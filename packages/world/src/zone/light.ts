@@ -12,6 +12,7 @@ import { hexDistance, posKey, type HexPos } from "@gantt-quest/core";
 import { close, inFight, sees } from "./geometry";
 import { propOf } from "./props";
 import { AURAS, FIRE_GLOW, LIGHT_RADIUS } from "./kit";
+import { auraRange } from "./passives";
 import { GLOWCAP_LIGHT } from "./forage";
 import { wearsLanternHelm } from "../gear";
 
@@ -32,7 +33,7 @@ export function lightSources(state: ZoneState): { at: HexPos; radius: number }[]
   // A hero in a lantern helm carries a torch's light on their head, and it never burns down.
   for (const u of state.units) if (!u.torch && carriesLantern(u)) out.push({ at: u.pos, radius: LIGHT_RADIUS });
   // A hero shining with a Beacon Aura.
-  for (const u of state.units) if (!u.down && u.conditions.some((c) => c.kind === "beacon")) out.push({ at: u.pos, radius: AURAS.beaconLight });
+  for (const u of state.units) if (!u.down && u.conditions.some((c) => c.kind === "beacon")) out.push({ at: u.pos, radius: AURAS.beaconLight + auraRange(u) - AURAS.range });
   for (const key of Object.keys(state.lights ?? {})) {
     const [q, r] = key.split(",").map(Number);
     out.push({ at: { q, r }, radius: LIGHT_RADIUS });

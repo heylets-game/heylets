@@ -43,7 +43,7 @@ export function exploreRound(ctx: Ctx, unit: Unit): void {
   standInSurface(ctx, unit);
   for (const c of unit.conditions) {
     if (c.fresh) c.fresh = false;
-    else c.rounds -= 1;
+    else if (c.kind !== "fervor") c.rounds -= 1;
   }
   unit.conditions = unit.conditions.filter((c) => c.rounds > 0);
 }

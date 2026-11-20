@@ -7,10 +7,11 @@ import { tileAt } from "../map";
 import type { Rng } from "../rng";
 import { adjacent, close, elevOf, inFight } from "./geometry";
 import { EFFECT_TICK, SUNDERED_DEFENCE } from "../content";
-import { AQUEOUS, AURAS, CORAL_ARMOR, ENEMY_KIT, FORTIFY, NORTH_STAR, SHIELD_SET_ASIDE, enemyDefence, enemySave } from "./kit";
+import { AQUEOUS, CORAL_ARMOR, ENEMY_KIT, FORTIFY, NORTH_STAR, SHIELD_SET_ASIDE, enemyDefence, enemySave } from "./kit";
 import { inDark } from "./light";
 import { d20, heroDefence, mod, netAdvantage, rollShown, statOf } from "./rules";
 import { songDefence, songHit, windward } from "./song";
+import { auraRange, kindledBy, passiveDefence } from "./passives";
 import type { Condition, Roll, Rolled, Unit, UnitCondition, ZoneEffect, ZoneEvent, ZoneState } from "./types";
 
 export interface Ctx {
@@ -76,6 +77,7 @@ export const burnOf = (unit: Unit): number => (EFFECT_TICK.burning ?? 0) * (unit
  */
 export function kindle(ctx: Ctx, by: Unit | undefined, target: Unit, rounds: number, stacks = 1): void {
   addCondition(ctx, target, "burning", rounds, stacks + (by && has(by, "north_star") ? 1 : 0));
+  kindledBy(ctx, by, target);
 }
 
 /** Whether a unit is Unseen (Sneak): no enemy can attack it, or pick it out to. */
@@ -95,9 +97,9 @@ export const DEBUFFS: readonly Condition[] = ["bleeding", "burning", "stunned", 
 export const wallDefence = (state: Pick<ZoneState, "weather">, unit: Unit): number =>
   (state.weather ?? []).some((w) => w.kind === "wall" && w.side === unit.side && w.hexes.some((p) => adjacent(p, unit.pos))) ? FORTIFY.defence : 0;
 
-/** A unit's Defence. With the board (`state`), a Dour Shanty it stands in, and a wall of its side's it stands beside, count too. */
+/** A unit's Defence. With the board (`state`), a Dour Shanty it stands in, a wall of its side's it stands beside, and an ally's passive, count too. */
 export const defenceOf = (unit: Unit, state?: Pick<ZoneState, "units" | "weather">): number =>
-  (state ? songDefence(state, unit) + wallDefence(state, unit) : 0) +
+  (state ? songDefence(state, unit) + wallDefence(state, unit) + passiveDefence(state, unit) : 0) +
   (unit.side === "hero" && unit.stats ? heroDefence(unit.stats, unit.armor) - ((unit.torch ?? 0) > 0 && unit.torchHand !== "main" && unit.outfit?.off_hand ? SHIELD_SET_ASIDE : 0) : enemyDefence(unit.kind)) +
   (has(unit, "coral_armor") ? CORAL_ARMOR.defence : 0) -
   (has(unit, "sundered") ? SUNDERED_DEFENCE : 0);
@@ -184,7 +186,10 @@ export function damage(ctx: Ctx, target: Unit, amount: number, opts: { actor: st
   if (target.hp <= 0) fall(ctx, target);
   // North Star: whatever its bearer strikes on the other side catches fire.
   const by = opts.actor ? ctx.state.units.find((u) => u.id === opts.actor) : undefined;
-  if (by && by.side !== target.side && has(by, "north_star")) addCondition(ctx, target, "burning", NORTH_STAR.burn);
+  if (by && by.side !== target.side && has(by, "north_star")) {
+    addCondition(ctx, target, "burning", NORTH_STAR.burn);
+    kindledBy(ctx, by, target);
+  }
   return dealt;
 }
 
@@ -221,7 +226,7 @@ export interface AttackContext {
  * What bears on an attack besides the attacker's skill.
  *
  * Advantage: the target is Exposed or Stunned, or Prone and struck in melee; Focus was spent; a pack
- * animal has one of its own beside the target; the attacker carries a Beacon, or an ally near enough (AURAS.range) does;
+ * animal has one of its own beside the target; the attacker carries a Beacon, or an ally near enough (auraRange) does;
  * the attacker is Unseen. Disadvantage: the attacker is Poisoned or Fumbling, carries the Black Spot or a Red Sky, is
  * shooting with an enemy beside them (or on their own hex), or is shooting at something Prone. Shots also get +2 from
  * higher ground, -2 from lower, and -2 at a target standing among trees. A blow by hand down a ladder gets
@@ -241,7 +246,7 @@ export function attackContext(state: ZoneState, attacker: Unit, target: Unit, op
   if (has(attacker, "inspired")) adv("you are Inspired");
   if (has(target, "guiding_light") && target.side !== attacker.side) adv("the target is lit by Guiding Light");
   if (attacker.side === "enemy" && ENEMY_KIT[attacker.kind]?.pack && state.units.some((u) => u.id !== attacker.id && u.side === "enemy" && !u.down && close(u.pos, target.pos))) adv("the pack is on the target");
-  if (state.units.some((u) => u.side === attacker.side && !u.down && has(u, "beacon") && hexDistance(u.pos, attacker.pos) <= AURAS.range)) adv(has(attacker, "beacon") ? "your Beacon" : "an ally's Beacon");
+  if (state.units.some((u) => u.side === attacker.side && !u.down && has(u, "beacon") && hexDistance(u.pos, attacker.pos) <= auraRange(u))) adv(has(attacker, "beacon") ? "your Beacon" : "an ally's Beacon");
   if (has(attacker, "poisoned")) dis("Poisoned");
   if (has(attacker, "glitched")) dis("Fumbling");
   if (has(attacker, "black_spot")) dis("the Black Spot is on you");

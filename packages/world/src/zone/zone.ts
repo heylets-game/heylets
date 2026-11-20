@@ -30,7 +30,7 @@ import { makeRng, seedFromString } from "../rng";
 import { enemyTurn } from "./ai";
 import { abilityArea, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, doCommon, drinkItem, moveLeft, resolveAbility, throwItem, walk } from "./combat";
 import { burnOf, has, heal, regrow, removeCondition, tick, unseen, type Ctx } from "./engine";
-import { passiveHooks } from "./passives";
+import { auraRange, passiveHooks } from "./passives";
 import { ALERT_RANGE, JOIN_RANGE, freeHexNear, generateZone } from "./gen";
 import { generateDelve } from "./delve";
 import { checkLoot, checkOpen, leaveBody, look, lootFor, openChest, payBounty, take } from "./loot";
@@ -442,7 +442,7 @@ function beginTurn(ctx: Ctx, enc: Encounter, unit: Unit): boolean {
   // A Healing Aura mends the bearer and everyone of theirs standing beside them.
   if (has(unit, "mending")) {
     for (const u of ctx.state.units) {
-      if (u.side === unit.side && !u.down && u.hp < u.maxHp && hexDistance(u.pos, unit.pos) <= AURAS.range) heal(ctx, u, rollDice(ctx.rng, AURAS.heal), { actor: unit.id, what: "healing_aura" });
+      if (u.side === unit.side && !u.down && u.hp < u.maxHp && hexDistance(u.pos, unit.pos) <= auraRange(unit)) heal(ctx, u, rollDice(ctx.rng, AURAS.heal), { actor: unit.id, what: "healing_aura" });
     }
   }
   // Aqueous Regeneration comes again.
@@ -500,7 +500,7 @@ function endTurn(ctx: Ctx, unit: Unit): void {
   const owed = drowningOwed(ctx.state, unit);
   for (const c of unit.conditions) {
     if (c.fresh) c.fresh = false;
-    else c.rounds -= 1;
+    else if (c.kind !== "fervor") c.rounds -= 1;
   }
   unit.conditions = unit.conditions.filter((c) => c.rounds > 0);
   drown(ctx, unit, owed);

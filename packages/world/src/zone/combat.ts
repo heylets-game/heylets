@@ -702,6 +702,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim &
   const tactic = tacticOf(ability);
   const { state } = ctx;
   ctx.events.push({ t: "used", id: unit.id, what: ability, name: def.name, target: aim.target, at: aim.at });
+  const told = ctx.events.length;
   const foes = () => state.units.filter((u) => u.side !== unit.side && !u.down);
   // Unseen, any ability gives the user away once it is done (bar going Unseen again, or a pocket picked unseen).
   const wasUnseen = unseen(unit);
@@ -958,6 +959,9 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim &
   if (landed && def.selfEffect && !unit.down) addCondition(ctx, unit, def.selfEffect.effect, def.selfEffect.turns);
   if (tactic.stride && !unit.down) moveMore(state, unit, tactic.stride);
   if (wasUnseen && !tactic.hide && !tactic.steal) giveAway(ctx, unit);
+  // Whether it hit an enemy, told to the user's passives.
+  const struck = ctx.events.slice(told).some((e) => e.t === "hit" && e.actor === unit.id && state.units.some((u) => u.id === e.target && u.side !== unit.side));
+  for (const p of passiveHooks(unit)) p.abilityDone?.(ctx, unit, def, struck);
 }
 
 /**

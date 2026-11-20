@@ -13,7 +13,7 @@ import { propOf } from "./props";
 import { SITE_IDS, backdropOf, siteInside, type SiteId } from "./sites";
 import { ACTION_AP, AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, CHART, COMMON_ACTIONS, BLOCK, BONUS_AP, BOLSTER, GUARD_UP, STAND_STRONG, STURDY, ENEMY_BURST, ENEMY_HP_SCALE, ENEMY_KIT, ENEMY_MOVE_AP, EXPLORE_ROUND_MS, FLEE_RANGE, LIGHT_RADIUS, SHIELD_SET_ASIDE, TACTICS, TORCH_GROUND_ROUNDS, TORCH_HELD_ROUNDS, TORCH_ROUND_MS, abilityDice as abilityDiceFor, commonCost, enemyHp, enemyMove, enemyStrikes, tacticOf } from "./kit";
 import { MAX_CATCHUP_ROUNDS, exploreRound } from "./clock";
-import { PASSIVE_HOOKS } from "./passives";
+import { PASSIVE_HOOKS, STAY_NEAR, auraRange } from "./passives";
 import { TRAITS, TRAIT_BY_ID } from "../traits";
 import { defenceOf } from "./engine";
 import { abilityArea, checkAbility, crateBlow, enemyAct, wayBetween } from "./combat";
@@ -2985,6 +2985,108 @@ describe("the Paladin's class abilities", () => {
     for (const p of [at(4, 6), ...hexNeighbors(at(4, 6), state.map.grid)]) state.surfaces[posKey(p)] = { kind: "slime", rounds: 5, by: null };
     expect(wayBetween(state, unit(state, "ann"), unit(state, "bo").pos)).toHaveLength(3);
   });
+
+  describe("passives", () => {
+    /** ann's ability on the dummy, tried seed by seed until it hits (or misses, with `miss`). */
+    const tryUse = (state: ZoneState, ability: string, target: string, miss = false) => {
+      for (let seed = 1; seed < 120; seed++) {
+        const next = structuredClone(state);
+        next.rng = seed;
+        const events: ZoneEvent[] = [];
+        const after = must(next, { type: "use", by: "ann", unit: "ann", ability, target }, events);
+        if (events.some((e) => e.t === "hit" && e.target === target) !== miss) return { state: after, events };
+      }
+      throw new Error(miss ? "never a miss" : "never a hit");
+    };
+    const fervorOf = (state: ZoneState) => unit(state, "ann").conditions.find((c) => c.kind === "fervor");
+    /** The flat part of ann's blow on the dummy. */
+    const plusOf = (events: ZoneEvent[], target: string) => {
+      const e = events.find((x) => x.t === "hit" && x.target === target);
+      return e?.t === "hit" ? e.dice!.plus : NaN;
+    };
+    /** party(), with ann at level 5 carrying `passive`. */
+    const withPassive = (passive: string) => {
+      const p = party();
+      Object.assign(unit(p.state, "ann"), { level: 5, passives: [passive] });
+      unit(p.state, "ann").abilities.push("bash");
+      return p;
+    };
+
+    it("Inspiring Strikes: a hit heals the nearest hurt ally within 2 hexes half the Paladin's level, rounded up, once", () => {
+      const { state, dummy } = withPassive("inspiring_strikes");
+      for (const id of ["ann", "bo", "cy"]) unit(state, id).hp = 1;
+      const { events } = tryUse(state, "stoke_the_fire", dummy);
+      const heals = events.filter((e) => e.t === "heal" && e.what === "inspiring_strikes");
+      expect(heals).toEqual([expect.objectContaining({ target: "bo", amount: 3, actor: "ann" })]);
+      // A miss heals no one.
+      expect(tryUse(state, "bash", dummy, true).events.some((e) => e.t === "heal" && e.what === "inspiring_strikes")).toBe(false);
+      // bo whole, and cy too far: no one.
+      unit(state, "bo").hp = unit(state, "bo").maxHp;
+      expect(tryUse(state, "bash", dummy).events.some((e) => e.t === "heal" && e.what === "inspiring_strikes")).toBe(false);
+    });
+
+    it("Beaming Fervor: setting an enemy Burning makes the next attack, not this one, do half the level more", () => {
+      let { state, dummy } = withPassive("beaming_fervor");
+      const plain = plusOf(tryUse(state, "bash", dummy).events, dummy);
+      const bare = party();
+      unit(bare.state, "ann").level = 5;
+      unit(bare.state, "ann").abilities.push("bash");
+      let events: ZoneEvent[];
+      ({ state, events } = tryUse(state, "branding_strike", dummy));
+      expect(unit(state, dummy).conditions.some((c) => c.kind === "burning")).toBe(true);
+      expect(plusOf(events, dummy)).toBe(plusOf(tryUse(bare.state, "branding_strike", dummy).events, dummy));
+      expect(fervorOf(state)).toMatchObject({ amount: 3 });
+      // It waits through turns with no attack.
+      state = nextTurn(nextTurn(state));
+      expect(fervorOf(state)).toMatchObject({ amount: 3 });
+      ({ state, events } = tryUse(state, "bash", dummy));
+      expect(plusOf(events, dummy)).toBe(plain + 3);
+      expect(fervorOf(state)).toBeUndefined();
+    });
+
+    it("Beaming Fervor: a miss spends it, and an attack that spends it and sets Burning again lights a new one", () => {
+      let { state, dummy } = withPassive("beaming_fervor");
+      const bare = party();
+      unit(bare.state, "ann").level = 5;
+      unit(bare.state, "ann").abilities.push("bash");
+      const plainStoke = plusOf(tryUse(bare.state, "stoke_the_fire", dummy).events, dummy);
+      state = tryUse(state, "branding_strike", dummy).state;
+      state = nextTurn(state);
+      expect(fervorOf(tryUse(state, "bash", dummy, true).state)).toBeUndefined();
+      const again = tryUse(state, "stoke_the_fire", dummy);
+      expect(plusOf(again.events, dummy)).toBe(plainStoke + 3);
+      expect(fervorOf(again.state)).toMatchObject({ amount: 3 });
+    });
+
+    it("Beaming Fervor: nothing from an enemy that will not catch", () => {
+      let { state, dummy } = withPassive("beaming_fervor");
+      unit(state, dummy).conditions.push({ kind: "wet", rounds: 5 });
+      state = tryUse(state, "branding_strike", dummy).state;
+      expect(fervorOf(state)).toBeUndefined();
+    });
+
+    it("Brighter Beacon: the auras reach a hex further", () => {
+      let { state } = withPassive("brighter_beacon");
+      for (const id of ["ann", "bo", "cy"]) unit(state, id).hp = 1;
+      state = must(state, { type: "use", by: "ann", unit: "ann", ability: "healing_aura" });
+      const events: ZoneEvent[] = [];
+      state = nextTurn(state, events);
+      expect(events.some((e) => e.t === "heal" && e.what === "healing_aura" && e.target === "cy")).toBe(true);
+      expect(auraRange(unit(state, "ann"))).toBe(AURAS.range + 1);
+    });
+
+    it("Stay Near: the Paladin and allies within 2 hexes have 1 more Defence, and two do not stack", () => {
+      const { state } = party();
+      const before = Object.fromEntries(["ann", "bo", "cy"].map((id) => [id, defenceOf(unit(state, id), state)]));
+      unit(state, "ann").passives = ["stay_near"];
+      expect(defenceOf(unit(state, "ann"), state)).toBe(before.ann + STAY_NEAR.defence);
+      expect(defenceOf(unit(state, "bo"), state)).toBe(before.bo + STAY_NEAR.defence);
+      expect(defenceOf(unit(state, "cy"), state)).toBe(before.cy);
+      unit(state, "bo").passives = ["stay_near"];
+      expect(defenceOf(unit(state, "ann"), state)).toBe(before.ann + STAY_NEAR.defence);
+      expect(defenceOf(unit(state, "cy"), state)).toBe(before.cy + STAY_NEAR.defence);
+    });
+  });
 });
 
 describe("the Mage's class abilities", () => {
@@ -5399,7 +5501,11 @@ describe("Warlock weapons", () => {
 describe("passives", () => {
   afterEach(() => {
     delete PASSIVE_HOOKS.test_passive;
-    for (const d of TRAITS.splice(0)) delete TRAIT_BY_ID[d.id];
+    for (const id of ["pal", "mag"]) {
+      const i = TRAITS.findIndex((d) => d.id === id);
+      if (i >= 0) TRAITS.splice(i, 1);
+      delete TRAIT_BY_ID[id];
+    }
   });
 
   it("carry into a map only those of the hero's class", () => {

@@ -16,42 +16,53 @@ import {
   type TraitDef,
 } from "./index";
 
-/** Passives for the test alone, taken out again after each one. */
+/** Passives for the test alone, for a class of its own, taken out again after each one. */
+const added: string[] = [];
 function addPassives(defs: TraitDef[]) {
   for (const d of defs) {
     TRAITS.push(d);
     TRAIT_BY_ID[d.id] = d;
+    added.push(d.id);
   }
 }
 afterEach(() => {
-  for (const d of TRAITS.splice(0)) delete TRAIT_BY_ID[d.id];
+  for (const id of added.splice(0)) {
+    TRAITS.splice(TRAITS.findIndex((d) => d.id === id), 1);
+    delete TRAIT_BY_ID[id];
+  }
 });
 
 describe("passives", () => {
-  it("has none written yet, so no level asks for a pick", () => {
-    expect(TRAITS).toEqual([]);
-    for (const c of HERO_CLASSES) expect(pendingTraitTiers(c.id, 10, [])).toEqual([]);
+  it("gives a class with passives two to choose from at each pick, with a name and a word on what it does", () => {
+    for (const c of HERO_CLASSES) {
+      const own = TRAITS.filter((d) => d.classId === c.id);
+      if (own.length === 0) continue;
+      for (const tier of [1, 2] as const) expect(own.filter((d) => d.tier === tier), `${c.id} tier ${tier}`).toHaveLength(2);
+      for (const d of own) expect(d.name && d.blurb, d.id).toBeTruthy();
+    }
+    expect(new Set(TRAITS.map((d) => d.id)).size).toBe(TRAITS.length);
   });
 
-  it("opens picks at levels 3 and 6, one per tier, for keeps, once a class has some", () => {
+  it("opens picks at levels 3 and 6, one per tier, for keeps", () => {
     addPassives([
-      { id: "p1a", classId: "qa_paladin", tier: 1, name: "A", blurb: "" },
-      { id: "p1b", classId: "qa_paladin", tier: 1, name: "B", blurb: "" },
-      { id: "p2a", classId: "qa_paladin", tier: 2, name: "C", blurb: "" },
-      { id: "m1a", classId: "devops_mage", tier: 1, name: "D", blurb: "" },
+      { id: "p1a", classId: "test_class", tier: 1, name: "A", blurb: "" },
+      { id: "p1b", classId: "test_class", tier: 1, name: "B", blurb: "" },
+      { id: "p2a", classId: "test_class", tier: 2, name: "C", blurb: "" },
+      { id: "m1a", classId: "other_class", tier: 1, name: "D", blurb: "" },
     ]);
     expect(TRAIT_LEVELS).toEqual([3, 6]);
-    expect(pendingTraitTiers("qa_paladin", 2, [])).toEqual([]);
-    expect(pendingTraitTiers("qa_paladin", 3, [])).toEqual([1]);
-    expect(pendingTraitTiers("qa_paladin", 6, [])).toEqual([1, 2]);
-    expect(pendingTraitTiers("qa_paladin", 6, ["p1a"])).toEqual([2]);
+    expect(pendingTraitTiers("test_class", 2, [])).toEqual([]);
+    expect(pendingTraitTiers("test_class", 3, [])).toEqual([1]);
+    expect(pendingTraitTiers("test_class", 6, [])).toEqual([1, 2]);
+    expect(pendingTraitTiers("test_class", 6, ["p1a"])).toEqual([2]);
     // A tier the class has nothing for asks for nothing.
-    expect(pendingTraitTiers("devops_mage", 6, [])).toEqual([1]);
-    expect(traitPickError("qa_paladin", 3, [], "p1a")).toBeNull();
-    expect(traitPickError("qa_paladin", 3, ["p1a"], "p1b")).toMatch(/already/);
-    expect(traitPickError("qa_paladin", 5, [], "p2a")).toMatch(/level 6/);
-    expect(traitPickError("qa_paladin", 9, [], "m1a")).toMatch(/class/);
-    expect(traitPickError("qa_paladin", 9, [], "nope")).toMatch(/class/);
+    expect(pendingTraitTiers("other_class", 6, [])).toEqual([1]);
+    expect(pendingTraitTiers("no_class", 10, [])).toEqual([]);
+    expect(traitPickError("test_class", 3, [], "p1a")).toBeNull();
+    expect(traitPickError("test_class", 3, ["p1a"], "p1b")).toMatch(/already/);
+    expect(traitPickError("test_class", 5, [], "p2a")).toMatch(/level 6/);
+    expect(traitPickError("test_class", 9, [], "m1a")).toMatch(/class/);
+    expect(traitPickError("test_class", 9, [], "nope")).toMatch(/class/);
     expect(parseTraits('["p1a","nope",3]')).toEqual(["p1a"]);
     expect(parseTraits("not json")).toEqual([]);
     expect(parseTraits(null)).toEqual([]);

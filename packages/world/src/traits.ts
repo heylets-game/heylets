@@ -2,7 +2,7 @@
 // they level, one of the class's choices at each of TRAIT_LEVELS, for keeps.
 // The logbook offers them and the server saves the pick. Each is data here
 // (name, blurb, class, tier); what it does in a hex fight is its hooks in
-// zone/passives.ts, under the same id. None are written yet.
+// zone/passives.ts, under the same id.
 
 /** The levels a hero picks a passive at; tier 1 is the first, tier 2 the second. */
 export const TRAIT_LEVELS = [3, 6] as const;
@@ -16,8 +16,14 @@ export interface TraitDef {
   blurb: string;
 }
 
-/** Every class's passives. Empty for now: a level with nothing to pick from asks for nothing. */
-export const TRAITS: TraitDef[] = [];
+/** Every class's passives. A class with none at a tier asks for no pick there. */
+export const TRAITS: TraitDef[] = [
+  // Lighthouse Paladin
+  { id: "inspiring_strikes", classId: "qa_paladin", tier: 1, name: "Inspiring Strikes", blurb: "When an attack of yours hits, the nearest hurt ally within 2 hexes heals half your level, rounded up." },
+  { id: "beaming_fervor", classId: "qa_paladin", tier: 1, name: "Beaming Fervor", blurb: "When you set an enemy Burning, your next attack does extra damage equal to half your level, rounded up. Does not stack." },
+  { id: "brighter_beacon", classId: "qa_paladin", tier: 2, name: "Brighter Beacon", blurb: "Your auras reach 1 hex further." },
+  { id: "stay_near", classId: "qa_paladin", tier: 2, name: "Stay Near", blurb: "You and every ally within 2 hexes of you have +1 Defence." },
+];
 
 export const TRAIT_BY_ID: Record<string, TraitDef> = Object.fromEntries(TRAITS.map((d) => [d.id, d]));
 

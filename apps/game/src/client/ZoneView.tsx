@@ -30,7 +30,8 @@ import { hexDistance, posKey, type HexPos } from "@gantt-quest/core";
 import {
   ABILITIES,
   ALERT_RANGE,
-  AURAS,
+  auraRange,
+  TRAIT_BY_ID,
   COMMON_ACTIONS,
   CONDITION_INFO,
   CRATE_HP,
@@ -356,7 +357,7 @@ function marches(events: ZoneEvent[], where: { id: string; side: string; pos: He
 type Wave = { from: THREE.Vector3; at: number; rolled: Promise<number> };
 
 /** What an attack is called, for its look and sound: an ability's name, or an enemy attack's own. */
-const blowName = (what: string) => ABILITIES[what]?.name ?? what;
+const blowName = (what: string) => ABILITIES[what]?.name ?? TRAIT_BY_ID[what]?.name ?? what;
 
 /** One thing taken out of something searched, in a few words: "12 gold", "2 bone", "a Bright lodestone". */
 function lootLine(item: LootSpot["loot"][string][number]): string {
@@ -1783,7 +1784,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       if (u.down) continue;
       const song = shantyOf(u);
       if (song) out.push({ hexes: zoneBlast(state.map, u.pos, shantyRadius(song)), color: CONDITION_INFO[song.kind].color, line: 0.6, dashed: true });
-      for (const kind of ["beacon", "mending"] as const) if (u.conditions.some((c) => c.kind === kind)) out.push({ hexes: zoneBlast(state.map, u.pos, AURAS.range), color: CONDITION_INFO[kind].color, line: 0.6, dashed: true });
+      for (const kind of ["beacon", "mending"] as const) if (u.conditions.some((c) => c.kind === kind)) out.push({ hexes: zoneBlast(state.map, u.pos, auraRange(u)), color: CONDITION_INFO[kind].color, line: 0.6, dashed: true });
     }
     if (!pick && courseOnly.length > 0) out.push({ hexes: courseOnly, color: "#ff4d4d", fill: 0.12, line: 0.7, dashed: true });
     // What there is still to search (for you): a gold ring round each, once no fight is on.

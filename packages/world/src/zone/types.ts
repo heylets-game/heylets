@@ -24,9 +24,10 @@ export type Side = "hero" | "enemy";
  * and the Sage's (stars.ts): Guiding Light on an enemy (whoever attacks it has advantage), North Star on an ally (their blows
  * set what they hit Burning), and a course charted (on the Sage: the mark their allies move faster toward);
  * and the Warden's: Taunted, on an enemy (it must go for the Warden who taunted it, if it can);
- * and the Warlock's (drowning.ts), all on an enemy: Drowning (stacks, `amount`), the Curse of Drowning, the Black Spot and Red Sky at Morning.
+ * and the Warlock's (drowning.ts), all on an enemy: Drowning (stacks, `amount`), the Curse of Drowning, the Black Spot and Red Sky at Morning;
+ * and the passives' (passives.ts): Fervor, on a Paladin with Beaming Fervor (its next attack does more damage, `amount`).
  */
-export type Condition = EffectKind | "poisoned" | "wet" | "beacon" | "mending" | "bolstered" | "invisible" | "contraband" | "regenerating" | "coral_armor" | ShantyKind | "inspired" | "guiding_light" | "north_star" | "charted" | "taunted" | "drowning" | "drowning_curse" | "black_spot" | "red_sky" | "tailwind";
+export type Condition = EffectKind | "poisoned" | "wet" | "beacon" | "mending" | "bolstered" | "invisible" | "contraband" | "regenerating" | "coral_armor" | ShantyKind | "inspired" | "guiding_light" | "north_star" | "charted" | "taunted" | "drowning" | "drowning_curse" | "black_spot" | "red_sky" | "tailwind" | "fervor";
 
 /** The shanties a Bard sings (song.ts): a condition on the Bard, reaching everyone of theirs nearby. */
 export type ShantyKind = "lively_shanty" | "dour_shanty" | "windgod_shanty";
@@ -47,6 +48,8 @@ export interface UnitCondition {
   joinedOwn?: string[];
   /** A shanty: how many have joined it since the Bard's turn last began (the extra each joining gives lasts that long). */
   surge?: number;
+  /** Fervor: the bonus ready for the next attack is `amount`; `pending`, a new one lit by the attack being made waits for the one after. */
+  pending?: boolean;
   /** Taunted: the unit that taunted it. The Curse of Drowning and the Black Spot: who laid it. */
   by?: string;
 }
