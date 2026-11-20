@@ -5,7 +5,7 @@
 // zone/passives.ts, under the same id. None are written yet.
 
 /** The levels a hero picks a passive at; tier 1 is the first, tier 2 the second. */
-export const TRAIT_LEVELS = [2, 4] as const;
+export const TRAIT_LEVELS = [3, 6] as const;
 
 export interface TraitDef {
   id: string;

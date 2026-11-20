@@ -1,4 +1,4 @@
-// Passives (traits, picked at levels 2 and 4) and the signature weapons' abilities.
+// Passives (traits, picked at levels 3 and 6) and the signature weapons' abilities.
 
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -33,23 +33,23 @@ describe("passives", () => {
     for (const c of HERO_CLASSES) expect(pendingTraitTiers(c.id, 10, [])).toEqual([]);
   });
 
-  it("opens picks at levels 2 and 4, one per tier, for keeps, once a class has some", () => {
+  it("opens picks at levels 3 and 6, one per tier, for keeps, once a class has some", () => {
     addPassives([
       { id: "p1a", classId: "qa_paladin", tier: 1, name: "A", blurb: "" },
       { id: "p1b", classId: "qa_paladin", tier: 1, name: "B", blurb: "" },
       { id: "p2a", classId: "qa_paladin", tier: 2, name: "C", blurb: "" },
       { id: "m1a", classId: "devops_mage", tier: 1, name: "D", blurb: "" },
     ]);
-    expect(TRAIT_LEVELS).toEqual([2, 4]);
-    expect(pendingTraitTiers("qa_paladin", 1, [])).toEqual([]);
-    expect(pendingTraitTiers("qa_paladin", 2, [])).toEqual([1]);
-    expect(pendingTraitTiers("qa_paladin", 5, [])).toEqual([1, 2]);
-    expect(pendingTraitTiers("qa_paladin", 5, ["p1a"])).toEqual([2]);
+    expect(TRAIT_LEVELS).toEqual([3, 6]);
+    expect(pendingTraitTiers("qa_paladin", 2, [])).toEqual([]);
+    expect(pendingTraitTiers("qa_paladin", 3, [])).toEqual([1]);
+    expect(pendingTraitTiers("qa_paladin", 6, [])).toEqual([1, 2]);
+    expect(pendingTraitTiers("qa_paladin", 6, ["p1a"])).toEqual([2]);
     // A tier the class has nothing for asks for nothing.
-    expect(pendingTraitTiers("devops_mage", 5, [])).toEqual([1]);
-    expect(traitPickError("qa_paladin", 2, [], "p1a")).toBeNull();
-    expect(traitPickError("qa_paladin", 2, ["p1a"], "p1b")).toMatch(/already/);
-    expect(traitPickError("qa_paladin", 3, [], "p2a")).toMatch(/level 4/);
+    expect(pendingTraitTiers("devops_mage", 6, [])).toEqual([1]);
+    expect(traitPickError("qa_paladin", 3, [], "p1a")).toBeNull();
+    expect(traitPickError("qa_paladin", 3, ["p1a"], "p1b")).toMatch(/already/);
+    expect(traitPickError("qa_paladin", 5, [], "p2a")).toMatch(/level 6/);
     expect(traitPickError("qa_paladin", 9, [], "m1a")).toMatch(/class/);
     expect(traitPickError("qa_paladin", 9, [], "nope")).toMatch(/class/);
     expect(parseTraits('["p1a","nope",3]')).toEqual(["p1a"]);
