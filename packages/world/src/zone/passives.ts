@@ -6,7 +6,7 @@
 import { hexDistance } from "@gantt-quest/core";
 import type { AbilityDef } from "../content";
 import { addCondition, has, heal, removeCondition, type Ctx } from "./engine";
-import { AURAS } from "./kit";
+import { AURAS, ITEM_AP } from "./kit";
 import type { Unit, ZoneState } from "./types";
 
 export interface PassiveHooks {
@@ -19,7 +19,7 @@ export interface PassiveHooks {
   turnStart?(ctx: Ctx, unit: Unit, inFight: boolean): void;
   /** Damage added to an ability of theirs. Read for the preview as well as the blow, so it must not change anything. */
   damageBonus?(state: ZoneState, unit: Unit, def: AbilityDef): number;
-  /** An ability of theirs has hit `target` for `dealt` HP (after armor, guard and the like). */
+  /** An ability of theirs has hit `target` for `dealt` HP (after armor, guard and the like), and left its own conditions. */
   hit?(ctx: Ctx, unit: Unit, target: Unit, def: AbilityDef, dealt: number, crit: boolean): void;
   /** An ability of theirs is done. `struck`: it hit at least one enemy. */
   abilityDone?(ctx: Ctx, unit: Unit, def: AbilityDef, struck: boolean): void;
@@ -33,7 +33,18 @@ export interface PassiveHooks {
   toHit?(unit: Unit, target: Unit, def: AbilityDef): number;
   /** HP `ally` (themselves too) heals as its turn in a fight starts. Two of the same passive do not stack. */
   allyTurnHeal?(unit: Unit, ally: Unit): number;
+  /** Damage added to a blow of theirs rolled with advantage. */
+  withAdvantage?: number;
+  /** Why they have advantage on an attack on `target`, if they do. */
+  advantageOn?(state: Pick<ZoneState, "units">, unit: Unit, target: Unit): string | null;
+  /** AP a throw costs them, if not the usual. */
+  throwAp?: number;
 }
+
+/** Cruel Cuts: the turns of Bleeding a critical hit sets going on an enemy not Bleeding yet. */
+export const CRUEL_CUTS_BLEED = 2;
+/** Opportunist: damage added to a blow with advantage. */
+export const OPPORTUNIST_DAMAGE = 2;
 
 /** The Mage's lightning: what Greater Conductivity and Potent Shocks work with. */
 export const LIGHTNING: ReadonlySet<string> = new Set(["shock", "lightning_strike", "chain_lightning"]);
@@ -109,6 +120,27 @@ export const PASSIVE_HOOKS: Record<string, PassiveHooks> = {
   osmosis: {
     allyTurnHeal: (_unit, ally) => (has(ally, "wet") ? OSMOSIS_HEAL : 0),
   },
+  // Rogue, first pick.
+  // After the ability's own conditions: a blow that sets Bleeding going itself leaves a stack more on a crit.
+  cruel_cuts: {
+    hit(ctx, _unit, target, _def, _dealt, crit) {
+      if (!crit || target.down) return;
+      const c = target.conditions.find((x) => x.kind === "bleeding");
+      if (!c) {
+        addCondition(ctx, target, "bleeding", CRUEL_CUTS_BLEED);
+        return;
+      }
+      c.amount = (c.amount ?? 1) + 1;
+      ctx.events.push({ t: "condition", target: target.id, kind: "bleeding", rounds: c.rounds, amount: c.amount });
+    },
+  },
+  opportunist: { withAdvantage: OPPORTUNIST_DAMAGE },
+  // Rogue, second pick.
+  flanking: {
+    advantageOn: (state, unit, target) =>
+      state.units.some((u) => u.side === unit.side && u.id !== unit.id && !u.down && hexDistance(u.pos, target.pos) === 1) ? "flanking: an ally is beside the target" : null,
+  },
+  quick_fingers: { throwAp: 1 },
 };
 
 /** Beaming Fervor: a Fervor waiting is made ready; one spent with none waiting is gone. */
@@ -130,6 +162,9 @@ export const STAY_NEAR = { range: 2, defence: 1 };
 export function passiveHooks(unit: Unit): PassiveHooks[] {
   return (unit.passives ?? []).flatMap((id) => (PASSIVE_HOOKS[id] ? [PASSIVE_HOOKS[id]] : []));
 }
+
+/** AP a throw costs a unit. */
+export const throwAp = (unit: Unit): number => Math.min(ITEM_AP.throw, ...passiveHooks(unit).map((p) => p.throwAp ?? ITEM_AP.throw));
 
 /** How far a unit's auras reach. */
 export const auraRange = (unit: Unit): number => AURAS.range + passiveHooks(unit).reduce((n, p) => n + (p.auraReach ?? 0), 0);

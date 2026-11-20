@@ -518,7 +518,7 @@ const info = (kind: EffectKind, blurb: string) => ({ name: EFFECT_INFO[kind].nam
 
 /** Every condition as it works on the tiles. Names and colours are the old ones where there was one. */
 export const CONDITION_INFO: Record<Condition, { name: string; blurb: string; color: string }> = {
-  bleeding: info("bleeding", "Loses 2 HP at the start of each of its turns."),
+  bleeding: info("bleeding", "Loses 2 HP at the start of each of its turns, 2 more for each stack past the first."),
   burning: info("burning", "Loses 3 HP at the start of each of its turns, 3 more for each stack past the first. Water puts it out."),
   stunned: info("stunned", "Loses its next turn. Attacks against it have advantage."),
   guarded: info("guarded", "Takes half damage until its next turn."),

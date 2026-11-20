@@ -20,7 +20,7 @@
 
 import { STARTING_STATS, hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/core";
 import { classAbilitiesOf, poolFor, withClassAbilities } from "../classabilities";
-import { ABILITIES, EFFECT_TICK, ENEMIES, HERO_CLASSES, WEAPONS, abilitiesFor } from "../content";
+import { ABILITIES, ENEMIES, HERO_CLASSES, WEAPONS, abilitiesFor } from "../content";
 import { weaponItem } from "../gear";
 import { tileAt } from "../map";
 import type { HeroSheet } from "../hero";
@@ -29,8 +29,8 @@ import { TRAIT_BY_ID } from "../traits";
 import { makeRng, seedFromString } from "../rng";
 import { enemyTurn } from "./ai";
 import { abilityArea, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, doCommon, drinkItem, moveLeft, resolveAbility, throwItem, walk } from "./combat";
-import { burnOf, has, heal, regrow, removeCondition, tick, unseen, type Ctx } from "./engine";
-import { allyTurnHeal, auraRange, passiveHooks } from "./passives";
+import { bleedOf, burnOf, has, heal, regrow, removeCondition, tick, unseen, type Ctx } from "./engine";
+import { allyTurnHeal, auraRange, passiveHooks, throwAp } from "./passives";
 import { ALERT_RANGE, JOIN_RANGE, freeHexNear, generateZone } from "./gen";
 import { generateDelve } from "./delve";
 import { checkLoot, checkOpen, leaveBody, look, lootFor, openChest, payBounty, take } from "./loot";
@@ -436,7 +436,7 @@ function beginTurn(ctx: Ctx, enc: Encounter, unit: Unit): boolean {
   // A Lively Shanty's lift from those who joined it lasts until its Bard's turn comes round again.
   const song = shantyOf(unit);
   if (song) song.surge = 0;
-  for (const kind of ["bleeding", "burning"] as const) if (has(unit, kind)) tick(ctx, unit, kind, kind === "burning" ? burnOf(unit) : (EFFECT_TICK[kind] ?? 0));
+  for (const kind of ["bleeding", "burning"] as const) if (has(unit, kind)) tick(ctx, unit, kind, kind === "burning" ? burnOf(unit) : bleedOf(unit));
   if (unit.down) return false;
   for (const p of passiveHooks(unit)) p.turnStart?.(ctx, unit, true);
   allyTurnHeal(ctx, unit);
@@ -999,7 +999,7 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
   const touched = state.units.filter((u) => area.has(posKey(u.pos)));
   const back = reachBack(state, unit, touched);
   if (back) return back;
-  const cost = spend(budget, ITEM_AP.throw);
+  const cost = spend(budget, throwAp(unit));
   if (cost) return cost;
   // A healing potion among enemies is a kindness; anything else is a declaration.
   const struck = def.heal ? [] : touched.filter((u) => u.side === "enemy" && !u.down).map((u) => u.group!);

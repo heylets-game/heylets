@@ -28,6 +28,11 @@ export const TRAITS: TraitDef[] = [
   { id: "greater_conductivity", classId: "devops_mage", tier: 1, name: "Greater Conductivity", blurb: "Your lightning (Shock, Lightning Strike, Chain Lightning) has +1 to hit Wet enemies." },
   { id: "potent_shocks", classId: "devops_mage", tier: 2, name: "Potent Shocks", blurb: "Your lightning leaves what it hits Shocked for 2 turns: 2 less Defence." },
   { id: "osmosis", classId: "devops_mage", tier: 2, name: "Osmosis", blurb: "In a fight, you and every ally, however far, heal 2 at the start of each turn while Wet." },
+  // Smuggler Rogue
+  { id: "cruel_cuts", classId: "refactor_rogue", tier: 1, name: "Cruel Cuts", blurb: "Your critical hits set the target Bleeding for 2 turns, or add a stack to its Bleeding if it already is." },
+  { id: "opportunist", classId: "refactor_rogue", tier: 1, name: "Opportunist", blurb: "Your attacks with advantage do 2 more damage." },
+  { id: "flanking", classId: "refactor_rogue", tier: 2, name: "Flanking", blurb: "You have advantage on attacks on any enemy beside one of your allies." },
+  { id: "quick_fingers", classId: "refactor_rogue", tier: 2, name: "Quick Fingers", blurb: "Throwing an item costs you only 1 AP." },
 ];
 
 export const TRAIT_BY_ID: Record<string, TraitDef> = Object.fromEntries(TRAITS.map((d) => [d.id, d]));

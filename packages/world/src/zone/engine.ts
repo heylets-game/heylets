@@ -11,7 +11,7 @@ import { AQUEOUS, CORAL_ARMOR, ENEMY_KIT, FORTIFY, NORTH_STAR, SHIELD_SET_ASIDE,
 import { inDark } from "./light";
 import { d20, heroDefence, mod, netAdvantage, rollShown, statOf } from "./rules";
 import { songDefence, songHit, windward } from "./song";
-import { SHOCKED, auraRange, kindledBy, passiveDefence } from "./passives";
+import { SHOCKED, auraRange, kindledBy, passiveDefence, passiveHooks } from "./passives";
 import type { Condition, Roll, Rolled, Unit, UnitCondition, ZoneEffect, ZoneEvent, ZoneState } from "./types";
 
 export interface Ctx {
@@ -70,6 +70,8 @@ export function addCondition(ctx: Ctx, unit: Unit, kind: Condition, rounds: numb
 
 /** What Burning takes off a unit at the start of its turn: the tick for each of its stacks. */
 export const burnOf = (unit: Unit): number => (EFFECT_TICK.burning ?? 0) * (unit.conditions.find((c) => c.kind === "burning")?.amount ?? 1);
+/** What Bleeding takes off a unit at the start of its turn: the tick for each of its stacks (Cruel Cuts adds them). */
+export const bleedOf = (unit: Unit): number => (EFFECT_TICK.bleeding ?? 0) * (unit.conditions.find((c) => c.kind === "bleeding")?.amount ?? 1);
 
 /**
  * Set a unit Burning by a blow of `by`'s: under North Star, one stack more than the blow would give (one, if it gives
@@ -228,7 +230,7 @@ export interface AttackContext {
  *
  * Advantage: the target is Exposed or Stunned, or Prone and struck in melee; Focus was spent; a pack
  * animal has one of its own beside the target; the attacker carries a Beacon, or an ally near enough (auraRange) does;
- * the attacker is Unseen. Disadvantage: the attacker is Poisoned or Fumbling, carries the Black Spot or a Red Sky, is
+ * the attacker is Unseen; a passive of the attacker's (Flanking). Disadvantage: the attacker is Poisoned or Fumbling, carries the Black Spot or a Red Sky, is
  * shooting with an enemy beside them (or on their own hex), or is shooting at something Prone. Shots also get +2 from
  * higher ground, -2 from lower, and -2 at a target standing among trees. A blow by hand down a ladder gets
  * +2, and one struck up it -2.
@@ -248,6 +250,10 @@ export function attackContext(state: ZoneState, attacker: Unit, target: Unit, op
   if (has(target, "guiding_light") && target.side !== attacker.side) adv("the target is lit by Guiding Light");
   if (attacker.side === "enemy" && ENEMY_KIT[attacker.kind]?.pack && state.units.some((u) => u.id !== attacker.id && u.side === "enemy" && !u.down && close(u.pos, target.pos))) adv("the pack is on the target");
   if (state.units.some((u) => u.side === attacker.side && !u.down && has(u, "beacon") && hexDistance(u.pos, attacker.pos) <= auraRange(u))) adv(has(attacker, "beacon") ? "your Beacon" : "an ally's Beacon");
+  for (const p of passiveHooks(attacker)) {
+    const why = p.advantageOn?.(state, attacker, target);
+    if (why) adv(why);
+  }
   if (has(attacker, "poisoned")) dis("Poisoned");
   if (has(attacker, "glitched")) dis("Fumbling");
   if (has(attacker, "black_spot")) dis("the Black Spot is on you");

@@ -12,8 +12,8 @@
 // since burnt out, and saying so round by round would tell nobody anything.
 // In a fight, rounds are the fight's own, and the clock only keeps up.
 
-import { EFFECT_TICK, ENEMIES } from "../content";
-import { burnOf, has, heal, regrow, removeCondition, tick, type Ctx } from "./engine";
+import { ENEMIES } from "../content";
+import { bleedOf, burnOf, has, heal, regrow, removeCondition, tick, type Ctx } from "./engine";
 import { EXPLORE_ROUND_MS, TORCH_ROUND_MS } from "./kit";
 import { tickWeather } from "./weather";
 import { standInSurface, tickLights, tickSurfaces } from "./surfaces";
@@ -34,7 +34,7 @@ export function exploreRound(ctx: Ctx, unit: Unit): void {
   removeCondition(unit, "guarded");
   removeCondition(unit, "taunting");
   removeCondition(unit, "stunned");
-  for (const kind of ["bleeding", "burning"] as const) if (has(unit, kind)) tick(ctx, unit, kind, kind === "burning" ? burnOf(unit) : (EFFECT_TICK[kind] ?? 0));
+  for (const kind of ["bleeding", "burning"] as const) if (has(unit, kind)) tick(ctx, unit, kind, kind === "burning" ? burnOf(unit) : bleedOf(unit));
   if (unit.down) return;
   for (const p of passiveHooks(unit)) p.turnStart?.(ctx, unit, false);
   regrow(ctx, unit);

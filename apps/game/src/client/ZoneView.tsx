@@ -31,6 +31,7 @@ import {
   ABILITIES,
   ALERT_RANGE,
   auraRange,
+  throwAp,
   TRAIT_BY_ID,
   COMMON_ACTIONS,
   CONDITION_INFO,
@@ -292,7 +293,7 @@ function dwell(ev: ZoneEvent, many: boolean, next: ZoneEvent | undefined, carrie
   }
 }
 /** Conditions that come in stacks (the condition's `amount`), shown with how many. */
-const STACKED = new Set(["burning", "drowning"]);
+const STACKED = new Set(["burning", "bleeding", "drowning"]);
 const stacksOf = (c: { kind: string; amount?: number }): number => (STACKED.has(c.kind) ? (c.amount ?? 1) : 0);
 
 /** The conditions on a unit, as badges over its head: in CONDITION_INFO's colours, with rounds left, and stacks where there are more than one. */
@@ -2140,7 +2141,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       const def = THROWABLES[pick.item];
       if (def.drink && onSelf) declare({ type: "drink", unit: act.id, item: pick.item }, (act.items[pick.item] ?? 0) > 0, { cost: ITEM_AP.drink, slot: `it:${pick.item}`, name: def.name });
       else if (def.light && onSelf && !act.torch) declare({ type: "light", unit: act.id }, (act.items.torch ?? 0) > 0, { cost: ITEM_AP.light, slot: `it:${pick.item}` });
-      else declare({ type: "throw", unit: act.id, item: pick.item, at: pos }, !checkThrow(asState(state), act, pick.item, pos), { cost: ITEM_AP.throw, slot: `it:${pick.item}`, name: def.name, toward: pos });
+      else declare({ type: "throw", unit: act.id, item: pick.item, at: pos }, !checkThrow(asState(state), act, pick.item, pos), { cost: throwAp(act), slot: `it:${pick.item}`, name: def.name, toward: pos });
       setPick(null);
     } else if (pick.what === "jump") common("jump", { at: pos });
     else if (there) common(pick.what, { target: there.id });
@@ -2335,12 +2336,12 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       id: `it:${item}`,
       icon: ITEM_ICON[item],
       name: held ? `${def.name} (lit, ${act.torch} rounds left)` : def.name,
-      line: def.drink ? `Throw it (${ITEM_AP.throw} AP), or click yourself to drink it (${ITEM_AP.drink} AP)` : def.light ? (held ? `Throw the lit torch down where it should burn (${ITEM_AP.throw} AP)` : `Throw it lit (${ITEM_AP.throw} AP), or click yourself to light it to hold (${ITEM_AP.light} AP)`) : `Throw it (${ITEM_AP.throw} AP)`,
+      line: def.drink ? `Throw it (${throwAp(act)} AP), or click yourself to drink it (${ITEM_AP.drink} AP)` : def.light ? (held ? `Throw the lit torch down where it should burn (${ITEM_AP.throw} AP)` : `Throw it lit (${ITEM_AP.throw} AP), or click yourself to light it to hold (${ITEM_AP.light} AP)`) : `Throw it (${ITEM_AP.throw} AP)`,
       more: def.blurb,
       count: have,
       picked: (pick?.kind === "item" && pick.item === item) || taken.has(`it:${item}`),
       // Thrown for more AP than a potion is drunk, or a torch lit, for: those can still be done with too few left to throw.
-      spent: (have <= 0 && !held) || !(canPay(ITEM_AP.throw) || ((!!def.drink || (!!def.light && !held)) && canPay(ITEM_AP.drink))),
+      spent: (have <= 0 && !held) || !(canPay(throwAp(act)) || ((!!def.drink || (!!def.light && !held)) && canPay(ITEM_AP.drink))),
       run: () => setPick((p) => (p?.kind === "item" && p.item === item ? null : { kind: "item", item })),
     };
   }

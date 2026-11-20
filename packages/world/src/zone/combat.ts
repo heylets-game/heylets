@@ -612,13 +612,14 @@ function strike(ctx: Ctx, unit: Unit, def: AbilityDef, tactic: Tactic, target: U
   let more = damageBonus(ctx.state, unit, def);
   if (tactic.vsWet && has(target, "wet")) more += tactic.vsWet;
   if (tactic.edge && roll.adv === 1) more += tactic.edge;
+  if (roll.adv === 1) more += passiveHooks(unit).reduce((n, p) => n + (p.withAdvantage ?? 0), 0);
   if (tactic.wading && inWater(ctx.state, unit)) more += tactic.wading;
   if (tactic.bulwark) more += Math.floor(shieldOf(unit) * tactic.bulwark.perShield);
   const rolled = rollShown(ctx.rng, abilityDice(def), more, roll.crit);
   const dealt = damage(ctx, target, rolled.total, { actor: unit.id, what: def.id, crit: roll.crit, dice: rolled });
   if (def.drain && dealt > 0 && !unit.down) heal(ctx, unit, Math.max(1, Math.round(dealt * def.drain)), { actor: unit.id, what: def.id });
-  for (const p of passiveHooks(unit)) p.hit?.(ctx, unit, target, def, dealt, roll.crit);
   afflict(ctx, unit, def, target, true);
+  for (const p of passiveHooks(unit)) p.hit?.(ctx, unit, target, def, dealt, roll.crit);
   if (tactic.guide && !target.down && (!tactic.guideSave || !saveRoll(ctx, target, SAVE_STAT.guiding_light, saveDc(unit, def), `Resist ${def.name}`).ok)) addCondition(ctx, target, "guiding_light", tactic.guide);
   if (tactic.drowns && !target.down && !saveRoll(ctx, target, SAVE_STAT.drowning, saveDc(unit, def), `Resist ${def.name}`).ok) drown(ctx, target, tactic.drowns);
   if (tactic.goad && !target.down && !saveRoll(ctx, target, SAVE_STAT.taunted, saveDc(unit, def), `Resist ${def.name}`).ok) {

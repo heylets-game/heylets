@@ -13,9 +13,9 @@ import { propOf } from "./props";
 import { SITE_IDS, backdropOf, siteInside, type SiteId } from "./sites";
 import { ACTION_AP, AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, CHART, COMMON_ACTIONS, BLOCK, BONUS_AP, BOLSTER, GUARD_UP, STAND_STRONG, STURDY, ENEMY_BURST, ENEMY_HP_SCALE, ENEMY_KIT, ENEMY_MOVE_AP, EXPLORE_ROUND_MS, FLEE_RANGE, LIGHT_RADIUS, SHIELD_SET_ASIDE, TACTICS, TORCH_GROUND_ROUNDS, TORCH_HELD_ROUNDS, TORCH_ROUND_MS, abilityDice as abilityDiceFor, commonCost, enemyHp, enemyMove, enemyStrikes, tacticOf } from "./kit";
 import { MAX_CATCHUP_ROUNDS, exploreRound } from "./clock";
-import { PASSIVE_HOOKS, SHOCKED, STAY_NEAR, auraRange } from "./passives";
+import { OPPORTUNIST_DAMAGE, PASSIVE_HOOKS, SHOCKED, STAY_NEAR, auraRange, throwAp } from "./passives";
 import { TRAITS, TRAIT_BY_ID } from "../traits";
-import { defenceOf } from "./engine";
+import { bleedOf, defenceOf } from "./engine";
 import { abilityArea, checkAbility, crateBlow, enemyAct, previewAttack, wayBetween } from "./combat";
 import { d20, diceAverage, diceFor, heroMove, hitChance } from "./rules";
 import { createZone, ensureMouth, spentOut, standInHero, stepZone, zoneHero, zoneView } from "./zone";
@@ -3605,6 +3605,88 @@ describe("the Rogue's class abilities", () => {
     state = nextTurn(state);
     state = must(state, { type: "throw", by: "ann", unit: "ann", item: "fire", at: at(10, 6) });
     expect(has(state, "ann", "invisible")).toBe(false);
+  });
+
+  describe("passives", () => {
+    /** party(), with a dummy beside ann, ann carrying `passives` and the knives' Eviscerate too. */
+    const withPassives = (...passives: string[]) => {
+      const p = party();
+      const near = addFoe(p.state, at(6, 6));
+      Object.assign(unit(p.state, "ann"), { passives, abilities: [...unit(p.state, "ann").abilities, "eviscerate"] });
+      return { ...p, near };
+    };
+    /** ann's ability on `target`, seed by seed, until the blow is what `want` asks of it. */
+    const useUntil = (state: ZoneState, ability: string, target: string, want: (hit: Extract<ZoneEvent, { t: "hit" }>) => boolean) => {
+      for (let seed = 1; seed < 600; seed++) {
+        const next = structuredClone(state);
+        next.rng = seed;
+        const events: ZoneEvent[] = [];
+        const after = must(next, { type: "use", by: "ann", unit: "ann", ability, target }, events);
+        const hit = events.find((e): e is Extract<ZoneEvent, { t: "hit" }> => e.t === "hit" && e.target === target);
+        if (hit && want(hit)) return { state: after, events, seed };
+      }
+      throw new Error("never so");
+    };
+    const bleedOn = (state: ZoneState, id: string) => unit(state, id).conditions.find((c) => c.kind === "bleeding");
+
+    it("Cruel Cuts: a critical hit sets Bleeding going for 2 turns, or adds a stack to it; a plain hit does not", () => {
+      const { state, near } = withPassives("cruel_cuts");
+      expect(bleedOn(useUntil(state, "stab", near, (h) => !h.crit).state, near)).toBeUndefined();
+      const crit = useUntil(state, "stab", near, (h) => h.crit).state;
+      expect(bleedOn(crit, near)).toMatchObject({ rounds: 2 });
+      expect(bleedOn(crit, near)?.amount ?? 1).toBe(1);
+      // A blow that sets Bleeding going itself leaves a stack more.
+      expect(bleedOn(useUntil(state, "eviscerate", near, (h) => h.crit).state, near)).toMatchObject({ rounds: 3, amount: 2 });
+      // Bleeding already, from before: a stack more.
+      unit(state, near).conditions.push({ kind: "bleeding", rounds: 2, amount: 2 });
+      expect(bleedOn(useUntil(state, "stab", near, (h) => h.crit).state, near)).toMatchObject({ amount: 3 });
+    });
+
+    it("Bleeding: each stack bleeds the full 2", () => {
+      const { state, near } = withPassives();
+      unit(state, near).conditions.push({ kind: "bleeding", rounds: 2, amount: 3 });
+      expect(bleedOf(unit(state, near))).toBe(6);
+    });
+
+    it("Opportunist: a blow with advantage does 2 more, one without none more", () => {
+      const { state, near } = withPassives("opportunist");
+      const plain = withPassives();
+      const plusWith = (s: ZoneState, seed: number) => {
+        const next = structuredClone(s);
+        next.rng = seed;
+        const events: ZoneEvent[] = [];
+        must(next, { type: "use", by: "ann", unit: "ann", ability: "stab", target: near }, events);
+        const hit = events.find((e) => e.t === "hit" && e.target === near);
+        return hit?.t === "hit" ? hit.dice!.plus : null;
+      };
+      const { seed } = useUntil(state, "stab", near, () => true);
+      expect(plusWith(state, seed)).toBe(plusWith(plain.state, seed));
+      for (const s of [state, plain.state]) unit(s, "ann").conditions.push({ kind: "inspired", rounds: 2 });
+      const lucky = useUntil(state, "stab", near, () => true).seed;
+      expect(plusWith(state, lucky)).toBe(plusWith(plain.state, lucky)! + OPPORTUNIST_DAMAGE);
+    });
+
+    it("Flanking: advantage on an enemy beside an ally, not on one with none beside it", () => {
+      const { state } = party();
+      unit(state, "ann").passives = ["flanking"];
+      const far = addFoe(state, at(9, 6));
+      expect(previewAttack(state, unit(state, "ann"), "bow_shot", unit(state, far))!.adv).toBe(0);
+      hero(state, "dee", "qa_paladin", at(10, 6));
+      expect(previewAttack(state, unit(state, "ann"), "bow_shot", unit(state, far))!.adv).toBe(1);
+      // ann herself beside it is no flank.
+      const near = addFoe(state, at(6, 6));
+      expect(previewAttack(state, unit(state, "ann"), "stab", unit(state, near))!.notes.some((n) => /flank/i.test(n))).toBe(false);
+    });
+
+    it("Quick Fingers: a throw costs 1 AP", () => {
+      for (const [passives, cost] of [[["quick_fingers"], 1], [[], ACTION_AP]] as const) {
+        const { state, near } = withPassives(...passives);
+        const before = state.encounter!.budgets.ann.ap;
+        const after = must(state, { type: "throw", by: "ann", unit: "ann", item: "fire", at: unit(state, near).pos });
+        expect(after.encounter!.budgets.ann.ap).toBe(before - cost);
+        expect(throwAp(unit(state, "ann"))).toBe(cost);
+      }
+    });
   });
 });
 
