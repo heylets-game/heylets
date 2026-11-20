@@ -26,7 +26,7 @@ export interface HeroSheet {
   outfit?: Outfit;
   /** A lantern helm on the head, shown or hidden (isLanternHelm): it lights the dark round them in the caves. */
   lantern?: boolean;
-  /** Class traits picked so far (traits.ts). */
+  /** Passives picked so far (traits.ts): what they do in a hex fight is in zone/passives.ts. */
   traits?: string[];
   /** The class abilities chosen for the hero's slots (classabilities.ts). Fought with on top of the weapon's, in zone fights and voyage battles alike. */
   abilityLoadout?: (string | null)[];
@@ -84,6 +84,5 @@ export function heroCombatant(sheet: HeroSheet, vitals: Pick<Vitals, "hp" | "max
     abilities: withClassAbilities(abilitiesFor(sheet.weapon), classAbilitiesOf(sheet.classId, sheet.level, sheet.abilityLoadout)),
     effects: [],
     down: false,
-    traits: [...(sheet.traits ?? [])],
   };
 }

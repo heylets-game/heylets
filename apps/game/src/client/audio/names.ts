@@ -146,9 +146,9 @@ export function soundNames(): Set<string> {
       add(soundName.miss(a, style));
     }
   }
-  // Heals come from abilities, and from traits and a troll growing back.
+  // Heals come from abilities, and from a troll growing back.
   const regrowth = Object.values(ENEMIES).flatMap((e) => (e.regen ? [e.regen.name] : []));
-  for (const a of [...attacks, ...TRAITS.map((t) => t.name), ...regrowth]) add(soundName.heal(a));
+  for (const a of [...attacks, ...regrowth]) add(soundName.heal(a));
   for (const f of fighters) {
     add(soundName.attackVoice(f));
     add(soundName.hurt(f));

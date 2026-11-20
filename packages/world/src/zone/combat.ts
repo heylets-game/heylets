@@ -21,6 +21,7 @@ import { clusterHexes, enterWeather, makeWeather, rainHexes, wallHexes } from ".
 import { summonCall, summonSpots } from "./summon";
 import { layCurse, drown } from "./drowning";
 import { SHANTIES, joinable, shantyOf, songDamage, songMove, windward } from "./song";
+import { passiveHooks } from "./passives";
 import { constellationHexes, constellationLinks, courseMarks, litFoes } from "./stars";
 
 /** What a thrown bomb's blast is saved against. */
@@ -576,10 +577,10 @@ export function wayBetween(state: ZoneState, unit: Unit, to: HexPos): HexPos[] {
   return path ? [unit.pos, ...path] : hexSegment(unit.pos, to);
 }
 
-/** What a hero adds to an ability's damage: their stat, their weapon, half their level and any shanty playing. */
+/** What a hero adds to an ability's damage: their stat, their weapon, half their level, any shanty playing and their passives. */
 function damageBonus(state: ZoneState, unit: Unit, def: AbilityDef): number {
   // A torch swung in the hand hits with the torch, not the weapon put away for it.
-  return mod(statOf(unit, def.stat)) + (def.id === "torch_swing" ? 0 : unit.power) + Math.floor(unit.level / 2) + songDamage(state, unit);
+  return mod(statOf(unit, def.stat)) + (def.id === "torch_swing" ? 0 : unit.power) + Math.floor(unit.level / 2) + songDamage(state, unit) + passiveHooks(unit).reduce((n, p) => n + (p.damageBonus?.(state, unit, def) ?? 0), 0);
 }
 
 const saveDc = (unit: Unit, def: AbilityDef): number => 8 + proficiency(unit.level) + mod(statOf(unit, def.stat));
@@ -616,6 +617,7 @@ function strike(ctx: Ctx, unit: Unit, def: AbilityDef, tactic: Tactic, target: U
   const rolled = rollShown(ctx.rng, abilityDice(def), more, roll.crit);
   const dealt = damage(ctx, target, rolled.total, { actor: unit.id, what: def.id, crit: roll.crit, dice: rolled });
   if (def.drain && dealt > 0 && !unit.down) heal(ctx, unit, Math.max(1, Math.round(dealt * def.drain)), { actor: unit.id, what: def.id });
+  for (const p of passiveHooks(unit)) p.hit?.(ctx, unit, target, def, dealt, roll.crit);
   afflict(ctx, unit, def, target, true);
   if (tactic.guide && !target.down && (!tactic.guideSave || !saveRoll(ctx, target, SAVE_STAT.guiding_light, saveDc(unit, def), `Resist ${def.name}`).ok)) addCondition(ctx, target, "guiding_light", tactic.guide);
   if (tactic.drowns && !target.down && !saveRoll(ctx, target, SAVE_STAT.drowning, saveDc(unit, def), `Resist ${def.name}`).ok) drown(ctx, target, tactic.drowns);

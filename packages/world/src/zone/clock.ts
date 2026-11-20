@@ -17,6 +17,7 @@ import { burnOf, has, heal, regrow, removeCondition, tick, type Ctx } from "./en
 import { EXPLORE_ROUND_MS, TORCH_ROUND_MS } from "./kit";
 import { tickWeather } from "./weather";
 import { standInSurface, tickLights, tickSurfaces } from "./surfaces";
+import { passiveHooks } from "./passives";
 import type { Unit } from "./types";
 
 /** The most rounds counted at once, out of a fight; anything longer has run its course all the same. */
@@ -35,6 +36,7 @@ export function exploreRound(ctx: Ctx, unit: Unit): void {
   removeCondition(unit, "stunned");
   for (const kind of ["bleeding", "burning"] as const) if (has(unit, kind)) tick(ctx, unit, kind, kind === "burning" ? burnOf(unit) : (EFFECT_TICK[kind] ?? 0));
   if (unit.down) return;
+  for (const p of passiveHooks(unit)) p.turnStart?.(ctx, unit, false);
   regrow(ctx, unit);
   const grows = unit.side === "enemy" ? ENEMIES[unit.kind]?.regen : undefined;
   if (grows && unit.hp < unit.maxHp && !has(unit, grows.unless)) heal(ctx, unit, grows.amount, { actor: unit.id, what: grows.name });

@@ -7,7 +7,6 @@
 import { FREE_POINTS_PER_LEVEL, LEVELUP_AUTO_ALLOC, STARTING_STATS, type Stats } from "@gantt-quest/core";
 import { createBattle, currentActor, stepBattle, type BattleAction, type BattleEvent, type BattleState, type Combatant } from "./battle";
 import { ABILITIES, ENEMIES, HERO_CLASSES, WEAPONS, bandKinds, cavernBand, heroClass, type CavernLead, type RoamerLead } from "./content";
-import { traitsFor } from "./traits";
 import { heroCombatant, type HeroSheet } from "./hero";
 import { makeRng } from "./rng";
 
@@ -66,8 +65,6 @@ export interface SimHero {
   weapon?: string;
   weaponPower?: number;
   armor?: number;
-  /** Class traits picked (traits.ts). */
-  traits?: string[];
 }
 
 /** Stats at `level`: the class baseline, its auto-allocation, and free points into its main stat. */
@@ -90,7 +87,6 @@ function sheet(h: SimHero, i: number): HeroSheet {
     weapon: h.weapon ?? heroClass(h.classId)!.weapons[0],
     weaponPower: h.weaponPower ?? 0,
     armor: h.armor ?? 0,
-    traits: h.traits ?? [],
   };
 }
 
@@ -361,14 +357,6 @@ export function balanceReport(seeds = 40, level = 1): string {
     lines.push(`  strongest: ${sorted.slice(-4).reverse().map((r) => `${r.p.join("+")} ${pct(r.v.clearRate).trim()}`).join(", ")}`);
   }
   if (level >= 4) {
-    lines.push("");
-    lines.push(`TRAITS: solo voyages, ${g} seeds; clear rate with no traits, then each level-2 pick x level-4 pick (a1/a2 = first level-4 option, b1/b2 = second)`);
-    for (const c of SIM_CLASSES) {
-      const [t1a, t1b] = traitsFor(c).filter((t) => t.tier === 1);
-      const [t2a, t2b] = traitsFor(c).filter((t) => t.tier === 2);
-      const run = (traits: string[]) => pct(gauntletRow([{ ...at(c), traits }], g, c).clearRate).trim();
-      lines.push(`  ${c.padEnd(16)} none ${run([])} | ${t1a.name} + ${t2a.name} ${run([t1a.id, t2a.id])}, + ${t2b.name} ${run([t1a.id, t2b.id])} | ${t1b.name} + ${t2a.name} ${run([t1b.id, t2a.id])}, + ${t2b.name} ${run([t1b.id, t2b.id])}`);
-    }
     lines.push("");
     lines.push(`SIGNATURE WEAPONS: solo voyages, ${g} seeds; clear rate with the starting weapon, the loot weapon, and the signature weapon`);
     for (const c of SIM_CLASSES) {

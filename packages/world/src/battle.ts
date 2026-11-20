@@ -23,7 +23,6 @@ import {
 } from "./content";
 import { afterArmor, type Outfit } from "./gear";
 import type { Rng } from "./rng";
-import { DEBUFFS, TRAIT_BY_ID, type TraitRule } from "./traits";
 
 export interface ActiveEffect {
   kind: EffectKind;
@@ -68,10 +67,6 @@ export interface Combatant {
   turns?: number;
   /** Enemies only: the move it will make on its next turn. */
   intent?: Intent | null;
-  /** Heroes only: the class traits they picked (traits.ts). */
-  traits?: string[];
-  /** Once-a-fight traits already used up this fight, by trait id. */
-  spent?: string[];
 }
 
 export type BattleStatus = "active" | "victory" | "defeat" | "fled";
@@ -113,9 +108,7 @@ export type BattleEvent =
   | { t: "skip"; id: string; effect: EffectKind }
   | { t: "down"; id: string }
   | { t: "flee"; actor: string; ok: boolean }
-  | { t: "end"; status: BattleStatus }
-  /** A class trait kicked in. */
-  | { t: "trait"; id: string; trait: string };
+  | { t: "end"; status: BattleStatus };
 
 export const POTION_HEAL = 12;
 
@@ -190,12 +183,6 @@ export function createBattle(setup: BattleSetup, rng: Rng): { state: BattleState
   };
   const events: BattleEvent[] = [];
   for (const e of enemies) chooseIntent(state, e, rng, events);
-  for (const h of combatants.filter((c) => c.side === "hero" && !c.down)) {
-    for (const { id, rule } of rulesOf(h, "start_effect")) {
-      addEffect(state, h, rule.effect, rule.turns, events);
-      events.push({ t: "trait", id: h.id, trait: id });
-    }
-  }
   advance(state, rng, events);
   return { state, events };
 }
@@ -208,17 +195,6 @@ const find = (state: BattleState, id: string) => state.combatants.find((c) => c.
 const living = (state: BattleState, side: "hero" | "enemy") =>
   state.combatants.filter((c) => c.side === side && !c.down);
 const hasEffect = (c: Combatant, kind: EffectKind) => c.effects.some((e) => e.kind === kind);
-
-/** A combatant's trait rules of one kind, with the trait each came from. */
-function rulesOf<K extends TraitRule["t"]>(c: Combatant, kind: K): { id: string; rule: Extract<TraitRule, { t: K }> }[] {
-  if (c.side !== "hero" || !c.traits) return [];
-  return c.traits
-    .filter((id) => TRAIT_BY_ID[id]?.rule.t === kind)
-    .map((id) => ({ id, rule: TRAIT_BY_ID[id].rule as Extract<TraitRule, { t: K }> }));
-}
-
-/** Different debuffs on a combatant right now. */
-const debuffCount = (c: Combatant) => c.effects.filter((e) => DEBUFFS.includes(e.kind)).length;
 
 /** Who acts next: the lowest clock, then the faster, then the earlier in the line-up. */
 function nextUp(state: BattleState): Combatant | undefined {
@@ -270,8 +246,6 @@ function chooseIntent(state: BattleState, c: Combatant, rng: Rng, events: Battle
 }
 
 function addEffect(state: BattleState, target: Combatant, effect: EffectKind, turns: number, events: BattleEvent[], by?: Combatant) {
-  // Some traits make the effects their hero causes last longer.
-  if (by) for (const { rule } of rulesOf(by, "longer")) if (rule.effects.includes(effect)) turns += rule.turns;
   const existing = target.effects.find((e) => e.kind === effect);
   if (existing) existing.turns = Math.max(existing.turns, turns);
   else target.effects.push({ kind: effect, turns });
@@ -300,31 +274,11 @@ function damage(state: BattleState, target: Combatant, raw: number, events: Batt
   const amount = Math.max(0, guarded ? Math.ceil(blunted / 2) : blunted);
   target.hp = Math.max(0, target.hp - amount);
   events.push(cause(amount));
-  // A once-a-fight trait can keep a hero up on 1 HP.
-  if (target.hp === 0 && !target.down) {
-    const stand = rulesOf(target, "last_stand").find(({ id }) => !(target.spent ?? []).includes(id));
-    if (stand) {
-      target.hp = 1;
-      (target.spent ??= []).push(stand.id);
-      events.push({ t: "trait", id: target.id, trait: stand.id });
-    }
-  }
   if (target.hp === 0 && !target.down) {
     target.down = true;
     target.effects = [];
     target.intent = null;
     events.push({ t: "down", id: target.id });
-    // Some heroes take heart (and HP) from every enemy that falls.
-    if (target.side === "enemy") {
-      for (const h of living(state, "hero")) {
-        for (const { id, rule } of rulesOf(h, "on_kill_heal")) {
-          const healed = Math.min(h.maxHp - h.hp, rule.amount);
-          if (healed <= 0) continue;
-          h.hp += healed;
-          events.push({ t: "heal", actor: h.id, target: h.id, amount: healed, ability: TRAIT_BY_ID[id].name });
-        }
-      }
-    }
   }
   settle(state);
   return amount;
@@ -390,17 +344,6 @@ function advance(state: BattleState, rng: Rng, events: BattleEvent[]) {
       const amount = Math.min(actor.maxHp - actor.hp, grows.amount);
       actor.hp += amount;
       events.push({ t: "heal", actor: actor.id, target: actor.id, amount, ability: grows.name });
-    }
-    for (const { id, rule } of rulesOf(actor, "regen")) {
-      const amount = Math.min(actor.maxHp - actor.hp, rule.amount);
-      if (amount <= 0) continue;
-      actor.hp += amount;
-      events.push({ t: "heal", actor: actor.id, target: actor.id, amount, ability: TRAIT_BY_ID[id].name });
-    }
-    for (const { id } of rulesOf(actor, "low_hp_guard")) {
-      if (actor.hp * 3 >= actor.maxHp || hasEffect(actor, "guarded")) continue;
-      addEffect(state, actor, "guarded", 1, events);
-      events.push({ t: "trait", id: actor.id, trait: id });
     }
 
     const stun = actor.effects.find((e) => e.kind === "stunned");
@@ -474,16 +417,6 @@ function resolveAbility(
     focus,
   }, rng);
   events.push({ t: "check", actor: actor.id, check });
-  // A crewmate's perfect gives some heroes focus.
-  if (check.perfect && actor.side === "hero") {
-    for (const h of living(state, "hero")) {
-      if (h === actor) continue;
-      for (const { id } of rulesOf(h, "ally_perfect_focus")) {
-        h.focus += 1;
-        events.push({ t: "trait", id: h.id, trait: id });
-      }
-    }
-  }
   const scale = check.successes / def.rolls;
 
   for (const target of targets) {
@@ -492,19 +425,11 @@ function resolveAbility(
         events.push({ t: "miss", actor: actor.id, target: target.id, ability: def.name });
         continue;
       }
-      // Payoffs for what the target already carries, from traits.
-      let flat = 0;
-      let mult = 1;
-      for (const { rule } of rulesOf(actor, "vs_effect")) if (hasEffect(target, rule.effect)) flat += rule.bonus;
-      for (const { rule } of rulesOf(actor, "per_debuff")) flat += rule.bonus * debuffCount(target);
-      const weak = target.hp * 4 < target.maxHp;
-      if (weak) for (const { rule } of rulesOf(actor, "finisher")) mult *= rule.mult;
       const base = Math.round((def.damage + actor.level + actor.power) * scale);
-      const amount = damage(state, target, Math.round((base + flat) * mult), events, true, (amount) => ({
+      const amount = damage(state, target, base, events, true, (amount) => ({
         t: "hit", actor: actor.id, target: target.id, amount, ability: def.name, perfect: check.perfect,
       }));
       if (check.perfect && def.perfect && !target.down) addEffect(state, target, def.perfect.effect, def.perfect.turns, events, actor);
-      if (check.perfect && !target.down) for (const { rule } of rulesOf(actor, "perfect_effect")) addEffect(state, target, rule.effect, rule.turns, events, actor);
       if (def.drain && amount > 0 && !actor.down && actor.hp < actor.maxHp) {
         const healed = Math.min(actor.maxHp - actor.hp, Math.max(1, Math.round(amount * def.drain)));
         actor.hp += healed;
@@ -608,8 +533,7 @@ export function stepBattle(prev: BattleState, actorId: string, action: BattleAct
     if (!target || target.side !== "hero" || target.down) return { ok: false, error: "invalid target" };
     actor.potions -= 1;
     state.itemUsed = true;
-    const bonus = rulesOf(actor, "potion_bonus").reduce((a, { rule }) => a + rule.amount, 0);
-    const amount = Math.min(target.maxHp - target.hp, POTION_HEAL + bonus);
+    const amount = Math.min(target.maxHp - target.hp, POTION_HEAL);
     target.hp += amount;
     events.push({ t: "heal", actor: actor.id, target: target.id, amount, ability: "Potion" });
     return { ok: true, state, events };
@@ -622,15 +546,6 @@ export function stepBattle(prev: BattleState, actorId: string, action: BattleAct
     if (focus > actor.focus || focus > def.rolls) return { ok: false, error: "not enough focus" };
     const err = resolveAbility(state, actor, def, action.target, focus, rng, events);
     if (err) return { ok: false, error: err };
-    // The first focus spent in a fight can come back.
-    if (focus > 0) {
-      const free = rulesOf(actor, "first_focus_free").find(({ id }) => !(actor.spent ?? []).includes(id));
-      if (free) {
-        actor.focus += 1;
-        (actor.spent ??= []).push(free.id);
-        events.push({ t: "trait", id: actor.id, trait: free.id });
-      }
-    }
   } else if (action.type === "flee") {
     if (state.boss) return { ok: false, error: "there is no running from this fight" };
     const focus = Math.max(0, Math.floor(action.focus ?? 0));

@@ -90,6 +90,7 @@ export {
 export { mod as statMod, proficiency, heroMove, heroDefence, diceFor, diceText, diceAverage, hitChance, rollShown, type Dice } from "./rules";
 export { attackContext, defenceOf, has as hasCondition, shieldOf, unseen, type AttackContext } from "./engine";
 export { abilityArea, carrySpot, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, crateBlow, moveLeft, walkAp, apForMove, payMove, previewAttack, leavesReach, shiftInto, shoveDest, edgeDc, EDGE_DC, type Aim, type Shift } from "./combat";
+export { PASSIVE_HOOKS, passiveHooks, type PassiveHooks } from "./passives";
 export { chartOf, constellationHexes, constellationLinks, courseMarks, litFoes } from "./stars";
 export { SURFACE_INFO, HARMFUL as HARMFUL_SURFACES } from "./surfaces";
 export { WEATHER_INFO, wallHexes } from "./weather";

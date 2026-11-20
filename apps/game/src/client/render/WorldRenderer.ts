@@ -18,7 +18,7 @@ import "./camera.css";
 import { PINCH_PAN_SLACK, followIconSvg, readFollow, writeFollow } from "./cameraFollow";
 import type { HexPos } from "@gantt-quest/core";
 import { hexDistance } from "@gantt-quest/core";
-import { lookStep, lookYaw, BASE_HEIGHT, BATTLE_JOIN_RANGE, HARBOR_HEART_AT, BIG_REACH, ENEMIES, HEX_DIRS, SEATS, TRAIT_BY_ID, tileCost, WALL_FACE_HALF, WALL_ITEM_BOTTOM, WALL_ITEM_TOP, hexAt, xpProgress, reachable, tileAt, wallFace, wallFaces, type Biome, type ClientState, type Clime, type Outfit, type Phase, type Poi, type Tile, type WorldEvent, type WorldMap } from "@gantt-quest/world";
+import { lookStep, lookYaw, BASE_HEIGHT, BATTLE_JOIN_RANGE, HARBOR_HEART_AT, BIG_REACH, ENEMIES, HEX_DIRS, SEATS, tileCost, WALL_FACE_HALF, WALL_ITEM_BOTTOM, WALL_ITEM_TOP, hexAt, xpProgress, reachable, tileAt, wallFace, wallFaces, type Biome, type ClientState, type Clime, type Outfit, type Phase, type Poi, type Tile, type WorldEvent, type WorldMap } from "@gantt-quest/world";
 import { fancy, fancyGrass } from "./fancy";
 import { NightLife } from "./nightlife";
 import { Storm } from "./storm";
@@ -1518,8 +1518,6 @@ export class WorldRenderer {
           });
         }
         else if (b.t === "turn" && b.id === this.state?.you) myTurnAt = beat;
-        // A class trait kicking in gets its name over the hero.
-        else if (b.t === "trait") this.later(beat++, () => { const name = TRAIT_BY_ID[b.trait]?.name ?? b.trait; sounds.trait(name, this.spot(b.id)); this.float(b.id, name, "#facc15"); });
         // These ride on the blow before them rather than taking a beat of their own.
         else if (b.t === "effect") { this.later(Math.max(startBeat, beat - 1) + 0.4, () => sounds.effect(b.effect, this.spot(b.target))); }
         else if (b.t === "down") {

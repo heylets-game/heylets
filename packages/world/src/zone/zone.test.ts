@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { STARTING_STATS, allHexesInGrid, hexDistance, hexNeighbors, posKey, type HexGrid, type HexPos } from "@gantt-quest/core";
 import { ABILITIES, EFFECT_TICK, ENEMIES, HERO_CLASSES, SUNDERED_DEFENCE, WEAPONS, abilitiesFor } from "../content";
 import { CLIMES, type Biome, type Tile } from "../map";
@@ -12,11 +12,13 @@ import { HEX_ROOM, adjacent, blast, blockerAt, flies, isDead, sees, seesFor, sol
 import { propOf } from "./props";
 import { SITE_IDS, backdropOf, siteInside, type SiteId } from "./sites";
 import { ACTION_AP, AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, CHART, COMMON_ACTIONS, BLOCK, BONUS_AP, BOLSTER, GUARD_UP, STAND_STRONG, STURDY, ENEMY_BURST, ENEMY_HP_SCALE, ENEMY_KIT, ENEMY_MOVE_AP, EXPLORE_ROUND_MS, FLEE_RANGE, LIGHT_RADIUS, SHIELD_SET_ASIDE, TACTICS, TORCH_GROUND_ROUNDS, TORCH_HELD_ROUNDS, TORCH_ROUND_MS, abilityDice as abilityDiceFor, commonCost, enemyHp, enemyMove, enemyStrikes, tacticOf } from "./kit";
-import { MAX_CATCHUP_ROUNDS } from "./clock";
+import { MAX_CATCHUP_ROUNDS, exploreRound } from "./clock";
+import { PASSIVE_HOOKS } from "./passives";
+import { TRAITS, TRAIT_BY_ID } from "../traits";
 import { defenceOf } from "./engine";
 import { abilityArea, checkAbility, crateBlow, enemyAct, wayBetween } from "./combat";
 import { d20, diceAverage, diceFor, heroMove, hitChance } from "./rules";
-import { createZone, ensureMouth, spentOut, standInHero, stepZone, zoneView } from "./zone";
+import { createZone, ensureMouth, spentOut, standInHero, stepZone, zoneHero, zoneView } from "./zone";
 import { DELVE_CRATES, generateDelve } from "./delve";
 import { litHexes } from "./light";
 import { poolFor } from "../classabilities";
@@ -5391,6 +5393,62 @@ describe("Warlock weapons", () => {
       if (hit.crit) return;
     }
     throw new Error("never a critical hit");
+  });
+});
+
+describe("passives", () => {
+  afterEach(() => {
+    delete PASSIVE_HOOKS.test_passive;
+    for (const d of TRAITS.splice(0)) delete TRAIT_BY_ID[d.id];
+  });
+
+  it("carry into a map only those of the hero's class", () => {
+    for (const d of [{ id: "pal", classId: "qa_paladin" }, { id: "mag", classId: "devops_mage" }]) {
+      const def = { ...d, tier: 1 as const, name: d.id, blurb: "" };
+      TRAITS.push(def);
+      TRAIT_BY_ID[d.id] = def;
+    }
+    const sheet = { id: "ann", name: "Ann", classId: "qa_paladin", level: 4, base: STARTING_STATS.qa_paladin, bonus: {}, weapon: HERO_CLASSES[0].weapons[0], weaponPower: 0, armor: 0, traits: ["pal", "mag", "gone"] };
+    expect(zoneHero(sheet).passives).toEqual(["pal"]);
+    let state = board();
+    state = must(state, { type: "join", hero: zoneHero(sheet) });
+    expect(unit(state, "ann").passives).toEqual(["pal"]);
+  });
+
+  it("are called as a fight is entered, as each turn starts, for each blow's damage and on each hit", () => {
+    const calls: string[] = [];
+    PASSIVE_HOOKS.test_passive = {
+      enterFight: (_ctx, u) => calls.push(`enter:${u.id}`),
+      turnStart: (_ctx, u, inFight) => calls.push(`turn:${u.id}:${inFight}`),
+      damageBonus: () => 50,
+      hit: (_ctx, u, target, def, dealt) => calls.push(`hit:${u.id}:${target.id}:${def.id}:${dealt >= 50}`),
+    };
+    let state = board();
+    state.aiOff = true;
+    hero(state, "ann", "qa_paladin", at(5, 6)).passives = ["test_passive"];
+    const foe = enemy(state, "dummy", at(6, 6));
+    state = provoke(state);
+    expect(calls).toContain("enter:ann");
+    expect(calls).toContain("turn:ann:true");
+    for (let seed = 1; seed < 80; seed++) {
+      const tryState = structuredClone(state);
+      tryState.rng = seed;
+      const events: ZoneEvent[] = [];
+      must(tryState, { type: "use", by: "ann", unit: "ann", ability: "bash", target: foe.id }, events);
+      if (!events.some((e) => e.t === "hit" && e.target === foe.id)) continue;
+      expect(calls).toContain(`hit:ann:${foe.id}:bash:true`);
+      return;
+    }
+    throw new Error("never a hit");
+  });
+
+  it("start a round out of a fight too", () => {
+    const calls: boolean[] = [];
+    PASSIVE_HOOKS.test_passive = { turnStart: (_ctx, _u, inFight) => calls.push(inFight) };
+    const state = board();
+    hero(state, "ann", "qa_paladin", at(5, 6)).passives = ["test_passive"];
+    exploreRound({ state, rng: makeRng(1), events: [], effects: [] } as unknown as Ctx, unit(state, "ann"));
+    expect(calls).toEqual([false]);
   });
 });
 

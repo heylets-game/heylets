@@ -25,10 +25,12 @@ import { weaponItem } from "../gear";
 import { tileAt } from "../map";
 import type { HeroSheet } from "../hero";
 import { addStats, maxFocusFor, maxHpFor } from "../progression";
+import { TRAIT_BY_ID } from "../traits";
 import { makeRng, seedFromString } from "../rng";
 import { enemyTurn } from "./ai";
 import { abilityArea, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, doCommon, drinkItem, moveLeft, resolveAbility, throwItem, walk } from "./combat";
 import { burnOf, has, heal, regrow, removeCondition, tick, unseen, type Ctx } from "./engine";
+import { passiveHooks } from "./passives";
 import { ALERT_RANGE, JOIN_RANGE, freeHexNear, generateZone } from "./gen";
 import { generateDelve } from "./delve";
 import { checkLoot, checkOpen, leaveBody, look, lootFor, openChest, payBounty, take } from "./loot";
@@ -144,6 +146,7 @@ function heroUnit(hero: ZoneHero, pos: HexPos, controller?: string): Unit {
     armor: hero.armor,
     power: hero.weaponPower,
     abilities: heroAbilities(hero),
+    ...(hero.passives?.length ? { passives: [...hero.passives] } : {}),
     outfit: hero.outfit,
     ...(hero.lantern ? { lantern: true } : {}),
     conditions: [],
@@ -162,6 +165,7 @@ export function zoneHero(sheet: HeroSheet, items?: Partial<Record<Throwable, num
     ...(sheet.lantern ? { lantern: true } : {}),
     maxHp: maxHpFor(stats, sheet.level), maxFocus: maxFocusFor(sheet.level),
     classAbilities: classAbilitiesOf(sheet.classId, sheet.level, sheet.abilityLoadout),
+    passives: (sheet.traits ?? []).filter((id) => TRAIT_BY_ID[id]?.classId === sheet.classId),
     ...(items ? { items: cleanItems(items) } : {}),
   };
 }
@@ -227,6 +231,7 @@ function enter(ctx: Ctx, enc: Encounter, unit: Unit): void {
   enc.order.splice(at < 0 ? enc.order.length : at, 0, unit.id);
   // One who fled it and is back is simply in it again.
   if (enc.fled?.includes(unit.id)) enc.fled = enc.fled.filter((id) => id !== unit.id);
+  for (const p of passiveHooks(unit)) p.enterFight?.(ctx, unit);
 }
 
 /**
@@ -433,6 +438,7 @@ function beginTurn(ctx: Ctx, enc: Encounter, unit: Unit): boolean {
   if (song) song.surge = 0;
   for (const kind of ["bleeding", "burning"] as const) if (has(unit, kind)) tick(ctx, unit, kind, kind === "burning" ? burnOf(unit) : (EFFECT_TICK[kind] ?? 0));
   if (unit.down) return false;
+  for (const p of passiveHooks(unit)) p.turnStart?.(ctx, unit, true);
   // A Healing Aura mends the bearer and everyone of theirs standing beside them.
   if (has(unit, "mending")) {
     for (const u of ctx.state.units) {
@@ -810,7 +816,7 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
       // Back again, perhaps with different gear: the sheet is refreshed, and where they stand and how hurt they are is kept.
       // Not in a fight, though: that is fought in the gear it was started in. Nor a hero given a dev kit.
       if (inFight(state, here.id) || here.devKit) return null;
-      Object.assign(here, { name: hero.name, kind: hero.classId, level: hero.level, stats: hero.stats, armor: hero.armor, power: hero.weaponPower, outfit: hero.outfit, lantern: hero.lantern, maxHp: hero.maxHp, maxFocus: hero.maxFocus });
+      Object.assign(here, { name: hero.name, kind: hero.classId, level: hero.level, stats: hero.stats, armor: hero.armor, power: hero.weaponPower, outfit: hero.outfit, lantern: hero.lantern, maxHp: hero.maxHp, maxFocus: hero.maxFocus, passives: hero.passives?.length ? [...hero.passives] : undefined });
       // A torch swung in the main hand stays there: the new weapon is what is taken up when it goes.
       if (here.torchHand === "main") here.stowed = heroAbilities(hero);
       else here.abilities = heroAbilities(hero);
