@@ -13,14 +13,11 @@ import type { StatKey } from "@gantt-quest/core";
 import { rollCheck, statPct, type CheckResult } from "./check";
 import {
   ABILITIES,
-  BARD_AURA,
-  DRUID_REGEN,
   EFFECT_TICK,
   ENEMIES,
   EXPOSED_BONUS,
   HASTE_FACTOR,
   SLOW_FACTOR,
-  WARLOCK_BLEED_TURNS,
   type AbilityDef,
   type EffectKind,
 } from "./content";
@@ -168,12 +165,10 @@ export function createBattle(setup: BattleSetup, rng: Rng): { state: BattleState
       down: false,
     };
   });
-  // The Tidewall Warden comes into every fight already guarded (see advance for how long it lasts).
   const combatants: Combatant[] = [
     ...setup.heroes.map((h) => {
       const down = h.hp <= 0;
-      const effects: ActiveEffect[] = h.kind === "sre_warden" && !down ? [{ kind: "guarded", turns: 1 }] : [];
-      return { ...h, effects, down, intent: undefined };
+      return { ...h, effects: [] as ActiveEffect[], down, intent: undefined };
     }),
     ...enemies,
   ];
@@ -372,13 +367,10 @@ function advance(state: BattleState, rng: Rng, events: BattleEvent[]) {
     state.actor = actor.id;
     state.turnNo += 1;
     state.itemUsed = false;
-    const firstTurn = (actor.turns ?? 0) === 0;
     actor.turns = (actor.turns ?? 0) + 1;
 
-    // Guard and taunt last until the start of the combatant's next turn. The
-    // Tidewall Warden's opening guard holds through its first turn, to its second.
-    const keepGuard = actor.kind === "sre_warden" && actor.side === "hero" && firstTurn;
-    actor.effects = actor.effects.filter((e) => e.kind !== "taunting" && (keepGuard || e.kind !== "guarded"));
+    // Guard and taunt last until the start of the combatant's next turn.
+    actor.effects = actor.effects.filter((e) => e.kind !== "taunting" && e.kind !== "guarded");
     for (const e of [...actor.effects]) {
       const tick = EFFECT_TICK[e.kind];
       if (tick) {
@@ -392,12 +384,6 @@ function advance(state: BattleState, rng: Rng, events: BattleEvent[]) {
     if (state.status !== "active") break;
     if (actor.down) continue;
 
-    // The Reef Druid grows back a little at the start of each of its turns, stunned or not.
-    if (actor.side === "hero" && actor.kind === "backend_druid" && actor.hp < actor.maxHp) {
-      const amount = Math.min(actor.maxHp - actor.hp, DRUID_REGEN);
-      actor.hp += amount;
-      events.push({ t: "heal", actor: actor.id, target: actor.id, amount, ability: "Deep Roots" });
-    }
     // A troll's wounds close at the start of each of its turns, stunned or not, unless it is on fire.
     const grows = actor.side === "enemy" ? ENEMIES[actor.kind]?.regen : undefined;
     if (grows && actor.hp < actor.maxHp && !hasEffect(actor, grows.unless)) {
@@ -499,8 +485,6 @@ function resolveAbility(
     }
   }
   const scale = check.successes / def.rolls;
-  // While a Shanty Bard stands, every other hero hits a little harder.
-  const aura = actor.side === "hero" && actor.kind !== "frontend_bard" && living(state, "hero").some((h) => h.kind === "frontend_bard") ? BARD_AURA : 0;
 
   for (const target of targets) {
     if (def.damage !== undefined) {
@@ -515,13 +499,11 @@ function resolveAbility(
       for (const { rule } of rulesOf(actor, "per_debuff")) flat += rule.bonus * debuffCount(target);
       const weak = target.hp * 4 < target.maxHp;
       if (weak) for (const { rule } of rulesOf(actor, "finisher")) mult *= rule.mult;
-      const base = Math.round((def.damage + actor.level + actor.power + aura) * scale);
+      const base = Math.round((def.damage + actor.level + actor.power) * scale);
       const amount = damage(state, target, Math.round((base + flat) * mult), events, true, (amount) => ({
         t: "hit", actor: actor.id, target: target.id, amount, ability: def.name, perfect: check.perfect,
       }));
       if (check.perfect && def.perfect && !target.down) addEffect(state, target, def.perfect.effect, def.perfect.turns, events, actor);
-      // The Wreck Warlock's perfect hits leave the target bleeding.
-      if (check.perfect && actor.side === "hero" && actor.kind === "data_warlock" && !target.down) addEffect(state, target, "bleeding", WARLOCK_BLEED_TURNS, events, actor);
       if (check.perfect && !target.down) for (const { rule } of rulesOf(actor, "perfect_effect")) addEffect(state, target, rule.effect, rule.turns, events, actor);
       if (def.drain && amount > 0 && !actor.down && actor.hp < actor.maxHp) {
         const healed = Math.min(actor.maxHp - actor.hp, Math.max(1, Math.round(amount * def.drain)));

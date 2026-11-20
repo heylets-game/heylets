@@ -6,7 +6,7 @@
 // blows, blasts and bombs reach crates too (crates.ts).
 
 import { hexDistance, hexNeighbors, hexSegment, posKey, type HexPos } from "@gantt-quest/core";
-import { ABILITIES, BARD_AURA, ENEMIES, type AbilityDef, type EffectKind } from "../content";
+import { ABILITIES, ENEMIES, type AbilityDef, type EffectKind } from "../content";
 import { tileAt, type Poi } from "../map";
 import { DEBUFFS, addCondition, addShield, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, kindle, removeCondition, saveBonus, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
 import { cratesOn, crateById, hurtCrate, isCrateId } from "./crates";
@@ -23,8 +23,6 @@ import { layCurse, drown } from "./drowning";
 import { SHANTIES, joinable, shantyOf, songDamage, songMove, windward } from "./song";
 import { constellationHexes, constellationLinks, courseMarks, litFoes } from "./stars";
 
-/** How near a Bard has to be for their tune to help. */
-export const BARD_AURA_RANGE = 3;
 /** What a thrown bomb's blast is saved against. */
 const THROW_SAVE = 12;
 
@@ -578,11 +576,10 @@ export function wayBetween(state: ZoneState, unit: Unit, to: HexPos): HexPos[] {
   return path ? [unit.pos, ...path] : hexSegment(unit.pos, to);
 }
 
-/** What a hero adds to an ability's damage: their stat, their weapon, half their level, and a Bard's tune if one is near. */
+/** What a hero adds to an ability's damage: their stat, their weapon, half their level and any shanty playing. */
 function damageBonus(state: ZoneState, unit: Unit, def: AbilityDef): number {
-  const tune = state.units.some((u) => u.id !== unit.id && u.side === unit.side && u.kind === "frontend_bard" && !u.down && hexDistance(u.pos, unit.pos) <= BARD_AURA_RANGE) ? BARD_AURA : 0;
   // A torch swung in the hand hits with the torch, not the weapon put away for it.
-  return mod(statOf(unit, def.stat)) + (def.id === "torch_swing" ? 0 : unit.power) + Math.floor(unit.level / 2) + tune + songDamage(state, unit);
+  return mod(statOf(unit, def.stat)) + (def.id === "torch_swing" ? 0 : unit.power) + Math.floor(unit.level / 2) + songDamage(state, unit);
 }
 
 const saveDc = (unit: Unit, def: AbilityDef): number => 8 + proficiency(unit.level) + mod(statOf(unit, def.stat));
@@ -619,8 +616,6 @@ function strike(ctx: Ctx, unit: Unit, def: AbilityDef, tactic: Tactic, target: U
   const rolled = rollShown(ctx.rng, abilityDice(def), more, roll.crit);
   const dealt = damage(ctx, target, rolled.total, { actor: unit.id, what: def.id, crit: roll.crit, dice: rolled });
   if (def.drain && dealt > 0 && !unit.down) heal(ctx, unit, Math.max(1, Math.round(dealt * def.drain)), { actor: unit.id, what: def.id });
-  // A Warlock's critical hits drag the target under (Riptide).
-  if (roll.crit && unit.kind === "data_warlock") drown(ctx, target, 1);
   afflict(ctx, unit, def, target, true);
   if (tactic.guide && !target.down && (!tactic.guideSave || !saveRoll(ctx, target, SAVE_STAT.guiding_light, saveDc(unit, def), `Resist ${def.name}`).ok)) addCondition(ctx, target, "guiding_light", tactic.guide);
   if (tactic.drowns && !target.down && !saveRoll(ctx, target, SAVE_STAT.drowning, saveDc(unit, def), `Resist ${def.name}`).ok) drown(ctx, target, tactic.drowns);

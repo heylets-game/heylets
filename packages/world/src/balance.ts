@@ -1,8 +1,7 @@
 // Class balance simulation. Plays many seeded fights per class and per small
 // party against the island's real encounters (roaming bands, camps, lairs),
 // with a plain "sensible player" policy, and reports win rate, rounds to
-// win, damage and healing per hero turn, and what the two passives (the
-// Bard's aura, the Druid's regrowth) are worth. Deterministic: the same
+// win, and damage and healing per hero turn. Deterministic: the same
 // seeds give the same table. Not used by the game; balance.test.ts runs it.
 
 import { FREE_POINTS_PER_LEVEL, LEVELUP_AUTO_ALLOC, STARTING_STATS, type Stats } from "@gantt-quest/core";
@@ -149,67 +148,43 @@ export interface FightTally {
   heroTurns: number;
   /** Direct and over-time damage the heroes dealt, per class id. */
   damage: Record<string, number>;
-  /** Healing from abilities and passives, per class id (not potions). */
+  /** Healing from abilities, per class id (not potions). */
   healing: Record<string, number>;
   turns: Record<string, number>;
-  /** Extra damage the Bard's aura added. */
-  aura: number;
-  /** HP the Druid's Deep Roots gave back. */
-  regen: number;
   /** Heroes standing at the end. */
   standing: number;
   /** Each hero's HP, focus and potions after the fight, as the voyage keeps them (a downed winner gets up on 1 HP). */
   after: { hp: number; focus: number; potions: number }[];
 }
 
-export interface SimOptions {
-  /** Strip the passives by disguising the class (the passives key off the class id). */
-  noAura?: boolean;
-  noRegen?: boolean;
-}
-
 /** One seeded fight, with rested heroes unless `carry` gives their HP, focus and potions. */
-export function simFight(party: SimHero[], enemyKinds: string[], seed: number, opts: SimOptions = {}, carry?: FightTally["after"]): FightTally {
+export function simFight(party: SimHero[], enemyKinds: string[], seed: number, carry?: FightTally["after"]): FightTally {
   const rng = makeRng(seed);
   const heroes = party.map((h, i) => {
     const c = heroCombatant(sheet(h, i));
     if (carry) Object.assign(c, carry[i]);
-    if ((opts.noAura && c.kind === "frontend_bard") || (opts.noRegen && c.kind === "backend_druid")) c.kind = `${c.kind}~`;
     return c;
   });
   const classOf = new Map(heroes.map((h, i) => [h.id, party[i].classId]));
   const avgLevel = party.reduce((a, h) => a + h.level, 0) / party.length;
   const created = createBattle({ heroes, enemyKinds, avgLevel, poiId: null }, rng);
   let state = created.state;
-  const tally: FightTally = { won: false, rounds: 0, heroTurns: 0, damage: {}, healing: {}, turns: {}, aura: 0, regen: 0, standing: 0, after: [] };
+  const tally: FightTally = { won: false, rounds: 0, heroTurns: 0, damage: {}, healing: {}, turns: {}, standing: 0, after: [] };
   const add = (rec: Record<string, number>, id: string, n: number) => {
     const cls = classOf.get(id);
     if (cls) rec[cls] = (rec[cls] ?? 0) + n;
   };
   // Who put each burn or bleed on whom, so ticks credit the right class.
   const dotOwner = new Map<string, string>();
-  const read = (events: BattleEvent[], actorAbility?: { actor: Combatant; ability: string; scale?: number }) => {
-    let scale = 0;
+  const read = (events: BattleEvent[], actorAbility?: { actor: Combatant; ability: string }) => {
     for (const e of events) {
-      if (e.t === "check" && actorAbility && e.actor === actorAbility.actor.id) scale = e.check.successes / e.check.rolls.length;
-      if (e.t === "hit" && classOf.has(e.actor)) {
-        add(tally.damage, e.actor, e.amount);
-        const a = actorAbility?.actor;
-        const def = ABILITIES[actorAbility?.ability ?? ""];
-        if (a && def?.damage !== undefined && a.kind !== "frontend_bard") {
-          const plain = Math.round((def.damage + a.level + a.power) * scale);
-          if (e.amount > plain) tally.aura += e.amount - plain;
-        }
-      }
+      if (e.t === "hit" && classOf.has(e.actor)) add(tally.damage, e.actor, e.amount);
       if (e.t === "effect" && actorAbility && classOf.has(actorAbility.actor.id) && !classOf.has(e.target)) dotOwner.set(`${e.target}:${e.effect}`, actorAbility.actor.id);
       if (e.t === "tick" && !classOf.has(e.target)) {
         const owner = dotOwner.get(`${e.target}:${e.effect}`);
         if (owner) add(tally.damage, owner, e.amount);
       }
-      if (e.t === "heal" && classOf.has(e.actor) && e.ability !== "Potion") {
-        add(tally.healing, e.actor, e.amount);
-        if (e.ability === "Deep Roots") tally.regen += e.amount;
-      }
+      if (e.t === "heal" && classOf.has(e.actor) && e.ability !== "Potion") add(tally.healing, e.actor, e.amount);
     }
   };
   read(created.events);
@@ -223,9 +198,7 @@ export function simFight(party: SimHero[], enemyKinds: string[], seed: number, o
       tally.heroTurns += 1;
       add(tally.turns, actor.id, 1);
     }
-    // A Bard's aura counts only if a Bard is standing when the blow lands.
-    const bardUp = living(state, "hero").some((h) => h.kind === "frontend_bard");
-    read(res.events, action.type === "ability" && bardUp ? { actor, ability: action.ability } : action.type === "ability" ? { actor: { ...actor, kind: "frontend_bard" }, ability: action.ability } : undefined);
+    read(res.events, action.type === "ability" ? { actor, ability: action.ability } : undefined);
     state = res.state;
   }
   tally.won = state.status === "victory";
@@ -251,7 +224,7 @@ export interface GauntletTally {
  * another band, then the lair, with HP, focus and potions carried between
  * fights and a small rest in between. This is where sustain shows.
  */
-export function simGauntlet(party: SimHero[], seed: number, opts: SimOptions = {}): GauntletTally {
+export function simGauntlet(party: SimHero[], seed: number): GauntletTally {
   const pick = makeRng(seed ^ 0x5bd1e995);
   const bands = SIM_ENCOUNTERS.filter((e) => e.id.startsWith("band"));
   const camps = SIM_ENCOUNTERS.filter((e) => e.id.startsWith("camp"));
@@ -260,7 +233,7 @@ export function simGauntlet(party: SimHero[], seed: number, opts: SimOptions = {
   const out: GauntletTally = { cleared: false, fightsWon: 0, fights: [] };
   let carry: FightTally["after"] | undefined;
   for (const [i, enc] of route.entries()) {
-    const t = simFight(party, enc.kinds(party.length), seed * 131 + i, opts, carry);
+    const t = simFight(party, enc.kinds(party.length), seed * 131 + i, carry);
     out.fights.push(t);
     if (!t.won) return out;
     out.fightsWon += 1;
@@ -276,14 +249,12 @@ export interface GauntletRow {
   fightsWon: number;
   dpt: number;
   hpt: number;
-  auraShare: number;
-  regenShare: number;
 }
 
-export function gauntletRow(party: SimHero[], seeds: number, opts: SimOptions = {}, focusClass?: string): GauntletRow {
-  let cleared = 0, won = 0, dmg = 0, heal = 0, turns = 0, partyDmg = 0, partyHeal = 0, aura = 0, regen = 0;
+export function gauntletRow(party: SimHero[], seeds: number, focusClass?: string): GauntletRow {
+  let cleared = 0, won = 0, dmg = 0, heal = 0, turns = 0;
   for (let seed = 1; seed <= seeds; seed++) {
-    const g = simGauntlet(party, seed, opts);
+    const g = simGauntlet(party, seed);
     if (g.cleared) cleared += 1;
     won += g.fightsWon;
     for (const t of g.fights) {
@@ -293,13 +264,9 @@ export function gauntletRow(party: SimHero[], seeds: number, opts: SimOptions = 
         heal += t.healing[cls] ?? 0;
         turns += t.turns[cls] ?? 0;
       }
-      partyDmg += Object.values(t.damage).reduce((a, b) => a + b, 0);
-      partyHeal += Object.values(t.healing).reduce((a, b) => a + b, 0);
-      aura += t.aura;
-      regen += t.regen;
     }
   }
-  return { clearRate: cleared / seeds, fightsWon: won / seeds, dpt: turns ? dmg / turns : 0, hpt: turns ? heal / turns : 0, auraShare: partyDmg ? aura / partyDmg : 0, regenShare: partyHeal ? regen / partyHeal : 0 };
+  return { clearRate: cleared / seeds, fightsWon: won / seeds, dpt: turns ? dmg / turns : 0, hpt: turns ? heal / turns : 0 };
 }
 
 export interface SimRow {
@@ -311,18 +278,15 @@ export interface SimRow {
   /** Per hero turn, for the class(es) of interest. */
   dpt: number;
   hpt: number;
-  /** Share of the party's damage the Bard's aura supplied, and of its healing the Druid's regrowth supplied. */
-  auraShare: number;
-  regenShare: number;
 }
 
 /** Run `seeds` fights of a party against each encounter and fold them into one row. */
-export function simRow(label: string, party: SimHero[], encounters: SimEncounter[], seeds: number, opts: SimOptions = {}, focusClass?: string): SimRow {
-  let fights = 0, wins = 0, winRounds = 0, dmg = 0, heal = 0, turns = 0, partyDmg = 0, partyHeal = 0, aura = 0, regen = 0;
+export function simRow(label: string, party: SimHero[], encounters: SimEncounter[], seeds: number, focusClass?: string): SimRow {
+  let fights = 0, wins = 0, winRounds = 0, dmg = 0, heal = 0, turns = 0;
   for (const enc of encounters) {
     const kinds = enc.kinds(party.length);
     for (let seed = 1; seed <= seeds; seed++) {
-      const t = simFight(party, kinds, seed * 7919 + enc.id.length * 31 + kinds.length, opts);
+      const t = simFight(party, kinds, seed * 7919 + enc.id.length * 31 + kinds.length);
       fights += 1;
       if (t.won) {
         wins += 1;
@@ -334,10 +298,6 @@ export function simRow(label: string, party: SimHero[], encounters: SimEncounter
         heal += t.healing[cls] ?? 0;
         turns += t.turns[cls] ?? 0;
       }
-      partyDmg += Object.values(t.damage).reduce((a, b) => a + b, 0);
-      partyHeal += Object.values(t.healing).reduce((a, b) => a + b, 0);
-      aura += t.aura;
-      regen += t.regen;
     }
   }
   return {
@@ -347,8 +307,6 @@ export function simRow(label: string, party: SimHero[], encounters: SimEncounter
     roundsToWin: wins ? winRounds / wins : 0,
     dpt: turns ? dmg / turns : 0,
     hpt: turns ? heal / turns : 0,
-    auraShare: partyDmg ? aura / partyDmg : 0,
-    regenShare: partyHeal ? regen / partyHeal : 0,
   };
 }
 
@@ -368,7 +326,7 @@ export function parties(size: number, classes = SIM_CLASSES): string[][] {
 const pct = (n: number) => `${(n * 100).toFixed(0)}%`.padStart(5);
 const num = (n: number) => n.toFixed(1).padStart(5);
 
-/** The full report as text: single fights solo, then voyages (gauntlets) solo and in parties, then the passives. */
+/** The full report as text: single fights solo, then voyages (gauntlets) solo and in parties. */
 export function balanceReport(seeds = 40, level = 1): string {
   const lines: string[] = [];
   const at = (classId: string): SimHero => ({ classId, level, weaponPower: level >= 4 ? 2 : 0 });
@@ -380,10 +338,10 @@ export function balanceReport(seeds = 40, level = 1): string {
   lines.push("");
   lines.push("SOLO                 fight win: all  bands+camps  lairs | rounds | voyage clear  fights won | dmg/turn  heal/turn");
   for (const c of SIM_CLASSES) {
-    const all = simRow(c, [at(c)], encs, seeds, {}, c);
-    const t = simRow(c, [at(c)], trash, seeds, {}, c);
-    const l = simRow(c, [at(c)], lairs, seeds, {}, c);
-    const v = gauntletRow([at(c)], g, {}, c);
+    const all = simRow(c, [at(c)], encs, seeds, c);
+    const t = simRow(c, [at(c)], trash, seeds, c);
+    const l = simRow(c, [at(c)], lairs, seeds, c);
+    const v = gauntletRow([at(c)], g, c);
     lines.push(`${c.padEnd(20)}            ${pct(all.winRate)}   ${pct(t.winRate)}     ${pct(l.winRate)} |  ${num(all.roundsToWin)} |   ${pct(v.clearRate)}        ${num(v.fightsWon)}   |  ${num(v.dpt)}     ${num(v.hpt)}`);
   }
   for (const size of [2, 3]) {
@@ -395,7 +353,7 @@ export function balanceReport(seeds = 40, level = 1): string {
     for (const c of SIM_CLASSES) {
       const mine = rows.filter((r) => r.p.includes(c));
       const mean = (f: (r: GauntletRow) => number, rs = mine.map((r) => r.v)) => rs.reduce((a, r) => a + f(r), 0) / rs.length;
-      const own = mine.map((r) => gauntletRow(r.p.map(at), Math.max(5, Math.round(gs / 2)), {}, c));
+      const own = mine.map((r) => gauntletRow(r.p.map(at), Math.max(5, Math.round(gs / 2)), c));
       lines.push(`${c.padEnd(92)} ${pct(mean((r) => r.clearRate))}   ${num(mean((r) => r.fightsWon))}    |  ${num(mean((r) => r.dpt, own))}     ${num(mean((r) => r.hpt, own))}`);
     }
     const sorted = [...rows].sort((a, b) => a.v.clearRate - b.v.clearRate);
@@ -408,29 +366,16 @@ export function balanceReport(seeds = 40, level = 1): string {
     for (const c of SIM_CLASSES) {
       const [t1a, t1b] = traitsFor(c).filter((t) => t.tier === 1);
       const [t2a, t2b] = traitsFor(c).filter((t) => t.tier === 2);
-      const run = (traits: string[]) => pct(gauntletRow([{ ...at(c), traits }], g, {}, c).clearRate).trim();
+      const run = (traits: string[]) => pct(gauntletRow([{ ...at(c), traits }], g, c).clearRate).trim();
       lines.push(`  ${c.padEnd(16)} none ${run([])} | ${t1a.name} + ${t2a.name} ${run([t1a.id, t2a.id])}, + ${t2b.name} ${run([t1a.id, t2b.id])} | ${t1b.name} + ${t2a.name} ${run([t1b.id, t2a.id])}, + ${t2b.name} ${run([t1b.id, t2b.id])}`);
     }
     lines.push("");
     lines.push(`SIGNATURE WEAPONS: solo voyages, ${g} seeds; clear rate with the starting weapon, the loot weapon, and the signature weapon`);
     for (const c of SIM_CLASSES) {
       const cls = heroClass(c)!;
-      const row = (weapon: string) => pct(gauntletRow([{ ...at(c), weapon }], g, {}, c).clearRate).trim();
+      const row = (weapon: string) => pct(gauntletRow([{ ...at(c), weapon }], g, c).clearRate).trim();
       lines.push(`  ${c.padEnd(16)} ${WEAPONS[cls.weapons[0]].name} ${row(cls.weapons[0])} | ${WEAPONS[cls.weapons[1]].name} ${row(cls.weapons[1])} | ${WEAPONS[cls.signature].name} ${row(cls.signature)}`);
     }
-  }
-  lines.push("");
-  lines.push(`PASSIVES: voyages in a party of 2, ${g} seeds; clear rate with the passive vs without it, and its share of the party's damage or healing`);
-  for (const [cls, opt, share] of [["frontend_bard", { noAura: true }, "auraShare"], ["backend_druid", { noRegen: true }, "regenShare"]] as const) {
-    for (const partner of SIM_CLASSES) {
-      const p = [at(cls), at(partner)];
-      const on = gauntletRow(p, g);
-      const off = gauntletRow(p, g, opt);
-      lines.push(`  ${cls}+${partner}`.padEnd(36) + ` ${pct(on.clearRate)} vs ${pct(off.clearRate)}   ${share === "auraShare" ? "aura" : "regen"} = ${pct(on[share])} of party ${share === "auraShare" ? "damage" : "healing"}`);
-    }
-    const solo = gauntletRow([at(cls)], g);
-    const soloOff = gauntletRow([at(cls)], g, opt);
-    lines.push(`  ${cls} alone`.padEnd(36) + ` ${pct(solo.clearRate)} vs ${pct(soloOff.clearRate)}`);
   }
   return lines.join("\n");
 }

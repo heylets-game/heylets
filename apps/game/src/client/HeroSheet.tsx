@@ -1,7 +1,7 @@
 // A hero's sheet, read-only: what opens on picking someone in the Crew
 // panel (a tap on the map is for walking, never for this). Their
 // level, HP, focus and XP, the five stats with what gear adds, what they wear
-// on the paper doll, their weapon's abilities, the class passive and what
+// on the paper doll, their weapon's abilities and what
 // their hut gives them. Works for anyone in your crew or on your voyage, and
 // for yourself.
 
@@ -9,7 +9,6 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ABILITIES,
   DEFAULT_APPEARANCE,
-  HERO_CLASSES,
   RARITY_COLOR,
   SLOT_ICON,
   SLOT_LABEL,
@@ -154,7 +153,6 @@ export function HeroSheet({ id, you, onClose, live, logbook }: Props) {
   const maxFocus = live?.maxFocus ?? maxFocusFor(hero.level);
   const focus = live?.focus ?? maxFocus;
   const need = xpToNext(hero.level);
-  const cls = HERO_CLASSES.find((c) => c.id === hero.classId);
   const weapon = worn.get("main_hand");
   const abilities = abilitiesFor(weapon?.kind === "weapon" ? weapon.ref : null);
   const perks = perkText(hero.hutPerks);
@@ -291,12 +289,6 @@ export function HeroSheet({ id, you, onClose, live, logbook }: Props) {
               ))}
             </ul>
           ) : <p className="muted">No abilities.</p>}
-        </section>
-      )}
-      {cls?.passive && (
-        <section>
-          <h4>Passive</h4>
-          <p className="muted">{cls.passive}</p>
         </section>
       )}
       {perks && (

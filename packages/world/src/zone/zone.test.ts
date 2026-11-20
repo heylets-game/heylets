@@ -5376,7 +5376,7 @@ describe("Warlock weapons", () => {
     expect(fails(state, { type: "use", by: "ann", unit: "ann", ability: "drink_deeply" })).toMatch(/not ready/);
   });
 
-  it("Riptide: a Warlock's critical hit adds a stack of Drowning, not Bleeding", () => {
+  it("a Warlock's critical hit leaves no Drowning or Bleeding of its own: there are no class passives", () => {
     const { state, foe } = duel("dummy", "data_warlock", at(5, 6), at(9, 6));
     unit(state, "ann").abilities = ["vile_splash"];
     for (let seed = 1; seed < 400; seed++) {
@@ -5386,7 +5386,7 @@ describe("Warlock weapons", () => {
       const next = must(tryState, { type: "use", by: "ann", unit: "ann", ability: "vile_splash", target: foe }, events);
       const hit = events.find((e) => e.t === "hit" && e.target === foe);
       if (!hit || hit.t !== "hit") continue;
-      expect(drowning(next, foe)).toBe(hit.crit ? 1 : 0);
+      expect(drowning(next, foe)).toBe(0);
       expect(unit(next, foe).conditions.some((c) => c.kind === "bleeding")).toBe(false);
       if (hit.crit) return;
     }

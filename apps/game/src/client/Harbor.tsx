@@ -254,9 +254,6 @@ function Creation({ draft, busy, act, invite }: { draft: Character | null; busy:
                   {on && <span className="cc-check" aria-hidden>✔</span>}
                 </span>
                 <span className="cc-blurb">{blurb("class", c.id)}</span>
-                {c.passive && (
-                  <span className="cc-passive"><span className="cc-passive-label">Passive</span>{c.passive}</span>
-                )}
                 <span className="cc-weapon">
                   <Icon name={WEAPON_ICON[c.weapons[0]] ?? "broadsword"} color={RARITY_COLOR.common} size={18} />
                   <span>Starts with <strong>{label("weapon", c.weapons[0])}</strong></span>

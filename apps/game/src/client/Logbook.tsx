@@ -233,7 +233,6 @@ export function Logbook({ me, refresh, onClose, onIsland = false }: Props) {
                   )}
                 </>
               )}
-              {cls?.passive && <div className="book-skill"><span className="book-skill-n">✦</span><div><strong>Passive</strong><small> always on</small><p>{cls.passive}</p></div></div>}
             </>
           )}
         </section>

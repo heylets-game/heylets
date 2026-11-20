@@ -41,16 +41,8 @@ export interface HeroClass {
   weapons: string[];
   /** A rarer weapon with the class's signature ability. Drops only where loot is good (lairs and bosses). */
   signature: string;
-  /** Something the class always does in a fight, if it has one. Shown when choosing a class. */
-  passive?: string;
 }
 
-/** HP the Reef Druid grows back at the start of each of its turns in a fight. */
-export const DRUID_REGEN = 1;
-/** Extra damage on every other hero's attacks while a Shanty Bard is standing. One Bard's worth, however many there are. */
-export const BARD_AURA = 2;
-/** Turns of bleeding the Wreck Warlock's perfect hits leave behind. */
-export const WARLOCK_BLEED_TURNS = 2;
 
 export const HERO_CLASSES: HeroClass[] = [
   {
@@ -77,10 +69,9 @@ export const HERO_CLASSES: HeroClass[] = [
   {
     id: "backend_druid",
     name: "Reef Druid",
-    blurb: "Hardy healer. Mends allies and tangles enemies with Intelligence, and regrows like coral.",
+    blurb: "Hardy healer. Mends allies and tangles enemies with Intelligence.",
     weapons: ["root_staff", "sickle"],
     signature: "coral_staff",
-    passive: `Deep roots: heals ${DRUID_REGEN} HP at the start of each of its turns in a fight.`,
   },
   {
     id: "frontend_bard",
@@ -88,7 +79,6 @@ export const HERO_CLASSES: HeroClass[] = [
     blurb: "Makes everyone better. Plays the party up and the enemy down with Intelligence.",
     weapons: ["lute", "flute", "accordion"],
     signature: "ships_bell",
-    passive: `Encore: while the Bard is standing, every other hero's attacks do +${BARD_AURA} damage.`,
   },
   {
     id: "staff_sage",
@@ -103,7 +93,6 @@ export const HERO_CLASSES: HeroClass[] = [
     blurb: "The wall. Draws every blow onto itself and hits back with Strength and the weight of its armor.",
     weapons: ["maul", "pager_axe"],
     signature: "boarding_pike",
-    passive: "Night watch: starts every fight guarded (half damage) until its second turn.",
   },
   {
     id: "data_warlock",
@@ -111,7 +100,6 @@ export const HERO_CLASSES: HeroClass[] = [
     blurb: "Curses, drowns and drains with Intelligence.",
     weapons: ["grimoire", "void_staff"],
     signature: "bilge_chalice",
-    passive: "Riptide: every critical hit also drags the target under: a stack of Drowning.",
   },
 ];
 

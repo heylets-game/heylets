@@ -20,7 +20,7 @@
 
 import { STARTING_STATS, hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/core";
 import { classAbilitiesOf, poolFor, withClassAbilities } from "../classabilities";
-import { ABILITIES, DRUID_REGEN, EFFECT_TICK, ENEMIES, HERO_CLASSES, WEAPONS, abilitiesFor } from "../content";
+import { ABILITIES, EFFECT_TICK, ENEMIES, HERO_CLASSES, WEAPONS, abilitiesFor } from "../content";
 import { weaponItem } from "../gear";
 import { tileAt } from "../map";
 import type { HeroSheet } from "../hero";
@@ -227,8 +227,6 @@ function enter(ctx: Ctx, enc: Encounter, unit: Unit): void {
   enc.order.splice(at < 0 ? enc.order.length : at, 0, unit.id);
   // One who fled it and is back is simply in it again.
   if (enc.fled?.includes(unit.id)) enc.fled = enc.fled.filter((id) => id !== unit.id);
-  // A Warden walks into every fight with their guard up.
-  if (unit.kind === "sre_warden" && !has(unit, "guarded")) unit.conditions.push({ kind: "guarded", rounds: 1 });
 }
 
 /**
@@ -435,8 +433,6 @@ function beginTurn(ctx: Ctx, enc: Encounter, unit: Unit): boolean {
   if (song) song.surge = 0;
   for (const kind of ["bleeding", "burning"] as const) if (has(unit, kind)) tick(ctx, unit, kind, kind === "burning" ? burnOf(unit) : (EFFECT_TICK[kind] ?? 0));
   if (unit.down) return false;
-  // A Druid mends a little every turn.
-  if (unit.kind === "backend_druid" && unit.hp < unit.maxHp) heal(ctx, unit, DRUID_REGEN, { actor: unit.id, what: "regen" });
   // A Healing Aura mends the bearer and everyone of theirs standing beside them.
   if (has(unit, "mending")) {
     for (const u of ctx.state.units) {
