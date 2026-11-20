@@ -30,7 +30,7 @@ import { makeRng, seedFromString } from "../rng";
 import { enemyTurn } from "./ai";
 import { abilityArea, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, doCommon, drinkItem, moveLeft, resolveAbility, throwItem, walk } from "./combat";
 import { burnOf, has, heal, regrow, removeCondition, tick, unseen, type Ctx } from "./engine";
-import { auraRange, passiveHooks } from "./passives";
+import { allyTurnHeal, auraRange, passiveHooks } from "./passives";
 import { ALERT_RANGE, JOIN_RANGE, freeHexNear, generateZone } from "./gen";
 import { generateDelve } from "./delve";
 import { checkLoot, checkOpen, leaveBody, look, lootFor, openChest, payBounty, take } from "./loot";
@@ -439,6 +439,7 @@ function beginTurn(ctx: Ctx, enc: Encounter, unit: Unit): boolean {
   for (const kind of ["bleeding", "burning"] as const) if (has(unit, kind)) tick(ctx, unit, kind, kind === "burning" ? burnOf(unit) : (EFFECT_TICK[kind] ?? 0));
   if (unit.down) return false;
   for (const p of passiveHooks(unit)) p.turnStart?.(ctx, unit, true);
+  allyTurnHeal(ctx, unit);
   // A Healing Aura mends the bearer and everyone of theirs standing beside them.
   if (has(unit, "mending")) {
     for (const u of ctx.state.units) {

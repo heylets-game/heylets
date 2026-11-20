@@ -21,7 +21,7 @@ import { clusterHexes, enterWeather, makeWeather, rainHexes, wallHexes } from ".
 import { summonCall, summonSpots } from "./summon";
 import { layCurse, drown } from "./drowning";
 import { SHANTIES, joinable, shantyOf, songDamage, songMove, windward } from "./song";
-import { passiveHooks } from "./passives";
+import { passiveHooks, passiveToHit } from "./passives";
 import { constellationHexes, constellationLinks, courseMarks, litFoes } from "./stars";
 
 /** What a thrown bomb's blast is saved against. */
@@ -604,7 +604,7 @@ function give(ctx: Ctx, unit: Unit, target: Unit, effect: EffectKind, turns: num
 /** One attack roll with an ability against one target. Returns whether it landed. */
 function strike(ctx: Ctx, unit: Unit, def: AbilityDef, tactic: Tactic, target: Unit, opts: { focus?: boolean }): boolean {
   const melee = tactic.reach === "melee";
-  const roll = attackRoll(ctx, unit, target, { label: def.name, bonus: proficiency(unit.level) + mod(statOf(unit, def.stat)) + (tactic.toHit ?? 0), melee, focus: opts.focus });
+  const roll = attackRoll(ctx, unit, target, { label: def.name, bonus: proficiency(unit.level) + mod(statOf(unit, def.stat)) + (tactic.toHit ?? 0) + passiveToHit(unit, target, def), melee, focus: opts.focus });
   if (!roll.ok) {
     ctx.events.push({ t: "miss", actor: unit.id, target: target.id, what: def.id });
     return false;
@@ -691,7 +691,7 @@ export function previewAttack(state: ZoneState, unit: Unit, ability: string, tar
   const tactic = tacticOf(ability);
   if (!def || !["single", "chain", "adjacent", "arc"].includes(tactic.shape) || tactic.overwhelm || tactic.sure || tactic.bind) return null;
   const c = attackContext(state, unit, target, { melee: tactic.reach === "melee" });
-  const bonus = proficiency(unit.level) + mod(statOf(unit, def.stat)) + (tactic.toHit ?? 0) + c.mods;
+  const bonus = proficiency(unit.level) + mod(statOf(unit, def.stat)) + (tactic.toHit ?? 0) + passiveToHit(unit, target, def) + c.mods;
   const vs = defenceOf(target, state);
   return { chance: hitChance(bonus, vs, c.adv), bonus, vs, adv: c.adv, notes: c.notes };
 }

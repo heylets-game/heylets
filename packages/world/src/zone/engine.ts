@@ -11,7 +11,7 @@ import { AQUEOUS, CORAL_ARMOR, ENEMY_KIT, FORTIFY, NORTH_STAR, SHIELD_SET_ASIDE,
 import { inDark } from "./light";
 import { d20, heroDefence, mod, netAdvantage, rollShown, statOf } from "./rules";
 import { songDefence, songHit, windward } from "./song";
-import { auraRange, kindledBy, passiveDefence } from "./passives";
+import { SHOCKED, auraRange, kindledBy, passiveDefence } from "./passives";
 import type { Condition, Roll, Rolled, Unit, UnitCondition, ZoneEffect, ZoneEvent, ZoneState } from "./types";
 
 export interface Ctx {
@@ -91,7 +91,7 @@ export function giveAway(ctx: Ctx, unit: Unit): void {
 }
 
 /** The conditions that count as wounds, for abilities that grow with them. */
-export const DEBUFFS: readonly Condition[] = ["bleeding", "burning", "stunned", "slowed", "glitched", "exposed", "poisoned", "prone", "sundered"];
+export const DEBUFFS: readonly Condition[] = ["bleeding", "burning", "stunned", "slowed", "glitched", "exposed", "poisoned", "prone", "sundered", "shocked"];
 
 /** Fortify: one of the side that raised a wall, standing beside it, is the steadier for it. */
 export const wallDefence = (state: Pick<ZoneState, "weather">, unit: Unit): number =>
@@ -102,7 +102,8 @@ export const defenceOf = (unit: Unit, state?: Pick<ZoneState, "units" | "weather
   (state ? songDefence(state, unit) + wallDefence(state, unit) + passiveDefence(state, unit) : 0) +
   (unit.side === "hero" && unit.stats ? heroDefence(unit.stats, unit.armor) - ((unit.torch ?? 0) > 0 && unit.torchHand !== "main" && unit.outfit?.off_hand ? SHIELD_SET_ASIDE : 0) : enemyDefence(unit.kind)) +
   (has(unit, "coral_armor") ? CORAL_ARMOR.defence : 0) -
-  (has(unit, "sundered") ? SUNDERED_DEFENCE : 0);
+  (has(unit, "sundered") ? SUNDERED_DEFENCE : 0) -
+  (has(unit, "shocked") ? SHOCKED.defence : 0);
 
 /** Whether a unit stands in water (Aqueous Regeneration heals more there). */
 export const inWater = (state: ZoneState, unit: Unit): boolean => state.surfaces[posKey(unit.pos)]?.kind === "water";

@@ -13,10 +13,10 @@ import { propOf } from "./props";
 import { SITE_IDS, backdropOf, siteInside, type SiteId } from "./sites";
 import { ACTION_AP, AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, CHART, COMMON_ACTIONS, BLOCK, BONUS_AP, BOLSTER, GUARD_UP, STAND_STRONG, STURDY, ENEMY_BURST, ENEMY_HP_SCALE, ENEMY_KIT, ENEMY_MOVE_AP, EXPLORE_ROUND_MS, FLEE_RANGE, LIGHT_RADIUS, SHIELD_SET_ASIDE, TACTICS, TORCH_GROUND_ROUNDS, TORCH_HELD_ROUNDS, TORCH_ROUND_MS, abilityDice as abilityDiceFor, commonCost, enemyHp, enemyMove, enemyStrikes, tacticOf } from "./kit";
 import { MAX_CATCHUP_ROUNDS, exploreRound } from "./clock";
-import { PASSIVE_HOOKS, STAY_NEAR, auraRange } from "./passives";
+import { PASSIVE_HOOKS, SHOCKED, STAY_NEAR, auraRange } from "./passives";
 import { TRAITS, TRAIT_BY_ID } from "../traits";
 import { defenceOf } from "./engine";
-import { abilityArea, checkAbility, crateBlow, enemyAct, wayBetween } from "./combat";
+import { abilityArea, checkAbility, crateBlow, enemyAct, previewAttack, wayBetween } from "./combat";
 import { d20, diceAverage, diceFor, heroMove, hitChance } from "./rules";
 import { createZone, ensureMouth, spentOut, standInHero, stepZone, zoneHero, zoneView } from "./zone";
 import { DELVE_CRATES, generateDelve } from "./delve";
@@ -3259,6 +3259,77 @@ describe("the Mage's class abilities", () => {
       for (const id of [near, far]) expect(unit(state, id).conditions.some((c) => c.kind === "wet")).toBe(true);
     }
     expect(swept).toBeGreaterThan(0);
+  });
+
+  describe("passives", () => {
+    /** party(), with a dummy 3 hexes off, and ann at level 5 carrying `passives`. */
+    const withPassives = (...passives: string[]) => {
+      const p = party(["shock", "waterbolt", "chain_lightning", "roar_of_thunder", "mend"]);
+      const near = addDummy(p.state, at(8, 6));
+      Object.assign(unit(p.state, "ann"), { level: 5, passives });
+      return { ...p, near };
+    };
+    const wet = (state: ZoneState, id: string) => unit(state, id).conditions.push({ kind: "wet", rounds: 9 });
+    /** ann's ability on `target`, tried seed by seed until it hits. */
+    const hitWith = (state: ZoneState, ability: string, target: string) => {
+      for (let seed = 1; seed < 120; seed++) {
+        const next = structuredClone(state);
+        next.rng = seed;
+        const events: ZoneEvent[] = [];
+        const after = must(next, { type: "use", by: "ann", unit: "ann", ability, target }, events);
+        if (events.some((e) => e.t === "hit" && e.target === target)) return after;
+      }
+      throw new Error("never a hit");
+    };
+
+    it("Evening Mist: the Mage has 1 more Defence while Wet, and no one else does", () => {
+      const { state } = withPassives("evening_mist");
+      const ann = defenceOf(unit(state, "ann"), state);
+      const bo = defenceOf(unit(state, "bo"), state);
+      wet(state, "ann");
+      wet(state, "bo");
+      expect(defenceOf(unit(state, "ann"), state)).toBe(ann + 1);
+      expect(defenceOf(unit(state, "bo"), state)).toBe(bo);
+    });
+
+    it("Greater Conductivity: +1 to hit a Wet enemy with lightning, and only with lightning", () => {
+      const { state, near } = withPassives("greater_conductivity");
+      const bonus = (ability: string) => previewAttack(state, unit(state, "ann"), ability, unit(state, near))!.bonus;
+      const dry = { shock: bonus("shock"), chain_lightning: bonus("chain_lightning"), waterbolt: bonus("waterbolt") };
+      wet(state, near);
+      expect(bonus("shock")).toBe(dry.shock + 1);
+      expect(bonus("chain_lightning")).toBe(dry.chain_lightning + 1);
+      expect(bonus("waterbolt")).toBe(dry.waterbolt);
+    });
+
+    it("Potent Shocks: lightning leaves what it hits Shocked for 2 turns, with 2 less Defence; other blows do not", () => {
+      const { state, near } = withPassives("potent_shocks");
+      const before = defenceOf(unit(state, near), state);
+      const shocked = hitWith(state, "shock", near);
+      expect(unit(shocked, near).conditions.find((c) => c.kind === "shocked")?.rounds).toBe(SHOCKED.rounds);
+      expect(defenceOf(unit(shocked, near), shocked)).toBe(before - SHOCKED.defence);
+      expect(has(hitWith(state, "waterbolt", near), near, "shocked")).toBe(false);
+      // Stacked with Sundered.
+      unit(shocked, near).conditions.push({ kind: "sundered", rounds: 2 });
+      expect(defenceOf(unit(shocked, near), shocked)).toBe(before - SHOCKED.defence - 2);
+    });
+
+    it("Osmosis: everyone of the Mage's side who is Wet heals 2 as each of their turns starts, and two Mages do not make it 4", () => {
+      let { state } = withPassives("osmosis");
+      unit(state, "bo").passives = ["osmosis"];
+      hero(state, "cy", "refactor_rogue", at(1, 6));
+      state.encounter!.order.push("cy");
+      state.encounter!.init.cy = 0;
+      for (const id of ["ann", "bo", "cy"]) unit(state, id).hp = 1;
+      wet(state, "ann");
+      wet(state, "bo");
+      const events: ZoneEvent[] = [];
+      state = nextTurn(state, events);
+      const osmosis = (id: string) => events.filter((e) => e.t === "heal" && e.what === "osmosis" && e.target === id);
+      expect(osmosis("ann")).toEqual([expect.objectContaining({ amount: 2 })]);
+      expect(osmosis("bo")).toEqual([expect.objectContaining({ amount: 2 })]);
+      expect(osmosis("cy")).toEqual([]);
+    });
   });
 });
 

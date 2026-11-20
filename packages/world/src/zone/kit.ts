@@ -511,6 +511,7 @@ export const SAVE_STAT: Record<Condition, StatKey> = {
   red_sky: "int_stat",
   tailwind: "agi",
   fervor: "str",
+  shocked: "vit",
 };
 
 const info = (kind: EffectKind, blurb: string) => ({ name: EFFECT_INFO[kind].name, color: EFFECT_INFO[kind].color, blurb });
@@ -550,6 +551,7 @@ export const CONDITION_INFO: Record<Condition, { name: string; blurb: string; co
   black_spot: { name: "The Black Spot", blurb: "Its attacks are rolled with disadvantage, and it takes a stack of Drowning at the end of each of its turns. If it falls with the Spot still on it, the Spot passes to the nearest of its side.", color: "#7a6a8f" },
   tailwind: { name: "Tailwind", blurb: "The wind at its back: more movement for each AP on its next turn.", color: "#bfe8ff" },
   red_sky: { name: "Red Sky at Morning", blurb: "A bad omen: its attacks are rolled with disadvantage.", color: "#e2483d" },
+  shocked: { name: "Shocked", blurb: "Lightning still crackles through it: 2 less Defence.", color: "#9be7ff" },
   fervor: { name: "Fervor", blurb: "Its next attack does more damage: half its level, rounded up. Lasts until it attacks.", color: "#ffb347" },
 };
 

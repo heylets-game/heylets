@@ -27,9 +27,20 @@ export interface PassiveHooks {
   kindled?(ctx: Ctx, unit: Unit, target: Unit): void;
   /** Hexes added to the reach of their auras (Beacon, Healing). */
   auraReach?: number;
-  /** Defence they give `ally` (themselves too). Two of the same do not stack: the best one counts. */
+  /** Defence they give `ally` (themselves too). Two of the same passive do not stack: the best one counts. */
   defenceFor?(state: Pick<ZoneState, "units">, unit: Unit, ally: Unit): number;
+  /** Added to their roll to hit `target` with an ability. Read for the preview too, so it must not change anything. */
+  toHit?(unit: Unit, target: Unit, def: AbilityDef): number;
+  /** HP `ally` (themselves too) heals as its turn in a fight starts. Two of the same passive do not stack. */
+  allyTurnHeal?(unit: Unit, ally: Unit): number;
 }
+
+/** The Mage's lightning: what Greater Conductivity and Potent Shocks work with. */
+export const LIGHTNING: ReadonlySet<string> = new Set(["shock", "lightning_strike", "chain_lightning"]);
+/** Osmosis: what one Wet heals as each of their turns starts. */
+export const OSMOSIS_HEAL = 2;
+/** Potent Shocks: the turns of Shocked a lightning hit leaves, and the Defence it takes. */
+export const SHOCKED = { rounds: 2, defence: 2 };
 
 /** Half a hero's level, rounded up. */
 const halfLevel = (unit: Unit): number => Math.ceil(unit.level / 2);
@@ -82,6 +93,22 @@ export const PASSIVE_HOOKS: Record<string, PassiveHooks> = {
   stay_near: {
     defenceFor: (_state, unit, ally) => (hexDistance(unit.pos, ally.pos) <= STAY_NEAR.range ? STAY_NEAR.defence : 0),
   },
+  // Mage, first pick.
+  evening_mist: {
+    defenceFor: (_state, unit, ally) => (ally.id === unit.id && has(unit, "wet") ? 1 : 0),
+  },
+  greater_conductivity: {
+    toHit: (_unit, target, def) => (LIGHTNING.has(def.id) && has(target, "wet") ? 1 : 0),
+  },
+  // Mage, second pick.
+  potent_shocks: {
+    hit(ctx, _unit, target, def) {
+      if (LIGHTNING.has(def.id) && !target.down) addCondition(ctx, target, "shocked", SHOCKED.rounds);
+    },
+  },
+  osmosis: {
+    allyTurnHeal: (_unit, ally) => (has(ally, "wet") ? OSMOSIS_HEAL : 0),
+  },
 };
 
 /** Beaming Fervor: a Fervor waiting is made ready; one spent with none waiting is gone. */
@@ -107,14 +134,40 @@ export function passiveHooks(unit: Unit): PassiveHooks[] {
 /** How far a unit's auras reach. */
 export const auraRange = (unit: Unit): number => AURAS.range + passiveHooks(unit).reduce((n, p) => n + (p.auraReach ?? 0), 0);
 
-/** Defence a unit has from the passives of its side (its own too): the best one, not added together. */
-export function passiveDefence(state: Pick<ZoneState, "units">, ally: Unit): number {
-  let best = 0;
+/**
+ * What the passives of a unit's side (its own too) give it, by each one's `pick`: the best of each passive,
+ * so two of the same do not stack, and different passives add up.
+ */
+function bestOfEach(state: Pick<ZoneState, "units">, ally: Unit, pick: (p: PassiveHooks, holder: Unit) => number): number {
+  const best = new Map<string, number>();
   for (const u of state.units) {
     if (u.side !== ally.side || u.down) continue;
-    for (const p of passiveHooks(u)) if (p.defenceFor) best = Math.max(best, p.defenceFor(state, u, ally));
+    for (const id of u.passives ?? []) {
+      const p = PASSIVE_HOOKS[id];
+      if (p) best.set(id, Math.max(best.get(id) ?? 0, pick(p, u)));
+    }
   }
-  return best;
+  return [...best.values()].reduce((a, b) => a + b, 0);
+}
+
+/** Defence a unit has from the passives of its side (its own too). */
+export const passiveDefence = (state: Pick<ZoneState, "units">, ally: Unit): number =>
+  bestOfEach(state, ally, (p, u) => p.defenceFor?.(state, u, ally) ?? 0);
+
+/** What a unit's passives add to its roll to hit `target` with an ability. */
+export const passiveToHit = (unit: Unit, target: Unit, def: AbilityDef): number =>
+  passiveHooks(unit).reduce((n, p) => n + (p.toHit?.(unit, target, def) ?? 0), 0);
+
+/** As a unit's turn in a fight starts: what the passives of its side heal it (Osmosis). */
+export function allyTurnHeal(ctx: Ctx, ally: Unit): void {
+  if (ally.down || ally.hp >= ally.maxHp) return;
+  for (const id of new Set(ctx.state.units.filter((u) => u.side === ally.side && !u.down).flatMap((u) => u.passives ?? []))) {
+    const p = PASSIVE_HOOKS[id];
+    if (!p?.allyTurnHeal) continue;
+    const holders = ctx.state.units.filter((u) => u.side === ally.side && !u.down && u.passives?.includes(id));
+    const best = holders.map((u) => ({ u, n: p.allyTurnHeal!(u, ally) })).sort((a, b) => b.n - a.n)[0];
+    if (best && best.n > 0) heal(ctx, ally, best.n, { actor: best.u.id, what: id });
+  }
 }
 
 /** Tell a unit's passives it has set `target` Burning, if it has caught. */
