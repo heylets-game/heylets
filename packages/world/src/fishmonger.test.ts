@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { hexDistance } from "@gantt-quest/core";
 import { BAIT_IDS, BAIT_SALE, baitBuyProblem, baitEaten } from "./fishing";
 import { fishFrom, fishingHoles } from "./fishingholes";
-import { FISHMONGER, FISHMONGER_POS } from "./fishmonger";
+import { FISHMONGER, FISHMONGER_ADVICE, FISHMONGER_ADVICE_DONE, FISHMONGER_POS, fishmongerAdvice } from "./fishmonger";
 import { HARBOR_GATHER, HARBOR_SIDES, generateHarbor, harborPath } from "./harbor";
 import { tileAt } from "./map";
 import { lureLost, type Sitting } from "./sitting";
@@ -30,10 +30,29 @@ describe("the fishmonger", () => {
     expect(tip).toContain(hole.where);
     expect(tip).toMatch(/worm/);
     expect(fishmongerTip(null)).toMatch(/Nowhere/);
-    const talk = fishmongerTalk(tip);
+    const talk = fishmongerTalk(tip, () => "Hold longer.");
     expect(talk.unit).toBe(FISHMONGER.id);
-    expect(talk.choices.map((c) => c.opens ?? c.says ?? (c.bye ? "bye" : ""))).toEqual(["fish", "bait", tip, "bye"]);
+    const said = (c: (typeof talk.choices)[number]) => c.opens ?? (typeof c.says === "function" ? c.says() : c.says) ?? (c.bye ? "bye" : "");
+    expect(talk.choices.map(said)).toEqual(["fish", "bait", tip, "Hold longer.", "bye"]);
     expect(Object.entries(TALK_VOICES).filter(([, v]) => v === TALK_VOICES[FISHMONGER.id]).length).toBe(1);
+  });
+});
+
+describe("the fishmonger's advice", () => {
+  it("gives every piece once, in order, says he is done, and only then starts again", () => {
+    const n = FISHMONGER_ADVICE.length;
+    const round = Array.from({ length: n + 1 }, (_, i) => fishmongerAdvice(i));
+    expect(new Set(round).size).toBe(n + 1);
+    expect(round.slice(0, n)).toEqual([...FISHMONGER_ADVICE]);
+    expect(round[n]).toBe(FISHMONGER_ADVICE_DONE);
+    expect(fishmongerAdvice(n + 1)).toBe(FISHMONGER_ADVICE[0]);
+  });
+
+  it("starts with how to catch better fish, fits the box, and is true to the numbers", () => {
+    expect(fishmongerAdvice(0)).toMatch(/Cast long/);
+    for (const a of [...FISHMONGER_ADVICE, FISHMONGER_ADVICE_DONE]) expect(a.length).toBeLessThanOrEqual(150);
+    const all = FISHMONGER_ADVICE.join(" ");
+    for (const words of [/double/, /for half/, /tap/i, /hold and reel/i, /goes red/, /jumps/]) expect(all).toMatch(words);
   });
 });
 

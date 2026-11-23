@@ -133,9 +133,9 @@ export const LOOKS: Record<string, Look> = {
   // a stone to the wheel with.
   keeper_lapidary: { skin: "#e3bd9c", hair: "#7c828f", hairStyle: "bun", body: "#4f6478", legs: "#3a3d48", accent: "#7fd0ff", hat: "none", weapon: "dop", sleeveless: true, apron: "#b9b3a4", loupe: "#c79a3e", eyes: "narrow", boots: "#2a2622" },
   // The fishmonger at the shack by the pier (packages/world/src/fishmonger.ts): an old sailor gone ashore, in a
-  // yellow oilskin raincoat with the hood up over a navy jersey, a grizzled full beard and a scowl, black sea boots,
-  // and the cleaver he guts the catch with. (Old Moss wears oilskins too, but a sou'wester and no hood or beard.)
-  keeper_fishmonger: { skin: "#c98f68", hair: "#8a8a86", body: "#25324a", legs: "#2a2f38", accent: "#f2c230", hat: "hood", hatColor: "#f2c230", hoodTrim: "#c99a1a", weapon: "cleaver", coat: true, coatColor: "#f2c230", coatTrim: "#c99a1a", beard: "full", mustache: "bushy", eyes: "fierce", nose: "broad", boots: "#16181c" },
+  // yellow oilskin raincoat with the hood up over a navy jersey, a grizzled full beard and a scowl, and black sea
+  // boots; empty-handed. (Old Moss wears oilskins too, but a sou'wester and no hood or beard.)
+  keeper_fishmonger: { skin: "#c98f68", hair: "#8a8a86", body: "#25324a", legs: "#2a2f38", accent: "#f2c230", hat: "hood", hatColor: "#f2c230", hoodTrim: "#c99a1a", weapon: "none", coat: true, coatColor: "#f2c230", coatTrim: "#c99a1a", beard: "full", mustache: "bushy", eyes: "fierce", nose: "broad", boots: "#16181c" },
   npc: { skin: "#e8b891", hair: "#b9b9b9", body: "#e3dccb", legs: "#5a4632", accent: "#e8dcc0", hat: "none", weapon: "none", stripes: "#2d3a5a", boots: "#3a2c22" },
   // Fight enemies, made over for the sea. The Bandit is a deckhand raider: a red kerchief knotted at the side, a
   // shirt banded in navy, a leather vest, a sash, and a cutlass.

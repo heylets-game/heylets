@@ -156,6 +156,9 @@ export class FishingStage implements WorldMinigame {
   private readonly lineMat: THREE.LineBasicMaterial;
   private readonly float: THREE.Group;
   private readonly shadow: THREE.Mesh;
+  /** A glow lure on the line: a soft green light under the float, and with the fish while it is on. Seen only after dark. */
+  private readonly glow: THREE.Points;
+  private lureOn = false;
   private readonly rings: Ring[] = [];
   private jumper: THREE.Group | null = null;
   /** A landed catch, held up in front of the eye. */
@@ -216,7 +219,36 @@ export class FishingStage implements WorldMinigame {
     this.shadow.visible = false;
     world.addObject(this.shadow);
 
+    this.glow = glowPoint();
+    world.addObject(this.glow);
+
     this.stopTick = world.addTicker((dt, camera, clock) => this.tick(dt, camera, clock));
+  }
+
+  /** What goes on the hook for the next cast: a glow lure, or anything that does not shine. */
+  setLure(glowing: boolean) {
+    this.lureOn = glowing;
+  }
+
+  /**
+   * The glow lure's light: just under the float while it is out, under the fish while it fights, and out of the water
+   * with nothing. It shows as the dark comes on (by day the lure is only paint) and pulses slowly, like the night
+   * feeders' own lights.
+   */
+  private placeGlow(clock: number) {
+    const fighting = !!this.fight && !this.fight.state.outcome;
+    const at = !this.lureOn || this.leaving ? null : fighting ? this.fishAt() : this.float.visible ? this.float.position : null;
+    const night = this.world.night;
+    const mat = this.glow.material as THREE.PointsMaterial;
+    if (!at || night < 0.05) {
+      this.glow.visible = false;
+      return;
+    }
+    (this.glow.geometry.getAttribute("position") as THREE.BufferAttribute).setXYZ(0, at.x, at.y - 0.05, at.z).needsUpdate = true;
+    mat.opacity = Math.min(1, night * 1.4) * (0.6 + 0.4 * Math.sin(clock * 2.6) ** 2);
+    // (In CSS pixels: the renderer scales a point's size by the screen's pixel ratio itself.)
+    mat.size = 64 + 10 * Math.sin(clock * 1.3);
+    this.glow.visible = true;
   }
 
   // ---------- the rod ----------
@@ -579,6 +611,13 @@ export class FishingStage implements WorldMinigame {
 
   private tick(dt: number, camera: THREE.PerspectiveCamera, clock: number) {
     if (this.disposed) return;
+    // Another game took the view before this one had flown back out (a word with Bram, a new cast): the renderer
+    // has taken down its group, but what it put in the world itself (the rod, the line, the float, the lure's glow)
+    // and this ticker are its own to take down.
+    if (this.world.playing !== this) {
+      this.dispose();
+      return;
+    }
     this.clock = clock;
     const now = performance.now();
     if (this.phase === "charging") this.charge = clamp01((now - this.chargeAt) / CHARGE_MS);
@@ -635,6 +674,8 @@ export class FishingStage implements WorldMinigame {
       this.nibbled.clear();
       this.bitten = false;
     }
+
+    this.placeGlow(clock);
 
     // The fight: play every tick that has passed, as the server will.
     const f = this.fight;
@@ -866,7 +907,8 @@ export class FishingStage implements WorldMinigame {
     if (this.disposed) return;
     this.disposed = true;
     this.stopTick();
-    for (const obj of [this.rod, this.line, this.float, this.shadow, ...(this.hull ? [this.hull] : [])]) {
+    (this.glow.material as THREE.PointsMaterial).map?.dispose();
+    for (const obj of [this.rod, this.line, this.float, this.shadow, this.glow, ...(this.hull ? [this.hull] : [])]) {
       this.world.removeObject(obj);
       disposeTree(obj);
     }
@@ -878,6 +920,30 @@ export class FishingStage implements WorldMinigame {
     }
     this.rings.length = 0;
   }
+}
+
+/** A soft round light, drawn the same size however far off: brightest in the middle, fading to nothing at the edge. */
+function glowPoint(): THREE.Points {
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d")!;
+  const r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  r.addColorStop(0, "rgba(220, 255, 235, 1)");
+  r.addColorStop(0.12, "rgba(120, 255, 190, 0.95)");
+  r.addColorStop(0.4, "rgba(60, 220, 150, 0.4)");
+  r.addColorStop(1, "rgba(30, 180, 120, 0)");
+  g.fillStyle = r;
+  g.fillRect(0, 0, 64, 64);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(3), 3));
+  const material = new THREE.PointsMaterial({ map: new THREE.CanvasTexture(c), size: 64, sizeAttenuation: false, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, toneMapped: false });
+  const p = new THREE.Points(geometry, material);
+  p.frustumCulled = false;
+  p.visible = false;
+  // Drawn after the finishing pass, like the float it sits under, so it is not hazed away.
+  p.layers.set(OVERLAY_LAYER);
+  p.renderOrder = 997;
+  return p;
 }
 
 function disposeTree(obj: THREE.Object3D) {

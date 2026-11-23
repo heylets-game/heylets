@@ -341,6 +341,7 @@ function Sitting({ outing, bait: baitAtStart, world, pier, at: here, hole, vesse
         }
       },
       cast: (power) => {
+        stage.current?.setLure(chosenRef.current === "glow_lure");
         step({ t: "cast", power, spot: pier, bait: chosenRef.current })
           .then((next) => {
             const c = next.outing?.sitting?.cast;

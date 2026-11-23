@@ -22,8 +22,8 @@ export interface TalkChoice {
   label: string;
   /** Opens this panel of theirs (the view knows what each is): the conversation ends as it opens. */
   opens?: string;
-  /** They answer with this, and the replies come back. */
-  says?: string;
+  /** They answer with this, and the replies come back. A function is asked each time the reply is chosen: the next of several things they say, never the same twice running. */
+  says?: string | (() => string);
   /** Lets you type a question for them to answer. */
   ask?: true;
   /** Ends the conversation. */
@@ -179,8 +179,11 @@ export function fishmongerTip(hole: FishingHole | null): string {
   return `${HOLE_NAMES[hole.kind]} ${hole.where}. ${what[0].toUpperCase()}${what.slice(1)}, last I saw.${hook} Don't go telling the whole Harbor.`;
 }
 
-/** The fishmonger, at his shack. `tip` is where he says they are biting (fishmongerTip). */
-export function fishmongerTalk(tip: string): Conversation {
+/**
+ * The fishmonger, at his shack. `tip` is where he says they are biting (fishmongerTip); `advice` gives the next
+ * piece of advice each time he is asked for one (fishmongerAdvice).
+ */
+export function fishmongerTalk(tip: string, advice: () => string): Conversation {
   return {
     unit: FISHMONGER.id,
     name: FISHMONGER.name,
@@ -190,6 +193,7 @@ export function fishmongerTalk(tip: string): Conversation {
       { id: "fish", label: "I've fish to sell", opens: "fish" },
       { id: "bait", label: "What have you got for bait?", opens: "bait" },
       { id: "tip", label: "Where are they biting?", says: tip },
+      { id: "advice", label: "Got any advice?", says: advice },
       BYE,
     ],
   };

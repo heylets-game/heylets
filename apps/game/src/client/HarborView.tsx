@@ -6,7 +6,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAudioScene } from "./audio/useAudioScene";
 import { hexDistance, hexNeighbors, type HexPos } from "@gantt-quest/core";
-import { GATHER_SPOTS, GATHER_SPOT_IDS, HARBOR_APOTHECARY, HARBOR_LAPIDARY, HARBOR_BOARD, HARBOR_BUILDINGS, footing, HARBOR_CAVE, HARBOR_WAYGATE, HARBOR_CHEST, HARBOR_GALLEY, HARBOR_LIGHTHOUSE, HARBOR_SMITHY, HARBOR_GATHER, HARBOR_NAME, HARBOR_PLOTS, HARBOR_PLOT_FACING, HARBOR_PUB, HARBOR_RING, HARBOR_SHOP, HARBOR_SPAWN, HARBOR_WORKS, PLOT_PRICE, RESOURCE_KINDS, SHACK_COST, binFill, binNeeds, builtProjects, BOOK_TITLE, fishFrom, harborDoor, tileAt, type FishSpot, FISH_SPOTS, HOLE_NAMES, holeFishNames, generateHarbor, projectById, projectProgress, harborPoi, hutTier, poiAt, salesman, gardenBeds, gardenCorner, gardenLooks, plotAt, gardenSpotAt, GARDEN_SPOTS, HARBOR_WELL, HARBOR_WELL_AT, bedProgress, nextReady, readyCount, growText, type GardenBed, type GatherSpot, type Resources, regular as regularOf, regularTalk, type RegularId, FISHMONGER, FISHMONGER_FACES, FISHMONGER_POS, isFishmongerAt, fishmongerTalk, fishmongerTip, bestHole } from "@gantt-quest/world";
+import { GATHER_SPOTS, GATHER_SPOT_IDS, HARBOR_APOTHECARY, HARBOR_LAPIDARY, HARBOR_BOARD, HARBOR_BUILDINGS, footing, HARBOR_CAVE, HARBOR_WAYGATE, HARBOR_CHEST, HARBOR_GALLEY, HARBOR_LIGHTHOUSE, HARBOR_SMITHY, HARBOR_GATHER, HARBOR_NAME, HARBOR_PLOTS, HARBOR_PLOT_FACING, HARBOR_PUB, HARBOR_RING, HARBOR_SHOP, HARBOR_SPAWN, HARBOR_WORKS, PLOT_PRICE, RESOURCE_KINDS, SHACK_COST, binFill, binNeeds, builtProjects, BOOK_TITLE, fishFrom, harborDoor, tileAt, type FishSpot, FISH_SPOTS, HOLE_NAMES, holeFishNames, generateHarbor, projectById, projectProgress, harborPoi, hutTier, poiAt, salesman, gardenBeds, gardenCorner, gardenLooks, plotAt, gardenSpotAt, GARDEN_SPOTS, HARBOR_WELL, HARBOR_WELL_AT, bedProgress, nextReady, readyCount, growText, type GardenBed, type GatherSpot, type Resources, regular as regularOf, regularTalk, type RegularId, FISHMONGER, FISHMONGER_FACES, FISHMONGER_POS, isFishmongerAt, fishmongerAdvice, fishmongerTalk, fishmongerTip, bestHole } from "@gantt-quest/world";
 import type { Poi } from "@gantt-quest/world";
 import { MusterPanel, useMuster } from "./atlas/Muster";
 import { api, type Me, type RegularsView } from "./api";
@@ -125,6 +125,22 @@ const goIn = (here: Here | null): (() => void) | null => (!here || here.closed |
  * the Harbor is kept behind it, built but put away: not drawn, not connected, none of its panels up. Coming back
  * to it is then at once.
  */
+/**
+ * How many times Bram has been asked for advice in this browser: each asking gets the next piece, from the first,
+ * so he says every one before he says any again (fishmongerAdvice). Without storage, it counts for this page.
+ */
+let askedHere = 0;
+function nextAdvice(): number {
+  try {
+    const was = Number(localStorage.getItem("gq.bram.advice") ?? "-1");
+    const n = Number.isFinite(was) ? was + 1 : 0;
+    localStorage.setItem("gq.bram.advice", String(n));
+    return n;
+  } catch {
+    return askedHere++;
+  }
+}
+
 export function HarborView({ me, refresh, resting = false }: { me: Me; refresh(): Promise<unknown>; resting?: boolean }) {
   useAudioScene("harbor", !resting);
   /** Whether the Harbor was made put away (the game was opened somewhere else: on a map, in a building). */
@@ -402,7 +418,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
   const talkToMonger = () => {
     setWantMonger(false);
     const crew = me.crew?.id;
-    talk.begin(fishmongerTalk(fishmongerTip(crew ? bestHole(crew, Date.now(), true) : null)));
+    talk.begin(fishmongerTalk(fishmongerTip(crew ? bestHole(crew, Date.now(), true) : null), () => fishmongerAdvice(nextAdvice())));
   };
   const talkToMongerRef = useRef(talkToMonger);
   talkToMongerRef.current = talkToMonger;

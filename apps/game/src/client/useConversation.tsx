@@ -126,7 +126,7 @@ export function useConversation(host: ConversationHost): { active: Conversation 
     }
     if (ch.says) {
       setAsked(null);
-      return speak(pagesOf(ch.says));
+      return speak(pagesOf(typeof ch.says === "function" ? ch.says() : ch.says));
     }
     if (ch.ask) {
       setAsked(null);
