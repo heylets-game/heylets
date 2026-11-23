@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode, type RefObject, useLayoutEffect } from "react";
 import { useAudioScene } from "./audio/useAudioScene";
 import { hexDistance, hexNeighbors, type HexPos } from "@gantt-quest/core";
-import { PUB_BARKEEP, PUB_BARKEEP_POS, PUB_COUNTER, PUB_DEALER, PUB_DEALER_POS, PUB_DEALER_STAND, PUB_FITTINGS, PUB_GRID, PUB_LEADERBOARD, PUB_MENU, PUB_REGULAR_SPOTS, PUB_SALESMAN_POS, PUB_SEATS, PUB_TRADER, dueIn, gatherDay, poiAt, pubMountSpots, pubPath, pubRoom, PUB_MOUNT_SLOTS, regularsOn, salesman, outfitOf, barkeepTalk, dealerTalk, regularTalk, salesmanTalk, type PubClientMessage, type RegularId, type XpMessage } from "@gantt-quest/world";
+import { PUB_BARKEEP, PUB_BARKEEP_POS, PUB_COUNTER, PUB_DEALER, PUB_DEALER_POS, PUB_DEALER_STAND, PUB_FITTINGS, PUB_GRID, PUB_LEADERBOARD, PUB_MENU, PUB_SALESMAN_POS, PUB_SEATS, PUB_TRADER, dueIn, gatherDay, poiAt, pubMountSpots, pubPath, pubRoom, PUB_MOUNT_SLOTS, regularsOn, salesman, outfitOf, barkeepTalk, dealerTalk, regularTalk, salesmanTalk, type PubClientMessage, type RegularId, type XpMessage } from "@gantt-quest/world";
 import { toOwned } from "./items";
 import { withLook } from "./render/sprites";
 import { CatchPanel } from "./CatchPanel";
@@ -42,6 +42,7 @@ import { HeroSheet, useHeroSheet } from "./HeroSheet";
 import { blurb, label } from "./labels";
 import { xpEvents } from "./xpEvents";
 import { useConversation } from "./useConversation";
+import { regularHero, regularOn, regularUnit, useRegularsAbout } from "./useRegularsAbout";
 import "./hut.css";
 import "./pub.css";
 
@@ -49,8 +50,6 @@ import "./pub.css";
 const MOUNT_SPOTS = pubMountSpots(PUB_MOUNT_SLOTS);
 
 const same = (a: HexPos, b: HexPos) => a.q === b.q && a.r === b.r;
-/** A regular's unit id in the scene. */
-const regularUnit = (id: string) => `regular:${id}`;
 const ROOM = pubRoom();
 const DOOR = ROOM.pois.find((p) => p.kind === "door")!.pos;
 
@@ -169,8 +168,8 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
   useEffect(() => {
     if (!talkTo) return;
     void loadRegs();
-    const spot = castRef.current.findIndex((r) => r.id === talkTo);
-    if (spot >= 0) renderer.current?.lookAt(PUB_REGULAR_SPOTS[spot].pos);
+    const at = aboutRef.current.find((r) => r.id === talkTo)?.pos;
+    if (at) renderer.current?.lookAt(at);
   }, [talkTo, loadRegs]);
   /** The regular just clicked: their panel opens once you are beside them. */
   const wantTalk = useRef<RegularId | null>(null);
@@ -185,6 +184,12 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
   const talkingWith = useRef<string[]>([]);
   const castRef = useRef(cast);
   castRef.current = cast;
+  /** The regular just clicked, or being talked to: they wait where they are for you. */
+  const [holdFor, setHoldFor] = useState<RegularId | null>(null);
+  // The day's regulars drift about the pub through the night (packages/world/src/wander.ts); by day they are out.
+  const about = useRegularsAbout(renderer, me.crew?.id, "pub", holdFor, !resting);
+  const aboutRef = useRef(about);
+  aboutRef.current = about;
   /** The leaderboard on the wall is open. It opens once you are in front of it if you clicked it, and closes when you walk away. */
   const [reading, setReading] = useState(false);
   const wantBoard = useRef(false);
@@ -210,6 +215,8 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
     [pub.you, pub.players, me.character, me.player.id, myLook],
   );
   const self = players.find((p) => p.id === you);
+  const selfPos = useRef(self?.pos);
+  selfPos.current = self?.pos;
   /** How each player is drawn, for their seat at the Shoals table. */
   const looks = useMemo(() => Object.fromEntries(players.map((p) => [p.id, { classId: p.classId, outfit: p.outfit }])), [players]);
 
@@ -240,7 +247,7 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
         // A traveling salesman, when one is in, takes the corner by the far wall.
         ...(seller ? [{ id: "salesman", classId: seller.look, pos: PUB_SALESMAN_POS, label: seller.name }] : []),
         // The day's regulars, each on their own spot.
-        ...cast.map((r, i) => ({ id: regularUnit(r.id), classId: r.look, pos: PUB_REGULAR_SPOTS[i].pos, label: r.name })),
+        ...about.map(regularHero),
       ],
       freeRoam: true,
       indoors: true,
@@ -255,7 +262,7 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
         { id: "leaderboard", model: "tally_board", pos: PUB_LEADERBOARD.pos, facing: 0, z: -0.4 },
       ],
     };
-  }, [players, you, seller, cast, wall]);
+  }, [players, you, seller, about, wall]);
   const latest = useRef(scene);
   latest.current = scene;
   const send = useRef(pub.send);
@@ -281,10 +288,17 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
       }, onHexClick: (to) => {
         if (pinned.current) return;
         // Clicking a regular walks you up beside them, and opens a word with them once there.
-        const spot = PUB_REGULAR_SPOTS.findIndex((s) => same(s.pos, to));
-        const who = spot >= 0 ? castRef.current[spot] : undefined;
+        const who = regularOn(aboutRef.current, to);
         wantTalk.current = who?.id ?? null;
-        if (who) return send.current({ type: "move", to: PUB_REGULAR_SPOTS[spot].stand });
+        setHoldFor(who?.id ?? null);
+        if (who) {
+          // Beside them already: talk. Else to the floor beside them nearest you (they wait).
+          const from = selfPos.current;
+          if (from && hexDistance(from, who.pos) === 1) return chatRef.current(who.id);
+          const beside = hexNeighbors(who.pos, PUB_GRID).filter((n) => from && (same(n, from) || pubPath(ROOM, from, n))).sort((a, b) => hexDistance(from!, a) - hexDistance(from!, b));
+          if (beside[0]) return send.current({ type: "move", to: beside[0] });
+          return;
+        }
         // Clicking the dealer (or the hex in front of them) walks you up, and opens their papers once there.
         wantDeal.current = same(to, PUB_DEALER_POS) || same(to, PUB_DEALER_STAND);
         if (wantDeal.current) return send.current({ type: "move", to: PUB_DEALER_STAND });
@@ -383,6 +397,11 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
   /** The regular being talked to, for their errand. */
   const talkingRegular = useRef<RegularId | null>(null);
   talkingWith.current = talk.active && you ? [you, talk.active.unit] : [];
+  // The conversation over: whoever it was with is on their way again (unless you have just clicked them once more).
+  const chatting = !!talk.active;
+  useEffect(() => {
+    if (!chatting && !wantTalk.current) setHoldFor(null);
+  }, [chatting]);
   /** Start a word with one of them. */
   const chat = (who: "barkeep" | "dealer" | "trader" | RegularId) => {
     talkingRegular.current = null;
@@ -392,6 +411,7 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
     const r = castRef.current.find((c) => c.id === who);
     if (!r) return;
     talkingRegular.current = r.id;
+    setHoldFor(r.id);
     talk.begin(regularTalk(r, regularUnit(r.id)));
   };
   const chatRef = useRef(chat);
@@ -447,10 +467,11 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
     wantBoard.current = false;
   }, [atBoard]);
   /** The regular you are standing beside, if any. */
-  const nearSpot = self ? PUB_REGULAR_SPOTS.findIndex((s) => hexDistance(s.pos, self.pos) === 1) : -1;
-  const near = nearSpot >= 0 ? cast[nearSpot] : undefined;
+  const nearAbout = self ? about.find((r) => hexDistance(r.pos, self.pos) === 1) : undefined;
+  const near = nearAbout ? cast.find((c) => c.id === nearAbout.id) : undefined;
   const talking = talkTo && near?.id === talkTo ? regs?.regulars.find((v) => v.regular === talkTo) : undefined;
-  const hoverRegular = hover ? cast[PUB_REGULAR_SPOTS.findIndex((s) => same(s.pos, hover))] : undefined;
+  const hoverAbout = hover ? regularOn(about, hover) : undefined;
+  const hoverRegular = hoverAbout ? cast.find((c) => c.id === hoverAbout.id) : undefined;
   // Walking up to a regular: they say hello, and if you clicked them, their panel opens. Walking away closes it.
   const nearId = near?.id ?? null;
   useEffect(() => {
@@ -459,9 +480,8 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
       return;
     }
     const who = castRef.current.find((r) => r.id === nearId);
-    // A word with them if you clicked them; passing by, only a greeting.
+    // A word with them if you clicked them. (Not a greeting to everyone who drifts past.)
     if (who && wantTalk.current === nearId) chatRef.current(who.id);
-    else if (who) renderer.current?.say(regularUnit(who.id), who.hello);
     wantTalk.current = null;
   }, [nearId]);
   const gold = me.character?.gold ?? 0;
