@@ -23,7 +23,7 @@ type Field = keyof typeof APPEARANCE_OPTIONS;
 
 /** The pickers, grouped as the panel shows them. */
 const GROUPS: { title: string; fields: [Field, string][] }[] = [
-  { title: "Body", fields: [["height", "Height"], ["build", "Build"], ["shoulders", "Shoulders"], ["hips", "Hips"]] },
+  { title: "Body", fields: [["height", "Height"], ["build", "Build"], ["shoulders", "Shoulders"], ["hips", "Hips"], ["arms", "Arms"], ["legs", "Legs"]] },
   { title: "Head", fields: [["headSize", "Head size"], ["headShape", "Head shape"], ["ears", "Ears"], ["hairStyle", "Hair"]] },
   { title: "Face", fields: [["eyes", "Eyes"], ["nose", "Nose"], ["mustache", "Mustache"], ["beard", "Beard"]] },
 ];

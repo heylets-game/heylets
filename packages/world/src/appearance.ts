@@ -75,7 +75,40 @@ export const EYES = [
   { id: "narrow", label: "Narrow" },
   { id: "sleepy", label: "Sleepy" },
   { id: "fierce", label: "Fierce" },
-] as const satisfies readonly Preset<string>[];
+  // A patch over one eye (the hero's own right or left), the other eye round.
+  { id: "patchR", label: "Patch, right", patch: "right" },
+  { id: "patchL", label: "Patch, left", patch: "left" },
+] as const satisfies readonly (Preset<string> & { patch?: "right" | "left" })[];
+
+/** A choice of limbs: how long (`len`) and how thick (`thick`) they are, 1 the usual; and on one side, if any, something in place of the limb's end. */
+interface LimbPreset<Id extends string> extends Preset<Id> {
+  len: number;
+  thick: number;
+  /** The side (the hero's own) whose shin is a wooden peg (legs), or whose hand is an iron hook (arms). */
+  side?: "right" | "left";
+}
+
+/** The legs, over the height chosen: longer or shorter, stronger or skinnier, or a peg in place of one shin and foot. */
+export const LEGS = [
+  { id: "average", label: "Average", len: 1, thick: 1 },
+  { id: "longStrong", label: "Long & strong", len: 1.12, thick: 1.2 },
+  { id: "longSkinny", label: "Long & skinny", len: 1.12, thick: 0.8 },
+  { id: "shortStrong", label: "Short & strong", len: 0.88, thick: 1.2 },
+  { id: "shortSkinny", label: "Short & skinny", len: 0.88, thick: 0.8 },
+  { id: "pegR", label: "Peg leg, right", len: 1, thick: 1, side: "right" },
+  { id: "pegL", label: "Peg leg, left", len: 1, thick: 1, side: "left" },
+] as const satisfies readonly LimbPreset<string>[];
+
+/** The arms: longer or shorter, stronger or skinnier, or a hook in place of one hand. */
+export const ARMS = [
+  { id: "average", label: "Average", len: 1, thick: 1 },
+  { id: "longStrong", label: "Long & strong", len: 1.1, thick: 1.2 },
+  { id: "longSkinny", label: "Long & skinny", len: 1.1, thick: 0.8 },
+  { id: "shortStrong", label: "Short & strong", len: 0.9, thick: 1.2 },
+  { id: "shortSkinny", label: "Short & skinny", len: 0.9, thick: 0.8 },
+  { id: "hookR", label: "Hook hand, right", len: 1, thick: 1, side: "right" },
+  { id: "hookL", label: "Hook hand, left", len: 1, thick: 1, side: "left" },
+] as const satisfies readonly LimbPreset<string>[];
 
 export const NOSES = [
   { id: "button", label: "Button" },
@@ -122,6 +155,8 @@ export interface Appearance {
   shoulders: IdOf<typeof SHOULDERS>;
   /** How wide the hips are, and so how far apart the legs. */
   hips: IdOf<typeof HIPS>;
+  legs: IdOf<typeof LEGS>;
+  arms: IdOf<typeof ARMS>;
   headSize: IdOf<typeof HEAD_SIZES>;
   headShape: IdOf<typeof HEAD_SHAPES>;
   ears: IdOf<typeof EARS>;
@@ -143,6 +178,8 @@ export const DEFAULT_APPEARANCE: Appearance = {
   build: "average",
   shoulders: "average",
   hips: "average",
+  legs: "average",
+  arms: "average",
   headSize: "average",
   headShape: "round",
   ears: "round",
@@ -161,6 +198,8 @@ export const APPEARANCE_OPTIONS = {
   build: BUILDS,
   shoulders: SHOULDERS,
   hips: HIPS,
+  legs: LEGS,
+  arms: ARMS,
   headSize: HEAD_SIZES,
   headShape: HEAD_SHAPES,
   ears: EARS,
@@ -174,6 +213,17 @@ export const APPEARANCE_OPTIONS = {
 /** The size factor of a sized choice (height, build, shoulders, head size). */
 export function appearanceK(field: "height" | "build" | "shoulders" | "hips" | "headSize", look: Appearance): number {
   return (APPEARANCE_OPTIONS[field] as readonly SizedPreset<string>[]).find((p) => p.id === look[field])?.k ?? 1;
+}
+
+/** The chosen legs or arms: how long and thick they are (1 the usual), and the side with a peg or a hook, if either. */
+export function limbsOf(field: "legs" | "arms", look: Appearance): { len: number; thick: number; side?: "right" | "left" } {
+  const p: LimbPreset<string> | undefined = (APPEARANCE_OPTIONS[field] as readonly LimbPreset<string>[]).find((q) => q.id === look[field]);
+  return p ?? { len: 1, thick: 1 };
+}
+
+/** The eye covered by a patch, if one is. */
+export function eyePatchOf(eyes: string | undefined): "right" | "left" | undefined {
+  return (EYES as readonly { id: string; patch?: "right" | "left" }[]).find((e) => e.id === eyes)?.patch;
 }
 
 /**
@@ -219,22 +269,29 @@ export function parseAppearance(raw: unknown): Appearance | null {
 /** A short stable string for an appearance, for caching whatever is drawn from it. */
 export function appearanceKey(look: Appearance | undefined): string {
   if (!look) return "";
-  return [look.height, look.build, look.shoulders, look.hips, look.headSize, look.headShape, look.ears, look.hairStyle, look.eyes, look.nose, look.mustache, look.beard, look.skin, look.hair, inkKey(look.ink)].join(".");
+  return [look.height, look.build, look.shoulders, look.hips, look.legs, look.arms, look.headSize, look.headShape, look.ears, look.hairStyle, look.eyes, look.nose, look.mustache, look.beard, look.skin, look.hair, inkKey(look.ink)].join(".");
 }
 
 /** A random appearance, for the picker's dice. `rand` returns 0 to 1. */
 export function randomAppearance(rand: () => number = Math.random): Appearance {
   const pick = <T>(list: readonly T[]): T => list[Math.floor(rand() * list.length)];
+  // A patch, a peg or a hook now and then, not on most: the dice pick one of them about one time in eight.
+  const rarely = <T extends { id: string }>(list: readonly T[], special: (p: T) => boolean): T => {
+    const odd = rand() < 0.125;
+    return pick(list.filter((p) => special(p) === odd));
+  };
   return {
     height: pick(HEIGHTS).id,
     build: pick(BUILDS).id,
     shoulders: pick(SHOULDERS).id,
     hips: pick(HIPS).id,
+    legs: rarely<(typeof LEGS)[number]>(LEGS, (p) => "side" in p).id,
+    arms: rarely<(typeof ARMS)[number]>(ARMS, (p) => "side" in p).id,
     headSize: pick(HEAD_SIZES).id,
     headShape: pick(HEAD_SHAPES).id,
     ears: pick(EARS).id,
     hairStyle: pick(HAIR_STYLES).id,
-    eyes: pick(EYES).id,
+    eyes: rarely<(typeof EYES)[number]>(EYES, (p) => "patch" in p).id,
     nose: pick(NOSES).id,
     mustache: pick(MUSTACHES).id,
     beard: pick(BEARDS).id,

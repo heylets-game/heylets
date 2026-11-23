@@ -15,7 +15,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { ConvexGeometry } from "three/examples/jsm/geometries/ConvexGeometry.js";
-import { APPEARANCE_OPTIONS, GARB_PREFIX, HAIR_COLORS, SKIN_TONES, INK_COLORS, INK_LEVELS, INK_REGIONS, RARITY_COLOR, WEAPONS, WEAPON_ICON, appearanceK, decodeInk, inkColorOf, inkLevelOf, wearsLanternHelm, type Appearance, type Emote, type Ink, type InkRegion, type InkView, type Outfit, type Slot } from "@gantt-quest/world";
+import { APPEARANCE_OPTIONS, GARB_PREFIX, HAIR_COLORS, SKIN_TONES, INK_COLORS, INK_LEVELS, INK_REGIONS, RARITY_COLOR, WEAPONS, WEAPON_ICON, appearanceK, decodeInk, eyePatchOf, limbsOf, inkColorOf, inkLevelOf, wearsLanternHelm, type Appearance, type Emote, type Ink, type InkRegion, type InkView, type Outfit, type Slot } from "@gantt-quest/world";
 import type { Look } from "./looks";
 import { torchFlame } from "./torchFlame";
 import { buildLowPoly, disposeLowPoly, type Dangle, type Spin } from "./gearModels";
@@ -215,12 +215,34 @@ interface Measures {
   /** How wide the hips are, so how far apart the legs stand. */
   hips: number;
   head: number;
+  /** How thick the legs are, over the build (see LEGS). */
+  legGirth: number;
+  /** How long the arms are, and how thick over the build (see ARMS). */
+  armLen: number;
+  armGirth: number;
+  /** The side (-1 right, 1 left) whose shin is a peg, and whose hand is a hook, or 0 for none. */
+  peg: number;
+  hook: number;
 }
-const USUAL: Measures = { legs: 1, girth: 1, shoulders: 1, hips: 1, head: 1 };
+const USUAL: Measures = { legs: 1, girth: 1, shoulders: 1, hips: 1, head: 1, legGirth: 1, armLen: 1, armGirth: 1, peg: 0, hook: 0 };
 let m: Measures = USUAL;
 function measuresOf(look: Appearance | null): Measures {
   if (!look) return USUAL;
-  return { legs: appearanceK("height", look), girth: appearanceK("build", look), shoulders: appearanceK("shoulders", look), hips: appearanceK("hips", look), head: appearanceK("headSize", look) };
+  const legs = limbsOf("legs", look);
+  const arms = limbsOf("arms", look);
+  const side = (s?: "right" | "left") => (s === "right" ? -1 : s === "left" ? 1 : 0);
+  return {
+    legs: appearanceK("height", look) * legs.len,
+    girth: appearanceK("build", look),
+    shoulders: appearanceK("shoulders", look),
+    hips: appearanceK("hips", look),
+    head: appearanceK("headSize", look),
+    legGirth: legs.thick,
+    armLen: arms.len,
+    armGirth: arms.thick,
+    peg: side(legs.side),
+    hook: side(arms.side),
+  };
 }
 
 /** One ring of a loft: its height, its half-width (x) and half-depth (z), and how far forward its middle is. */
@@ -2086,7 +2108,7 @@ interface Rig {
 // ---------- people ----------
 
 /** The joints every two-legged figure shares, and how they move. */
-function biped(top: THREE.Group, parts: Part[], elbow = ELBOW) {
+function biped(top: THREE.Group, parts: Part[], drawnElbow = ELBOW) {
   const part = (parent: THREE.Object3D, x: number, y: number, z: number) => {
     const p = new Part(parent, x, y, z);
     parts.push(p);
@@ -2094,6 +2116,11 @@ function biped(top: THREE.Group, parts: Part[], elbow = ELBOW) {
   };
   // The proportions chosen (all 1 for a stock figure): longer legs lift the hips, broader shoulders set the arms out.
   const hipY = 5 * m.legs;
+  // Longer or shorter arms: the elbow and the fist are that much further from the shoulder, and what is drawn on
+  // the arm (in its own space, the elbow at `drawnElbow`) is stretched to fit. Everything that poses the arm goes by
+  // `elbow` and `fist`, so it reaches as far as the arm does.
+  const armK = m.armLen;
+  const elbow = drawnElbow * armK;
   /** How long a thigh is, and a shin: this figure's own (the measures in force now are the next figure's later). */
   const shank = -KNEE * m.legs;
   const torso = part(top, 0, hipY, 0);
@@ -2111,23 +2138,24 @@ function biped(top: THREE.Group, parts: Part[], elbow = ELBOW) {
   // The knee is -KNEE above the ground, so the sole is that far below it.
   const footR = part(shinR.joint, 0, KNEE * m.legs, 0);
   const footL = part(shinL.joint, 0, KNEE * m.legs, 0);
-  for (const leg of [thighR, thighL, shinR, shinL]) leg.skin.scale.set(m.girth, m.legs, m.girth);
+  const legGirth = m.girth * m.legGirth;
+  for (const leg of [thighR, thighL, shinR, shinL]) leg.skin.scale.set(legGirth, m.legs, legGirth);
   // Wide hips carry fuller thighs; the shins stay as they are.
-  for (const thigh of [thighR, thighL]) thigh.skin.scale.x = m.girth * (0.5 + 0.5 * m.hips);
+  for (const thigh of [thighR, thighL]) thigh.skin.scale.x = legGirth * (0.5 + 0.5 * m.hips);
   // An arm is an upper arm from the shoulder and a forearm from the elbow. It is still drawn as one limb in the
   // shoulder's space: the part shares what is drawn on it between the two, and cuts a sleeve at the elbow.
   const foreR = part(armR.joint, 0, elbow, 0);
   const foreL = part(armL.joint, 0, elbow, 0);
-  armR.jointAt(elbow, foreR);
-  armL.jointAt(elbow, foreL);
-  const limbGirth = (1 + m.girth) / 2;
-  for (const arm of [armR, armL, foreR, foreL]) arm.skin.scale.set(limbGirth, 1, limbGirth);
+  armR.jointAt(drawnElbow, foreR);
+  armL.jointAt(drawnElbow, foreL);
+  const limbGirth = ((1 + m.girth) / 2) * m.armGirth;
+  for (const arm of [armR, armL, foreR, foreL]) arm.skin.scale.set(limbGirth, armK, limbGirth);
   const legR = limb(thighR, shinR);
   const legL = limb(thighL, shinL);
   // What a weight swinging from the right hand can bump: all but that arm, which carries it.
   bodyParts = [torso, head, thighR, thighL, shinR, shinL, armL, foreL];
   // What each hand holds, in the middle of the fist, kept upright however the arm is bent.
-  const fist = lowPoly ? -5.25 : -5;
+  const fist = (lowPoly ? -5.25 : -5) * armK;
   const heldR = part(foreR.joint, 0, fist - elbow, 0);
   const heldL = part(foreL.joint, 0, fist - elbow, 0);
   /** How far forward each upper arm rests, how far its elbow is bent (forward is below zero), and how what it holds is tipped. */
@@ -3351,11 +3379,13 @@ function lowHead(head: Part, look: Look, asleep: boolean, covered = false) {
       lids.push(lid.joint);
     }
   } else head.box(tone(skin, -0.25), 1, 0.24, 0.3, 0, mouthY, faceAt(rings, mouthY) + 0.03);
-  lowEyes(head, look.hair, eyes, asleep, rings);
+  lowEyes(head, look.hair, eyes, asleep, rings, chosen?.hairStyle === "bald");
   if (look.glowEyes && !asleep) {
-    // Alight over the eyes the face has: a glow in each. For a look whose eyes light only with a spell, each is a
-    // part of its own, swelled and shrunk as the spell is cast (see castEyes).
+    // Alight over the eyes the face has: a glow in each (not under a patch). For a look whose eyes light only with
+    // a spell, each is a part of its own, swelled and shrunk as the spell is cast (see castEyes).
+    const patch = eyePatchOf(eyes);
     for (const s of [-1, 1]) {
+      if ((patch === "right" && s < 0) || (patch === "left" && s > 0)) continue;
       const x = s * 1.15;
       const z = faceZ(rings, x, 3.05) + 0.12;
       if (look.glowOnCast) {
@@ -3631,7 +3661,8 @@ function faceFor(key: string, colours: boolean): Face {
     headShape: pick(o.headShape),
     ears: pick(o.ears),
     hairStyle: pick(o.hairStyle),
-    eyes: pick(o.eyes),
+    // (Not a patch: that is a hero's choice. Picked from the same six as ever, so each keeps the eyes they had.)
+    eyes: pick(o.eyes.filter((e) => !eyePatchOf(e.id))),
     nose: pick(o.nose),
     // A villager may have a mustache, a beard or both; a named townsperson has only what their look gives them.
     mustache: !colours || next() < 0.6 ? "none" : pick(o.mustache),
@@ -3809,13 +3840,22 @@ function inlayPoints(rings: readonly Ring[], cx: number, cy: number, rx: number,
 /** How wide and tall (half of each) each kind of eye is drawn by lowEyes: what a lid has to cover. */
 const EYE_SIZE: Record<string, [number, number]> = { big: [0.55, 0.8], beady: [0.3, 0.3], narrow: [0.5, 0.24], round: [0.42, 0.62], sleepy: [0.42, 0.62], fierce: [0.42, 0.62] };
 
-function lowEyes(head: Part, hair: string, kind: string, asleep: boolean, rings: readonly Ring[]) {
+function lowEyes(head: Part, hair: string, kind: string, asleep: boolean, rings: readonly Ring[], bald = false) {
   const y = 3.05;
+  // A patch over one eye (the right is s = -1), the other eye round.
+  const patch = eyePatchOf(kind);
+  const patched = patch === "right" ? -1 : patch === "left" ? 1 : 0;
+  if (patched) {
+    kind = "round";
+    lowEyePatch(head, rings, patched, bald);
+  }
   const fierce = kind === "fierce";
   for (const s of [-1, 1]) {
     const x = s * (kind === "beady" ? 1.05 : 1.15);
     const glint = (gx: number, gy: number, r: number) => head.inlay("#ffffff", inlayPoints(rings, gx, gy, r, r, 0.1));
-    if (asleep) {
+    if (s === patched) {
+      // Under the patch.
+    } else if (asleep) {
       // Shut: a lid line, sagging a little in the middle.
       head.inlay(OUTLINE, inlayPoints(rings, x, y - 0.1, 0.5, 0.09, 0.07, (px, py) => py + 0.16 * ((px - x) / 0.5) ** 2));
     } else if (kind === "big") {
@@ -3857,6 +3897,83 @@ function lowEyes(head: Part, hair: string, kind: string, asleep: boolean, rings:
     brow(OUTLINE, 0.09, 0.06);
     brow(hair, 0, 0.14);
   }
+}
+
+/** The eye patch's cloth and its strap. */
+const PATCH = "#1f1a1c";
+const PATCH_STRAP = "#3a2a22";
+
+/**
+ * A patch over the eye on side `s` (-1 the right), laid on the face like an eye (see inlayPoints) and a little
+ * larger, and its strap: from the patch's outer edge round the side of the head above the ear to the back, and from
+ * its inner edge up across the brow to the far temple and on round, a loop that sits over the hair where there is
+ * some (see crownOf).
+ */
+function lowEyePatch(head: Part, rings: readonly Ring[], s: number, bald: boolean) {
+  const [x, y] = [s * 1.15, 3.05];
+  // Flat along the top, under the brow, and rounded below: a patch, not a big dark eye. A stitched rim round it.
+  const top = y + 0.5;
+  head.inlay(tone(PATCH, 0.22), inlayPoints(rings, x, y - 0.02, 0.8, 0.84, 0.13, (_px, py) => Math.min(py, top + 0.08)));
+  head.inlay(PATCH, inlayPoints(rings, x, y - 0.02, 0.7, 0.74, 0.17, (_px, py) => Math.min(py, top)));
+  const over = bald ? rings : crownOf(rings);
+  // The strap's height going round the head: `a` is the angle from straight ahead toward the patched side. Low
+  // at the patch, level round the back above the ear, and steeply up across the brow to clear the other eye.
+  const heightAt = (a: number): number => {
+    if (a >= 0.62) return 3.4 + 0.55 * Math.min(1, (a - 0.62) / (Math.PI - 0.62));
+    if (a >= 0.1) return 3.45;
+    if (a >= -0.55) return 3.45 + (1.05 * (0.1 - a)) / 0.65;
+    return 4.5 - (0.55 * (a + 0.55)) / (0.55 - Math.PI);
+  };
+  const pts: Pt[] = [];
+  const steps = 28;
+  for (let i = 0; i <= steps; i++) {
+    // From just inside the patch, the long way round, back to just outside it.
+    const a = 0.1 - ((2 * Math.PI - 0.52) * i) / steps;
+    const turn = a < -Math.PI ? a + 2 * Math.PI : a;
+    const h = heightAt(turn);
+    const [px, pz] = surfaceAt(over, h, s * turn);
+    pts.push([px + Math.sin(s * turn) * 0.08, h, pz + Math.cos(s * turn) * 0.08]);
+  }
+  // Each piece a round band laid over the head with no outline of its own, as the patch is: an outlined strap
+  // came out as a string of beads, each piece edged in black.
+  const r = 0.11;
+  const along = new THREE.Vector3();
+  const side = new THREE.Vector3();
+  const up = new THREE.Vector3();
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const [a, b] = [new THREE.Vector3(...pts[i]), new THREE.Vector3(...pts[i + 1])];
+    along.subVectors(b, a).normalize();
+    side.set(0, 1, 0).cross(along).normalize();
+    up.crossVectors(along, side);
+    const band: Pt[] = [];
+    // A little past each end, so neighbouring pieces overlap round the bends.
+    for (const [end, out] of [[a, -0.04], [b, 0.04]] as const) {
+      for (let k = 0; k < 6; k++) {
+        const t = (k / 6) * Math.PI * 2;
+        const p = end.clone().addScaledVector(along, out).addScaledVector(side, Math.cos(t) * r).addScaledVector(up, Math.sin(t) * r);
+        band.push([p.x, p.y, p.z]);
+      }
+    }
+    head.inlay(PATCH_STRAP, band);
+  }
+}
+
+/** Where a straight line out from the middle of a loft of `rings` (8-sided) at height `y`, `a` from +z toward +x, meets its side. */
+function surfaceAt(rings: readonly Ring[], y: number, a: number): [number, number] {
+  const pts = section(rings, 8, y);
+  const [dx, dz] = [Math.sin(a), Math.cos(a)];
+  let best = 0;
+  for (let k = 0; k < pts.length; k++) {
+    const [ax, az] = pts[k];
+    const [bx, bz] = pts[(k + 1) % pts.length];
+    const [ex, ez] = [bx - ax, bz - az];
+    const den = dx * ez - dz * ex;
+    if (Math.abs(den) < 1e-9) continue;
+    const t = (ax * ez - az * ex) / den;
+    const u = (ax * dz - az * dx) / den;
+    if (u >= 0 && u <= 1 && t > best) best = t;
+  }
+  return [dx * best, dz * best];
 }
 
 /** A nose of each kind, its bridge between the eyes, on a face whose front is at `z`. */
@@ -4664,17 +4781,19 @@ function lowAmulet(torso: Part, ref: string, trim: string, sh: number, over: num
  * trim's colour on each hand; any other, a gold band on the right hand with a stone on the outside that glows
  * in the trim's colour.
  */
-function lowRing(armR: Part, armL: Part, ref: string, trim: string) {
+function lowRing(armR: Part, armL: Part, ref: string, trim: string, hook = 0) {
   const band: Ring[] = [[-5.82, 1.2, 1.15, 0.15], [-5.42, 1.26, 1.2, 0.13]];
+  // A hook has no fingers to wear one on (see lowHook): the bands on the hand there is, a single ring on the left.
   if (ref === "bands") {
-    for (const arm of [armR, armL]) arm.loft(trim, band, 8);
+    for (const [arm, s] of [[armR, -1], [armL, 1]] as const) if (hook !== s) arm.loft(trim, band, 8);
     return;
   }
-  armR.loft(GEAR.gold, band, 8);
+  const [arm, s] = hook === -1 ? [armL, 1] : [armR, -1];
+  arm.loft(GEAR.gold, band, 8);
   // The stone, out to the side and a little forward (the right hand is s = -1: outward is -x).
   const a = 0.75;
-  armR.ball(GEAR.gold, 0.44, -Math.sin(a) * 1.3, -5.62, Math.cos(a) * 1.22 + 0.14);
-  armR.glowBall(trim, 0.42, -Math.sin(a) * 1.6, -5.62, Math.cos(a) * 1.5 + 0.14);
+  arm.ball(GEAR.gold, 0.44, s * Math.sin(a) * 1.3, -5.62, Math.cos(a) * 1.22 + 0.14);
+  arm.glowBall(trim, 0.42, s * Math.sin(a) * 1.6, -5.62, Math.cos(a) * 1.5 + 0.14);
 }
 
 /**
@@ -4683,7 +4802,7 @@ function lowRing(armR: Part, armL: Part, ref: string, trim: string) {
  */
 function thighReach(y: number): number {
   const fuller = 0.5 + 0.5 * m.hips;
-  return 1.7 * m.hips + (ringAt(THIGH, y).rx + 0.14) * fuller + 0.12;
+  return 1.7 * m.hips + (ringAt(THIGH, y).rx * m.legGirth + 0.14) * fuller + 0.12;
 }
 
 /** A ring just outside `rings` at height `y`, `by` larger all round. */
@@ -4946,13 +5065,13 @@ function lowHand(arm: Part, skin: string, s: number) {
 /** A tapered leg in two pieces that meet at the knee, so it can bend: the thigh on `thigh`, the shin on `shin`. */
 const THIGH: Ring[] = [[-2.95, 1.08, 1.12], [-1.4, 1.3, 1.36], [0.2, 1.5, 1.5], [0.85, 1.1, 1.1]];
 const SHIN: Ring[] = [[-2.25, 0.92, 0.98], [-1, 1.15, 1.2, -0.05], [0.4, 1.1, 1.14]];
-function lowLeg(thigh: Part, shin: Part, color: string) {
+function lowLeg(thigh: Part, shin: Part | null, color: string) {
   thigh.loft(color, THIGH, 6);
-  shin.loft(color, SHIN, 6);
+  shin?.loft(color, SHIN, 6);
 }
 
-/** A bare leg, the drawers over the top of the thigh. */
-function lowBareLeg(thigh: Part, shin: Part, skin: string) {
+/** A bare leg, the drawers over the top of the thigh. (No shin on a peg leg's side: see lowPegLeg.) */
+function lowBareLeg(thigh: Part, shin: Part | null, skin: string) {
   lowLeg(thigh, shin, skin);
   thigh.loft(LINEN, [[-1.5, 1.42, 1.48], [0.3, 1.6, 1.6], [0.9, 1.2, 1.2]], 6);
 }
@@ -5042,31 +5161,34 @@ function lowDiverPlate(torso: Part, skin: string, sh: number, trim: string): num
   return ringAt(rings, 4.2).rz + ringAt(rings, 4.2).dz + 0.3;
 }
 
-/** Armor on the legs, low-poly: loose sailcloth trousers tied at the shin, or iron greaves with steel at the knee and shin. */
-function lowLegArmor(thigh: Part, shin: Part, ref: string, trim: string) {
+/**
+ * Armor on the legs, low-poly: loose sailcloth trousers tied at the shin, or iron greaves with steel at the knee and
+ * shin. On a peg leg's side (no `shin`), only what is over the thigh.
+ */
+function lowLegArmor(thigh: Part, shin: Part | null, ref: string, trim: string) {
   if (ref === "diving_legs") {
     // Riveted Leggings: dark canvas, a riveted iron knee plate, and a brass band round the top of the shin.
     const canvas = "#4d4a3e";
     thigh.loft(canvas, grown(THIGH, 0.12), 6);
-    shin.loft(canvas, grown(SHIN, 0.1), 6);
-    shin.ball(DIVE_IRON, 1.05, 0, 0.05, 0.75, 0, [1.2, 1, 0.85]);
-    for (const x of [-0.55, 0.55]) shin.ball(tone(DIVE_IRON, 0.2), 0.15, x, 0.05, 1.62, 0);
-    shin.loft(DIVE_BRASS, [[-1.05, 1.36, 1.4], [-0.6, 1.38, 1.42]], 6);
+    shin?.loft(canvas, grown(SHIN, 0.1), 6);
+    shin?.ball(DIVE_IRON, 1.05, 0, 0.05, 0.75, 0, [1.2, 1, 0.85]);
+    for (const x of [-0.55, 0.55]) shin?.ball(tone(DIVE_IRON, 0.2), 0.15, x, 0.05, 1.62, 0);
+    shin?.loft(DIVE_BRASS, [[-1.05, 1.36, 1.4], [-0.6, 1.38, 1.42]], 6);
     thigh.loft(trim, [[0.05, 1.62, 1.62], [0.45, 1.58, 1.58]], 6);
     return;
   }
   if (ref === "trousers") {
     const cloth = "#d8cfb4";
     thigh.loft(cloth, grown(THIGH, 0.14), 6);
-    shin.loft(cloth, [[-1.55, 1.18, 1.24], [-1, 1.32, 1.38, -0.05], [0.4, 1.28, 1.32]], 6);
-    shin.loft(trim, [[-1.75, 1.22, 1.28], [-1.35, 1.24, 1.3]], 6);
+    shin?.loft(cloth, [[-1.55, 1.18, 1.24], [-1, 1.32, 1.38, -0.05], [0.4, 1.28, 1.32]], 6);
+    shin?.loft(trim, [[-1.75, 1.22, 1.28], [-1.35, 1.24, 1.3]], 6);
     thigh.box(tone(cloth, -0.1), 0.9, 1.1, 0.3, 0.45, -1.6, 1.42);
     return;
   }
   thigh.loft(GEAR.iron, grown(THIGH, 0.06), 6);
-  shin.loft(GEAR.iron, grown(SHIN, 0.08), 6);
-  shin.ball(GEAR.steel, 0.95, 0, 0.05, 0.85, 0, [1.15, 0.95, 0.8]);
-  shin.shape(GEAR.steel, sym([[0.75, -0.55, 0.95], [0.7, -1.95, 0.85], [0, -0.45, 1.38], [0, -2.05, 1.25]]));
+  shin?.loft(GEAR.iron, grown(SHIN, 0.08), 6);
+  shin?.ball(GEAR.steel, 0.95, 0, 0.05, 0.85, 0, [1.15, 0.95, 0.8]);
+  shin?.shape(GEAR.steel, sym([[0.75, -0.55, 0.95], [0.7, -1.95, 0.85], [0, -0.45, 1.38], [0, -2.05, 1.25]]));
   thigh.loft(trim, [[0.05, 1.62, 1.62], [0.5, 1.56, 1.56]], 6);
 }
 
@@ -5093,6 +5215,45 @@ function lowBoots(foot: Part, shin: Part, ref: string, trim: string) {
   shin.loft(GEAR.leather, [[-2.35, 1.1, 1.14], [-1, 1.3, 1.34, -0.05], [-0.5, 1.32, 1.36]], 6);
   shin.loft(tone(GEAR.leather, 0.08), [[-0.85, 1.44, 1.48], [-0.2, 1.48, 1.52]], 6);
   shin.loft(trim, [[-1.15, 1.36, 1.4], [-0.92, 1.37, 1.41]], 6);
+}
+
+/** What a peg leg is turned from, and the iron shod on its end. */
+const PEG_WOOD = "#9a7448";
+
+/**
+ * A wooden peg in place of a shin and a foot (see LEGS), on the shin's part: a cup the knee sits in, strapped
+ * on, and a post tapering down to the ground, shod in iron. The ground is KNEE below the knee, in the shin's
+ * own space, as it is under a foot.
+ */
+function lowPegLeg(shin: Part) {
+  shin.loft(tone(PEG_WOOD, -0.08), [[-0.85, 0.62, 0.62], [-0.35, 1.08, 1.1], [0.35, 1.22, 1.26], [0.6, 1.1, 1.14]], 6);
+  shin.loft(GEAR.leather, [[-0.05, 1.28, 1.32], [0.25, 1.3, 1.34]], 6);
+  shin.ball(GEAR.gold, 0.16, 0, 0.1, 1.36, 0);
+  shin.loft(PEG_WOOD, [[KNEE + 0.25, 0.3, 0.3], [-1.5, 0.38, 0.38], [-0.6, 0.6, 0.6]], 6);
+  shin.loft(tone(PEG_WOOD, 0.1), [[-1.35, 0.44, 0.44], [-1.15, 0.46, 0.46]], 6);
+  shin.loft(GEAR.iron, [[KNEE, 0.26, 0.26], [KNEE + 0.35, 0.33, 0.33]], 6);
+}
+
+/**
+ * An iron hook in place of a hand (see ARMS), on the arm's part where the mitt would be: a leather cuff over the
+ * wrist, a short shaft, and the hook curling forward and up to its point.
+ */
+function lowHook(arm: Part) {
+  arm.loft(GEAR.leather, [[-5.05, 0.78, 0.78], [-4.7, 1.02, 1.02], [-4.1, 0.92, 0.92]], 6);
+  arm.loft(tone(GEAR.leather, -0.14), [[-4.75, 1.08, 1.08], [-4.5, 1.08, 1.08]], 6);
+  arm.ball(GEAR.iron, 0.5, 0, -5.12, 0, 0, [1, 0.5, 1]);
+  // Down from the cuff, then round a half circle forward and up past it, thinning to the point.
+  const r = 0.62;
+  const pts: Pt[] = [[0, -5.1, 0], [0, -6.2, 0]];
+  for (let i = 1; i <= 6; i++) {
+    const t = (i / 6) * 1.2 * Math.PI;
+    pts.push([0, -6.2 - r * Math.sin(t), r - r * Math.cos(t)]);
+  }
+  const thick = (i: number) => 0.24 - (0.16 * i) / (pts.length - 1);
+  for (let i = 0; i + 1 < pts.length; i++) {
+    strut(arm, GEAR.steel, pts[i], pts[i + 1], thick(i), thick(i + 1));
+    if (i > 0) arm.ball(GEAR.steel, thick(i), ...pts[i], 0);
+  }
 }
 
 /** A chunky round-toed shoe, its sole on the ground at the foot's origin. */
@@ -5751,18 +5912,22 @@ function person(top: THREE.Group, look: Look, outfit: Outfit | undefined, asleep
   // Under the hem of whatever is worn on the body.
   tier = TIER.legs;
   for (const [leg, thigh, shin, foot] of sides) {
+    // A peg in place of this shin and foot (see LEGS): the thigh dressed as ever, and nothing worn below the knee.
+    const peg = lowPoly && m.peg !== 0 && thigh === (m.peg < 0 ? b.thighR : b.thighL);
+    if (peg) lowPegLeg(shin);
+    const below = peg ? null : shin;
     if (lowPoly && !legs) {
       if (bare("legs")) {
-        lowBareLeg(thigh, shin, look.skin);
+        lowBareLeg(thigh, below, look.skin);
         if (chosen?.ink) {
           const right = thigh === b.thighR;
           inkPart(thigh, right ? "thighR" : "thighL", chosen.ink);
-          inkPart(shin, right ? "shinR" : "shinL", chosen.ink);
+          if (below) inkPart(below, right ? "shinR" : "shinL", chosen.ink);
         }
       }
-      else lowLeg(thigh, shin, look.legs);
+      else lowLeg(thigh, below, look.legs);
     }
-    else if (lowPoly && legs) lowLegArmor(thigh, shin, legs.ref, trim("legs"));
+    else if (lowPoly && legs) lowLegArmor(thigh, below, legs.ref, trim("legs"));
     else if (legs?.ref === "trousers") {
       // Sailcloth: pale, loose, tied at the shin.
       const cloth = "#d8cfb4";
@@ -5779,6 +5944,7 @@ function person(top: THREE.Group, look: Look, outfit: Outfit | undefined, asleep
     } else {
       leg.box(look.legs, 2.4, 5, 2.6, 0, -2.5, 0);
     }
+    if (peg) continue;
     if (lowPoly && !boots) {
       if (bare("boots")) lowBareFoot(foot, look.skin);
       else if (look.boots) lowBoots(foot, shin, "sea", look.boots);
@@ -6083,7 +6249,9 @@ function person(top: THREE.Group, look: Look, outfit: Outfit | undefined, asleep
   const hood = helmet ? helmet.ref === "hood" || helmet.icon === "hood" : !bare("helmet") && !lantern && look.hat === "hood";
   for (const [arm, s] of [[armR, -1], [armL, 1]] as const) {
     if (lowPoly) {
-      lowHand(arm, look.skin, s);
+      // An iron hook in place of this hand (see ARMS), or the hand.
+      if (m.hook === s) lowHook(arm);
+      else lowHand(arm, look.skin, s);
       if (!greatcoat && !body) {
         const region = s < 0 ? "armR" : "armL";
         if (undressed || look.sleeveless) {
@@ -6171,7 +6339,7 @@ function person(top: THREE.Group, look: Look, outfit: Outfit | undefined, asleep
   }
   const ring = outfit?.ring;
   if (ring && lowPoly) {
-    lowRing(armR, armL, ring.ref, trim("ring"));
+    lowRing(armR, armL, ring.ref, trim("ring"), m.hook);
   } else if (ring?.ref === "bands") {
     for (const arm of [armR, armL]) arm.box(trim("ring"), 2.4, 0.6, 2.8, 0, -4.2, 0);
   } else if (ring) {
@@ -6300,7 +6468,7 @@ function drawFlute(p: Part, trim: string, span: number) {
 /** Where a hand is, in the torso's frame, its arm (on side `side`, -1 right) turned `forward` and `out` as the biped turns it. */
 function handAt(side: number, forward: number, out: number): THREE.Vector3 {
   const shoulderX = 4.05 * m.shoulders + 0.45;
-  return new THREE.Vector3(0, -5.1, 0).applyEuler(new THREE.Euler(forward, 0, out)).add(new THREE.Vector3(side * shoulderX, 5.5, 0));
+  return new THREE.Vector3(0, -5.1 * m.armLen, 0).applyEuler(new THREE.Euler(forward, 0, out)).add(new THREE.Vector3(side * shoulderX, 5.5, 0));
 }
 
 /** Set a joint at `at`, its +y along `dir` and its +z as near the front (+z) as that allows. */
@@ -6588,7 +6756,7 @@ function giantFoot(foot: Part, skin: string, nail: string, w: number, long: numb
  */
 function ogre(top: THREE.Group): Rig {
   const parts: Part[] = [];
-  const b = giant(top, parts, { legs: 0.85, girth: 1.4, shoulders: 1.5, hips: 1.3, head: 1 }, 1.3, -2.6);
+  const b = giant(top, parts, { ...USUAL, legs: 0.85, girth: 1.4, shoulders: 1.5, hips: 1.3, head: 1 }, 1.3, -2.6);
   const skin = "#b3a46a";
   const dark = tone(skin, -0.12);
   const fur = "#6e4f30";
@@ -6666,7 +6834,7 @@ function ogre(top: THREE.Group): Rig {
  */
 function troll(top: THREE.Group): Rig {
   const parts: Part[] = [];
-  const b = giant(top, parts, { legs: 1.15, girth: 0.9, shoulders: 1.1, hips: 0.95, head: 1 }, 1.18, -3.8);
+  const b = giant(top, parts, { ...USUAL, legs: 1.15, girth: 0.9, shoulders: 1.1, hips: 0.95, head: 1 }, 1.18, -3.8);
   const skin = "#7f9474";
   const dark = tone(skin, -0.12);
   const moss = "#4e6a33";
