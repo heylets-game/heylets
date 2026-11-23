@@ -1,13 +1,16 @@
 // Home finishes: the wallpaper on a hut's walls inside, what its floor is laid with, and the colour of its roof
 // outside. Nell Ashby sells them from her stall beside the market stall in the Harbor. Each finish is bought once
 // and kept for good; its owner then dresses their hut in any of the ones they own, as often as they like, from
-// edit mode at home. A hut with none chosen looks as huts always have: bare walls, honey boards, and a roof
+// edit mode at home. She does not lay out every wallpaper and floor at once: each UTC day her table has half of
+// each, picked from the date (`finishStock`), the same for every crew, so a pattern seen today may be gone tomorrow
+// and back another day. Roofs are all on sale every day. A hut with none chosen looks as huts always have: bare walls, honey boards, and a roof
 // colour of its own picked from its owner's id.
 //
 // Each finish carries what it is drawn with (`look`): the client paints the wallpaper and the floor from it
 // (render/groundArt.ts) and colours the roof, its shutters and the Lodge's pennant with it (render/places/huts.ts).
 
 import type { HexPos } from "@gantt-quest/core";
+import { makeRng, seedFromString } from "./rng";
 
 export type FinishKind = "wall" | "floor" | "roof";
 export const FINISH_KINDS: readonly FinishKind[] = ["wall", "floor", "roof"];
@@ -17,7 +20,7 @@ export const FINISH_KINDS: readonly FinishKind[] = ["wall", "floor", "roof"];
  * the paper runs to the skirting), and above it the paper: `ground`, with `ink` laid over it in `pattern`.
  */
 export interface WallLook {
-  pattern: "plain" | "stripe" | "sprig" | "damask" | "check" | "shell" | "boards";
+  pattern: "plain" | "stripe" | "sprig" | "damask" | "check" | "shell" | "boards" | "dots" | "harlequin" | "waves" | "anchors";
   ground: string;
   ink: string;
   dado?: string;
@@ -25,9 +28,12 @@ export interface WallLook {
   timber?: string;
 }
 
-/** A floor: boards in a stain (`tones` are the boards, `gap` between them), flagstones, tiles, or a painted floor. */
+/**
+ * A floor: boards in a stain (`tones` are the boards, `gap` between them), flagstones, tiles, a painted floor, or
+ * parquet. For octagon tiles the first tone is the octagons and the last the little squares between them.
+ */
 export interface FloorLook {
-  pattern: "boards" | "flags" | "tiles" | "painted" | "herringbone";
+  pattern: "boards" | "flags" | "tiles" | "painted" | "herringbone" | "basketweave" | "octagon";
   tones: string[];
   gap: string;
 }
@@ -66,6 +72,14 @@ export const FINISHES: readonly FinishDef[] = [
   wall("wall_ochre_check", "Ochre check", 50, "A warm check, like a good blanket.", { pattern: "check", ground: "#e8c97a", ink: "#b98a3a" }),
   wall("wall_navy_boards", "Navy wainscot", 65, "Painted boards to the waist, cream above. Shipshape.", { pattern: "boards", ground: "#e8dcc0", ink: "#2d3a5a", dado: "#2d3a5a" }),
   wall("wall_red_damask", "Red damask", 80, "Deep red with a gold figure. For a hut that means it.", { pattern: "damask", ground: "#7a2a2a", ink: "#c9a24a", dado: "#3a2218", timber: "#2a1a12" }),
+  wall("wall_mint_dots", "Mint polka dot", 40, "White dots on mint. Impossible to be cross in.", { pattern: "dots", ground: "#bfe0cc", ink: "#f6f3ea" }),
+  wall("wall_mustard_stripe", "Mustard stripe", 45, "Bold stripes over a walnut dado. Warm on a grey day.", { pattern: "stripe", ground: "#efe0b4", ink: "#c99a2e", dado: "#5e3f28" }),
+  wall("wall_lavender_sprig", "Lavender sprig", 50, "Little purple flowers on cream. Smells of nothing, sadly.", { pattern: "sprig", ground: "#f1ecf2", ink: "#8a6aa8" }),
+  wall("wall_coral_shell", "Coral shells", 55, "Coral shells on sand, over a coral dado.", { pattern: "shell", ground: "#f0e2cc", ink: "#d9765a", dado: "#b85a44" }),
+  wall("wall_waves", "Rolling waves", 60, "Waves on sky blue. Some say it makes them seasick.", { pattern: "waves", ground: "#cfe3ef", ink: "#2f6f9c", dado: "#1f4a6e" }),
+  wall("wall_harlequin", "Harlequin", 65, "Dusty blue and cream diamonds. Very grand.", { pattern: "harlequin", ground: "#efe6d2", ink: "#7f9bb5" }),
+  wall("wall_anchors", "Anchor print", 70, "Red anchors on cream over a navy dado. A sailor's room.", { pattern: "anchors", ground: "#f1eadb", ink: "#b9433d", dado: "#26324a" }),
+  wall("wall_green_damask", "Green damask", 80, "Bottle green with a gold figure. Old money.", { pattern: "damask", ground: "#24402e", ink: "#c9a24a", dado: "#2a1a12", timber: "#22160e" }),
   floor("floor_ash", "Pale ash boards", 30, "Light boards, scrubbed pale.", { pattern: "boards", tones: ["#d8c29a", "#cfb88e", "#e0caa4", "#d4bd94"], gap: "#9c8462" }),
   floor("floor_walnut", "Dark walnut boards", 40, "Dark and rich. Hides the mud.", { pattern: "boards", tones: ["#5e3f28", "#563923", "#664530", "#5a3c26"], gap: "#2e1e12" }),
   floor("floor_limed", "Limed boards", 35, "Whitewashed planks, like a beach house.", { pattern: "boards", tones: ["#e4ddcc", "#dbd3c0", "#ebe4d4", "#e0d8c6"], gap: "#a89e88" }),
@@ -75,6 +89,15 @@ export const FINISHES: readonly FinishDef[] = [
   floor("floor_checker", "Black and white tiles", 60, "A smart checkerboard. Mind the shine.", { pattern: "tiles", tones: ["#ece6d8", "#2a2a30"], gap: "#8a8478" }),
   floor("floor_terracotta", "Terracotta tiles", 50, "Warm red clay tiles from down the coast.", { pattern: "tiles", tones: ["#b8603a", "#a95434", "#c26a42"], gap: "#e0cfb0" }),
   floor("floor_painted", "Painted diamonds", 55, "Boards painted in blue and cream diamonds.", { pattern: "painted", tones: ["#e8dcc0", "#4a6fa8"], gap: "#7f5f3e" }),
+  floor("floor_cherry", "Cherry boards", 40, "A warm reddish wood that darkens as it ages.", { pattern: "boards", tones: ["#9a5a3a", "#904f33", "#a36242", "#965638"], gap: "#4e2a1a" }),
+  floor("floor_grey_wash", "Grey-washed boards", 35, "Boards washed grey like driftwood.", { pattern: "boards", tones: ["#a8a49a", "#9e9a90", "#b2ada2", "#a39f95"], gap: "#5e5a52" }),
+  floor("floor_ebony", "Ebony-stained boards", 45, "Stained nearly black. Dramatic, and it shows the dust.", { pattern: "boards", tones: ["#2e2420", "#28201c", "#352a25", "#2b221e"], gap: "#120d0a" }),
+  floor("floor_basketweave", "Oak basketweave", 55, "Oak strips laid in little woven squares.", { pattern: "basketweave", tones: ["#b8905e", "#ad8654", "#c29a66", "#b28a58"], gap: "#6e5032" }),
+  floor("floor_slate", "Slate flagstones", 50, "Blue-grey slate, dark and smooth.", { pattern: "flags", tones: ["#4f5866", "#566070", "#4a525e", "#5c6574", "#525b68"], gap: "#262a30" }),
+  floor("floor_sandstone", "Sandstone flags", 50, "Warm yellow stone from the cliffs up the coast.", { pattern: "flags", tones: ["#c9ab7a", "#d1b483", "#c2a372", "#d6bb8c", "#cbad7c"], gap: "#7d6644" }),
+  floor("floor_blue_tiles", "Blue and white tiles", 60, "A cool blue checkerboard. Like a dairy.", { pattern: "tiles", tones: ["#eef0ea", "#3f6fa8"], gap: "#9aa6b4" }),
+  floor("floor_octagon", "Octagon and dot tiles", 65, "White octagons with little black squares between. Very proper.", { pattern: "octagon", tones: ["#ece6d8", "#2a2a30"], gap: "#8a8478" }),
+  floor("floor_painted_green", "Painted green diamonds", 55, "Boards painted in green and cream diamonds.", { pattern: "painted", tones: ["#ece2c6", "#4f7d4a"], gap: "#7f5f3e" }),
   roof("roof_slate", "Slate grey roof", 60, "Quiet and respectable.", "#5f6b78"),
   roof("roof_brick", "Brick red roof", 60, "The old Harbor red.", "#a3402f"),
   roof("roof_moss", "Moss green roof", 60, "Looks like it grew there.", "#5e7d3a"),
@@ -120,11 +143,46 @@ export function roofColor(id: string | null | undefined): string | undefined {
   return f?.kind === "roof" ? f.look.color : undefined;
 }
 
-/** Why `id` cannot be bought by someone owning `owned` with `gold`, or null if it can. */
-export function finishBuyProblem(id: unknown, owned: readonly string[], gold: number): string | null {
+// ---------- what is on Nell's table today ----------
+
+/** How many of each kind Nell lays out on a day: half the wallpapers and half the floors, and every roof. */
+export const FINISH_STOCK: Record<FinishKind, number> = {
+  wall: Math.ceil(finishesOf("wall").length / 2),
+  floor: Math.ceil(finishesOf("floor").length / 2),
+  roof: finishesOf("roof").length,
+};
+
+/** The UTC day of `now`, as YYYY-MM-DD: her table changes at midnight UTC. */
+export function finishDay(now: number): string {
+  return new Date(now).toISOString().slice(0, 10);
+}
+
+/** When her table next changes after `now`: the next midnight UTC. */
+export function nextFinishDay(now: number): number {
+  const d = new Date(now);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1);
+}
+
+/** The ids of the finishes Nell has out on `day` (YYYY-MM-DD, UTC), in catalogue order. The same for every crew. */
+export function finishStock(day: string): string[] {
+  const rng = makeRng(seedFromString(`finishes|${day}`));
+  const out = new Set<string>();
+  for (const kind of FINISH_KINDS) {
+    const pool = finishesOf(kind).map((f) => f.id);
+    for (let i = 0; i < FINISH_STOCK[kind] && pool.length > 0; i++) out.add(pool.splice(Math.floor(rng.next() * pool.length), 1)[0]);
+  }
+  return FINISHES.filter((f) => out.has(f.id)).map((f) => f.id);
+}
+
+/**
+ * Why `id` cannot be bought by someone owning `owned` with `gold`, or null if it can. `stock` is what Nell has out
+ * today (finishStock): anything else she has not got out, though it is hers to sell another day.
+ */
+export function finishBuyProblem(id: unknown, owned: readonly string[], gold: number, stock: readonly string[]): string | null {
   const def = typeof id === "string" ? finishById(id) : undefined;
   if (!def) return "Nell doesn't sell that.";
   if (owned.includes(def.id)) return "You have that one already.";
+  if (!stock.includes(def.id)) return "Nell hasn't got that one out today. Her table changes every day.";
   if (gold < def.price) return `That's ${def.price} gold, and you have ${gold}.`;
   return null;
 }
@@ -171,5 +229,5 @@ export const DECORATOR = {
   trade: "home furnishings",
   look: "keeper_decor",
   hello: "Mind the paste, it's still wet. Come to brighten the place up?",
-  line: "Wallpaper, floors, roofs. Buy it once, it's yours for good, and you can change your mind at home as often as you like.",
+  line: "Wallpaper, floors, roofs. Buy it once, it's yours for good, and you can change your mind at home as often as you like. I put out different patterns every day, so come and look again tomorrow.",
 } as const;

@@ -2,7 +2,7 @@
 // Nell, theirs for good, and which of them their hut is dressed in. Buying is one batch whose first statement takes
 // the gold only if the finish is not owned yet and the gold is there, so a double click cannot pay twice.
 
-import { BARE_FINISH, cleanFinish, finishBuyProblem, finishById, finishSetProblem, type FinishKind, type HutFinish } from "@gantt-quest/world";
+import { BARE_FINISH, cleanFinish, finishBuyProblem, finishById, finishDay, finishSetProblem, finishStock, nextFinishDay, type FinishKind, type HutFinish } from "@gantt-quest/world";
 import { getCharacter } from "./db";
 
 /** The finishes a player owns, in the order they bought them. */
@@ -24,6 +24,9 @@ export interface FinishesView {
   gold: number;
   /** Whether they have a hut standing to dress. */
   hut: boolean;
+  /** What Nell has out today (finishStock), and when her table next changes. */
+  stock: string[];
+  restock: number;
 }
 
 export async function finishesView(db: D1Database, playerId: string): Promise<FinishesView> {
@@ -33,14 +36,15 @@ export async function finishesView(db: D1Database, playerId: string): Promise<Fi
     getCharacter(db, playerId),
     db.prepare("SELECT 1 AS yes FROM huts WHERE player_id = ? AND plot IS NOT NULL AND bin_json IS NULL").bind(playerId).first<{ yes: number }>(),
   ]);
-  return { owned, finish, gold: c?.gold ?? 0, hut: !!hut };
+  const now = Date.now();
+  return { owned, finish, gold: c?.gold ?? 0, hut: !!hut, stock: finishStock(finishDay(now)), restock: nextFinishDay(now) };
 }
 
-/** Buy a finish from Nell, for good. */
+/** Buy a finish from Nell, for good: one she has out today. */
 export async function buyFinish(db: D1Database, playerId: string, id: unknown): Promise<string | { gold: number }> {
   const [c, owned] = await Promise.all([getCharacter(db, playerId), ownedFinishes(db, playerId)]);
   if (c?.status !== "active") return "Create a character first.";
-  const problem = finishBuyProblem(id, owned, c.gold);
+  const problem = finishBuyProblem(id, owned, c.gold, finishStock(finishDay(Date.now())));
   if (problem) return problem;
   const def = finishById(id as string)!;
   const [paid] = await db.batch([

@@ -241,8 +241,8 @@ export const api = {
   /** Gear from the bag into a container, or (container null) back into the bag. */
   stow: (container: number | null, itemId: number) => request("/api/hut/stow", { container, itemId }),
   upgradeHut: () => request<{ tier: number }>("/api/hut/upgrade", {}),
-  /** Nell's catalogue as you see it: the finishes you own, what your hut wears, your gold, and whether you have a hut standing. */
-  finishes: () => request<{ owned: string[]; finish: HutFinish; gold: number; hut: boolean }>("/api/finishes"),
+  /** Nell's catalogue as you see it: the finishes you own, what your hut wears, your gold, whether you have a hut standing, and what she has out today. */
+  finishes: () => request<{ owned: string[]; finish: HutFinish; gold: number; hut: boolean; stock: string[]; restock: number }>("/api/finishes"),
   buyFinish: (id: string) => request<{ gold: number }>("/api/finishes/buy", { id }),
   /** Dress your hut's walls, floor or roof in a finish you own (null: back to plain). */
   setFinish: (kind: FinishKind, id: string | null) => request<{ finish: HutFinish }>("/api/hut/finish", { kind, id }),
