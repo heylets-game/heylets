@@ -4,7 +4,13 @@
 // s = -q - r is used internally for distance and line maths.
 
 export type HexPos = { q: number; r: number };
-export type HexGrid = { cols: number; rows: number };
+/**
+ * A rectangle of hexes, `cols` across and `rows` down. It starts at offset column 0 and row 0 unless `col0` and
+ * `row0` say otherwise: a map that has to reach left of or above where its places were first laid out (the
+ * Harbor's sea) starts there instead, so nothing already on it moves. `row0` must be even, so the rows that are
+ * a hex short are still the odd ones.
+ */
+export type HexGrid = { cols: number; rows: number; col0?: number; row0?: number };
 
 // Six axial directions (pointy-top hex), clockwise from top-right.
 const DIRECTIONS: readonly HexPos[] = [
@@ -32,20 +38,22 @@ const DIRECTIONS: readonly HexPos[] = [
 // (The leftmost VISUAL column stays at offset col 0; axial coords drift
 // because the rendering formula already shifts +sqrt(3)/2 per row.)
 export function inBounds(pos: HexPos, grid: HexGrid): boolean {
-  if (pos.r < 0 || pos.r >= grid.rows) return false;
+  const row0 = grid.row0 ?? 0, col0 = grid.col0 ?? 0;
+  if (pos.r < row0 || pos.r >= row0 + grid.rows) return false;
   const rowShift = Math.floor(pos.r / 2);
   const rowWidth = pos.r % 2 === 0 ? grid.cols : grid.cols - 1;
   const offsetCol = pos.q + rowShift;
-  return offsetCol >= 0 && offsetCol < rowWidth;
+  return offsetCol >= col0 && offsetCol < col0 + rowWidth;
 }
 
 // Every valid hex in the grid, row by row.
 export function allHexesInGrid(grid: HexGrid): HexPos[] {
   const result: HexPos[] = [];
-  for (let r = 0; r < grid.rows; r++) {
+  const row0 = grid.row0 ?? 0, col0 = grid.col0 ?? 0;
+  for (let r = row0; r < row0 + grid.rows; r++) {
     const rowShift = Math.floor(r / 2);
     const rowWidth = r % 2 === 0 ? grid.cols : grid.cols - 1;
-    for (let oc = 0; oc < rowWidth; oc++) {
+    for (let oc = col0; oc < col0 + rowWidth; oc++) {
       result.push({ q: oc - rowShift, r });
     }
   }

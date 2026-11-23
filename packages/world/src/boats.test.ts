@@ -2,12 +2,13 @@ import { describe, expect, it } from "vitest";
 import { FISH } from "./fishcatalog";
 import { FISH_SPOTS, rollCatch, vesselProblem } from "./fishing";
 import { gatherView, stepGather } from "./gather";
-import { HARBOR_BRIDGE, HARBOR_PIERS, HARBOR_ROCKS, HARBOR_WRECK, coastal, generateHarbor, harborPath, seaEdge, waterSpotAt } from "./harbor";
+import { HARBOR_BRIDGE, HARBOR_PIERS, HARBOR_ROCKS, HARBOR_SEA_REACH, HARBOR_WRECK, coastal, generateHarbor, harborPath, seaEdge, waterSpotAt } from "./harbor";
 import { VESSEL_OF, bestVessel, FURNISHINGS } from "./hut";
 import { hutRoom, placeProblem } from "./hutroom";
 import { makeRng } from "./rng";
 import { startSitting } from "./sitting";
-import { tileAt } from "./map";
+import { reachable, tileAt } from "./map";
+import { hexDistance } from "@gantt-quest/core";
 
 const map = generateHarbor();
 const water = map.tiles.filter((t) => t.biome === "water");
@@ -41,6 +42,28 @@ describe("boats", () => {
     expect(harborPath(map, pier, open, "rowboat")).not.toBeNull();
     expect(harborPath(map, pier, HARBOR_WRECK, "rowboat")).toBeNull();
     for (const r of HARBOR_ROCKS) expect(harborPath(map, pier, r, "rowboat")).toBeNull();
+  });
+
+  it("row out the same distance off every shore: every water hex within reach of land, none beyond, the edge all the way round", () => {
+    const land = map.tiles.filter((t) => t.biome !== "water");
+    const off = (p: { q: number; r: number }) => Math.min(...land.map((l) => hexDistance(l, p)));
+    // The map's water is exactly the sea a boat can reach.
+    for (const t of water) expect(off(t)).toBeLessThanOrEqual(HARBOR_SEA_REACH);
+    for (const t of water) if (seaEdge(map, t)) expect(off(t)).toBe(HARBOR_SEA_REACH);
+    // Due north, south, east and west of the land, and at the corners, it goes the whole way out.
+    const col = (t: { q: number; r: number }) => t.q + Math.floor(t.r / 2);
+    const far = (pick: (t: { q: number; r: number }) => number) => Math.max(...water.map(pick)) - Math.max(...land.map(pick));
+    expect(far((t) => -t.r)).toBe(HARBOR_SEA_REACH);
+    expect(far((t) => t.r)).toBe(HARBOR_SEA_REACH);
+    expect(far((t) => col(t))).toBeGreaterThanOrEqual(HARBOR_SEA_REACH);
+    expect(far((t) => -col(t))).toBeGreaterThanOrEqual(HARBOR_SEA_REACH);
+    // And a rowboat gets to all of it (but the rocks and the wreck) from a pier.
+    const hazards = new Set([...HARBOR_ROCKS, HARBOR_WRECK].map((p) => `${p.q},${p.r}`));
+    const rowed = reachable(map, pier, Infinity, (t) => (t.biome !== "water" ? (t.biome === "rampart" || t.built || t.blocker ? Infinity : 1) : hazards.has(`${t.q},${t.r}`) ? Infinity : 1));
+    for (const t of water) if (!hazards.has(`${t.q},${t.r}`)) expect(rowed.has(`${t.q},${t.r}`), `${t.q},${t.r}`).toBe(true);
+    // The far corner is a long row, but a short-enough one for a single trip from the nearest shore.
+    const corner = water.filter((t) => seaEdge(map, t)).sort((a, b) => a.r - b.r || col(a) - col(b))[0];
+    expect(harborPath(map, pier, corner, "rowboat")).not.toBeNull();
   });
 
   it("walk round by the bridge rather than paddle across to the housing island", () => {

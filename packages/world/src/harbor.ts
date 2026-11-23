@@ -20,7 +20,18 @@ import { findPath, tileAt, type Biome, type Poi, type PoiKind, type Tile, type W
 /** What the crew's home port is called, wherever its name is shown. */
 export const HARBOR_NAME = "Heylets Harbor";
 
-export const HARBOR_GRID: HexGrid = { cols: 40, rows: 31 };
+/**
+ * How far out the Harbor's sea goes, in hexes from the nearest land (a pier counts): a boat can go anywhere on it,
+ * the same distance off every shore, and its outer edge is the open sea.
+ */
+export const HARBOR_SEA_REACH = 6;
+/**
+ * The rectangle the Harbor is laid out in. The town was planned on a 40 by 31 grid from 0,0, and the grid runs
+ * `HARBOR_SEA_REACH` further on every side so the sea is never cut short by its edge; only the water within that
+ * reach of land is kept (`generateHarbor`), so the map's own edge is a ring round the coast, not this rectangle.
+ * (The reach is even, so the rows that are a hex short are still the odd ones.)
+ */
+export const HARBOR_GRID: HexGrid = { cols: 40 + 2 * HARBOR_SEA_REACH, rows: 31 + 2 * HARBOR_SEA_REACH, col0: -HARBOR_SEA_REACH, row0: -HARBOR_SEA_REACH };
 
 /** Offset column (visual left-to-right index) of an axial hex. */
 const colOf = (p: HexPos) => p.q + Math.floor(p.r / 2);
@@ -537,6 +548,7 @@ export function generateHarbor(): WorldMap {
   for (const p of [at(8, 5), at(9, 5)]) lay(p, "forest");
   raiseOakHill(map);
   layPaths(map);
+  map.tiles = withinReach(map);
   map.pois = [
     harborPoi("board", "board", HARBOR_BOARD), harborPoi("shop", "shop", HARBOR_SHOP), harborPoi("finishes", "finishes", HARBOR_FINISHES), harborPoi("ring", "ring", HARBOR_RING),
     harborPoi("pub", "pub", HARBOR_PUB), harborPoi("works", "works", HARBOR_WORKS),
@@ -558,6 +570,26 @@ export function generateHarbor(): WorldMap {
     return facing ? { ...p, facing } : p;
   });
   return map;
+}
+
+/** The map's tiles without the water further than `HARBOR_SEA_REACH` from land: counted out a ring at a time from the shore. */
+function withinReach(map: WorldMap): Tile[] {
+  const far = new Map<string, number>();
+  let ring = map.tiles.filter((t) => t.biome !== "water");
+  for (const t of ring) far.set(keyOf(t), 0);
+  for (let d = 1; d <= HARBOR_SEA_REACH; d++) {
+    const next: Tile[] = [];
+    for (const p of ring) {
+      for (const n of around(p)) {
+        const t = tileAt(map, n);
+        if (!t || far.has(keyOf(t))) continue;
+        far.set(keyOf(t), d);
+        next.push(t);
+      }
+    }
+    ring = next;
+  }
+  return map.tiles.filter((t) => far.has(keyOf(t)));
 }
 
 /**
@@ -645,7 +677,8 @@ const onRoad = (t: Tile) => t.biome === "cobble" || t.biome === "dock" || !!t.pa
 /**
  * A walkable route between two Harbor hexes, or null: the cheapest by the costs above, so it follows a road
  * where there is one. The rampart cannot be crossed, nor a building walked through, nor the water crossed
- * without a boat. A barrel keeps to water beside the land; a rowboat goes anywhere on it. Neither goes onto the
+ * without a boat. A barrel keeps to water beside the land; a rowboat goes anywhere on it, which is everywhere
+ * within `HARBOR_SEA_REACH` of the shore. Neither goes onto the
  * rocks or the wreck. If keeping to the roads would make a walk longer than one request may be, it goes the
  * shortest way instead.
  */
@@ -678,7 +711,7 @@ export function coastal(map: WorldMap, p: HexPos): boolean {
   });
 }
 
-/** A water hex at the edge of the map: from here a rowboat can row out to the open sea. */
+/** A water hex at the edge of the map, as far out as the sea goes (`HARBOR_SEA_REACH`): from here a rowboat fishes the open sea. */
 export function seaEdge(map: WorldMap, p: HexPos): boolean {
   return tileAt(map, p)?.biome === "water" && around(p).some((n) => !tileAt(map, n));
 }
