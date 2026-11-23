@@ -83,7 +83,7 @@ A tab left open on an older build is told when a newer one is out (`src/client/N
 | `…/hut.ts`, `…/hutroom.ts` | Hut materials, furnishings and tiers; the walk-in room, placement and its message types |
 | `…/drops.ts` | What a searched cache gives for the hut |
 | `…/gather.ts` | Fishing, felling and the quarry: outings, timing, payouts, stamina and resting |
-| `…/fishing.ts`, `fishingholes.ts`, `fishfight.ts`, `sitting.ts`, `fishcatalog.ts`, `fishmarket.ts`, `catchbook.ts` | Fishing: a sitting anywhere along the shore or afloat, the crew's fishing holes (where the fish are, by the clock and the weather), the fight with one fish, the catalogue of what can be caught, selling it, and the Catch Book |
+| `…/fishing.ts`, `fishingholes.ts`, `fishfight.ts`, `sitting.ts`, `fishcatalog.ts`, `fishmarket.ts`, `catchbook.ts`, `fishmonger.ts` | Fishing: a sitting anywhere along the shore or afloat, bait (what it does, what it costs, when it is used up), the crew's fishing holes (where the fish are, by the clock and the weather), the fight with one fish, the catalogue of what can be caught, selling it, the Catch Book, and Bram the fishmonger at the shack, who buys the catch and sells the bait |
 | `…/felling.ts`, `mine.ts` | Felling's two rounds, and the quarry's rock face |
 | `…/timing.ts` | The timed stop used on the splitting block (and by the older gathering outings): markers, grades and how a stat eases them |
 | `…/projects.ts` | Crew projects |
@@ -100,7 +100,7 @@ A tab left open on an older build is told when a newer one is out (`src/client/N
 | `apps/game/src/server/hut-room.ts` | One Durable Object per hut owner: presence, walking, chat and furniture |
 | `apps/game/src/server/pub-room.ts` | One Durable Object per crew for the pub: presence, walking, chat and the game tables |
 | `apps/game/src/server/stake-table.ts` | A game table for any stake game: antes, prize, per-player views, forfeits |
-| `apps/game/src/server/gather.ts`, `fishing.ts`, `projects.ts`, `trade.ts`, `workshops.ts`, `lapidary.ts`, `townchest.ts`, `lodestones.ts` | D1 work for each of those |
+| `apps/game/src/server/gather.ts`, `fishing.ts`, `bait.ts`, `projects.ts`, `trade.ts`, `workshops.ts`, `lapidary.ts`, `townchest.ts`, `lodestones.ts` | D1 work for each of those |
 | `apps/game/src/server/ai.ts` | Prompts and the Workers AI calls (and the mock): the barkeep, and naming a hero |
 | `apps/game/src/server/db/`, `db.ts` | D1 access, a module to each domain: players and sign-in, characters, inventory, the market stall, crews, plots, huts and their containers, spending, rewards. `db.ts` only passes on what they export, so everything is still imported from `./db` |
 | `apps/game/src/server/email.ts` | Sending sign-in codes |

@@ -6,10 +6,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAudioScene } from "./audio/useAudioScene";
 import { hexDistance, hexNeighbors, type HexPos } from "@gantt-quest/core";
-import { GATHER_SPOTS, GATHER_SPOT_IDS, HARBOR_APOTHECARY, HARBOR_LAPIDARY, HARBOR_BOARD, HARBOR_BUILDINGS, footing, HARBOR_CAVE, HARBOR_WAYGATE, HARBOR_CHEST, HARBOR_GALLEY, HARBOR_LIGHTHOUSE, HARBOR_SMITHY, HARBOR_GATHER, HARBOR_NAME, HARBOR_PLOTS, HARBOR_PLOT_FACING, HARBOR_PUB, HARBOR_RING, HARBOR_SHOP, HARBOR_SPAWN, HARBOR_WORKS, PLOT_PRICE, RESOURCE_KINDS, SHACK_COST, binFill, binNeeds, builtProjects, BOOK_TITLE, fishFrom, harborDoor, tileAt, type FishSpot, FISH_SPOTS, HOLE_NAMES, holeFishNames, generateHarbor, projectById, projectProgress, harborPoi, hutTier, poiAt, salesman, gardenBeds, gardenCorner, gardenLooks, plotAt, gardenSpotAt, GARDEN_SPOTS, HARBOR_WELL, HARBOR_WELL_AT, bedProgress, nextReady, readyCount, growText, type GardenBed, type GatherSpot, type Resources, regular as regularOf, regularTalk, type RegularId, roofColor, DECORATOR, FINISHES_STALL, HARBOR_FINISHES, decoratorTalk } from "@gantt-quest/world";
+import { GATHER_SPOTS, GATHER_SPOT_IDS, HARBOR_APOTHECARY, HARBOR_LAPIDARY, HARBOR_BOARD, HARBOR_BUILDINGS, footing, HARBOR_CAVE, HARBOR_WAYGATE, HARBOR_CHEST, HARBOR_GALLEY, HARBOR_LIGHTHOUSE, HARBOR_SMITHY, HARBOR_GATHER, HARBOR_NAME, HARBOR_PLOTS, HARBOR_PLOT_FACING, HARBOR_PUB, HARBOR_RING, HARBOR_SHOP, HARBOR_SPAWN, HARBOR_WORKS, PLOT_PRICE, RESOURCE_KINDS, SHACK_COST, binFill, binNeeds, builtProjects, BOOK_TITLE, fishFrom, harborDoor, tileAt, type FishSpot, FISH_SPOTS, HOLE_NAMES, holeFishNames, generateHarbor, projectById, projectProgress, harborPoi, hutTier, poiAt, salesman, gardenBeds, gardenCorner, gardenLooks, plotAt, gardenSpotAt, GARDEN_SPOTS, HARBOR_WELL, HARBOR_WELL_AT, bedProgress, nextReady, readyCount, growText, type GardenBed, type GatherSpot, type Resources, regular as regularOf, regularTalk, type RegularId, roofColor, DECORATOR, FINISHES_STALL, HARBOR_FINISHES, decoratorTalk, FISHMONGER, FISHMONGER_FACES, FISHMONGER_POS, isFishmongerAt, fishmongerAdvice, fishmongerTalk, fishmongerTip, bestHole } from "@gantt-quest/world";
 import type { Poi } from "@gantt-quest/world";
 import { MusterPanel, useMuster } from "./atlas/Muster";
 import { api, type Me, type RegularsView } from "./api";
+import { BaitPanel } from "./BaitPanel";
 import { CatchPanel } from "./CatchPanel";
 import { ChatInput } from "./ChatInput";
 import { AccountPanel } from "./Account";
@@ -33,7 +34,7 @@ import { InventoryScreen } from "./InventoryScreen";
 import { ShopScreen } from "./ShopScreen";
 import { TileAction } from "./TileAction";
 import { Trading } from "./TradePanel";
-import { WorldRenderer, type RenderHero, type RenderState } from "./render/WorldRenderer";
+import { WorldRenderer, hexToWorld, type RenderHero, type RenderState } from "./render/WorldRenderer";
 import { useHarbor } from "./useHarbor";
 import { useOwnLook } from "./ownLook";
 import { useSalesman } from "./salesmanClock";
@@ -126,6 +127,22 @@ const goIn = (here: Here | null): (() => void) | null => (!here || here.closed |
  * the Harbor is kept behind it, built but put away: not drawn, not connected, none of its panels up. Coming back
  * to it is then at once.
  */
+/**
+ * How many times Bram has been asked for advice in this browser: each asking gets the next piece, from the first,
+ * so he says every one before he says any again (fishmongerAdvice). Without storage, it counts for this page.
+ */
+let askedHere = 0;
+function nextAdvice(): number {
+  try {
+    const was = Number(localStorage.getItem("gq.bram.advice") ?? "-1");
+    const n = Number.isFinite(was) ? was + 1 : 0;
+    localStorage.setItem("gq.bram.advice", String(n));
+    return n;
+  } catch {
+    return askedHere++;
+  }
+}
+
 export function HarborView({ me, refresh, resting = false }: { me: Me; refresh(): Promise<unknown>; resting?: boolean }) {
   useAudioScene("harbor", !resting);
   /** Whether the Harbor was made put away (the game was opened somewhere else: on a map, in a building). */
@@ -138,7 +155,11 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
   const [shop, setShop] = useState(false);
   const [notices, setNotices] = useState(false);
   const [gather, setGather] = useState<GatherSpot | null>(null);
+  /** Bram the fishmonger's panels, opened from a word with him: buying the catch, and the bait counter. */
   const [fishmonger, setFishmonger] = useState(false);
+  const [baitOpen, setBaitOpen] = useState(false);
+  /** Bram (or his shack) was clicked: a word with him once you are beside him. */
+  const [wantMonger, setWantMonger] = useState(false);
   const [works, setWorks] = useState(false);
   /** The town chest, on its dais on the west shore: the crew's shared store. */
   const [chest, setChest] = useState(false);
@@ -261,6 +282,8 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
       heroes: [
         ...players.map((p): RenderHero => ({ id: p.id, classId: p.classId, pos: p.pos, label: p.name, outfit: p.id === you ? ownOutfit : p.outfit, asleep: !!p.bedroll && same(p.bedroll, p.pos), rod: p.fishing ? (p.gilded ? "gilded" : true) : false, boat: tileAt(base, p.pos)?.biome === "water" ? p.vessel ?? "barrel" : undefined, level: p.level, xp: p.xp })),
         ...about.map(regularHero),
+        // Bram the fishmonger, at his shack by the pier, day and night.
+        { id: FISHMONGER.id, classId: FISHMONGER.look, pos: FISHMONGER_POS, label: FISHMONGER.name },
         // Nell, at her counter among her samples, beside the market stall.
         { id: DECORATOR.id, classId: DECORATOR.look, pos: FINISHES_STALL, label: DECORATOR.name },
       ],
@@ -281,6 +304,9 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     // door and the going in: nothing more to press on arriving (see `want`). A click anywhere else is only a walk.
     const r = new WorldRenderer(mount.current!, {
       onHexClick: (to, place) => {
+        // Bram, at his shack: walk up beside him, and a word with him there.
+        if (isFishmongerAt(to)) return walkUpMonger.current();
+        setWantMonger(false);
         // One of the regulars, out and about: walk up beside them, and a word with them there.
         const who = regularOn(aboutRef.current, to);
         if (who) return walkUp.current(who.id, who.pos);
@@ -313,7 +339,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     setHover(null);
     setHoverPlace(null);
     setGather(null);
-    for (const close of [setSheet, setBook, setShop, setNotices, setFishmonger, setWorks, setChest, setAccount]) close(false);
+    for (const close of [setSheet, setBook, setShop, setNotices, setFishmonger, setBaitOpen, setWantMonger, setWorks, setChest, setAccount]) close(false);
     setTradeWith(null);
     setGardenOf(null);
     setWellOpen(false);
@@ -342,10 +368,17 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     world: renderer,
     you,
     at: self?.pos ?? null,
-    onOpen: (what) => (what === "errand" ? setJobOpen(true) : what === "finishes" ? setFinishesOpen(true) : undefined),
-    panelOpen: jobOpen || finishesOpen,
+    onOpen: (what) => {
+      if (what === "errand") setJobOpen(true);
+      else if (what === "fish") setFishmonger(true);
+      else if (what === "bait") setBaitOpen(true);
+      else if (what === "finishes") setFinishesOpen(true);
+    },
+    panelOpen: jobOpen || fishmonger || baitOpen || finishesOpen,
     closePanels: () => {
       setJobOpen(false);
+      setFishmonger(false);
+      setBaitOpen(false);
       setFinishesOpen(false);
     },
   });
@@ -357,13 +390,23 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     if (talking) return;
     setChatWith(null);
     setJobOpen(false);
+    setFishmonger(false);
+    setBaitOpen(false);
     setFinishesOpen(false);
   }, [talking]);
+  // Bram looks out at his shack's door and the water past it, but for while he is talking to someone.
+  const bramDrawn = !!scene;
+  useEffect(() => {
+    if (!bramDrawn || talking) return;
+    const t = setTimeout(() => renderer.current?.turnUnit(FISHMONGER.id, hexToWorld(FISHMONGER_FACES)), 0);
+    return () => clearTimeout(t);
+  }, [bramDrawn, talking]);
   /** Walk up beside a regular (they wait), or, beside them already, talk. */
   const walkUp = useRef((_id: RegularId, _at: HexPos) => {});
   walkUp.current = (id, at) => {
     if (!self || talk.active) return;
     setWant(null);
+    setWantMonger(false);
     loadRegs();
     if (hexDistance(self.pos, at) <= 1 && !same(self.pos, at)) return chat(id);
     // The open ground beside them nearest you.
@@ -382,6 +425,35 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     setChatWith(id);
     talk.begin(regularTalk(who, regularUnit(id)));
   };
+  /** A word with Bram: he says where they are biting off the shore, if anywhere is worth it. */
+  const talkToMonger = () => {
+    setWantMonger(false);
+    const crew = me.crew?.id;
+    talk.begin(fishmongerTalk(fishmongerTip(crew ? bestHole(crew, Date.now(), true) : null), () => fishmongerAdvice(nextAdvice())));
+  };
+  const talkToMongerRef = useRef(talkToMonger);
+  talkToMongerRef.current = talkToMonger;
+  /** Walk up beside Bram, or, beside him already, talk. */
+  const walkUpMonger = useRef(() => {});
+  walkUpMonger.current = () => {
+    if (!self || talk.active) return;
+    setWant(null);
+    setWantRegular(null);
+    if (hexDistance(self.pos, FISHMONGER_POS) === 1) return talkToMonger();
+    // The open ground beside him nearest you.
+    const beside = hexNeighbors(FISHMONGER_POS, base.grid).filter((n) => {
+      const t = tileAt(base, n);
+      return !!t && t.biome !== "water" && t.biome !== "rampart" && !t.built && !t.blocker;
+    }).sort((a, b) => hexDistance(self.pos, a) - hexDistance(self.pos, b));
+    if (!beside[0]) return;
+    setWantMonger(true);
+    send.current({ type: "move", to: beside[0] });
+  };
+  const besideMonger = !!self && hexDistance(self.pos, FISHMONGER_POS) === 1;
+  useEffect(() => {
+    if (besideMonger && wantMonger) talkToMonger();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [besideMonger, wantMonger]);
   // Beside the regular you walked up to: the conversation starts (its camera waits for you to stop).
   const wanted = wantRegular ? about.find((r) => r.id === wantRegular) : undefined;
   const besideWanted = !!self && !!wanted && hexDistance(self.pos, wanted.pos) <= 1;
@@ -430,14 +502,16 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
   const unseen = me.seenRelease !== undefined && hasUnseen(me.seenRelease);
   const hoverRegular = hover ? regularOn(about, hover) : undefined;
   const hoverWho = hoverRegular ? regularOf(hoverRegular.id) : undefined;
-  const tip = hoverWho ? `${hoverWho.name}, ${hoverWho.trade}. Click to walk up and talk.`
+  const hoverBram = !!hover && isFishmongerAt(hover);
+  const tip = hoverBram ? `${FISHMONGER.name}, ${FISHMONGER.trade}. He buys your catch and sells bait. Click to walk up and talk.`
+    : hoverWho ? `${hoverWho.name}, ${hoverWho.trade}. Click to walk up and talk.`
     : !hoverPoi ? null
     : hoverPoi.kind === "cave" ? "The Haunted Caverns: go down and fight what lurks in the dark"
     : hoverPoi.kind === "board" ? (unseen ? "Notice board: news of what has changed. Something new is pinned up!" : "Notice board: news of what has changed")
     : hoverPoi.kind === "shop" ? "Market stall: gear, and furniture for your hut"
     : hoverPoi.kind === "finishes" ? `${DECORATOR.name}, ${DECORATOR.trade}: wallpaper, floors and roof colours for your hut. Click to walk up and talk.`
     : hoverPoi.kind === "ring" ? "Sparring ring: being rebuilt"
-    : hoverPoi.kind === "fishing" ? "The fishmonger's stall: sell your catch at today's prices. Cast a line here too, or anywhere along the shore"
+    : hoverPoi.kind === "fishing" ? `The fish shack: ${FISHMONGER.short} the fishmonger buys your catch and sells bait. Cast a line from its jetty, or anywhere along the shore`
     : hoverPoi.kind === "felling" || hoverPoi.kind === "quarry" ? `${GATHER_SPOTS[hoverPoi.kind].name}: gather hut materials`
     : hoverPoi.kind === "rocks" ? "Rocks. Ships that miss the channel find them."
     : hoverPoi.kind === "wreck" ? "A wreck on the rocks. Nobody remembers her name."
@@ -466,7 +540,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     : hoverPoi.kind === "shop" ? "Market Stall"
     : hoverPoi.kind === "finishes" ? "Home Furnishings"
     : hoverPoi.kind === "ring" ? "Sparring Ring"
-    : hoverPoi.kind === "fishing" ? "The Fishmonger"
+    : hoverPoi.kind === "fishing" ? "The Fish Shack"
     : hoverPoi.kind === "felling" ? "The Tree Line"
     : hoverPoi.kind === "quarry" ? "The Quarry"
     : hoverPoi.kind === "wreck" ? "The Wreck"
@@ -704,13 +778,13 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
           : gatherHere === "fishing" && pierHere ? FISH_SPOTS[pierHere].name : GATHER_SPOTS[gatherHere].name,
         label: gatherHere === "fishing" ? (pierHere === "sea" ? "Row out and cast" : "Cast a line") : gatherHere === "felling" ? "Take up the axe" : "Work the seam",
         run: () => setGather(gatherHere),
-        // A click on the fish shack is a call on the fishmonger, whose stall it is. A click on the tree line or the
-        // quarry opens its card, where setting out (and the energy it costs) has a button of its own. A pier head or
-        // a boat is no structure to click: there the button floats over the hero, as it always has.
-        enter: atShack ? () => setFishmonger(true) : undefined,
+        // A click on the fish shack is a word with Bram, whose shack it is: he stands at its east end. A click on the
+        // tree line or the quarry opens its card, where setting out (and the energy it costs) has a button of its own.
+        // A pier head or a boat is no structure to click: there the button floats over the hero, as it always has.
+        enter: atShack ? () => talkToMongerRef.current() : undefined,
         press: gatherHere === "fishing" && !atShack,
-        // The shack's shore is also the fishmonger's stall.
-        also: atShack ? { label: "The fishmonger", run: () => setFishmonger(true) } : undefined,
+        // At the shack's door, Bram is a step away.
+        also: atShack ? { label: `Talk to ${FISHMONGER.short}`, run: () => talkToMongerRef.current() } : undefined,
       }
     : atPub ? { title: visitor ? <>The pub <span className="pub-visitor">· {visitor.name}, {visitor.trade}, is in</span></> : "The pub", label: "Go in", run: () => goInside("pub", "pub") }
     : atWorks ? { title: "The works", label: "See the crew's projects", run: () => setWorks(true) }
@@ -765,7 +839,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     : null;
   hereNow.current = here;
   // Anything laid over the Harbor takes the floating button away.
-  const panelOpen = sheet || book || shop || notices || !!gather || fishmonger || works || account || !!tradeWith || !!gardenOf || talking || finishesOpen;
+  const panelOpen = sheet || book || shop || notices || !!gather || fishmonger || baitOpen || works || account || !!tradeWith || !!gardenOf || talking || finishesOpen;
   // Over your own garden, how its next bed is coming on; over a crewmate's near you, a drop while it wants water.
   const gardenMarks: GardenMarkInfo[] = [];
   for (const m of board.members) {
@@ -894,6 +968,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
       {chest && me.character && <TownChest me={me} refresh={refresh} onClose={() => setChest(false)} />}
       {gather && me.character && <GatherPanel spot={gather} onRod={(on) => harbor.send({ type: "fishing", on })} pier={pierHere ?? undefined} at={self?.pos} hole={holeHere} vessel={self?.vessel ?? null} gilded={me.character?.title === BOOK_TITLE} renderer={renderer} onClose={() => setGather(null)} onStamina={setStamina} onPaid={() => void refresh()} />}
       {fishmonger && me.character && <CatchPanel buyer="market" onGold={() => void refresh()} onClose={() => setFishmonger(false)} />}
+      {baitOpen && me.character && <BaitPanel gold={gold} onGold={() => void refresh()} onClose={() => setBaitOpen(false)} />}
       {wellOpen && atWell && me.character && (
         <WellMenu renderer={renderer} onClose={() => setWellOpen(false)} onChanged={() => void refresh()} />
       )}

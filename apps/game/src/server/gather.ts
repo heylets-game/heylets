@@ -43,8 +43,14 @@ import {
   vesselProblem,
   fishFrom,
   generateHarbor,
+  BAITS,
+  baitEaten,
+  isBaitId,
+  lureLost,
+  type BaitCounts,
 } from "@gantt-quest/world";
 import type { HexPos } from "@gantt-quest/core";
+import { baitOf, spendBaitAfter } from "./bait";
 import { heroInitFor } from "./db";
 import { closeSitting, type SittingPaid } from "./fishing";
 import { ownedVessel } from "./fishmarket";
@@ -70,6 +76,8 @@ export interface GatherStatus {
   chances: Record<GatherSpot, number>;
   /** The outing in progress, or the one that just ended. */
   outing: GatherView | null;
+  /** The bait the hero has, to put on the hook. */
+  bait: BaitCounts;
 }
 
 interface Row {
@@ -114,7 +122,7 @@ async function settleIdle(db: D1Database, playerId: string, row: Row | null): Pr
 }
 
 async function status(db: D1Database, playerId: string, stats: Record<GatherSpot, number>, ended?: GatherState): Promise<GatherStatus> {
-  const [row, xpRecord] = await Promise.all([readRow(db, playerId), readHarborXp(db, playerId)]);
+  const [row, xpRecord, bait] = await Promise.all([readRow(db, playerId), readHarborXp(db, playerId), baitOf(db, playerId)]);
   const now = Date.now();
   return {
     stamina: { left: outingsLeft(row, now), max: GATHER_DAILY_OUTINGS, resetsAt: gatherResetAt(now) },
@@ -122,6 +130,7 @@ async function status(db: D1Database, playerId: string, stats: Record<GatherSpot
     restReadyAt: restReadyAt(row?.rested_at),
     chances: { fishing: statPct(stats.fishing), felling: statPct(stats.felling), quarry: statPct(stats.quarry) },
     outing: ended ? gatherView(ended, now) : row?.session_json ? gatherView(JSON.parse(row.session_json) as GatherState, now) : null,
+    bait,
   };
 }
 
@@ -272,18 +281,26 @@ export async function stepOuting(db: D1Database, playerId: string, choice: unkno
     const vessel = await ownedVessel(db, playerId);
     const from = where ? fishFrom(HARBOR, where.pos, vessel) : null;
     if (!from || !where) return NOT_AT_WATER;
-    // No bait yet: nothing sells it (the fishmonger will). Whatever the client names is never taken.
-    asked = { ...asked, vessel, spot: from, at: where.pos, crew: where.crewId, bait: null };
+    // The bait named goes on the hook only if the hero has some (bought from the fishmonger); it is taken below,
+    // with the cast, if the cast is saved.
+    const bait = asked.bait == null ? null : isBaitId(asked.bait) ? asked.bait : undefined;
+    if (bait === undefined) return "That is not bait.";
+    if (bait && !((await baitOf(db, playerId))[bait] ?? 0)) return `You have no ${BAITS[bait].name.toLowerCase()} left. The fishmonger by the shack sells more.`;
+    asked = { ...asked, vessel, spot: from, at: where.pos, crew: where.crewId, bait };
   } else if (asked.t === "cast") asked = { ...asked, vessel: null, at: null, crew: null, bait: null };
   const step = stepGather(current, timed(current, asked, Date.now()));
   if (step.error) return step.error;
   const next = step.state;
 
   if (next.status === "active") {
-    const res = await db
-      .prepare("UPDATE gathering SET session_json = ?1 WHERE player_id = ?2 AND session_json = ?3")
-      .bind(JSON.stringify(next), playerId, row.session_json)
-      .run();
+    // A cast eats a worm or a shrimp; a fish that breaks the line or takes all of it takes the lure with it. Either is
+    // taken only if this request is the one that saved the step.
+    const eaten = asked.t === "cast" && next.sitting?.cast && baitEaten(next.sitting.cast.bait) ? next.sitting.cast.bait : null;
+    const used = eaten ?? lureLost(current.sitting, next.sitting);
+    const [res] = await db.batch([
+      db.prepare("UPDATE gathering SET session_json = ?1 WHERE player_id = ?2 AND session_json = ?3").bind(JSON.stringify(next), playerId, row.session_json),
+      ...(used ? [spendBaitAfter(db, playerId, used)] : []),
+    ]);
     if (res.meta.changes === 0) return "That was already played. Try again.";
     return status(db, playerId, stats);
   }

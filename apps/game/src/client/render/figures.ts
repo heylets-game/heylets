@@ -3398,8 +3398,8 @@ function lowHead(head: Part, look: Look, asleep: boolean, covered = false) {
   }
   if (chosen?.ink) inkPart(head, "head", chosen.ink);
   if (chosen) lowFacialHair(head, chosen.beard, chosen.mustache, skin, look.hair, rings, chinY, mouthY);
-  // A stock figure's own (the galley's cook): no beard, just what its look names.
-  else if (face || look.mustache) lowFacialHair(head, face?.beard ?? "none", look.mustache ?? face?.mustache ?? "none", skin, look.hair, rings, chinY, mouthY);
+  // A stock figure's own (the galley's cook, the fishmonger): just what its look names.
+  else if (face || look.mustache || look.beard) lowFacialHair(head, look.beard ?? face?.beard ?? "none", look.mustache ?? face?.mustache ?? "none", skin, look.hair, rings, chinY, mouthY);
 }
 
 /**

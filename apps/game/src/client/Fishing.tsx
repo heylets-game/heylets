@@ -7,6 +7,9 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { HexPos } from "@gantt-quest/core";
 import * as THREE from "three";
 import {
+  BAITS,
+  BAIT_IDS,
+  BAIT_SALE,
   BOOK_TITLE,
   FISH,
   FISH_SPOTS,
@@ -16,10 +19,13 @@ import {
   HARBOR_SIDES,
   HARBOR_SPAWN,
   generateHarbor,
+  harborSky,
   holeFishNames,
   HOLE_NAMES,
   tileAt,
   type FishingHole,
+  type BaitCounts,
+  type BaitId,
   formatLength,
   formatLoad,
   formatWeight,
@@ -186,9 +192,61 @@ function FishingIntro({ pier, hole, status, ended, busy, error, onStart, onClose
   );
 }
 
+/** The bait last put on the hook, kept for the next sitting. */
+const BAIT_KEY = "gq.fishing.bait";
+function savedBait(): BaitId | null {
+  try {
+    const b = localStorage.getItem(BAIT_KEY);
+    return BAIT_IDS.includes(b as BaitId) ? (b as BaitId) : null;
+  } catch {
+    return null;
+  }
+}
+function saveBait(b: BaitId | null) {
+  try {
+    if (b) localStorage.setItem(BAIT_KEY, b);
+    else localStorage.removeItem(BAIT_KEY);
+  } catch {
+    // Storage is off: it is asked for again next time.
+  }
+}
+
+/** What to put on the hook: nothing, or any bait the hero has, with the one that suits the hole they are at marked. */
+function BaitPicker({ counts, chosen, hole, onPick }: { counts: BaitCounts; chosen: BaitId | null; hole?: FishingHole; onPick(b: BaitId | null): void }) {
+  const kinds = BAIT_IDS.filter((b) => (counts[b] ?? 0) > 0);
+  if (kinds.length === 0) return <div className="fish-bait muted">No bait. Bram at the fish shack sells it.</div>;
+  const night = harborSky(Date.now()).night;
+  return (
+    <div className="fish-bait" role="group" aria-label="Bait on the hook">
+      <span>Bait</span>
+      <button className="small" aria-pressed={chosen === null} onClick={() => onPick(null)}>None</button>
+      {kinds.map((b) => {
+        const suits = hole && BAITS[b].suits === hole.kind;
+        const dark = BAITS[b].nightOnly && !night;
+        return (
+          <button
+            key={b}
+            className="small"
+            aria-pressed={chosen === b}
+            onClick={() => onPick(b)}
+            title={`${BAITS[b].blurb}${BAIT_SALE[b].lure ? " Kept between casts; lost if a fish takes the line." : " One goes with every cast."}`}
+          >
+            <span className={`bait-swatch ${b}`} aria-hidden />
+            {BAITS[b].name} <span className="tabular">{counts[b]}</span>
+            {suits && <span className="suits" title="What these fish go for">✓</span>}
+            {dark && <span className="muted">(after dark)</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /** The HUD over a sitting under way. */
-function Sitting({ outing, world, pier, at: here, hole, vessel, gilded, apply, onRod, onClose }: {
+function Sitting({ outing, bait: baitAtStart, world, pier, at: here, hole, vessel, gilded, apply, onRod, onClose }: {
   outing: GatherView;
+  /** The bait the hero had as the sitting's view opened. */
+  bait: BaitCounts;
   gilded: boolean;
   at: HexPos;
   /** The hole beside them, if they are fishing at one: they face it. */
@@ -220,6 +278,20 @@ function Sitting({ outing, world, pier, at: here, hole, vessel, gilded, apply, o
   const applyRef = useRef(apply);
   applyRef.current = apply;
   const msgTimer = useRef(0);
+  /** The bait the hero has, as the server last said, and what goes on the hook for the next cast. */
+  const [counts, setCounts] = useState<BaitCounts>(baitAtStart);
+  const [chosen, setChosen] = useState<BaitId | null>(() => {
+    const b = savedBait();
+    return b && (baitAtStart[b] ?? 0) > 0 ? b : null;
+  });
+  const chosenRef = useRef(chosen);
+  chosenRef.current = chosen;
+  const pick = (b: BaitId | null) => {
+    setChosen(b);
+    saveBait(b);
+    // Space casts, but not from a focused button: let go of the one just pressed.
+    (document.activeElement as HTMLElement | null)?.blur?.();
+  };
 
   const say = (text: string | undefined, tone: "good" | "bad" | "" = "") => {
     if (!text) return;
@@ -231,6 +303,15 @@ function Sitting({ outing, world, pier, at: here, hole, vessel, gilded, apply, o
     const next = (await api.gatherStep(choice)) as Status;
     applyRef.current(next);
     if (next.outing?.sitting) setView(next.outing);
+    if (next.bait) {
+      setCounts(next.bait);
+      // The last of it gone: the hook goes bare, and they are told.
+      const on = chosenRef.current;
+      if (on && !(next.bait[on] ?? 0)) {
+        setChosen(null);
+        say(BAIT_SALE[on].lure ? `Your last ${BAITS[on].name.toLowerCase()} went with the line.` : `That was your last ${BAITS[on].name.toLowerCase().replace(/s$/, "")}.`, "bad");
+      }
+    }
     if (next.outing && next.outing.status !== "active") setEnded(next);
     return next;
   };
@@ -260,7 +341,8 @@ function Sitting({ outing, world, pier, at: here, hole, vessel, gilded, apply, o
         }
       },
       cast: (power) => {
-        step({ t: "cast", power, spot: pier })
+        stage.current?.setLure(chosenRef.current === "glow_lure");
+        step({ t: "cast", power, spot: pier, bait: chosenRef.current })
           .then((next) => {
             const c = next.outing?.sitting?.cast;
             if (c) stage.current?.beginWait(c);
@@ -429,6 +511,7 @@ function Sitting({ outing, world, pier, at: here, hole, vessel, gilded, apply, o
           <div className="fish-creel-bar"><div style={{ width: `${Math.min(100, (live.creelGrams / live.creelLimitG) * 100)}%` }} /></div>
           <span className="tabular">{formatLoad(live.creelGrams, u)} / {formatLoad(live.creelLimitG, u)}</span>
         </div>
+        {!fighting && !pending && !ended && <BaitPicker counts={counts} chosen={chosen} hole={hole} onPick={pick} />}
       </div>
 
       {/* What to do now, and what the fish is doing: big, in the middle of the view, where the eye already is. */}
@@ -577,6 +660,6 @@ export function Fishing({ pier, at, hole, vessel = null, gilded = false, world, 
     if (active && !playing) setPlaying(active);
   }, [active, playing]);
   const shown = playing ?? active;
-  if (shown) return <Sitting outing={shown} world={world} pier={pier} at={at} hole={hole} vessel={vessel} gilded={gilded} apply={apply} onRod={onRod} onClose={onClose} />;
+  if (shown) return <Sitting outing={shown} bait={status?.bait ?? {}} world={world} pier={pier} at={at} hole={hole} vessel={vessel} gilded={gilded} apply={apply} onRod={onRod} onClose={onClose} />;
   return <FishingIntro pier={pier} hole={hole} status={status} ended={ended} busy={busy} error={error} onStart={() => void start()} onClose={onClose} />;
 }

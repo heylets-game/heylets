@@ -107,6 +107,45 @@ export const BAITS: Record<BaitId, BaitDef> = {
   glow_lure: { id: "glow_lure", name: "Glow lure", blurb: "A painted lure that shines in the dark. Useless by day.", rarity: { rare: 1.4, legendary: 1.5 }, nightOnly: true, nightFish: 2.5, suits: "night" },
 };
 
+export const isBaitId = (id: unknown): id is BaitId => BAIT_IDS.includes(id as BaitId);
+
+/**
+ * What the fishmonger sells bait for. Worms and shrimp go by the tin and the pot, and one is eaten on every cast. A
+ * lure is bought one at a time and comes back with the line, unless the line goes with the fish (`lineLost`).
+ */
+export interface BaitSale {
+  /** Gold for one lot. */
+  price: number;
+  /** How many come in a lot. */
+  per: number;
+  /** "a tin of ten". */
+  lot: string;
+  /** The most a hero carries. */
+  max: number;
+  /** Kept between casts: lost only with the line. */
+  lure?: true;
+}
+
+export const BAIT_SALE: Record<BaitId, BaitSale> = {
+  worms: { price: 6, per: 10, lot: "a tin of ten", max: 60 },
+  shrimp: { price: 15, per: 10, lot: "a pot of ten", max: 60 },
+  glow_lure: { price: 35, per: 1, lot: "one lure", max: 3, lure: true },
+};
+
+/** How much bait of each kind a hero has. A kind they have none of may be left out. */
+export type BaitCounts = Partial<Record<BaitId, number>>;
+
+/** Why a hero with `have` of `kind` and `gold` cannot buy a lot of it, or null if they can. */
+export function baitBuyProblem(kind: BaitId, have: number, gold: number): string | null {
+  const sale = BAIT_SALE[kind];
+  if (have + sale.per > sale.max) return sale.lure ? `You can carry only ${sale.max} glow lures.` : `Your ${BAITS[kind].name.toLowerCase()} won't keep past ${sale.max}. Use some first.`;
+  if (gold < sale.price) return `That's ${sale.price} gold, and you've ${gold}.`;
+  return null;
+}
+
+/** Whether a cast with `bait` on uses one up. Bait is taken by the bite; a lure comes back on the line. */
+export const baitEaten = (bait: BaitId | null | undefined): bait is BaitId => !!bait && !BAIT_SALE[bait].lure;
+
 /** How much more often `f` bites with `bait` on, under a sky that is `night` or not. */
 export function baitWeight(f: FishDef, bait: BaitId | null | undefined, night: boolean): number {
   const b = bait ? BAITS[bait] : undefined;
@@ -161,10 +200,15 @@ export function marketPrice(def: FishDef, grams: number, specimen: boolean, rate
   return Math.max(1, Math.round(def.pricePerKg * Math.pow(grams / 1000, 0.85) * rate * (specimen ? 1.25 : 1)));
 }
 
-/** What Old Tam pays for the pub's kitchen: steady and a little under the market. Null for anything he will not cook. */
+/**
+ * What Old Tam pays for the pub's kitchen, at his steady rate (TAM_RATE): what the fishmonger pays on an ordinary
+ * board, every day, with nothing more for a specimen. Null for anything he will not cook. His stew of the day pays
+ * more (fishmarket.ts).
+ */
+export const TAM_RATE = 1;
 export function tamPrice(def: FishDef, grams: number): number | null {
   if (!def.kitchen) return null;
-  return Math.max(1, Math.round(0.8 * def.pricePerKg * Math.pow(grams / 1000, 0.9)));
+  return marketPrice(def, grams, false, TAM_RATE);
 }
 
 /** The measures a player reads catches in. Weights and lengths are always stored in grams and millimetres. */

@@ -109,6 +109,18 @@ body.fishing .draggable:not(.gather), body.fishing .tip { display: none !importa
 .tag.specimen { color: var(--gold); border-color: #8a6a2a; }
 .tag.wanted { color: #8ad0a8; border-color: #3a7a5a; }
 .catch-ice { width: 100%; margin-bottom: 4px; }
+
+/* The fishmonger's bait counter, and the bait picker over a sitting. Each kind has a swatch of its own colour. */
+.bait-row { padding: 6px 8px; }
+.bait-row .bait-blurb { flex-basis: 100%; }
+.bait-swatch { flex: none; width: 14px; height: 14px; border: 1px solid #0006; border-radius: 50%; background: #6a6a6a; }
+.bait-swatch.worms { background: #c9746a; }
+.bait-swatch.shrimp { background: #f0a37a; }
+.bait-swatch.glow_lure { background: #9ff0d8; box-shadow: 0 0 6px #9ff0d8; }
+.fish-bait { display: flex; align-items: center; gap: 4px; padding: 3px 6px; background: rgba(20, 18, 42, 0.75); font-size: 12px; pointer-events: auto; flex-wrap: wrap; justify-content: center; }
+.fish-bait button { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; font-size: 12px; }
+.fish-bait button[aria-pressed="true"] { border-color: var(--gold); color: var(--gold); background: rgba(224, 177, 46, 0.12); }
+.fish-bait .suits { color: #8ad0a8; }
 .catch-board { padding: 8px; background: #1a2a22; border: 2px solid #2f4a3a; margin-bottom: 6px; }
 .catch-board p { margin: 4px 0 0; font-size: 12px; }
 .catch-wanted { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 4px; }

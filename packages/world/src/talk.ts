@@ -6,6 +6,10 @@
 // Their words are the ones they already had: a regular's or a keeper's hello and line, a salesman's greeting, the
 // dealer's hello. Old Tam had none written, so his are here.
 
+import { FISH } from "./fishcatalog";
+import { BAITS, BAIT_IDS } from "./fishing";
+import { HOLE_NAMES, type FishingHole } from "./fishingholes";
+import { FISHMONGER } from "./fishmonger";
 import { DECORATOR } from "./finishes";
 import { KEEPER_PLACES, type KeeperHouse } from "./keepers";
 import { PUB_BARKEEP, PUB_DEALER } from "./pub";
@@ -19,8 +23,8 @@ export interface TalkChoice {
   label: string;
   /** Opens this panel of theirs (the view knows what each is): the conversation ends as it opens. */
   opens?: string;
-  /** They answer with this, and the replies come back. */
-  says?: string;
+  /** They answer with this, and the replies come back. A function is asked each time the reply is chosen: the next of several things they say, never the same twice running. */
+  says?: string | (() => string);
   /** Lets you type a question for them to answer. */
   ask?: true;
   /** Ends the conversation. */
@@ -87,6 +91,7 @@ export const TALK_VOICES: Record<string, number> = {
   "keeper:apothecary": 2,
   "keeper:galley": -7,
   "keeper:lapidary": 6,
+  [FISHMONGER.id]: -5,
   [DECORATOR.id]: 4,
 };
 
@@ -173,6 +178,39 @@ export function keeperTalk(shop: KeeperHouse): Conversation {
     voice: TALK_VOICES[keeper.id] ?? 0,
     greeting: pagesOf([keeper.hello, keeper.line]),
     choices: [KEEPER_ASKS[shop], BYE],
+  };
+}
+
+/**
+ * What the fishmonger says when asked where they are biting: the best hole there is (`hole`, from bestHole), and the
+ * bait that suits it, or a grunt if there is none. The kinds of fish are named plainly, two at most.
+ */
+export function fishmongerTip(hole: FishingHole | null): string {
+  if (!hole) return "Nowhere worth the walk. Try the pier and keep your mouth shut, the fish can hear you.";
+  const fish = hole.featured.slice(0, 2).map((id) => FISH[id].name.toLowerCase());
+  const what = fish.length === 2 ? `${fish[0]} and ${fish[1]}` : fish[0] ?? "something";
+  const bait = BAIT_IDS.find((b) => BAITS[b].suits === hole.kind);
+  const hook = bait === "worms" ? " Put a worm on." : bait === "shrimp" ? " Shrimp, if you want the big ones." : bait === "glow_lure" ? " Take a glow lure out after dark." : "";
+  return `${HOLE_NAMES[hole.kind]} ${hole.where}. ${what[0].toUpperCase()}${what.slice(1)}, last I saw.${hook} Don't go telling the whole Harbor.`;
+}
+
+/**
+ * The fishmonger, at his shack. `tip` is where he says they are biting (fishmongerTip); `advice` gives the next
+ * piece of advice each time he is asked for one (fishmongerAdvice).
+ */
+export function fishmongerTalk(tip: string, advice: () => string): Conversation {
+  return {
+    unit: FISHMONGER.id,
+    name: FISHMONGER.name,
+    voice: TALK_VOICES[FISHMONGER.id],
+    greeting: pagesOf([FISHMONGER.hello, FISHMONGER.line]),
+    choices: [
+      { id: "fish", label: "I've fish to sell", opens: "fish" },
+      { id: "bait", label: "What have you got for bait?", opens: "bait" },
+      { id: "tip", label: "Where are they biting?", says: tip },
+      { id: "advice", label: "Got any advice?", says: advice },
+      BYE,
+    ],
   };
 }
 
