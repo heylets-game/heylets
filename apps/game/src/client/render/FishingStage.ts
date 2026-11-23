@@ -522,14 +522,16 @@ export class FishingStage implements WorldMinigame {
     this.line.visible = false;
     if (this.shown) this.disposeShown();
     const obj = catchModel(fish);
+    // Held over everything (the rod, the boat's bow), but solid: the depth left by what the overlay has drawn so far
+    // is cleared just before it, and it is drawn with depth, so its near side hides its far side and its far fin.
     obj.traverse((o) => {
       if (o instanceof THREE.Mesh) {
         o.layers.set(OVERLAY_LAYER);
         o.renderOrder = 1005;
         o.frustumCulled = false;
-        (o.material as THREE.Material).depthTest = false;
       }
     });
+    obj.add(depthReset(1004));
     this.world.addObject(obj);
     this.shown = { obj, t: 0, species: fish.species, going: null };
     this.ring(this.onWater(this.pierEnd.clone().addScaledVector(this.fwd, 0.6)), 0.2, 0.7);
@@ -953,4 +955,17 @@ function disposeTree(obj: THREE.Object3D) {
     const mats = Array.isArray(mesh.material) ? mesh.material : mesh.material ? [mesh.material] : [];
     for (const m of mats) m.dispose();
   });
+}
+
+/**
+ * Draws nothing, but clears the depth buffer as it comes up in the overlay's draw order (`renderOrder`), so what is
+ * drawn after it can be tested against its own depth without anything drawn before it in the way.
+ */
+function depthReset(renderOrder: number): THREE.Mesh {
+  const mesh = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }));
+  mesh.layers.set(OVERLAY_LAYER);
+  mesh.renderOrder = renderOrder;
+  mesh.frustumCulled = false;
+  mesh.onBeforeRender = (renderer) => renderer.clearDepth();
+  return mesh;
 }
