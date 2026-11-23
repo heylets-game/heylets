@@ -12,6 +12,7 @@ import { Hono } from "hono";
 import { atlasRoutes } from "./server/routes/atlas";
 import { characterRoutes } from "./server/routes/character";
 import { chestRoutes } from "./server/routes/chest";
+import { gardenRoutes } from "./server/routes/garden";
 import { contentRoutes } from "./server/routes/content";
 import { crewRoutes } from "./server/routes/crew";
 import { devRoutes } from "./server/routes/dev";
@@ -63,6 +64,7 @@ crewRoutes(app);
 atlasRoutes(app);
 lapidaryRoutes(app);
 chestRoutes(app);
+gardenRoutes(app);
 zoneRoutes(app);
 
 export default app;

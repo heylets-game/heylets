@@ -1,0 +1,111 @@
+/* The herb garden, tended in the Harbor with the camera down over its beds (Garden.tsx): a tag floating over each
+   bed and a dock along the bottom. And the marks that float over gardens in the Harbor (GardenMarks.tsx). */
+
+/* While the camera is down over the beds, the Harbor's floating panels and the bar are put away. */
+body.gardening .draggable, body.gardening .tip, body.gardening .hud, body.gardening .hud-left, body.gardening .toast { display: none !important; }
+
+.garden-view { position: absolute; inset: 0; pointer-events: none; z-index: 7; }
+.garden-view > * { pointer-events: auto; }
+
+/* ---------- a bed's tag, over its plants ---------- */
+.bed-tag-anchor { position: absolute; left: 0; top: 0; width: 0; height: 0; visibility: hidden; will-change: transform; pointer-events: none; }
+.bed-card {
+  position: absolute; left: 0; bottom: 8px; translate: -50% 0; pointer-events: auto; cursor: pointer;
+  display: flex; flex-direction: column; gap: 4px; width: 132px; padding: 5px 7px 6px;
+  color: var(--paper-ink); background: linear-gradient(180deg, #efe2bd 0, #ddcb9c 100%);
+  border: 1px solid #8a7246; box-shadow: 0 0 0 1px rgba(44, 35, 24, 0.6), 0 4px 10px rgba(0, 0, 0, 0.45);
+  animation: tag-in 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.3);
+  transition: width 0.15s ease-out, box-shadow 0.2s;
+}
+/* A little point under the tag, down to its bed. */
+.bed-card::after { content: ""; position: absolute; left: 50%; bottom: -7px; translate: -50% 0; width: 12px; height: 7px; background: #8a7246; clip-path: polygon(0 0, 100% 0, 50% 100%); }
+.bed-card:hover { box-shadow: 0 0 0 1px rgba(44, 35, 24, 0.6), 0 0 0 3px rgba(255, 224, 138, 0.55), 0 4px 10px rgba(0, 0, 0, 0.45); }
+.bed-card.open { width: 176px; cursor: default; box-shadow: 0 0 0 1px rgba(44, 35, 24, 0.6), 0 0 0 3px #ffe08a, 0 6px 16px rgba(0, 0, 0, 0.5); z-index: 2; }
+.bed-card.stage-ready { background: linear-gradient(180deg, #fbf0c0 0, #f0d77e 100%); border-color: #b48d2e; }
+.bed-card.stage-ready::after { background: #b48d2e; }
+@keyframes tag-in { from { opacity: 0; translate: -50% 8px; } }
+
+.bed-card-head { display: flex; align-items: center; gap: 5px; font-size: 12px; line-height: 15px; white-space: nowrap; }
+.bed-card-head strong { font-size: 12px; }
+.bed-card-head > span:not(.fed-mark) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #5b4a30; }
+.bed-card.stage-ready .bed-card-head > span:not(.fed-mark) { color: #3d5a16; font-weight: bold; }
+.fed-mark { display: inline-flex; }
+
+/* How far it has grown: a bar that fills green, with the time still to go on it. */
+.bed-grow { position: relative; height: 15px; border: 1px solid #5c4a2c; background: #2a2116; overflow: hidden; }
+.bed-grow span { position: absolute; inset: 0 auto 0 0; background: linear-gradient(180deg, #8fd05c 0, #4f8a3a 100%); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3); transition: width 1s linear; }
+.bed-grow em { position: relative; display: block; text-align: center; font-style: normal; font-size: 11px; line-height: 13px; color: #f6faec; text-shadow: 0 1px 0 #10180c, 0 0 3px #10180c; }
+.bed-grow.ready { border-color: #8a6a1e; }
+.bed-grow.ready span { background: linear-gradient(90deg, #d9b54a, #fff1a8, #d9b54a); background-size: 200% 100%; animation: bed-ripe 2.2s linear infinite; }
+.bed-grow.ready em { color: #3a2a08; text-shadow: none; font-weight: bold; }
+@keyframes bed-ripe { to { background-position: -200% 0; } }
+
+.bed-actions { display: flex; flex-direction: column; gap: 4px; padding-top: 2px; animation: tag-open 0.18s ease-out; }
+@keyframes tag-open { from { opacity: 0; transform: translateY(-3px); } }
+.bed-actions button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; width: 100%; padding-top: 3px; padding-bottom: 3px; font-size: 13px; }
+.bed-actions button small { opacity: 0.75; font-size: 11px; }
+.bed-note { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 8px; font-size: 11px; color: #5b4a30; }
+.bed-note > span { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+
+/* A drop of water, drawn rather than typed. */
+i.drop { display: inline-block; width: 8px; height: 11px; flex: none; background: linear-gradient(160deg, #bfe6ff 0, #4f9fd6 60%, #2f6f9e 100%);
+  clip-path: polygon(50% 0, 85% 52%, 92% 72%, 80% 92%, 50% 100%, 20% 92%, 8% 72%, 15% 52%); }
+
+/* ---------- the dock along the bottom ---------- */
+.garden-dock {
+  position: absolute; left: 50%; bottom: 10px; translate: -50% 0; width: min(720px, calc(100% - 20px));
+  display: flex; flex-direction: column; gap: 6px; padding: 10px 14px 10px;
+  background: linear-gradient(180deg, rgba(33, 27, 22, 0.96) 0, rgba(19, 16, 16, 0.96) 100%);
+  border: 2px solid var(--brass-lo); border-image: var(--frame-panel) 48 / 24px / 9px stretch;
+  box-shadow: 0 6px 14px 6px rgba(0, 0, 0, 0.45); animation: dock-up 0.35s ease-out;
+}
+@keyframes dock-up { from { opacity: 0; translate: -50% 16px; } }
+.garden-dock-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.garden-dock-head h2 { margin: 0; font-size: 20px; }
+.garden-dock-head .muted { font-size: 12px; }
+.garden-dock-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.garden-dock-row .spacer { flex: 1; }
+.garden-said { font-size: 13px; animation: said-in 0.3s ease-out; }
+.garden-said.good { color: var(--good); }
+.garden-said.bad { color: var(--bad); }
+@keyframes said-in { from { opacity: 0; translate: 0 -3px; } }
+.shed-stock { display: flex; gap: 12px; flex-wrap: wrap; }
+.shed-item { display: inline-flex; align-items: center; gap: 4px; }
+.shed-item b { font-size: 15px; }
+.shed-item .muted { font-size: 11px; }
+.shed-item.none { opacity: 0.45; }
+.shed-can { display: inline-flex; align-items: center; gap: 5px; padding-left: 10px; border-left: 1px solid var(--rule); }
+.shed-can.none { opacity: 0.55; }
+.shed-can .muted { font-size: 11px; }
+.can-drops { display: inline-flex; gap: 3px; }
+.can-drops i.drop.dry { background: #3a332a; }
+.shed-can.empty .can-drops { animation: can-empty 1.6s ease-in-out infinite; }
+@keyframes can-empty { 50% { opacity: 0.45; } }
+.garden-pick:not(:disabled) { animation: pick-glow 1.4s ease-in-out infinite alternate; }
+@keyframes pick-glow { from { box-shadow: 0 0 0 rgba(246, 224, 138, 0); } to { box-shadow: 0 0 14px rgba(246, 224, 138, 0.6); } }
+@media (max-width: 560px) {
+  .garden-dock { padding: 8px 10px; }
+  .garden-dock-head .muted { display: none; }
+  .shed-item .muted { display: none; }
+  .bed-card { width: 98px; padding: 4px 5px 5px; }
+  .bed-card.open { width: 156px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bed-card, .bed-actions, .garden-dock, .bed-grow.ready span, .garden-pick, .garden-mark .ring.ready { animation: none !important; }
+}
+
+/* ---------- over the gardens in the Harbor ---------- */
+.garden-mark { position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 5; pointer-events: none; visibility: hidden; will-change: transform; }
+.garden-mark > div { position: absolute; left: 0; bottom: 0; translate: -50% 0; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.garden-mark .ring { position: relative; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+  background: conic-gradient(#8cd05a calc(var(--p) * 1turn), rgba(20, 16, 12, 0.85) 0); box-shadow: 0 0 0 2px #2a2015, 0 2px 6px rgba(0, 0, 0, 0.5); }
+.garden-mark .ring::before { content: ""; position: absolute; inset: 4px; border-radius: 50%; background: #1d1813; }
+.garden-mark .ring > * { position: relative; }
+.garden-mark .ring.ready { background: conic-gradient(#f6e08a 1turn, #f6e08a 0); animation: mark-bob 0.6s ease-in-out infinite alternate; box-shadow: 0 0 0 2px #3a2a10, 0 0 12px rgba(246, 224, 138, 0.7); }
+.garden-mark .ring.ready::before { background: #2b3a1c; }
+.garden-mark .ring.thirsty { background: rgba(20, 16, 12, 0.85); box-shadow: 0 0 0 2px #2f6f9e, 0 2px 6px rgba(0, 0, 0, 0.5); }
+.garden-mark .ring.thirsty i.drop { width: 10px; height: 14px; }
+.garden-mark .label { padding: 0 6px; font-size: 11px; line-height: 16px; white-space: nowrap; color: var(--paper-ink); background: var(--paper); border: 1px solid var(--paper-lo); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45); }
+.garden-mark .label.ready { background: #f6e08a; border-color: #c6a94a; font-weight: bold; }
+@keyframes mark-bob { from { translate: 0 0; } to { translate: 0 -5px; } }

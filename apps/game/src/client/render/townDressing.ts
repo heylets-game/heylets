@@ -361,36 +361,6 @@ const DRAW: Record<DecorKind, (k: Kit, d: HarborDecor) => void> = {
     }
     for (const side of [-1, 1]) s.cyl(TIMBER_DARK, 0.04, 0.05, 1.5, side * 0.866, -0.85, 0.5, 6);
   },
-  garden(k, d) {
-    // A hut's own patch of garden: a bed of turned earth with rows of greens and a few flowers, a short run of
-    // pickets along two sides of it, and something left out (a pail, a spade stuck in the ground).
-    const s = k.solid;
-    const n = (i: number) => hash(d.at.q * 5 + i, d.at.r * 3, 90);
-    s.box("#4a3a28", 0.62, 0.05, 0.44, 0, 0, 0);
-    const bloom = ["#e8c14a", "#d6583f", "#e9e3cf", "#b06fd0", "#e58a9c"];
-    for (let row = 0; row < 3; row++) {
-      for (let i = 0; i < 5; i++) {
-        const x = -0.24 + i * 0.12, z = -0.14 + row * 0.14;
-        const h = 0.07 + n(row * 5 + i) * 0.09;
-        s.cone(row === 1 ? "#5f9a45" : "#4f8a3f", 0.045, h, x, 0.05, z, 4, i);
-        if (row === 2 && n(40 + i) < 0.6) s.blob(bloom[Math.floor(n(50 + i) * 4.99)], 0.03, 0.03, 0.03, x, 0.07 + h, z);
-      }
-    }
-    for (let i = 0; i < 6; i++) {
-      s.box(i % 2 ? TIMBER_PALE : "#a98a5e", 0.05, 0.3 + n(60 + i) * 0.04, 0.02, -0.3 + i * 0.12, 0, -0.26);
-      s.cone(TIMBER_PALE, 0.03, 0.04, -0.3 + i * 0.12, 0.3, -0.26, 4, Math.PI / 4);
-    }
-    s.box(TIMBER, 0.68, 0.025, 0.02, 0, 0.17, -0.275);
-    for (let i = 0; i < 4; i++) s.box(i % 2 ? "#a98a5e" : TIMBER_PALE, 0.02, 0.3, 0.05, -0.35, 0, -0.2 + i * 0.12);
-    s.box(TIMBER, 0.02, 0.025, 0.44, -0.365, 0.17, -0.02);
-    if (n(70) < 0.5) {
-      s.cyl(TIMBER_PALE, 0.07, 0.055, 0.12, 0.4, 0, 0.14, 8);
-      s.cyl(IRON, 0.072, 0.07, 0.02, 0.4, 0.08, 0.14, 8);
-    } else {
-      s.box(TIMBER_DARK, 0.02, 0.42, 0.02, 0.4, 0.04, 0.1, 0, 0.12);
-      s.box(IRON, 0.08, 0.1, 0.012, 0.4, 0, 0.09, 0, 0.12);
-    }
-  },
   rack(k) {
     // A rack of split fish drying in the wind.
     const s = k.solid;
