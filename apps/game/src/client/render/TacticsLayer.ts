@@ -9,7 +9,7 @@ import { fireField, gooMaterial, poisonFumes, poisonMaterial, tickFumes, tickGro
 import { posKey, type HexPos } from "@gantt-quest/core";
 import { SURFACE_INFO, WEATHER_INFO, tileAt, type SurfaceKind, type WeatherKind, type WorldMap } from "@gantt-quest/world";
 import { OUTLINE } from "./figures";
-import { toonRamp } from "./SpellFx";
+import { inkLine } from "./fancy";
 import { setSqualls } from "./wind";
 import { hexToWorld, tileTop, type WorldRenderer } from "./WorldRenderer";
 
@@ -587,8 +587,8 @@ export class TacticsLayer {
   }
 
   /**
-   * A rain cloud over `hexes` (Soothing Rain): low-poly puffs, pale on top and heavy and grey underneath, cel-shaded
-   * and inked as the figures are, half see-through so whoever stands under it can still be seen; and pale streaks
+   * A rain cloud over `hexes` (Soothing Rain): low-poly puffs, pale on top and heavy and grey underneath, lit and
+   * inked as the figures are, half see-through so whoever stands under it can still be seen; and pale streaks
    * of rain falling from its belly to the ground.
    */
   private rain(hexes: HexPos[]) {
@@ -597,9 +597,9 @@ export class TacticsLayer {
     // Cool greys with a little cool light of their own, so the cloud stays a rain cloud in warm afternoon sun.
     // See-through, so whoever stands in the rain and the ground under it show; writing depth all the same, so only the
     // cloud's near side is seen and not every puff and outline behind it muddled through it.
-    const top = new THREE.MeshToonMaterial({ color: "#c9d4e4", emissive: "#1f2b40", gradientMap: toonRamp(), transparent: true, opacity: 0.55 });
-    const belly = new THREE.MeshToonMaterial({ color: "#76869f", emissive: "#141c2c", gradientMap: toonRamp(), transparent: true, opacity: 0.6 });
-    const ink = new THREE.MeshBasicMaterial({ color: OUTLINE, side: THREE.BackSide, transparent: true, opacity: 0.45 });
+    const top = new THREE.MeshLambertMaterial({ color: "#c9d4e4", emissive: "#1f2b40", transparent: true, opacity: 0.55 });
+    const belly = new THREE.MeshLambertMaterial({ color: "#76869f", emissive: "#141c2c", transparent: true, opacity: 0.6 });
+    const ink = inkLine(new THREE.MeshBasicMaterial({ color: OUTLINE, side: THREE.BackSide, transparent: true, opacity: 0.45 }));
     const lay = (x: number, y: number, z: number, r: number, flat: number, mat: THREE.Material) => {
       const m = new THREE.Mesh(puff, mat);
       m.position.set(x, y, z);

@@ -17,7 +17,7 @@ import { PINCH_PAN_SLACK, followIconSvg, readFollow, writeFollow } from "./camer
 import type { HexPos } from "@gantt-quest/core";
 import { hexDistance } from "@gantt-quest/core";
 import { lookStep, lookYaw, BASE_HEIGHT, HARBOR_HEART_AT, BIG_REACH, ENEMIES, HEX_DIRS, SEATS, tileCost, WALL_FACE_HALF, WALL_ITEM_BOTTOM, WALL_ITEM_TOP, hexAt, xpProgress, reachable, tileAt, wallFace, wallFaces, type Biome, type Clime, type Emote, type Outfit, type Poi, type Tile, type WorldMap, type FloorLook, type WallLook } from "@gantt-quest/world";
-import { fancy, fancyGrass } from "./fancy";
+import { fancy, fancyGrass, inkLine } from "./fancy";
 import { NightLife } from "./nightlife";
 import { Storm } from "./storm";
 import { WIND_DIR, gustAt, setFieldWalkers, updateWind } from "./wind";
@@ -430,7 +430,7 @@ const BUILDINGS = new Set<Poi["kind"]>(["plot", "pub", "shop", "works", "lightho
  * tall), made heavier so a building's big plain walls and roofs read as inked from across the plaza.
  */
 const BUILDING_EDGE = (0.12 / FRAME) * 1.5 * 1.8;
-const INK = new THREE.MeshBasicMaterial({ color: OUTLINE, side: THREE.BackSide });
+const INK = inkLine(new THREE.MeshBasicMaterial({ color: OUTLINE, side: THREE.BackSide }));
 /** Shapes that are only a face, with no inside: an outline shell round them would show as a dark sheet behind. */
 const FLAT_SHAPES = new Set(["PlaneGeometry", "ShapeGeometry", "CircleGeometry", "RingGeometry"]);
 /**

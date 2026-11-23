@@ -20,6 +20,7 @@
 // rules: the view says what to play, where, and what to do when it lands.
 
 import * as THREE from "three";
+import { inkLine } from "./fancy";
 import { OUTLINE } from "./figures";
 import { fxTexture, type FxKind } from "./sprites";
 import { flickerFlame, torchFlame } from "./torchFlame";
@@ -298,16 +299,6 @@ const grown = (color: string, shine = 0) =>
   new THREE.MeshLambertMaterial({ color, vertexColors: true, flatShading: true, transparent: true, emissive: new THREE.Color(color).multiplyScalar(shine) });
 /** How thick the ink round vines is, in world units: about a figure's line, seen from the fight's camera. */
 const INK_EDGE = 0.022;
-/** Three hard bands of light, for cel shading (MeshToonMaterial's gradientMap): shade, lit, and a highlight. */
-let ramp: THREE.DataTexture | null = null;
-export const toonRamp = () => {
-  if (ramp) return ramp;
-  ramp = new THREE.DataTexture(new Uint8Array([90, 90, 90, 255, 185, 185, 185, 255, 255, 255, 255, 255]), 3, 1, THREE.RGBAFormat);
-  ramp.minFilter = ramp.magFilter = THREE.NearestFilter;
-  ramp.generateMipmaps = false;
-  ramp.needsUpdate = true;
-  return ramp;
-};
 /** A colour taken `k` of the way to another. */
 const mix = (color: string, to: string, k: number) => `#${new THREE.Color(color).lerp(new THREE.Color(to), k).getHexString()}`;
 /** A colour taken `k` of the way to white. */
@@ -1339,10 +1330,10 @@ export class SpellFx {
     const SEG = 40;
     const RAD = kelp ? 4 : 5;
     const stem = kelp ? color : mix(color, "#7a5530", 0.4);
-    // Cel-shaded and inked, as the figures are, so they read against grass and leaves.
-    const material = new THREE.MeshToonMaterial({ color: stem, vertexColors: true, gradientMap: toonRamp(), transparent: true, emissive: new THREE.Color(stem).multiplyScalar(0.18) });
-    const prickle = new THREE.MeshToonMaterial({ color: paler(stem, 0.55), gradientMap: toonRamp(), transparent: true, emissive: new THREE.Color(paler(stem, 0.55)).multiplyScalar(0.2) });
-    const ink = new THREE.MeshBasicMaterial({ color: OUTLINE, side: THREE.BackSide, transparent: true });
+    // Lit as the figures are, and inked as they are (when outlines are on), so they read against grass and leaves.
+    const material = new THREE.MeshLambertMaterial({ color: stem, vertexColors: true, transparent: true, emissive: new THREE.Color(stem).multiplyScalar(0.18) });
+    const prickle = new THREE.MeshLambertMaterial({ color: paler(stem, 0.55), transparent: true, emissive: new THREE.Color(paler(stem, 0.55)).multiplyScalar(0.2) });
+    const ink = inkLine(new THREE.MeshBasicMaterial({ color: OUTLINE, side: THREE.BackSide, transparent: true }));
     /** Seconds to wind up round them; to tear loose of the ground; the least they stay; and to wither. */
     const GROW = 0.6;
     const LOOSE = 0.4;
@@ -1711,9 +1702,9 @@ export class SpellFx {
    */
   sink(at: THREE.Vector3, color: string, onLand?: () => void): number {
     const dark = mix(color, "#0b1a24", 0.78);
-    const blob = this.add(new THREE.Mesh(new THREE.IcosahedronGeometry(1, 2), new THREE.MeshToonMaterial({ color: dark, gradientMap: toonRamp(), emissive: new THREE.Color(color).multiplyScalar(0.15) })));
+    const blob = this.add(new THREE.Mesh(new THREE.IcosahedronGeometry(1, 2), new THREE.MeshLambertMaterial({ color: dark, emissive: new THREE.Color(color).multiplyScalar(0.15) })));
     blob.userData.ownGeometry = true;
-    const edge = new THREE.Mesh(blob.geometry, new THREE.MeshBasicMaterial({ color: OUTLINE, side: THREE.BackSide }));
+    const edge = new THREE.Mesh(blob.geometry, inkLine(new THREE.MeshBasicMaterial({ color: OUTLINE, side: THREE.BackSide })));
     edge.scale.setScalar(1.08);
     blob.add(edge);
     const top = at.clone().setY(at.y + 2.6);
@@ -1901,7 +1892,7 @@ export class SpellFx {
   pike(from: THREE.Vector3, to: THREE.Vector3, onLand?: () => void, drag?: { hand: () => THREE.Vector3 | null; caught: () => THREE.Vector3 | null }, stuck = false): number {
     const time = SpellFx.pikeTime(from.distanceTo(to));
     const g = this.add(new THREE.Group());
-    const ink = new THREE.MeshBasicMaterial({ color: OUTLINE, side: THREE.BackSide, transparent: true });
+    const ink = inkLine(new THREE.MeshBasicMaterial({ color: OUTLINE, side: THREE.BackSide, transparent: true }));
     // Each piece with its ink: a shell a little larger round it, as the figures are drawn.
     const piece = (geometry: THREE.BufferGeometry, color: string, scale: [number, number, number], at: [number, number, number], turn = 0) => {
       const m = new THREE.Mesh(geometry, flat(color));
@@ -2249,7 +2240,7 @@ export class SpellFx {
   harpoon(from: THREE.Vector3, to: THREE.Vector3, gun: () => THREE.Vector3 | null, after: "haul" | "reel" | "stuck", onLand?: () => void, caught?: () => THREE.Vector3 | null): number {
     const time = SpellFx.harpoonTime(from.distanceTo(to));
     const g = this.add(new THREE.Group());
-    const ink = new THREE.MeshBasicMaterial({ color: OUTLINE, side: THREE.BackSide, transparent: true });
+    const ink = inkLine(new THREE.MeshBasicMaterial({ color: OUTLINE, side: THREE.BackSide, transparent: true }));
     const part = (geometry: THREE.BufferGeometry, color: string, scale: [number, number, number], at: [number, number, number], turn: [number, number, number] = [0, 0, 0]) => {
       const m = new THREE.Mesh(geometry, flat(color));
       m.scale.set(...scale);
@@ -2339,7 +2330,7 @@ export class SpellFx {
     const time = SpellFx.pikeTime(from.distanceTo(to));
     const back = 0.3;
     const g = this.add(new THREE.Group());
-    const ink = new THREE.MeshBasicMaterial({ color: OUTLINE, side: THREE.BackSide, transparent: true });
+    const ink = inkLine(new THREE.MeshBasicMaterial({ color: OUTLINE, side: THREE.BackSide, transparent: true }));
     const pole = new THREE.Mesh(shaft, flat("#7a5530"));
     pole.scale.set(0.06, 0.06, 0.7);
     const curve = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.035, 5, 10, Math.PI * 1.2), flat("#aab4bf"));
@@ -2419,8 +2410,8 @@ export class SpellFx {
    */
   bomb(from: THREE.Vector3, to: THREE.Vector3) {
     const g = this.add(new THREE.Group());
-    const ink = new THREE.MeshBasicMaterial({ color: OUTLINE, side: THREE.BackSide, transparent: true });
-    const ball = new THREE.Mesh(new THREE.IcosahedronGeometry(0.16, 1), new THREE.MeshToonMaterial({ color: "#2a2730", gradientMap: toonRamp() }));
+    const ink = inkLine(new THREE.MeshBasicMaterial({ color: OUTLINE, side: THREE.BackSide, transparent: true }));
+    const ball = new THREE.Mesh(new THREE.IcosahedronGeometry(0.16, 1), new THREE.MeshLambertMaterial({ color: "#2a2730" }));
     ball.userData.ownGeometry = true;
     const edge = new THREE.Mesh(ball.geometry, ink);
     edge.scale.setScalar(1.12);

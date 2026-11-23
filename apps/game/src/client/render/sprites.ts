@@ -5,6 +5,7 @@
 
 import * as THREE from "three";
 import { SLOTS, appearanceKey, barPixels, parseAppearance, type Appearance, healthBand, type HealthBand, type Outfit } from "@gantt-quest/world";
+import { outlines } from "./fancy";
 import { LOOKS, mergeLook, type Look, type LookPalette } from "./looks";
 import { PIXEL_LINE_ROWS, canDrawPixelText, drawPixelText, drawSmallDigits, pixelTextWidth } from "./pixelFont";
 import { hasOwnFace } from "./figures";
@@ -60,7 +61,8 @@ export function previewSpriteUrl(kind: string, palette: LookPalette | undefined,
  */
 export function spriteDataUrl(kind: string, outfit?: Outfit, large = false, face?: string): string {
   const faced = face && hasOwnFace(kind) ? face : undefined;
-  const key = `${spriteKey(kind, outfit)}${large ? "|L" : ""}${faced ? `|f:${faced}` : ""}`;
+  // Drawn with outlines or without, as the setting is now (see outlines).
+  const key = `${spriteKey(kind, outfit)}${large ? "|L" : ""}${faced ? `|f:${faced}` : ""}${outlines.get() ? "|ink" : ""}`;
   let url = pictures.get(key);
   if (url) return url;
   url = portraitUrl(kind, lookFor(kind), outfit, false, large ? 2 : 1, faced);
