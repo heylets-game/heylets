@@ -28,7 +28,7 @@ import { addStats, maxFocusFor, maxHpFor } from "../progression";
 import { makeRng, seedFromString } from "../rng";
 import { enemyTurn } from "./ai";
 import { abilityArea, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, doCommon, drinkItem, moveLeft, resolveAbility, throwItem, walk } from "./combat";
-import { burnOf, has, heal, regrow, removeCondition, tick, unseen, type Ctx } from "./engine";
+import { UNTIMED, burnOf, has, heal, regrow, removeCondition, tick, unseen, type Ctx } from "./engine";
 import { ALERT_RANGE, JOIN_RANGE, freeHexNear, generateZone } from "./gen";
 import { generateDelve } from "./delve";
 import { checkLoot, checkOpen, leaveBody, look, lootFor, openChest, payBounty, take } from "./loot";
@@ -149,7 +149,7 @@ function heroUnit(hero: ZoneHero, pos: HexPos, controller?: string): Unit {
     abilities: heroAbilities(hero),
     outfit: hero.outfit,
     ...(hero.lantern ? { lantern: true } : {}),
-    conditions: [],
+    conditions: hero.luck && hero.luck > 0 ? [{ kind: "lucky", rounds: hero.luck }] : [],
     down: false,
     cooldowns: {},
     items: { ...(hero.items ?? STARTING_ITEMS) },
@@ -158,7 +158,7 @@ function heroUnit(hero: ZoneHero, pos: HexPos, controller?: string): Unit {
 }
 
 /** A hero's sheet, as a zone needs it: stats with gear, how much they can take, and (`items`) what their pack holds to drink or throw. */
-export function zoneHero(sheet: HeroSheet, items?: Partial<Record<Throwable, number>>): ZoneHero {
+export function zoneHero(sheet: HeroSheet, items?: Partial<Record<Throwable, number>>, luck = 0): ZoneHero {
   const stats = addStats(sheet.base, sheet.bonus);
   return {
     id: sheet.id, name: sheet.name, classId: sheet.classId, level: sheet.level, stats, weapon: sheet.weapon, weaponPower: sheet.weaponPower ?? 0, armor: sheet.armor ?? 0, outfit: sheet.outfit,
@@ -166,6 +166,7 @@ export function zoneHero(sheet: HeroSheet, items?: Partial<Record<Throwable, num
     maxHp: maxHpFor(stats, sheet.level), maxFocus: maxFocusFor(sheet.level),
     classAbilities: classAbilitiesOf(sheet.classId, sheet.level, sheet.abilityLoadout),
     ...(items ? { items: cleanItems(items) } : {}),
+    ...(luck > 0 ? { luck: Math.floor(luck) } : {}),
   };
 }
 
@@ -505,6 +506,7 @@ function endTurn(ctx: Ctx, unit: Unit): void {
   }
   const owed = drowningOwed(ctx.state, unit);
   for (const c of unit.conditions) {
+    if (UNTIMED.has(c.kind)) continue;
     if (c.fresh) c.fresh = false;
     else c.rounds -= 1;
   }
@@ -819,6 +821,12 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
     if (here) {
       // What their pack holds is what they carry, fight or no fight.
       if (hero.items) here.items = { ...hero.items };
+      // Luck brought back from the well is added to whatever they still had.
+      if (hero.luck && hero.luck > 0 && !here.down) {
+        const held = here.conditions.find((c) => c.kind === "lucky");
+        if (held) held.rounds += hero.luck;
+        else here.conditions.push({ kind: "lucky", rounds: hero.luck });
+      }
       // Back again, perhaps with different gear: the sheet is refreshed, and where they stand and how hurt they are is kept.
       // Not in a fight, though: that is fought in the gear it was started in. Nor a hero given a dev kit.
       if (inFight(state, here.id) || here.devKit) return null;

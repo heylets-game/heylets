@@ -1,10 +1,12 @@
 // The herb garden by a hut's door: planting and picking your own, watering and feeding a crewmate's, grinding
-// bones into bonemeal, and buying seed at the market stall. Every change is told to the crew's Harbor, where the
+// bones into bonemeal, and buying seed at the market stall. And the town well: the watering can and water skins
+// filled there, and coins tossed in for luck. Every change is told to the crew's Harbor, where the
 // garden is drawn as it grows.
 
 import { buyCan, buySeeds, canOf, feedBed, fillCan, gardenView, grindBone, pickGarden, plantBed, waterBed } from "../garden";
 import { crewFor, refreshHarbor } from "../db";
 import { announceXp } from "../harbor-xp";
+import { fillSkin, tossCoin, wellView } from "../well";
 import type { GameApp } from "./shared";
 
 type Body = { owner?: unknown; bed?: unknown; with?: unknown; qty?: unknown };
@@ -72,6 +74,26 @@ export function gardenRoutes(app: GameApp): void {
   app.post("/api/can/fill", async (c) => {
     const result = await fillCan(c.env.DB, c.get("player").id);
     return typeof result === "string" ? c.json({ error: result }, 409) : c.json(result);
+  });
+
+  // ---------- the town well ----------
+
+  // What the well's card shows: the can, the water skins, the day's coins and the luck held.
+  app.get("/api/well", async (c) => c.json(await wellView(c.env.DB, c.get("player").id)));
+
+  // Fill a water skin to carry onto a map.
+  app.post("/api/well/skin", async (c) => {
+    const result = await fillSkin(c.env.DB, c.get("player").id);
+    return typeof result === "string" ? c.json({ error: result }, 409) : c.json(result);
+  });
+
+  // Toss a coin in for luck: a lucky roll for the next map, and now and then a gem or some XP back.
+  app.post("/api/well/coin", async (c) => {
+    const player = c.get("player");
+    const result = await tossCoin(c.env.DB, player.id);
+    if (typeof result === "string") return c.json({ error: result }, 409);
+    if (result.xp) c.executionCtx.waitUntil(announceXp(c.env, player.id, result.xp));
+    return c.json(result);
   });
 
   app.post("/api/shop/can", async (c) => {

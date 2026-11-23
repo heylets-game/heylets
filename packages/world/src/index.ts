@@ -51,3 +51,4 @@ export * from "./townchest";
 export * from "./stonecraft";
 export * from "./lapidary";
 export * from "./garden";
+export * from "./well";

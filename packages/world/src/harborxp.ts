@@ -29,6 +29,8 @@ export const HARBOR_XP = {
   project: 4,
   /** Picking a herb garden: this much for each bed picked. */
   gardenBed: 2,
+  /** What the town well gives back, now and then, for a coin (well.ts). */
+  wish: 3,
 } as const;
 
 /** XP for each perfect split at the chopping block: not a pastime of its own, and not held to the daily cap, nor to a full pile. */

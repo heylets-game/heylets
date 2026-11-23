@@ -18,6 +18,7 @@ import type { ChestView } from "../server/townchest";
 import type { ApothecaryView, GalleyView, HaggleResult, KeeperWare, SmithyView } from "../server/workshops";
 import type { ErrandPaid, RegularsView } from "../server/errands";
 import type { GardenView } from "../server/garden";
+import type { WellView } from "../server/well";
 
 export type { Chart, ChartNode, ChestView, HeldStone };
 export type { ApothecaryView, SmithyView, GalleyView, ErrandPaid, RegularsView, HaggleResult, KeeperWare };
@@ -272,6 +273,10 @@ export const api = {
   grindBone: (qty: number) => request<{ bonemeal: number }>("/api/garden/grind", { qty }),
   /** Your watering can: how many waterings are in it (null: you have none). */
   can: () => request<{ water: number | null }>("/api/can"),
+  /** The town well: the can, the water skins, the day's coins and the luck held. */
+  well: () => request<WellView>("/api/well"),
+  wellSkin: () => request<{ skins: number }>("/api/well/skin", {}),
+  wellCoin: () => request<{ gift: "gem" | "xp" | null; luck: number; tossed: number; xp?: XpResult }>("/api/well/coin", {}),
   fillCan: () => request<{ water: number }>("/api/can/fill", {}),
   buyCan: () => request<{ ok: true }>("/api/shop/can", {}),
   buySeeds: (qty: number) => request<{ seeds: number; gold: number }>("/api/shop/seeds", { qty }),

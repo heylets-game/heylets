@@ -33,6 +33,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { EMOTE_MIN_MS, THROWABLE_KINDS, ZONE_CLIENT_ACTIONS, createZone, ensureMouth, hiddenEnemies, stepZone, zoneAwaiting, zoneHero, zoneOptions, zoneView, validEmote, type ZoneAction, type ZoneEvent, type ZoneState } from "@gantt-quest/world";
 import { consumablesOf, gainConsumables, kitStatements, spendConsumables, type Consumables } from "./consumables";
+import { returnLuck, takeLuck } from "./well";
 import { applyZoneGrant, crewFor, heroInitFor, refreshHarbor, type Env } from "./db";
 import { isDev } from "./dev";
 import { clearNode } from "./atlas";
@@ -173,7 +174,11 @@ export class ZoneRoom extends DurableObject<Env> {
       // Read afresh each time: the hero may have changed gear since they were last here.
       const hero = await heroInitFor(this.env.DB, playerId);
       if (!hero) return "You need a character first.";
-      return this.apply({ type: "join", hero: zoneHero(hero, await consumablesOf(this.env.DB, playerId)), near });
+      // Coins tossed in the town well come onto the map as lucky rolls; if the map cannot take them, they go back.
+      const luck = await takeLuck(this.env.DB, playerId);
+      const refused = await this.apply({ type: "join", hero: zoneHero(hero, await consumablesOf(this.env.DB, playerId), luck), near });
+      if (refused && luck > 0) await returnLuck(this.env.DB, playerId, luck);
+      return refused;
     });
     if (error) return new Response(error, { status: 409 });
 

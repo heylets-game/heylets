@@ -6,7 +6,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAudioScene } from "./audio/useAudioScene";
 import { hexDistance, type HexPos } from "@gantt-quest/core";
-import { GATHER_SPOTS, GATHER_SPOT_IDS, HARBOR_APOTHECARY, HARBOR_LAPIDARY, HARBOR_BOARD, HARBOR_BUILDINGS, footing, HARBOR_CAVE, HARBOR_WAYGATE, HARBOR_CHEST, HARBOR_GALLEY, HARBOR_LIGHTHOUSE, HARBOR_SMITHY, HARBOR_GATHER, HARBOR_NAME, HARBOR_PLOTS, HARBOR_PLOT_FACING, HARBOR_PUB, HARBOR_RING, HARBOR_SHOP, HARBOR_SPAWN, HARBOR_WORKS, PLOT_PRICE, RESOURCE_KINDS, SHACK_COST, binFill, binNeeds, builtProjects, BOOK_TITLE, fishSpotAt, harborDoor, seaEdge, tileAt, waterSpotAt, type FishSpot, FISH_SPOTS, generateHarbor, projectById, projectProgress, harborPoi, hutTier, poiAt, salesman, gardenBeds, gardenCorner, gardenLooks, plotAt, gardenSpotAt, GARDEN_SPOTS, HARBOR_WELL, HARBOR_WELL_AT, CAN_CAPACITY, bedProgress, nextReady, readyCount, growText, type GardenBed, type GatherSpot, type Resources } from "@gantt-quest/world";
+import { GATHER_SPOTS, GATHER_SPOT_IDS, HARBOR_APOTHECARY, HARBOR_LAPIDARY, HARBOR_BOARD, HARBOR_BUILDINGS, footing, HARBOR_CAVE, HARBOR_WAYGATE, HARBOR_CHEST, HARBOR_GALLEY, HARBOR_LIGHTHOUSE, HARBOR_SMITHY, HARBOR_GATHER, HARBOR_NAME, HARBOR_PLOTS, HARBOR_PLOT_FACING, HARBOR_PUB, HARBOR_RING, HARBOR_SHOP, HARBOR_SPAWN, HARBOR_WORKS, PLOT_PRICE, RESOURCE_KINDS, SHACK_COST, binFill, binNeeds, builtProjects, BOOK_TITLE, fishSpotAt, harborDoor, seaEdge, tileAt, waterSpotAt, type FishSpot, FISH_SPOTS, generateHarbor, projectById, projectProgress, harborPoi, hutTier, poiAt, salesman, gardenBeds, gardenCorner, gardenLooks, plotAt, gardenSpotAt, GARDEN_SPOTS, HARBOR_WELL, HARBOR_WELL_AT, bedProgress, nextReady, readyCount, growText, type GardenBed, type GatherSpot, type Resources } from "@gantt-quest/world";
 import type { Poi } from "@gantt-quest/world";
 import { MusterPanel, useMuster } from "./atlas/Muster";
 import { api, type Me } from "./api";
@@ -24,6 +24,7 @@ import { HudBar } from "./ui/Hud";
 import { Logbook } from "./Logbook";
 import { GatherPanel } from "./GatherPanel";
 import { Garden } from "./Garden";
+import { WellMenu } from "./WellMenu";
 import { GardenMarks, type GardenMarkInfo } from "./GardenMarks";
 import { HeroSheet, useHeroSheet } from "./HeroSheet";
 import { LOOK_CHANGED } from "./ChangeLook";
@@ -146,8 +147,8 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
   const [gardenOf, setGardenOf] = useState<string | null>(null);
   /** The clock the gardens grow by, moved on every few seconds: what each bed looks like is worked out from it. */
   const [clock, setClock] = useState(() => Date.now());
-  /** How many waterings are in your watering can (null: you have none; undefined: not read yet). */
-  const [can, setCan] = useState<number | null | undefined>(undefined);
+  /** The town well's card is open, hung over the well. */
+  const [wellOpen, setWellOpen] = useState(false);
   useEffect(() => {
     const t = setInterval(() => setClock(Date.now()), 10_000);
     return () => clearInterval(t);
@@ -282,6 +283,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     for (const close of [setSheet, setBook, setShop, setNotices, setFishmonger, setWorks, setChest, setAccount]) close(false);
     setTradeWith(null);
     setGardenOf(null);
+    setWellOpen(false);
   }, [resting]);
   // And brought back on stepping out of it, fading in over the building's last picture (render/handover.ts).
   useEffect(() => {
@@ -349,7 +351,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     : hoverPoi.kind === "lapidary" ? "The Lapidary: lodestones cut and worked for the atlas, and gems bought"
     : hoverPoi.kind === "smithy" ? (smithyBuilt ? "The smithy: arms and armour off the rack, your own sharpened or reinforced, and a smith to haggle with" : "The smithy's building site: a crew project at the works")
     : hoverPoi.kind === "galley" ? (galleyBuilt ? "The galley: the cook is in, with nothing to sell" : "The galley's building site: a crew project at the works")
-    : hoverPoi.kind === "well" ? (can === null ? "The town well: fill a watering can here (the market stall sells them)" : "The town well: fill your watering can here")
+    : hoverPoi.kind === "well" ? "The town well: fill a watering can or a water skin, or toss in a coin for luck"
     : hoverPoi.kind === "lot" ? (myPlot === null ? `A plot for sale: ${PLOT_PRICE} gold` : "An empty plot")
     : hoverPoi.kind === "site" ? (hoverPoi.id === `site:${you}` ? "Your plot: fill the bin and the shack goes up" : `${board.members.find((m) => `site:${m.id}` === hoverPoi.id)?.name ?? "Someone"}'s plot: building a shack`)
     : hoverPoi.kind === "plot" ? `${board.members.find((m) => `plot:${m.id}` === hoverPoi.id)?.name ?? "Someone"}'s ${hutTier(hoverPoi.tier ?? 1).name.toLowerCase()}`
@@ -412,6 +414,10 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
   const atBoard = !!self && same(self.pos, HARBOR_BOARD);
   const atLapidary = !!self && same(self.pos, HARBOR_LAPIDARY);
   const atWell = !!self && same(self.pos, HARBOR_WELL);
+  // Walking away from the well puts its card away.
+  useEffect(() => {
+    if (!atWell) setWellOpen(false);
+  }, [atWell]);
   const atChest = !!self && same(self.pos, HARBOR_CHEST);
   const atWaygate = !!self && same(self.pos, HARBOR_WAYGATE);
   // Where the waygate would take you without the atlas: the map a crewmate is out on, or the one you last walked off.
@@ -515,19 +521,6 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
       say_((e as Error).message);
     }
   };
-  // Your watering can, for the well: read on the way in, and again on walking up to the well.
-  useEffect(() => {
-    api.can().then((r) => setCan(r.water), () => undefined);
-  }, [atWell, gardenOf]);
-  const fillCan = async () => {
-    try {
-      const res = await api.fillCan();
-      setCan(res.water);
-      say_("You lower the bucket and fill your watering can to the brim.");
-    } catch (e) {
-      say_((e as Error).message);
-    }
-  };
   // The bin on your own plot, while the shack is still to go up, and what you hold that could go in it.
   const myBin = hutOwner?.id === you ? hutOwner.bin : undefined;
   const [held, setHeld] = useState<Resources | null>(null);
@@ -585,10 +578,9 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
         also: outThere || openMap ? { label: "Open the atlas", run: () => (location.hash = "atlas") } : lastMap ? { label: "Step back through", run: () => (location.hash = `zone/${lastMap}`) } : undefined,
       }
     : atWell ? {
-        title: <>The town well <span className="muted">· {can === null ? "the market stall sells watering cans" : can === undefined ? "cold, clear water" : `your watering can: ${can} of ${CAN_CAPACITY}`}</span></>,
-        label: can === null ? "No watering can to fill" : can === CAN_CAPACITY ? "Your can is full" : "Fill your watering can",
-        run: () => void fillCan(),
-        closed: can === null || can === CAN_CAPACITY,
+        title: <>The town well <span className="muted">· fill a watering can or a water skin, or toss in a coin for luck</span></>,
+        label: "Draw up to the well",
+        run: () => setWellOpen(true),
       }
     : atChest ? { title: <>The town chest <span className="muted">· the crew's shared store, in tabs: gear, materials, lodestones</span></>, label: "Open the town chest", run: () => setChest(true) }
     // The Lapidary was never a building site: it is open from a crew's first day, for nobody goes out without a lodestone.
@@ -788,6 +780,9 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
       {chest && me.character && <TownChest me={me} refresh={refresh} onClose={() => setChest(false)} />}
       {gather && me.character && <GatherPanel spot={gather} onRod={(on) => harbor.send({ type: "fishing", on })} pier={pierHere ?? undefined} at={self?.pos} vessel={self?.vessel ?? null} gilded={me.character?.title === BOOK_TITLE} renderer={renderer} onClose={() => setGather(null)} onStamina={setStamina} onPaid={() => void refresh()} />}
       {fishmonger && me.character && <CatchPanel buyer="market" onGold={() => void refresh()} onClose={() => setFishmonger(false)} />}
+      {wellOpen && atWell && me.character && (
+        <WellMenu renderer={renderer} onClose={() => setWellOpen(false)} onChanged={() => void refresh()} />
+      )}
       {gardenOf && me.character && you && renderer.current && (() => {
         const owner = board.members.find((m) => m.id === gardenOf);
         if (owner?.plot == null) return null;

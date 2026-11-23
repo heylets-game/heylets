@@ -109,3 +109,32 @@ i.drop { display: inline-block; width: 8px; height: 11px; flex: none; background
 .garden-mark .label { padding: 0 6px; font-size: 11px; line-height: 16px; white-space: nowrap; color: var(--paper-ink); background: var(--paper); border: 1px solid var(--paper-lo); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45); }
 .garden-mark .label.ready { background: #f6e08a; border-color: #c6a94a; font-weight: bold; }
 @keyframes mark-bob { from { translate: 0 0; } to { translate: 0 -5px; } }
+
+/* ---------- the town well's card (WellMenu.tsx), hung over the well ---------- */
+.well-anchor { position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 7; visibility: hidden; will-change: transform; pointer-events: none; }
+.well-card {
+  position: absolute; left: 0; bottom: 10px; translate: -50% 0; pointer-events: auto; width: 268px;
+  display: flex; flex-direction: column; gap: 6px; padding: 8px 9px 9px;
+  color: var(--paper-ink); background: linear-gradient(180deg, #efe2bd 0, #ddcb9c 100%);
+  border: 1px solid #8a7246; box-shadow: 0 0 0 1px rgba(44, 35, 24, 0.6), 0 6px 16px rgba(0, 0, 0, 0.5);
+  animation: tag-in 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.3);
+}
+.well-card::after { content: ""; position: absolute; left: 50%; bottom: -8px; translate: -50% 0; width: 14px; height: 8px; background: #8a7246; clip-path: polygon(0 0, 100% 0, 50% 100%); }
+.well-card header { display: flex; align-items: center; justify-content: space-between; }
+.well-card header strong { font-size: 14px; }
+.well-card header button { padding: 0 7px; line-height: 18px; }
+.well-option { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 7px; text-align: left; }
+.well-option span { display: flex; flex-direction: column; min-width: 0; }
+.well-option b { font-size: 13px; }
+.well-option small { font-size: 11px; opacity: 0.8; line-height: 1.25; }
+.well-option.coin:not(:disabled) b { color: inherit; }
+.well-luck { display: flex; align-items: center; gap: 8px; font-size: 12px; padding-top: 2px; border-top: 1px dashed #a98a5e; }
+.well-luck .muted { margin-left: auto; color: #6b5838; font-size: 11px; }
+.luck-pips { display: inline-flex; gap: 4px; }
+.luck-pips i { width: 10px; height: 10px; border-radius: 50%; background: #bfae84; box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.3); }
+.luck-pips i.on { background: radial-gradient(circle at 35% 35%, #fff6c8, #f0c94e 55%, #b68a1e); box-shadow: 0 0 6px rgba(246, 211, 101, 0.9); }
+.well-said { margin: 0; font-size: 12px; animation: said-in 0.3s ease-out; }
+.well-said.good { color: #2f5a1a; }
+.well-said.bad { color: #9a2f1d; }
+.well-said.gift { color: #7a2f8a; font-weight: bold; }
+@media (max-width: 560px) { .well-card { width: 236px; } }

@@ -86,11 +86,8 @@ export interface Tile {
    * three or more, a junction. It is only drawn: a path costs the same to walk as the ground it is on.
    */
   path?: number;
-  /**
-   * The grass here is of a set kind, whatever the lie of the land would have grown: tall grass, to wade through, or
-   * short, a lawn kept mown (round a hut's door, so nothing tall stands in front of its garden).
-   */
-  grass?: "tall" | "short";
+  /** The grass here is of a set kind, whatever the lie of the land would have grown: tall grass, to wade through. */
+  grass?: "tall";
 }
 
 /** What can stand on a hex and stop anyone walking onto it: a thicket, a heap of boulders, or one great old oak. */
