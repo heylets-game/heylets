@@ -200,10 +200,15 @@ export function marketPrice(def: FishDef, grams: number, specimen: boolean, rate
   return Math.max(1, Math.round(def.pricePerKg * Math.pow(grams / 1000, 0.85) * rate * (specimen ? 1.25 : 1)));
 }
 
-/** What Old Tam pays for the pub's kitchen: steady and a little under the market. Null for anything he will not cook. */
+/**
+ * What Old Tam pays for the pub's kitchen, at his steady rate (TAM_RATE): what the fishmonger pays on an ordinary
+ * board, every day, with nothing more for a specimen. Null for anything he will not cook. His stew of the day pays
+ * more (fishmarket.ts).
+ */
+export const TAM_RATE = 1;
 export function tamPrice(def: FishDef, grams: number): number | null {
   if (!def.kitchen) return null;
-  return Math.max(1, Math.round(0.8 * def.pricePerKg * Math.pow(grams / 1000, 0.9)));
+  return marketPrice(def, grams, false, TAM_RATE);
 }
 
 /** The measures a player reads catches in. Weights and lengths are always stored in grams and millimetres. */

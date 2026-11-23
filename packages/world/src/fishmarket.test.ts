@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FISH } from "./fishcatalog";
-import { FISH_BOARD_MS, FISH_RATE_MAX, FISH_RATE_MIN, FISH_WANTED, FISH_WANTED_BONUS, ICEBOX_G, QUAY_RATE, TROPHY_SLOTS, fishBoard, fishSalePrice, iceboxProblem, stowCatch, trophyProblem } from "./fishmarket";
+import { FISH_BOARD_MS, FISH_RATE_MAX, FISH_RATE_MIN, FISH_WANTED, FISH_WANTED_BONUS, ICEBOX_G, QUAY_RATE, TAM_STEW, TAM_STEW_BONUS, TROPHY_SLOTS, fishBoard, fishSalePrice, iceboxProblem, stowCatch, trophyProblem } from "./fishmarket";
+import { marketPrice } from "./fishing";
 
 const T = 1_800_000_000_000;
 const herring = { species: "herring", grams: 400, specimen: false };
@@ -41,9 +42,29 @@ describe("the fishmonger's board", () => {
 });
 
 describe("buyers", () => {
-  it("has Old Tam buy only what he can cook, at a price that does not move", () => {
-    expect(fishSalePrice(herring, "tam", fishBoard("A", T))).toBe(fishSalePrice(herring, "tam", fishBoard("B", T + 5 * FISH_BOARD_MS)));
+  it("has Old Tam buy only what he can cook, at a steady price the fishmonger pays on an ordinary board", () => {
+    // Two boards on which his stew does not want herring.
+    const boards = Array.from({ length: 40 }, (_, i) => fishBoard(`C${i}`, T + i * FISH_BOARD_MS)).filter((b) => !b.stew.includes("herring"));
+    expect(boards.length).toBeGreaterThan(1);
+    const steady = fishSalePrice(herring, "tam", boards[0]);
+    for (const b of boards) expect(fishSalePrice(herring, "tam", b)).toBe(steady);
+    expect(steady).toBe(marketPrice(FISH.herring, herring.grams, false, 1));
     expect(fishSalePrice({ species: "silver_king", grams: 30_000, specimen: true }, "tam", fishBoard("A", T))).toBeNull();
+  });
+
+  it("has Tam's stew want a couple of everyday fish he cooks each day, the same all day for a crew, and pay double for them", () => {
+    const b = fishBoard("CREW", T);
+    expect(b.stew).toHaveLength(TAM_STEW);
+    for (const id of b.stew) {
+      expect(FISH[id].kitchen).toBe(true);
+      expect(["common", "uncommon"]).toContain(FISH[id].rarity);
+      expect(FISH[id].water).not.toContain("sea");
+    }
+    expect(fishBoard("CREW", b.stewEndsAt - 1).stew).toEqual(b.stew);
+    const days = new Set(Array.from({ length: 10 }, (_, i) => fishBoard("CREW", b.stewEndsAt + i * 86_400_000).stew.join()));
+    expect(days.size).toBeGreaterThan(1);
+    const fish = { species: b.stew[0], grams: 2000, specimen: false };
+    expect(fishSalePrice(fish, "tam", b)).toBe(fishSalePrice(fish, "tam", { ...b, stew: [] })! * TAM_STEW_BONUS);
   });
 
   it("has the fishmonger take treasure at a flat price, and nothing for junk", () => {
@@ -81,9 +102,12 @@ describe("keeping fish", () => {
     expect(sold).toHaveLength(1);
     expect(sold[0]).toMatchObject({ species: "silver_king", buyer: "market" });
     expect(sold[0].gold).toBeGreaterThan(0);
-    // Something Tam cooks goes to him.
-    const full = stowCatch([{ species: "pollock", grams: 3000, specimen: false }], ICEBOX_G, b);
-    expect(full.sold[0].buyer).toBe("tam");
+    // Something Tam cooks goes to whichever of the two pays more for it today.
+    const pollock = { species: "pollock", grams: 3000, specimen: false };
+    const full = stowCatch([pollock], ICEBOX_G, b);
+    const tam = fishSalePrice(pollock, "tam", b)!;
+    const market = fishSalePrice(pollock, "market", b)!;
+    expect(full.sold[0]).toMatchObject({ buyer: tam >= market ? "tam" : "market", gold: Math.max(tam, market) });
   });
 
   it("sells a catch kept with the basket full on the quay, at the quay price, however much room the icebox has", () => {

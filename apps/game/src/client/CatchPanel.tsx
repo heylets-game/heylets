@@ -4,7 +4,7 @@
 // sell to Old Tam, who only takes what he can cook).
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { FISH, FISHMONGER, FISH_WANTED_BONUS, formatLength, formatLoad, formatWeight, type FishBuyer } from "@gantt-quest/world";
+import { FISH, FISHMONGER, FISH_WANTED_BONUS, TAM_STEW_BONUS, formatLength, formatLoad, formatWeight, type FishBuyer } from "@gantt-quest/world";
 import { api, type FishStock } from "./api";
 import { DragPanel } from "./DragPanel";
 import { catchIcon } from "./render/catchArt";
@@ -72,6 +72,7 @@ export function CatchPanel({ buyer, onClose, onGold }: {
     const def = FISH[f.species];
     const p = price(f);
     const wanted = buyer === "market" && stock?.board.wanted.includes(f.species);
+    const stew = buyer === "tam" && stock?.board.stew.includes(f.species);
     return (
       <li key={f.id} className={`catch-row ${picked.has(f.id) ? "picked" : ""}`}>
         {buyer && <input type="checkbox" checked={picked.has(f.id)} disabled={p === null || busy} onChange={() => toggle(f.id)} aria-label={`Pick ${def.name}`} />}
@@ -80,6 +81,7 @@ export function CatchPanel({ buyer, onClose, onGold }: {
           <strong>{def.name}</strong>
           {f.specimen && <span className="tag specimen">specimen</span>}
           {wanted && <span className="tag wanted">wanted</span>}
+          {stew && <span className="tag wanted">for the stew</span>}
           <small className="muted"> {formatWeight(f.grams, u)}{def.kind !== "haul" ? ` · ${formatLength(f.mm, u)}` : ""}</small>
         </span>
         {buyer ? (
@@ -124,7 +126,21 @@ export function CatchPanel({ buyer, onClose, onGold }: {
                 <p className="muted">Everything else at today's rate, by weight. Specimens fetch a quarter more.</p>
               </div>
             )}
-            {buyer === "tam" && <p className="muted">"I'll take what goes in the stew, and pay the same for it every day. Anything fancy, take it to the fishmonger."</p>}
+            {buyer === "tam" && (
+              <div className="catch-board">
+                <span className="muted">Today's stew, until midnight (UTC) in {until(stock.board.stewEndsAt)}:</span>
+                <div className="catch-wanted">
+                  {stock.board.stew.map((id) => (
+                    <span key={id} className="catch-wanted-one">
+                      <img src={catchIcon(id)} alt="" width={32} height={32} className="catch-row-icon" />
+                      <strong>{FISH[id].name}</strong>
+                      <small className="good">pays {TAM_STEW_BONUS}× today</small>
+                    </span>
+                  ))}
+                </div>
+                <p className="muted">"A fair price for anything that goes in a pot, the same every day. Bring me what the stew wants and I'll pay double. Anything fancy, take it to {FISHMONGER.short}."</p>
+              </div>
+            )}
 
             <h3>
               Icebox <span className="muted">· {formatLoad(stock.iceboxG, u)} of {formatLoad(stock.iceboxCapG, u)}</span>

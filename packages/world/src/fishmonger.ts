@@ -59,6 +59,7 @@ export const FISHMONGER_ADVICE: readonly string[] = [
   "Get yourself a rowboat and row out to the open sea. There's fish out there this pier's never seen.",
   // Selling.
   `My board changes four times a day. What's chalked up as wanted pays ${FISH_WANTED_BONUS === 2 ? "double" : `${FISH_WANTED_BONUS} times`}. Read it before you sell.`,
+  "Old Tam at the pub pays a fair price every day, and double for what his stew wants. Some days that beats me. Don't tell him.",
   "A big one for its kind is a specimen. I pay a quarter more for those, and they'll keep for good in your trophy chest.",
   `Fill your basket and keep fishing if you like, but what won't fit gets sold on the quay for ${QUAY_RATE === 0.5 ? "half" : "less"}. Your choice.`,
   "Fill the Catch Book, every page, and they'll gild your rod. Took me thirty years. Don't rush it.",
