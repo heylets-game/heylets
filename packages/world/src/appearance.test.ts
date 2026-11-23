@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_APPEARANCE, INK_COLORS, INK_REGIONS, MAX_INK_CELLS, appearanceKey, decodeInk, encodeInk, inkCell, parseAppearance, parseInk } from "./appearance";
+import { DEFAULT_APPEARANCE, INK_COLORS, INK_REGIONS, MAX_INK_CELLS, appearanceKey, decodeInk, encodeInk, eyePatchOf, inkCell, limbsOf, parseAppearance, parseInk, randomAppearance } from "./appearance";
 
 describe("ink", () => {
   const cols = INK_REGIONS.head.cols;
@@ -62,5 +62,35 @@ describe("ink", () => {
     const look = parseAppearance({ ...rest, facialHair: "goatee", mustache: undefined, beard: undefined })!;
     expect([look.mustache, look.beard]).toEqual(["bushy", "goatee"]);
     expect(parseAppearance({ ...DEFAULT_APPEARANCE, mustache: "walrus", beard: "none" })!.mustache).toBe("walrus");
+  });
+});
+
+describe("limbs and eye patches", () => {
+  it("keeps a peg leg, a hook and a patch, each on its side", () => {
+    const look = parseAppearance({ ...DEFAULT_APPEARANCE, legs: "pegL", arms: "hookR", eyes: "patchR" })!;
+    expect(limbsOf("legs", look).side).toBe("left");
+    expect(limbsOf("arms", look).side).toBe("right");
+    expect(eyePatchOf(look.eyes)).toBe("right");
+    expect(appearanceKey(look)).not.toBe(appearanceKey(DEFAULT_APPEARANCE));
+  });
+
+  it("gives a look saved before arms and legs could be chosen the usual ones", () => {
+    const { legs: _l, arms: _a, ...old } = DEFAULT_APPEARANCE;
+    void _l;
+    void _a;
+    const look = parseAppearance({ ...old, legs: "tentacles" })!;
+    expect([look.legs, look.arms]).toEqual(["average", "average"]);
+    expect(limbsOf("legs", look)).toMatchObject({ len: 1, thick: 1 });
+    expect(limbsOf("legs", look).side).toBeUndefined();
+  });
+
+  it("rolls a patch, a peg or a hook only now and then", () => {
+    let n = 0;
+    let odd = 0;
+    let seed = 7;
+    const rand = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+    for (; n < 2000; n++) if (limbsOf("legs", randomAppearance(rand)).side) odd++;
+    expect(odd / n).toBeGreaterThan(0.05);
+    expect(odd / n).toBeLessThan(0.2);
   });
 });
