@@ -69,16 +69,58 @@ export interface FightScript {
   segments: FightSegment[];
 }
 
-/** How much the hero's stats help, each 0 to 1, from their chance per roll (20 to 95). */
+/** How much the hero's stats help, each 0 to 1, from their chance per roll (20 to 95), and the rod in their hands. */
 export interface FightEase {
   str: number;
   dex: number;
+  /** The best rod they own; the cane rod if left out. */
+  rod?: RodId;
 }
 
-export const fightEase = (strPct: number, dexPct: number): FightEase => ({
+export const fightEase = (strPct: number, dexPct: number, rod?: RodId | null): FightEase => ({
   str: Math.max(0, Math.min(1, (strPct - 20) / 75)),
   dex: Math.max(0, Math.min(1, (dexPct - 20) / 75)),
+  ...(rod && rod !== "cane" ? { rod } : {}),
 });
+
+/**
+ * A rod. Everyone has the cane rod; the fishmonger sells the others. A better rod bends further before the line
+ * takes the strain, so tension climbs more slowly when the fish pulls and there is longer to ease off, and it
+ * carries a stronger line, so the same pull puts less of the line's breaking strain on it.
+ */
+export type RodId = "cane" | "greenheart" | "split_cane";
+export const ROD_IDS: RodId[] = ["cane", "greenheart", "split_cane"];
+
+export interface RodDef {
+  id: RodId;
+  name: string;
+  blurb: string;
+  /** Gold at the fishmonger's; 0 for the one everyone starts with. */
+  price: number;
+  /** The most the tension can climb in a second, where 1 is the line's breaking point. It drops back as fast as ever. */
+  climb: number;
+  /** How much stronger its line is than the cane rod's. */
+  strength: number;
+}
+
+export const RODS: Record<RodId, RodDef> = {
+  cane: { id: "cane", name: "Cane rod", blurb: "The rod everyone starts with. Stiff, and quick to let a big fish break the line.", price: 0, climb: 1.4, strength: 1 },
+  greenheart: { id: "greenheart", name: "Greenheart rod", blurb: "Bends further before the line takes the strain, on a stronger line.", price: 150, climb: 1.05, strength: 1.1 },
+  split_cane: { id: "split_cane", name: "Split-cane rod", blurb: "Bends nearly double before the line takes the strain, on the strongest line he sells. For the fish people tell stories about.", price: 450, climb: 0.8, strength: 1.2 },
+};
+
+export const isRodId = (id: unknown): id is RodId => ROD_IDS.includes(id as RodId);
+
+/** The best of the rods a player owns (the cane rod if none). */
+export const bestRod = (owned: readonly string[]): RodId => [...ROD_IDS].reverse().find((r) => r === "cane" || owned.includes(r))!;
+
+/** Why a player cannot buy `rod`, or null if they can. */
+export function rodBuyProblem(rod: RodId, owned: readonly string[], gold: number): string | null {
+  if (rod === "cane" || owned.includes(rod)) return "You already have that rod.";
+  if (ROD_IDS.indexOf(bestRod(owned)) > ROD_IDS.indexOf(rod)) return "You have a better rod than that already.";
+  if (gold < RODS[rod].price) return `That costs ${RODS[rod].price} gold.`;
+  return null;
+}
 
 const STYLE: Record<FightStyle, { power: number; stamina: number; run: number }> = {
   darter: { power: 0.9, stamina: 0.8, run: 3.5 },
@@ -209,6 +251,7 @@ export function fightTick(s: FightState, script: FightScript, ease: FightEase, p
   const steady = 1.1 - 0.25 * ease.dex;
   const tiring = (0.8 + 0.5 * ease.str) / script.staminaS;
   const reel = script.reelSpeed * (0.8 + 0.6 * ease.str);
+  const rod = RODS[ease.rod ?? "cane"] ?? RODS.cane;
   let target = 0;
   if (spent) {
     // Won: it comes in on its own, the line easy, whatever the button does.
@@ -237,11 +280,16 @@ export function fightTick(s: FightState, script: FightScript, ease: FightEase, p
     if (P > 0) S -= DT * 0.3 * P * tiring;
     else S += DT * 0.15 / script.staminaS;
   }
-  T += (target - T) * 0.3;
+  // A stronger line carries the same pull as less of its breaking strain. Tension climbs no faster than the rod
+  // lets it, so a held button gives a moment to see the line tighten and let go; letting go eases it at once.
+  if (!spent) target = target / rod.strength;
+  const step = (target - T) * 0.3;
+  T += step > rod.climb * DT ? rod.climb * DT : step;
   S = S < 0 ? 0 : S > 1 ? 1 : S;
   D = D < 0 ? 0 : D;
   over = T > 1 ? over + FIGHT_TICK_MS : 0;
-  slack = mode === "run" && P === 0 && T < SLACK_T ? slack + FIGHT_TICK_MS : 0;
+  // Slack is the pull on the line itself, whatever it is rated to.
+  slack = mode === "run" && P === 0 && T * rod.strength < SLACK_T ? slack + FIGHT_TICK_MS : 0;
   const t = s.t + FIGHT_TICK_MS;
   let outcome: FightOutcome | null = null;
   if (over > snapGraceMs(ease)) outcome = "snapped";

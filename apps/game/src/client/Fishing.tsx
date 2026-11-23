@@ -345,6 +345,9 @@ function Sitting({ outing, bait: baitAtStart, world, pier, at: here, hole, vesse
         step({ t: "cast", power, spot: pier, bait: chosenRef.current })
           .then((next) => {
             const c = next.outing?.sitting?.cast;
+            // The server puts the best rod the hero owns in their hands with every cast: the fight must be played with it.
+            const ease = next.outing?.sitting?.ease;
+            if (ease && stage.current) stage.current.ease = ease;
             if (c) stage.current?.beginWait(c);
             else stage.current?.reset();
           })

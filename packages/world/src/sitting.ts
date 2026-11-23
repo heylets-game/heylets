@@ -15,7 +15,7 @@
 
 import { statPct } from "./check";
 import { FISH, aFish, type FishDef } from "./fishcatalog";
-import { FIGHT_OUTCOME_TEXT, edgesProblem, fightEase, makeFightScript, replayFight, type FightEase, type FightOutcome, type FightScript } from "./fishfight";
+import { FIGHT_OUTCOME_TEXT, edgesProblem, fightEase, makeFightScript, replayFight, type FightEase, type FightOutcome, type FightScript, type RodId } from "./fishfight";
 import { BAIT_SALE, FISH_SPOTS, FISH_SPOT_IDS, castMetres, vesselProblem, type BaitId, type Vessel, formatLength, formatWeight, rollCatch, rollSize, type FishSpot } from "./fishing";
 import { holeAt, withHole } from "./fishingholes";
 import type { GatherChoice, GatherState, GatherStep } from "./gather";
@@ -120,6 +120,12 @@ export interface AnglerStats {
 
 const def = (species: string): FishDef => FISH[species];
 
+/** `ease` with `rod` in hand (the cane rod is left out, as fightEase leaves it). */
+function withRod(ease: FightEase, rod: RodId | null): FightEase {
+  const { rod: _, ...rest } = ease;
+  return rod && rod !== "cane" ? { ...rest, rod } : rest;
+}
+
 /** Begin a sitting at `spot`. The caller has checked the spot is open and the hero has stamina left. */
 export function startSitting(spot: FishSpot, seed: number, stats: AnglerStats, now: number, extraCreelG = 0): GatherState {
   const dex = statPct(stats.dex);
@@ -219,7 +225,9 @@ export function stepSitting(state: GatherState, choice: GatherChoice): GatherSte
     const fish: CaughtFish = { species: caught.id, ...size, spot: from, at: now, ...(caught.gold ? { gold: rng.int(caught.gold[0], caught.gold[1]) } : {}) };
     const script = makeFightScript(rng, caught, size.grams / 1000, metres);
     const cast: CastState = { at: now, power, metres, biteMs, nibbles, windowMs: Math.round(HOOK_WINDOW_MS + HOOK_WINDOW_DEX_MS * s.ease.dex), fish, script, hookedAt: null, bait: choice.bait ?? null };
-    return { state: { ...state, rng: rng.state(), step: state.step + 1, sitting: { ...busy, spot: from, vessel: spot.vessel ? choice.vessel ?? null : null, cast, last: null } } };
+    // The server fills in the best rod the hero owns, so one bought partway through a sitting is fished with from the next cast.
+    const ease = choice.rod === undefined ? s.ease : withRod(s.ease, choice.rod);
+    return { state: { ...state, rng: rng.state(), step: state.step + 1, sitting: { ...busy, ease, spot: from, vessel: spot.vessel ? choice.vessel ?? null : null, cast, last: null } } };
   }
 
   if (choice.t === "reel") {

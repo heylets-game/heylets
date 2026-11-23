@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BOOK_PAGES, FISH, FISH_IDS, WATERS, bookPage, type FishDef } from "./fishcatalog";
 import { holdFight, idleFight, playFight } from "./fishbot";
-import { EXHAUSTED, FIGHT_MAX_EDGES, FIGHT_MAX_MS, FIGHT_TICK_MS, LINE_M, PULSE_MS, SPENT_REEL_MPS, TAP_MS, edgesProblem, fightEase, fightTick, makeFightScript, pressureAt, replayFight, startFight, type FightEase } from "./fishfight";
+import { EXHAUSTED, FIGHT_MAX_EDGES, FIGHT_MAX_MS, FIGHT_TICK_MS, LINE_M, PULSE_MS, RODS, ROD_IDS, SPENT_REEL_MPS, TAP_MS, bestRod, edgesProblem, fightEase, fightTick, makeFightScript, pressureAt, replayFight, rodBuyProblem, snapGraceMs, startFight, type FightEase } from "./fishfight";
 import { FISH_SPOTS, HAUL_SHARE, castMetres, marketPrice, rollCatch, rollSize, tamPrice } from "./fishing";
 import { makeRng } from "./rng";
 
@@ -125,7 +125,7 @@ describe("the fight", () => {
     const all = fishes(() => true);
     for (let i = 0; i < 400; i++) {
       const f = all[i % all.length];
-      const ease = fightEase(20 + (i * 37) % 76, 20 + (i * 53) % 76);
+      const ease = fightEase(20 + (i * 37) % 76, 20 + (i * 53) % 76, ROD_IDS[i % ROD_IDS.length]);
       const { script } = hooked(f, 1000 + i);
       const { end, edges } = playFight(script, ease, 0.6 + (i % 4) * 0.1);
       const again = replayFight(script, ease, JSON.parse(JSON.stringify(edges)));
@@ -191,7 +191,7 @@ describe("the fight", () => {
     let weakMs = 0;
     let strongMs = 0;
     for (let i = 0; i < 40; i++) {
-      const { script } = hooked(FISH.wreck_grouper, i);
+      const { script } = hooked(FISH.old_whiskers, i);
       const a = playFight(script, weak).end;
       const b = playFight(script, strong).end;
       if (a.outcome === "landed") (weakLanded++, (weakMs += a.t));
@@ -207,6 +207,65 @@ describe("the fight", () => {
     const fast = playFight(script, { str: 1, dex: 0.5 }).end;
     expect(fast.outcome).toBe("landed");
     expect(fast.t).toBeLessThan(slow.t);
+  });
+
+  it("gives a moment to let go before a held line snaps, longer with a better rod", () => {
+    let last = 0;
+    for (const rod of ROD_IDS) {
+      const ease: FightEase = { ...MID, rod };
+      // Old Ironjaw, at the start of his run, held hard: the tension climbs no faster than the rod lets it.
+      const { script } = hooked(FISH.ironjaw, 2, 1);
+      let s = fightTick(startFight(script), script, ease, 0);
+      const t0 = s.t;
+      while (!s.outcome) {
+        const next = fightTick(s, script, ease, 1);
+        expect(next.T - s.T).toBeLessThanOrEqual(RODS[rod].climb * (FIGHT_TICK_MS / 1000) + 1e-9);
+        s = next;
+      }
+      expect(s.outcome).toBe("snapped");
+      const held = s.t - t0;
+      // Over half a second to see it coming, even on the cane rod, beyond the moment Dexterity gives.
+      expect(held - snapGraceMs(ease)).toBeGreaterThan(300);
+      expect(held).toBeGreaterThan(last);
+      last = held;
+    }
+  });
+
+  it("saves a line held past breaking if the button is let go in time", () => {
+    for (let i = 0; i < 20; i++) {
+      const { script } = hooked(FISH.ironjaw, i, 1);
+      let s = startFight(script);
+      while (s.over === 0 && !s.outcome) s = fightTick(s, script, MID, 1);
+      expect(s.outcome).toBeNull();
+      // Over breaking, and let go: it comes back under before the line goes, and stays whole.
+      for (let k = 0; k < 6; k++) s = fightTick(s, script, MID, 0);
+      expect(s.outcome).toBeNull();
+      expect(s.T).toBeLessThan(1);
+    }
+  });
+
+  it("lands the big ones more often with a better rod", () => {
+    const landed = (rod: (typeof ROD_IDS)[number]) => {
+      let n = 0;
+      for (let i = 0; i < 30; i++) if (playFight(hooked(FISH.old_whiskers, i, 0.8).script, { str: 0.3, dex: 0.3, rod }, 0.75).end.outcome === "landed") n++;
+      return n;
+    };
+    const counts = ROD_IDS.map(landed);
+    expect(counts[1]).toBeGreaterThan(counts[0]);
+    expect(counts[2]).toBeGreaterThan(counts[1]);
+  });
+
+  it("sells each rod once, in order of quality, for its price", () => {
+    expect(bestRod([])).toBe("cane");
+    expect(bestRod(["greenheart"])).toBe("greenheart");
+    expect(bestRod(["split_cane", "greenheart", "nonsense"])).toBe("split_cane");
+    expect(rodBuyProblem("cane", [], 999)).toBeTruthy();
+    expect(rodBuyProblem("greenheart", [], RODS.greenheart.price - 1)).toBeTruthy();
+    expect(rodBuyProblem("greenheart", [], RODS.greenheart.price)).toBeNull();
+    expect(rodBuyProblem("greenheart", ["greenheart"], 999)).toBeTruthy();
+    expect(rodBuyProblem("greenheart", ["split_cane"], 999)).toBeTruthy();
+    expect(rodBuyProblem("split_cane", [], RODS.split_cane.price)).toBeNull();
+    expect(fightEase(50, 50, "cane")).toEqual(fightEase(50, 50));
   });
 
   it("lets Dexterity alone hold the line harder", () => {

@@ -1,6 +1,6 @@
 // The fishmonger: an old sailor in a yellow raincoat who keeps the fish shack on the south-west shore, by the pier.
 // He stands at the shack's east end, by his drying line, all day and all night: he buys the catch at the day's
-// board (fishmarket.ts), sells bait (fishing.ts, BAIT_SALE) and, asked, says where they are biting
+// board (fishmarket.ts), sells bait (fishing.ts, BAIT_SALE) and rods (fishfight.ts, RODS) and, asked, says where they are biting
 // (fishingholes.ts, bestHole). He keeps out of the way of the shack's door, which is the one way to the water there.
 
 import type { HexPos } from "@gantt-quest/core";
@@ -50,6 +50,7 @@ export const FISHMONGER_ADVICE: readonly string[] = [
   "Wear it out and it gives up. Then it comes in on its own, quick as you like.",
   "Boots and crates don't fight. They're just heavy. Hold and wind.",
   "Strong arms tire a fish quicker and carry a fuller basket. Quick hands keep a straining line from snapping.",
+  "Keep snapping lines on the big ones? A better rod bends before the line does, and gives you longer to let go. I sell them.",
   // Where, when and with what.
   "See them dark shapes on the water? Fish. They move through the day, so the spot that was good this morning isn't now.",
   "A full cast from the shore reaches the shapes off it. Ask me where they're biting and I'll tell you the best of them.",

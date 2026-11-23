@@ -117,6 +117,12 @@ body.fishing .draggable:not(.gather), body.fishing .tip { display: none !importa
 .bait-swatch.worms { background: #c9746a; }
 .bait-swatch.shrimp { background: #f0a37a; }
 .bait-swatch.glow_lure { background: #9ff0d8; box-shadow: 0 0 6px #9ff0d8; }
+/* A rod is drawn as a thin stave, its wood's colour. */
+.bait-swatch.rod { width: 4px; height: 18px; border-radius: 2px; margin: 0 5px; transform: rotate(20deg); }
+.bait-swatch.rod.cane { background: #d8bf7a; }
+.bait-swatch.rod.greenheart { background: #5f7a3a; }
+.bait-swatch.rod.split_cane { background: #b5762e; }
+.bait-head { margin: 12px 0 2px; font-size: 1em; }
 .fish-bait { display: flex; align-items: center; gap: 4px; padding: 3px 6px; background: rgba(20, 18, 42, 0.75); font-size: 12px; pointer-events: auto; flex-wrap: wrap; justify-content: center; }
 .fish-bait button { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; font-size: 12px; }
 .fish-bait button[aria-pressed="true"] { border-color: var(--gold); color: var(--gold); background: rgba(224, 177, 46, 0.12); }

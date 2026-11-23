@@ -1,8 +1,9 @@
-// The fishmonger's bait counter: worms and shrimp by the tin and the pot, and glow lures one at a time. Opened from a
-// word with him at the shack. What each does, and what it costs, is in packages/world/src/fishing.ts.
+// The fishmonger's counter: worms and shrimp by the tin and the pot, glow lures one at a time, and rods. Opened from a
+// word with him at the shack. What each bait does, and what it costs, is in packages/world/src/fishing.ts; the rods
+// are in packages/world/src/fishfight.ts.
 
 import { useEffect, useState } from "react";
-import { BAITS, BAIT_IDS, BAIT_SALE, FISHMONGER, HOLE_NAMES, baitBuyProblem, type BaitCounts, type BaitId } from "@gantt-quest/world";
+import { BAITS, BAIT_IDS, BAIT_SALE, FISHMONGER, HOLE_NAMES, RODS, ROD_IDS, baitBuyProblem, bestRod, rodBuyProblem, type BaitCounts, type BaitId, type RodId } from "@gantt-quest/world";
 import { api } from "./api";
 import { DragPanel } from "./DragPanel";
 import "./fishing.css";
@@ -29,6 +30,7 @@ export function BaitPanel({ gold, onClose, onGold }: {
   onGold?(): void;
 }) {
   const [bait, setBait] = useState<BaitCounts | null>(null);
+  const [rods, setRods] = useState<RodId[]>([]);
   const [purse, setPurse] = useState(gold);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -36,19 +38,21 @@ export function BaitPanel({ gold, onClose, onGold }: {
   useEffect(() => {
     api.bait().then((r) => {
       setBait(r.bait);
+      setRods(r.rods);
       setPurse(r.gold);
     }, (e: Error) => setError(e.message));
   }, []);
 
-  const buy = async (kind: BaitId) => {
+  const buy = async (kind: BaitId | RodId, rod = false) => {
     setBusy(true);
     setError(null);
     setNote(null);
     try {
-      const r = await api.buyBait(kind);
+      const r = rod ? await api.buyRod(kind as RodId) : await api.buyBait(kind as BaitId);
       setBait(r.bait);
+      setRods(r.rods);
       setPurse(r.gold);
-      setNote(`${BOUGHT[kind]} "Don't waste it."`);
+      setNote(rod ? `${RODS[kind as RodId].name}, rigged and ready. "Look after it, and it'll look after you."` : `${BOUGHT[kind as BaitId]} "Don't waste it."`);
       onGold?.();
     } catch (e) {
       setError((e as Error).message);
@@ -59,9 +63,9 @@ export function BaitPanel({ gold, onClose, onGold }: {
 
   return (
     <div className="overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <DragPanel id="harbor.bait" title={`${FISHMONGER.short}'s bait`} compact className="panel catch-panel bait-panel" role="dialog" aria-label={`${FISHMONGER.short}'s bait`}>
+      <DragPanel id="harbor.bait" title={`${FISHMONGER.short}'s bait and rods`} compact className="panel catch-panel bait-panel" role="dialog" aria-label={`${FISHMONGER.short}'s bait and rods`}>
         <header className="gather-head">
-          <h2>{FISHMONGER.short}'s bait</h2>
+          <h2>{FISHMONGER.short}'s bait and rods</h2>
           <span className="spacer" />
           <span className="gold">{purse} gold</span>
           <button className="small" onClick={onClose}>Close</button>
@@ -90,6 +94,37 @@ export function BaitPanel({ gold, onClose, onGold }: {
               );
             })}
           </ul>
+        )}
+        {bait && (
+          <>
+            <h3 className="bait-head">Rods</h3>
+            <p className="muted">"A good rod bends before your line does. Gives you a moment to let go."</p>
+            <ul className="catch-list">
+              {ROD_IDS.map((kind) => {
+                const rod = RODS[kind];
+                const inHand = bestRod(rods) === kind;
+                const owned = kind === "cane" || rods.includes(kind);
+                const problem = owned ? null : rodBuyProblem(kind, rods, purse);
+                return (
+                  <li key={kind} className="catch-row bait-row">
+                    <span className={`bait-swatch rod ${kind}`} aria-hidden />
+                    <span className="grow">
+                      <strong>{rod.name}</strong>
+                      {inHand && <small className="muted"> · the one you fish with</small>}
+                      <small className="muted bait-blurb">{rod.blurb}</small>
+                    </span>
+                    {owned ? (
+                      <small className="muted">{inHand ? "In hand" : "Put away"}</small>
+                    ) : (
+                      <button className="small" disabled={busy || !!problem} title={problem ?? undefined} onClick={() => void buy(kind, true)}>
+                        Buy · {rod.price}g
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </>
         )}
       </DragPanel>
     </div>

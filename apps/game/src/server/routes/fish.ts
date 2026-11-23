@@ -2,7 +2,7 @@
 // Catch Book, the pub's wall and a fish hung at home. And bait, bought from
 // the fishmonger before they are caught.
 
-import { baitCounter, buyBait } from "../bait";
+import { baitCounter, buyBait, buyRod } from "../bait";
 import { catchBook, hangAtHome, mountInPub, pubWall, unmountInPub } from "../catchbook";
 import { fishStock, moveFish, sellFish } from "../fishmarket";
 import type { GameApp } from "./shared";
@@ -19,11 +19,16 @@ export function fishRoutes(app: GameApp): void {
     return typeof result === "string" ? c.json({ error: result }, 409) : c.json(result);
   });
 
-  // Bait from the fishmonger: what you have, and a lot of one kind bought (the server prices it).
+  // Bait and rods from the fishmonger: what you have, and a lot of bait or a rod bought (the server prices it).
   app.get("/api/fish/bait", async (c) => c.json(await baitCounter(c.env.DB, c.get("player").id)));
   app.post("/api/fish/bait", async (c) => {
     const body = await c.req.json<{ kind?: unknown }>().catch(() => ({}) as { kind?: unknown });
     const result = await buyBait(c.env.DB, c.get("player").id, body.kind);
+    return typeof result === "string" ? c.json({ error: result }, 409) : c.json(result);
+  });
+  app.post("/api/fish/rod", async (c) => {
+    const body = await c.req.json<{ kind?: unknown }>().catch(() => ({}) as { kind?: unknown });
+    const result = await buyRod(c.env.DB, c.get("player").id, body.kind);
     return typeof result === "string" ? c.json({ error: result }, 409) : c.json(result);
   });
 

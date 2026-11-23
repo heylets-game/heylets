@@ -2,12 +2,13 @@
 
 import type { StatKey } from "@gantt-quest/core";
 import type { FinishKind, HutFinish, Muster, MusterAnswer } from "@gantt-quest/world";
-import type { Appearance, BaitCounts, BaitId, CarryState, FishSpot, GatherChoice, HarborXpStatus, GatherSpot, HarborWorks, HutSummary, ItemDef, Lodestone, ProjectAmounts, PublicHero, Resources, SalesEntry, SalesmanId, SalesmanVisit, ShopEntry, Throwable, TradeSide } from "@gantt-quest/world";
+import type { Appearance, BaitId, RodId, CarryState, FishSpot, GatherChoice, HarborXpStatus, GatherSpot, HarborWorks, HutSummary, ItemDef, Lodestone, ProjectAmounts, PublicHero, Resources, SalesEntry, SalesmanId, SalesmanVisit, ShopEntry, Throwable, TradeSide } from "@gantt-quest/world";
 import { devTools } from "./devTools";
 import { forcedSalesman } from "./salesmanClock";
 import type { GatherStatus } from "../server/gather";
 import type { SittingPaid } from "../server/fishing";
 import type { FishStock } from "../server/fishmarket";
+import type { BaitCounter } from "../server/bait";
 import type { DealerView, HeldContractView } from "../server/dealer";
 import type { CatchBook, PubWall } from "../server/catchbook";
 import type { PubGame, PubLeaderboard, PubScore } from "../server/pub-scores";
@@ -194,8 +195,10 @@ export const api = {
   gather: () => request<GatherStatus & { sitting?: SittingPaid }>("/api/gather"),
   /** Kept fish: the icebox and the trophy chest, with today's prices. */
   fish: () => request<FishStock>("/api/fish"),
-  bait: () => request<{ bait: BaitCounts; gold: number }>("/api/fish/bait"),
-  buyBait: (kind: BaitId) => request<{ bait: BaitCounts; gold: number }>("/api/fish/bait", { kind }),
+  /** The fishmonger's counter: the bait and rods you have, and your gold. */
+  bait: () => request<BaitCounter>("/api/fish/bait"),
+  buyBait: (kind: BaitId) => request<BaitCounter>("/api/fish/bait", { kind }),
+  buyRod: (kind: RodId) => request<BaitCounter>("/api/fish/rod", { kind }),
   sellFish: (ids: string[], to: "market" | "tam") => request<FishStock & { sold: { id: string; gold: number }[] }>("/api/fish/sell", { ids, to }),
   moveFish: (id: string, to: "trophy" | "icebox") => request<FishStock>("/api/fish/move", { id, to }),
   /** The Catch Book, with the crew's records. */
