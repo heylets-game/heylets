@@ -5,8 +5,8 @@
 // and (pointed at) the same card out to the side.
 //
 //   click a thing       take it
-//   drag a thing        onto the sea bag (a "text/gq-loot" drag carrying its index, and
-//                       "text/gq-loot-uid" its own number where it has one)
+//   drag a thing        onto the sea bag (a "loot" drag in dragDrop.ts carrying its index, and
+//                       its own number where it has one); a finger holds it a moment first
 //   Take all, E, Space  take everything
 //   ×, Esc              close
 //
@@ -24,6 +24,8 @@ import { Icon, ItemDetail, bonusSummary, powerLabel } from "../items";
 import { blurb, itemName, label } from "../labels";
 import { BlueprintIcon, GOLD_ICON, ThingIcon, furnishingIcon, resourceIcon } from "../thingIcons";
 import { ITEM_ICON, STONE_ICON } from "./actionIcons";
+import { dragSource } from "../dragDrop";
+import { touchScreen } from "../holdTap";
 import "../ui/slots.css";
 import "./fight.css";
 
@@ -210,6 +212,7 @@ export function LootPanel({ title, subtitle, kind, items, share, blocked, onTake
   const [hover, setHover] = useState<number | null>(null);
   const [dragging, setDragging] = useState<number | null>(null);
   const can = !blocked && items.length > 0;
+  const [touch] = useState(touchScreen);
 
   // The keys, for as long as the window is open. The newest handlers, without rebinding on every render.
   const now = useRef({ can, onTakeAll, onClose });
@@ -267,15 +270,13 @@ export function LootPanel({ title, subtitle, kind, items, share, blocked, onTake
                   style={{ "--i": i, ...(tint ? { "--tint": tint } : {}) } as CSSProperties}
                   aria-label={`${lootName(item)}${n !== undefined ? `, ${n}` : ""}${blocked ? "" : ": take it"}`}
                   aria-disabled={!!blocked}
-                  draggable={!blocked}
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData("text/gq-loot", String(i));
-                    if (item.uid !== undefined) e.dataTransfer.setData("text/gq-loot-uid", String(item.uid));
-                    e.dataTransfer.effectAllowed = "move";
-                    setDragging(i);
-                    setHover(null);
-                  }}
-                  onDragEnd={() => setDragging(null)}
+                  {...dragSource(blocked ? null : { kind: "loot", index: i, uid: item.uid }, {
+                    onLift: () => {
+                      setDragging(i);
+                      setHover(null);
+                    },
+                    onEnd: () => setDragging(null),
+                  })}
                   onPointerEnter={() => setHover(i)}
                   onFocus={() => setHover(i)}
                   onBlur={() => setHover(null)}
@@ -292,13 +293,13 @@ export function LootPanel({ title, subtitle, kind, items, share, blocked, onTake
       )}
 
       <footer className="loot-foot">
-        <span className="loot-hint">{items.length === 0 ? "" : blocked ? "Look, but nothing can be taken yet." : "Click to take, or drag to your bag."}</span>
+        <span className="loot-hint">{items.length === 0 ? "" : blocked ? "Look, but nothing can be taken yet." : touch ? "Tap to take, or hold and drag to your bag." : "Click to take, or drag to your bag."}</span>
         <button type="button" className="primary loot-all" disabled={!can} title={blocked ?? (items.length === 0 ? "Nothing left to take" : "Take everything (E or Space)")} onClick={onTakeAll}>
           Take all <kbd>E</kbd>
         </button>
       </footer>
 
-      {shown && <LootCard item={shown} viewer={viewer} how={blocked ?? "Click to take it, or drag it to your bag."} />}
+      {shown && <LootCard item={shown} viewer={viewer} how={blocked ?? (touch ? "Tap to take it, or hold it and drag it to your bag." : "Click to take it, or drag it to your bag.")} />}
     </div>
   );
 }

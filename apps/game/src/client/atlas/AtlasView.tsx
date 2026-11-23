@@ -46,6 +46,7 @@ import { WorldRenderer, type RenderState } from "../render/WorldRenderer";
 import { uiZoom } from "../uiScale";
 import { AtlasCloud, CLOUD_TOP } from "./AtlasCloud";
 import { AtlasLayer, type AtlasMark, type AtlasRoute, type Rise } from "./AtlasLayer";
+import { dragSource, useDropTarget } from "../dragDrop";
 import "./atlas.css";
 
 type Known = Extract<ChartNode, { state: "harbor" | "cleared" | "open" }>;
@@ -368,6 +369,14 @@ export function AtlasView({ me, refresh, onLeave }: { me: Me; refresh(): Promise
   const inSlot = slotted && held.some((h) => stoneKey(h.stone) === stoneKey(slotted)) ? slotted : null;
   /** Whether the place picked has a map being fought through already: its slot is filled, or was never needed, and is shut. */
   const begun = !!shown?.zone;
+  /** A lodestone dragged from the pack beside the slot is put into it. */
+  const stoneDrop = useDropTarget(
+    (thing) => thing.kind === "lodestone" && !begun,
+    (thing) => {
+      const found = thing.kind === "lodestone" && held.find((h) => stoneKey(h.stone) === thing.key);
+      if (found && !begun) setSlotted(found.stone);
+    },
+  );
   /** The kind of place it is (a sea cave is a delve, not one; nor is the Harbor). */
   const shownSite: SiteDef | null = chart && shown && shown.kind !== "harbor" && shown.kind !== "seacave" ? SITES[nodeSite(chart.seed, shown) as SiteId] : null;
   /** What the place carries: its own, and what the lodestone in its slot adds (the one its map was made with, or the one put in now). */
@@ -539,12 +548,7 @@ export function AtlasView({ me, refresh, onLeave }: { me: Me; refresh(): Promise
                         onClick={() => !begun && setSlotted(null)}
                         onMouseEnter={() => setOver(begun ? (shown.stone ?? null) : inSlot)}
                         onMouseLeave={() => setOver(null)}
-                        onDragOver={(e) => { if (!begun) e.preventDefault(); }}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          const found = held.find((h) => stoneKey(h.stone) === e.dataTransfer.getData("text/lodestone"));
-                          if (found && !begun) setSlotted(found.stone);
-                        }}
+                        {...stoneDrop}
                       >
                         {begun
                           ? shown.stone && <Icon name={STONE_ICON(shown.stone.length).name} color={STONE_ICON(shown.stone.length).color} size={40} />
@@ -562,9 +566,8 @@ export function AtlasView({ me, refresh, onLeave }: { me: Me; refresh(): Promise
                                 key={key}
                                 type="button"
                                 className={`atlas-pack-stone ${inSlot && stoneKey(inSlot) === key ? "chosen" : ""}`}
-                                draggable
                                 aria-label={`${stoneName(stone)}, ${qty} in your pack: put it into the slot`}
-                                onDragStart={(e) => e.dataTransfer.setData("text/lodestone", key)}
+                                {...dragSource({ kind: "lodestone", key }, { onLift: () => setOver(null) })}
                                 onClick={() => setSlotted(inSlot && stoneKey(inSlot) === key ? null : stone)}
                                 onMouseEnter={() => setOver(stone)}
                                 onMouseLeave={() => setOver(null)}

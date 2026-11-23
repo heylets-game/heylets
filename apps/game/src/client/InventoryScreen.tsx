@@ -58,7 +58,7 @@
 // where it goes. While a fight is on the gear worn stays as it is; the pack
 // can still be looked through.
 
-import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { CatchPanel } from "./CatchPanel";
 import { LogbookButton } from "./Logbook";
 import {
@@ -121,6 +121,7 @@ import { DollChart, type ChartSlot } from "./ui/DollChart";
 import { SplitPrompt, StackIcon, stackName, toStacks, type Stack } from "./ui/Slots";
 import { ITEM_ICON, STONE_ICON } from "./zone/actionIcons";
 import { uiZoom } from "./uiScale";
+import { useDropTarget } from "./dragDrop";
 import { ownLook } from "./ownLook";
 import { withLook } from "./render/sprites";
 import { wornAhead, type WearChange } from "./wearAhead";
@@ -304,8 +305,8 @@ interface Props {
    */
   torch?: { hand: "main" | "off"; rounds: number; stow?(): void; why?: string };
   /**
-   * On a map: something dragged out of a loot window (zone/LootPanel.tsx, a "text/gq-loot" drag carrying its index
-   * there, and "text/gq-loot-uid" its own number where it has one) was dropped anywhere on the bag. The server
+   * On a map: something dragged out of a loot window (zone/LootPanel.tsx, a "loot" drag in dragDrop.ts carrying its
+   * index there, and its own number where it has one) was dropped anywhere on the bag. The server
    * decides where in the pack it lands.
    */
   onLootDrop?: (index: number, uid?: number) => void;
@@ -438,30 +439,14 @@ function EyeGlyph({ shut }: { shut: boolean }) {
 }
 
 export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = false, chest = null, trade = null, town = null, usable, gearLocked, stones, torch, onLootDrop }: Props) {
-  /** Loot is being dragged over the bag: it is lit as the place to drop it. */
-  const [lootOver, setLootOver] = useState(false);
-  const lootDrop = onLootDrop && {
-    onDragOver: (e: ReactDragEvent) => {
-      if (!e.dataTransfer.types.includes("text/gq-loot")) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-      if (!lootOver) setLootOver(true);
-    },
-    onDragLeave: (e: ReactDragEvent) => {
-      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setLootOver(false);
-    },
-    onDrop: (e: ReactDragEvent) => {
-      setLootOver(false);
-      const raw = e.dataTransfer.getData("text/gq-loot");
-      if (raw === "") return;
-      e.preventDefault();
-      const index = Number(raw);
+  /** Loot dragged from a body or chest is dropped on the bag: it is taken. The bag lights up while it is over it. */
+  const lootDrop = useDropTarget(
+    (thing) => thing.kind === "loot" && !!onLootDrop,
+    (thing) => {
       // The thing's own number, as it was when the drag began: the list may have moved under it since.
-      const own = e.dataTransfer.getData("text/gq-loot-uid");
-      const uid = own === "" ? undefined : Number(own);
-      if (Number.isInteger(index) && index >= 0) onLootDrop(index, uid !== undefined && Number.isInteger(uid) ? uid : undefined);
+      if (thing.kind === "loot") onLootDrop?.(thing.index, thing.uid);
     },
-  };
+  );
   /** The atlas's slot as it is now, for the handlers that outlive a render. */
   const stoneSlot = useRef(stones);
   stoneSlot.current = stones;
@@ -1281,7 +1266,7 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
         </div>
       )}
 
-      <div className={`bag panel window ${held ? "holding" : ""} ${lootOver ? "loot-over" : ""}`} role="dialog" aria-label="Sea bag" style={{ "--u": `${bu}px` } as CSSProperties} onContextMenu={putBack} {...lootDrop}>
+      <div className={`bag panel window ${held ? "holding" : ""}`} role="dialog" aria-label="Sea bag" style={{ "--u": `${bu}px` } as CSSProperties} onContextMenu={putBack} {...lootDrop}>
         <span className="win-plate">Sea Bag</span>
         {/* The close button, and the way into the logbook beside it. */}
         <div className="bag-top">

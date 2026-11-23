@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { ACTION_AP, AP_MAX, AP_TURN, BONUS_AP, FURNISHINGS, HERO_CLASSES, apForMove, moveLeft, weaponItem, type Budget, type LootItem, type Roll, type Rolled } from "@gantt-quest/world";
 import type { Me } from "../api";
 import { InventoryScreen } from "../InventoryScreen";
+import { useDropTarget } from "../dragDrop";
 import { spriteDataUrl } from "../render/sprites";
 import { RACK, RACK_ROW, paintRack } from "../ui/rackArt";
 import "../ui/hud.css";
@@ -106,7 +107,6 @@ export default function FightUiLab({ me, refresh }: { me?: Me; refresh?: () => P
   const [loot, setLoot] = useState<{ kind: "body" | "chest" | "spoils"; items: LootItem[] } | null>(null);
   const [blocked, setBlocked] = useState(false);
   const [bag, setBag] = useState(false);
-  const [bagOver, setBagOver] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [panel, setPanel] = useState(true);
   const [said, setSaid] = useState("");
@@ -278,6 +278,8 @@ export default function FightUiLab({ me, refresh }: { me?: Me; refresh?: () => P
     setSaid(`${how}: ${JSON.stringify(loot.items[index]).slice(0, 60)}`);
     setLoot({ ...loot, items: loot.items.filter((_, i) => i !== index) });
   };
+  /** The sea bag's footprint takes loot dropped on it. */
+  const bagDrop = useDropTarget((thing) => thing.kind === "loot", (thing) => thing.kind === "loot" && take(thing.index, "Dropped on the bag"));
 
   return (
     <div className={`run zone-view in-fight ${myTurn ? "my-turn" : ""}`} style={lab.root}>
@@ -335,11 +337,9 @@ export default function FightUiLab({ me, refresh }: { me?: Me; refresh?: () => P
       {bag && !me?.character && (
         <div className="overlay inv-overlay bag-overlay">
           <div
-            className={`bag panel window ${bagOver ? "loot-over" : ""}`}
+            className="bag panel window"
             style={{ ...lab.bag, "--u": "51px" } as CSSProperties}
-            onDragOver={(e) => { if (e.dataTransfer.types.includes("text/gq-loot")) { e.preventDefault(); setBagOver(true); } }}
-            onDragLeave={() => setBagOver(false)}
-            onDrop={(e) => { e.preventDefault(); setBagOver(false); take(Number(e.dataTransfer.getData("text/gq-loot")), "Dropped on the bag"); }}
+            {...bagDrop}
           >
             <span className="win-plate">Sea Bag</span>
             <p className="muted" style={{ margin: "auto", textAlign: "center" }}>The sea bag's footprint.<br />Drag loot here.</p>
