@@ -7,6 +7,18 @@
 // release-notes.ts); this list is only for the past.
 
 export const OVERRIDES: Record<string, string[]> = {
+  // The release after game-v2026.11.23 (#575). Its subject, "Sanity combat balance pass", said nothing a player could
+  // use: these are the changes in it they will notice.
+  "297f49e19e7416b04756d48e92c4658539848077": [
+    "Fights: most attacks, spells and heals were rebalanced, and most now hit a little less hard",
+    "Shanty Bard: Hornpipe rallies you and every ally within 2 hexes for +2 damage on your next attack",
+    "Reef Druid: Rejuvenate heals again at the start of the ally's next turn",
+    "Fights: Soul Drain heals you for half the damage it does",
+    "Fights: Pull of the Deep strikes 3 hexes up to 5 away, and Taunt reaches every enemy within 2 hexes",
+    "Fights: Roar of Thunder's stun can be resisted, and Beacon Aura gives +2 to hit instead of advantage",
+    "Tidewall Warden: the Foghorn Axe's guard is now Against the Waves, with more shield when you stand in water",
+    "Tidewall Warden: the big shield is now called Endure, and it also halves damage until your next turn",
+  ],
   // game-v2026.11.20.3 (#565). Its first line named the five emotes there were then; the dab, the floss and the
   // running man came in the releases after it, so it names all eight.
   "0dc40f5dfbcbea567cb8cb22341e778ef0fec229": [
