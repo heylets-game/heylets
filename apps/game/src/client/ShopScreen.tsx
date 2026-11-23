@@ -4,7 +4,7 @@
 // pieces for a hut, always in stock, at the catalogue's price.
 
 import { useEffect, useMemo, useState } from "react";
-import { CARRY_FORMULA, RARITY_COLOR, RESOURCE_KINDS, SLOT_LABEL, STALL_BUYS, STALL_FURNITURE, carryProblem, equipProblem, sellPrice, type Resources } from "@gantt-quest/world";
+import { BONEMEAL_PER_BONE, CAN_CAPACITY, CAN_PRICE, CARRY_FORMULA, GROW_MS, RARITY_COLOR, RESOURCE_KINDS, SEED_PRICE, SLOT_LABEL, STALL_BUYS, STALL_FURNITURE, carryProblem, equipProblem, sellPrice, type Resources } from "@gantt-quest/world";
 import { api, type Me, type Shop } from "./api";
 import { DragPanel } from "./DragPanel";
 import { useAct } from "./Harbor";
@@ -16,14 +16,17 @@ export function ShopScreen({ me, refresh, onClose }: { me: Me; refresh(): Promis
   const c = me.character!;
   const [shop, setShop] = useState<Shop | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"buy" | "sell" | "furniture">("buy");
+  const [tab, setTab] = useState<"buy" | "sell" | "furniture" | "garden">("buy");
   /** The furnishing last bought, and how many of it are now owned, so a purchase is visible. */
   const [bought, setBought] = useState<string | null>(null);
   const [picked, setPicked] = useState<{ tab: "buy" | "sell"; key: number } | null>(null);
   /** The player's materials, for the foraged goods the stall will buy. */
   const [stock, setStock] = useState<Resources>({});
+  /** The player's watering can: how much is in it (null: none yet). Undefined until read. */
+  const [can, setCan] = useState<number | null | undefined>(undefined);
   const load = () =>
     Promise.all([
+      api.can().then((r) => setCan(r.water), () => undefined),
       api.shop().then(setShop, (e: Error) => setLoadError(e.message)),
       api.hut().then((h) => setStock(h.resources), () => undefined),
     ]);
@@ -53,6 +56,7 @@ export function ShopScreen({ me, refresh, onClose }: { me: Me; refresh(): Promis
           <button className={`small ${tab === "buy" ? "selected" : ""}`} onClick={() => setTab("buy")}>Buy</button>
           <button className={`small ${tab === "sell" ? "selected" : ""}`} onClick={() => setTab("sell")}>Sell <span className="muted">{sellable.length + (forageHeld > 0 ? 1 : 0)}</span></button>
           <button className={`small ${tab === "furniture" ? "selected" : ""}`} onClick={() => setTab("furniture")}>Furniture</button>
+          <button className={`small ${tab === "garden" ? "selected" : ""}`} onClick={() => setTab("garden")}>Garden</button>
           <span className="spacer" />
           <span className="gold"><Icon name="cash" color="#ffd23f" size={18} /> {c.gold} gold</span>
           <button onClick={onClose}>Close</button>
@@ -93,6 +97,33 @@ export function ShopScreen({ me, refresh, onClose }: { me: Me; refresh(): Promis
                   );
                 })}
                 {shop && <p className="muted">New stock in about {hours} hour{hours === 1 ? "" : "s"}. The stall carries gear for your class and level.</p>}
+              </>
+            ) : tab === "garden" ? (
+              <>
+                {bought && !busy && !error && <p className="good">{bought}</p>}
+                <div className="shop-row">
+                  <span className="thing-tile"><ThingIcon icon={resourceIcon("seeds")} size={36} /></span>
+                  <div className="shop-info">
+                    <strong>{label("resource", "seeds")}</strong>
+                    <span className="muted">A packet plants one bed of your hut's herb garden · you have {stock.seeds ?? 0}</span>
+                  </div>
+                  {[1, 5, 10].map((n) => (
+                    <button key={n} className={n === 1 ? "primary" : undefined} disabled={busy || c.gold < n * SEED_PRICE} onClick={() => { setBought(null); void act(() => api.buySeeds(n).then(() => setBought(`${n} packet${n === 1 ? "" : "s"} of herb seeds bought.`))); }}>
+                      {n === 1 ? "Buy 1" : `${n}`} · {n * SEED_PRICE}g
+                    </button>
+                  ))}
+                </div>
+                <div className="shop-row">
+                  <span className="thing-tile"><Icon name="watering-can" color="#4f9fd6" size={36} /></span>
+                  <div className="shop-info">
+                    <strong>Watering Can</strong>
+                    <span className="muted">{can == null ? `Holds ${CAN_CAPACITY} waterings. Fill it at the well on the green` : `You have one · ${can} of ${CAN_CAPACITY} waterings in it`}</span>
+                  </div>
+                  <button className="primary" disabled={busy || can !== null || c.gold < CAN_PRICE} onClick={() => { setBought(null); void act(() => api.buyCan().then(() => setBought("A watering can, bought. Fill it at the well on the green."))); }}>
+                    {can != null ? "Owned" : `${CAN_PRICE}g`}
+                  </button>
+                </div>
+                <p className="muted">Sow a packet in a bed by your hut's door and it is ready to pick in {GROW_MS / 3_600_000} hours, two or three herbs a bed. Water it from your can for one more. Bonemeal makes it grow faster: grind it from bones at the garden, {BONEMEAL_PER_BONE} scoops a bone.</p>
               </>
             ) : tab === "furniture" ? (
               <>
@@ -156,6 +187,8 @@ export function ShopScreen({ me, refresh, onClose }: { me: Me; refresh(): Promis
               <ItemDetail item={buying.item} current={worn.get(buying.item.slot) ?? null} classId={c.class_id} level={c.level} />
             ) : selling ? (
               <ItemDetail item={selling} current={worn.get(selling.slot) ?? null} classId={c.class_id} level={c.level} />
+            ) : tab === "garden" ? (
+              <p className="muted">Your hut's herb garden is in the corner of its doorstep. A Shack's garden has two beds, a Cottage's three and a Lodge's four.</p>
             ) : tab === "furniture" ? (
               <p className="muted">Walk into your hut from its plot in the Harbor to put furniture down. The same pieces can be crafted there from wood, fur and copper.</p>
             ) : (

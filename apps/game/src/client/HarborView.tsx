@@ -5,8 +5,8 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAudioScene } from "./audio/useAudioScene";
-import type { HexPos } from "@gantt-quest/core";
-import { GATHER_SPOTS, GATHER_SPOT_IDS, HARBOR_APOTHECARY, HARBOR_LAPIDARY, HARBOR_BOARD, HARBOR_BUILDINGS, footing, HARBOR_CAVE, HARBOR_WAYGATE, HARBOR_CHEST, HARBOR_GALLEY, HARBOR_LIGHTHOUSE, HARBOR_SMITHY, HARBOR_GATHER, HARBOR_NAME, HARBOR_PLOTS, HARBOR_PLOT_FACING, HARBOR_PUB, HARBOR_RING, HARBOR_SHOP, HARBOR_SPAWN, HARBOR_WORKS, PLOT_PRICE, RESOURCE_KINDS, SHACK_COST, binFill, binNeeds, builtProjects, BOOK_TITLE, fishSpotAt, harborDoor, seaEdge, tileAt, waterSpotAt, type FishSpot, FISH_SPOTS, generateHarbor, projectById, projectProgress, harborPoi, hutTier, poiAt, salesman, type GatherSpot, type Resources } from "@gantt-quest/world";
+import { hexDistance, type HexPos } from "@gantt-quest/core";
+import { GATHER_SPOTS, GATHER_SPOT_IDS, HARBOR_APOTHECARY, HARBOR_LAPIDARY, HARBOR_BOARD, HARBOR_BUILDINGS, footing, HARBOR_CAVE, HARBOR_WAYGATE, HARBOR_CHEST, HARBOR_GALLEY, HARBOR_LIGHTHOUSE, HARBOR_SMITHY, HARBOR_GATHER, HARBOR_NAME, HARBOR_PLOTS, HARBOR_PLOT_FACING, HARBOR_PUB, HARBOR_RING, HARBOR_SHOP, HARBOR_SPAWN, HARBOR_WORKS, PLOT_PRICE, RESOURCE_KINDS, SHACK_COST, binFill, binNeeds, builtProjects, BOOK_TITLE, fishSpotAt, harborDoor, seaEdge, tileAt, waterSpotAt, type FishSpot, FISH_SPOTS, generateHarbor, projectById, projectProgress, harborPoi, hutTier, poiAt, salesman, gardenBeds, gardenCorner, gardenLooks, plotAt, gardenSpotAt, GARDEN_SPOTS, HARBOR_WELL, HARBOR_WELL_AT, CAN_CAPACITY, bedProgress, nextReady, readyCount, growText, type GardenBed, type GatherSpot, type Resources } from "@gantt-quest/world";
 import type { Poi } from "@gantt-quest/world";
 import { MusterPanel, useMuster } from "./atlas/Muster";
 import { api, type Me } from "./api";
@@ -23,6 +23,8 @@ import { DragPanel } from "./DragPanel";
 import { HudBar } from "./ui/Hud";
 import { Logbook } from "./Logbook";
 import { GatherPanel } from "./GatherPanel";
+import { Garden } from "./Garden";
+import { GardenMarks, type GardenMarkInfo } from "./GardenMarks";
 import { HeroSheet, useHeroSheet } from "./HeroSheet";
 import { LOOK_CHANGED } from "./ChangeLook";
 import { InventoryScreen } from "./InventoryScreen";
@@ -62,14 +64,18 @@ const BOARD_STANDS = footing(HARBOR_BOARD, "single", HARBOR_BUILDINGS.find((b) =
  */
 const BESIDE = new Set(HARBOR_BUILDINGS.filter((b) => b.shape === "single").map((b) => b.id));
 
+/** The doorstep of whatever stands on a hex: a building's, or the well's (a piece of the town's dressing, drawn from beside it). */
+const doorOf = (at: HexPos): HexPos | null => harborDoor(at) ?? (same(at, HARBOR_WELL_AT) ? HARBOR_WELL : null);
+
 /**
  * The place a pointer is on: the one whose model it is on (`model`, its id, as the renderer picked it), or whose
  * ground that hex is, or whose doorstep it is. Hovering and clicking both ask this, so what lights up under the
  * pointer is what a click walks to and goes into.
  */
 function placeUnder(pois: Poi[], at: HexPos, model?: string | null): Poi | undefined {
-  if (model) return pois.find((p) => p.id === model);
-  const door = harborDoor(at);
+  // (A hut's garden is a place only once the hut stands: before, its patch of greens is scenery.)
+  if (model) return pois.find((p) => p.id === model && !(p.kind === "garden" && !p.beds));
+  const door = doorOf(at);
   if (door) return pois.find((p) => same(p.pos, door));
   const on = pois.find((p) => same(p.pos, at));
   return on && !BESIDE.has(on.id) ? on : undefined;
@@ -136,6 +142,16 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
   /** The place whose model the pointer is on, by its id: `hover` alone cannot tell a roof from the ground at its door. */
   const [hoverPlace, setHoverPlace] = useState<string | null>(null);
   const [account, setAccount] = useState(false);
+  /** The herb garden open in its panel, by its owner's id. */
+  const [gardenOf, setGardenOf] = useState<string | null>(null);
+  /** The clock the gardens grow by, moved on every few seconds: what each bed looks like is worked out from it. */
+  const [clock, setClock] = useState(() => Date.now());
+  /** How many waterings are in your watering can (null: you have none; undefined: not read yet). */
+  const [can, setCan] = useState<number | null | undefined>(undefined);
+  useEffect(() => {
+    const t = setInterval(() => setClock(Date.now()), 10_000);
+    return () => clearInterval(t);
+  }, []);
   const [tradeWith, setTradeWith] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const chatEnd = useRef<HTMLDivElement>(null);
@@ -204,6 +220,14 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
         if (owner.bin) return { ...harborPoi(`site:${owner.id}`, "site", pos, facing), fill: binFill(owner.bin) };
         return { ...harborPoi(`plot:${owner.id}`, "plot", pos, facing), tier: owner.hutTier ?? 1 };
       }),
+      // By every hut's door, in a corner of its doorstep, its herb garden: drawn as each bed has grown while the hut
+      // stands, and as a plain patch of greens before. (After the plots, so the doorstep's own place is the hut.)
+      ...HARBOR_PLOTS.map((pos, i) => {
+        const owner = board.members.find((m) => m.plot === i);
+        const tended = owner?.garden && !owner.bin;
+        const poi = harborPoi(tended ? `garden:${owner.id}` : `garden:plot${i}`, "garden", pos, gardenCorner(i));
+        return tended ? { ...poi, beds: gardenLooks(owner.garden!, gardenBeds(owner.hutTier ?? 1), clock) } : poi;
+      }),
     ];
     return {
       code: "harbor",
@@ -217,7 +241,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
       stamina: stamina ?? undefined,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [base, board, players, you, stamina, ownOutfit]);
+  }, [base, board, players, you, stamina, ownOutfit, clock]);
   const latest = useRef(scene);
   latest.current = scene;
   const heroSheet = useHeroSheet();
@@ -228,8 +252,10 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     const r = new WorldRenderer(mount.current!, {
       onHexClick: (to, place) => {
         const aimed = latest.current ? placeUnder(latest.current.map.pois, to, place) : undefined;
-        setWant(aimed ? { ...aimed.pos } : null);
-        send.current({ type: "move", to: aimed?.pos ?? harborDoor(to) ?? to });
+        // A garden is drawn in a corner of its hut's doorstep, but tended from a spot of its own beside it.
+        const at = aimed?.kind === "garden" ? GARDEN_SPOTS[plotAt(aimed.pos)] : aimed?.pos;
+        setWant(at ? { ...at } : null);
+        send.current({ type: "move", to: at ?? doorOf(to) ?? to });
       },
       onHover: setHover,
       onHoverPlace: setHoverPlace,
@@ -255,6 +281,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     setGather(null);
     for (const close of [setSheet, setBook, setShop, setNotices, setFishmonger, setWorks, setChest, setAccount]) close(false);
     setTradeWith(null);
+    setGardenOf(null);
   }, [resting]);
   // And brought back on stepping out of it, fading in over the building's last picture (render/handover.ts).
   useEffect(() => {
@@ -276,11 +303,31 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
   const myPlot = board.members.find((m) => m.id === you)?.plot ?? null;
   const gold = me.character?.gold ?? 0;
   // Pointing at the ground a building stands on is pointing at the building.
-  const hoverPoi = scene && hover ? poiAt(scene.map, harborDoor(hover) ?? hover) : undefined;
+  // (A hut's garden shares its doorstep: pointing at the garden itself is pointing at the garden.)
+  const hoverGarden = scene && hoverPlace?.startsWith("garden:") ? scene.map.pois.find((p) => p.id === hoverPlace && p.beds) : undefined;
+  const hoverPoi = hoverGarden ?? (scene && hover ? poiAt(scene.map, doorOf(hover) ?? hover) : undefined);
   // The structure the pointer is on that a click would walk to and go into: it lights up with a glowing outline,
   // and the pointer becomes a hand. (A touch screen has no pointer to hover with: there a tap is the click.)
   const aimed = scene && hover ? placeUnder(scene.map.pois, hover, hoverPlace) : undefined;
-  const lights = !!aimed && (!NO_STRUCTURE.has(aimed.kind) || (aimed.kind === "lot" && myPlot === null) || aimed.id === `site:${you}`);
+  const lights = !!aimed && ((!NO_STRUCTURE.has(aimed.kind) && !(aimed.kind === "garden" && !aimed.beds)) || (aimed.kind === "lot" && myPlot === null) || aimed.id === `site:${you}`);
+  /** The member whose garden a place is, and what grows in it. */
+  const gardenOwner = (poi: Poi | undefined) => (poi?.kind === "garden" && poi.beds ? board.members.find((m) => `garden:${m.id}` === poi.id) : undefined);
+  /** How a member's garden is coming on, in a few words: what is ready, or when the next bed will be. */
+  const gardenStatus = (owner: (typeof board.members)[number]) => {
+    const beds = owner.garden ?? [];
+    const ready = readyCount(beds, clock);
+    const next = nextReady(beds, clock);
+    const bare = gardenBeds(owner.hutTier ?? 1) - beds.length;
+    if (ready > 0) return `${ready} bed${ready === 1 ? "" : "s"} ready to pick`;
+    if (next) return `the next bed is ready in ${growText(next, clock)}${bare > 0 ? `, ${bare} bare` : ""}`;
+    return owner.id === you ? "plant its beds with herb seeds or herbs" : "nothing planted yet";
+  };
+  const gardenTip = (owner: (typeof board.members)[number]) => {
+    const thirsty = (owner.garden ?? []).some((b) => b.readyAt > clock && !b.wateredBy);
+    if (owner.id === you) return `Your herb garden: ${gardenStatus(owner)}`;
+    return `${owner.name}'s herb garden: ${thirsty ? "water a bed and they pick an extra herb" : gardenStatus(owner)}`;
+  };
+
   const visitHere = salesmanNow.here;
   const visitor = visitHere ? salesman(visitHere.salesmanId) : undefined;
   /** A release with notes this player has not read: the board wears a "!". An older server sends no seenRelease, and then there is none. */
@@ -302,9 +349,11 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     : hoverPoi.kind === "lapidary" ? "The Lapidary: lodestones cut and worked for the atlas, and gems bought"
     : hoverPoi.kind === "smithy" ? (smithyBuilt ? "The smithy: arms and armour off the rack, your own sharpened or reinforced, and a smith to haggle with" : "The smithy's building site: a crew project at the works")
     : hoverPoi.kind === "galley" ? (galleyBuilt ? "The galley: the cook is in, with nothing to sell" : "The galley's building site: a crew project at the works")
+    : hoverPoi.kind === "well" ? (can === null ? "The town well: fill a watering can here (the market stall sells them)" : "The town well: fill your watering can here")
     : hoverPoi.kind === "lot" ? (myPlot === null ? `A plot for sale: ${PLOT_PRICE} gold` : "An empty plot")
     : hoverPoi.kind === "site" ? (hoverPoi.id === `site:${you}` ? "Your plot: fill the bin and the shack goes up" : `${board.members.find((m) => `site:${m.id}` === hoverPoi.id)?.name ?? "Someone"}'s plot: building a shack`)
     : hoverPoi.kind === "plot" ? `${board.members.find((m) => `plot:${m.id}` === hoverPoi.id)?.name ?? "Someone"}'s ${hutTier(hoverPoi.tier ?? 1).name.toLowerCase()}`
+    : gardenOwner(hoverPoi) ? gardenTip(gardenOwner(hoverPoi)!)
     : null;
 
   /** The place's name alone, hung over it on a plate while it is pointed at (the tip says what it is for). */
@@ -327,9 +376,11 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     : hoverPoi.kind === "apothecary" ? "The Apothecary"
     : hoverPoi.kind === "smithy" ? "The Smithy"
     : hoverPoi.kind === "galley" ? "The Galley"
+    : hoverPoi.kind === "well" ? "The Town Well"
     : hoverPoi.kind === "lot" ? "Plot for Sale"
     : hoverPoi.kind === "site" ? (hoverPoi.id === `site:${you}` ? "Your Plot" : `${ownerOf("site")?.name ?? "Someone"}'s Plot`)
     : hoverPoi.kind === "plot" ? (hoverPoi.id === `plot:${you}` ? `Your ${hutTier(hoverPoi.tier ?? 1).name}` : `${ownerOf("plot")?.name ?? "Someone"}'s ${hutTier(hoverPoi.tier ?? 1).name}`)
+    : gardenOwner(hoverPoi) ? (hoverPoi.id === `garden:${you}` ? "Your Herb Garden" : `${gardenOwner(hoverPoi)!.name}'s Herb Garden`)
     : null;
   const invite = harbor.crew ? `${location.origin}${location.pathname}#crew/${harbor.crew.id}` : "";
   const copy = async () => {
@@ -355,8 +406,12 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     return () => window.removeEventListener(LOOK_CHANGED, onLook);
   }, []);
   const atShop = !!self && same(self.pos, HARBOR_SHOP);
+  // The spot a hut's herb garden is tended from, and whose garden it is (only once their shack stands).
+  const gardenSpot = self ? gardenSpotAt(self.pos) : -1;
+  const gardenHere = gardenSpot >= 0 ? board.members.find((m) => m.plot === gardenSpot && m.garden && !m.bin) : undefined;
   const atBoard = !!self && same(self.pos, HARBOR_BOARD);
   const atLapidary = !!self && same(self.pos, HARBOR_LAPIDARY);
+  const atWell = !!self && same(self.pos, HARBOR_WELL);
   const atChest = !!self && same(self.pos, HARBOR_CHEST);
   const atWaygate = !!self && same(self.pos, HARBOR_WAYGATE);
   // Where the waygate would take you without the atlas: the map a crewmate is out on, or the one you last walked off.
@@ -460,6 +515,19 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
       say_((e as Error).message);
     }
   };
+  // Your watering can, for the well: read on the way in, and again on walking up to the well.
+  useEffect(() => {
+    api.can().then((r) => setCan(r.water), () => undefined);
+  }, [atWell, gardenOf]);
+  const fillCan = async () => {
+    try {
+      const res = await api.fillCan();
+      setCan(res.water);
+      say_("You lower the bucket and fill your watering can to the brim.");
+    } catch (e) {
+      say_((e as Error).message);
+    }
+  };
   // The bin on your own plot, while the shack is still to go up, and what you hold that could go in it.
   const myBin = hutOwner?.id === you ? hutOwner.bin : undefined;
   const [held, setHeld] = useState<Resources | null>(null);
@@ -516,11 +584,23 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
         enter: () => (location.hash = openMap ? `zone/${openMap.code}` : "atlas"),
         also: outThere || openMap ? { label: "Open the atlas", run: () => (location.hash = "atlas") } : lastMap ? { label: "Step back through", run: () => (location.hash = `zone/${lastMap}`) } : undefined,
       }
+    : atWell ? {
+        title: <>The town well <span className="muted">· {can === null ? "the market stall sells watering cans" : can === undefined ? "cold, clear water" : `your watering can: ${can} of ${CAN_CAPACITY}`}</span></>,
+        label: can === null ? "No watering can to fill" : can === CAN_CAPACITY ? "Your can is full" : "Fill your watering can",
+        run: () => void fillCan(),
+        closed: can === null || can === CAN_CAPACITY,
+      }
     : atChest ? { title: <>The town chest <span className="muted">· the crew's shared store, in tabs: gear, materials, lodestones</span></>, label: "Open the town chest", run: () => setChest(true) }
     // The Lapidary was never a building site: it is open from a crew's first day, for nobody goes out without a lodestone.
     : atLapidary ? { title: <>The Lapidary <span className="muted">· lodestones for the atlas are cut and worked here, and gems bought</span></>, label: "Go in", run: () => goInside(`${HARBOR_LAPIDARY.q},${HARBOR_LAPIDARY.r}`, "lapidary") }
     : atCave ? { title: <>The Haunted Caverns <span className="muted">· something lurks in the dark</span></>, label: "Go down", run: goDown }
     : atShop ? { title: "The market stall", label: "Browse the wares", run: () => setShop(true) }
+    // Beside a hut's herb garden (once its shack stands): the camera goes down over the beds.
+    : gardenHere ? {
+        title: <>{gardenHere.id === you ? "Your herb garden" : `${gardenHere.name}'s herb garden`} <span className="muted">· {gardenStatus(gardenHere)}</span></>,
+        label: gardenHere.id === you ? "Tend the garden" : gardenHere.garden!.some((b) => b.readyAt > clock && !b.wateredBy) ? "Water the garden" : "Look over the garden",
+        run: () => setGardenOf(gardenHere.id),
+      }
     : atRing ? shut(<>The sparring ring <span className="muted">· being rebuilt for a new way of fighting. Coming soon.</span></>)
     : gatherHere ? {
         title: gatherHere === "fishing" && pierHere ? FISH_SPOTS[pierHere].name : GATHER_SPOTS[gatherHere].name,
@@ -587,7 +667,20 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     : null;
   hereNow.current = here;
   // Anything laid over the Harbor takes the floating button away.
-  const panelOpen = sheet || book || shop || notices || !!gather || fishmonger || works || account || !!tradeWith;
+  const panelOpen = sheet || book || shop || notices || !!gather || fishmonger || works || account || !!tradeWith || !!gardenOf;
+  // Over your own garden, how its next bed is coming on; over a crewmate's near you, a drop while it wants water.
+  const gardenMarks: GardenMarkInfo[] = [];
+  for (const m of board.members) {
+    if (!m.garden || m.bin || m.plot == null) continue;
+    const growing = m.garden.filter((b: GardenBed) => b.readyAt > clock);
+    const ready = m.garden.length - growing.length;
+    const soonest = growing.sort((a, b) => a.readyAt - b.readyAt)[0];
+    if (m.id === you) {
+      if (m.garden.length > 0) gardenMarks.push({ poiId: `garden:${m.id}`, kind: "mine", ready, next: soonest ? { at: soonest.readyAt, p: bedProgress(soonest, clock) } : undefined });
+    } else if (self && growing.some((b) => !b.wateredBy) && hexDistance(self.pos, HARBOR_PLOTS[m.plot]) <= 5) {
+      gardenMarks.push({ poiId: `garden:${m.id}`, kind: "thirsty", ready });
+    }
+  }
   // Nothing lights up behind a window, or while a gathering outing has the view.
   const glowId = lights && !panelOpen ? aimed.id : null;
   useEffect(() => {
@@ -681,6 +774,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
 
       {/* A place gone into by clicking it has no button over the hero: only what must be pressed (`press`) keeps one. */}
       {here?.press && !here.closed && self && !panelOpen && <TileAction renderer={renderer} pos={self.pos} unitId={self.id} label={here.label} run={here.run} />}
+      {!panelOpen && <GardenMarks renderer={renderer} marks={gardenMarks} now={clock} />}
       {tip && <div className="tip">{tip}</div>}
       {title && hoverPoi && !panelOpen && <PlaceTitle renderer={renderer} poiId={hoverPoi.id} title={title} />}
       {error && <div className="toast">{error}</div>}
@@ -694,6 +788,23 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
       {chest && me.character && <TownChest me={me} refresh={refresh} onClose={() => setChest(false)} />}
       {gather && me.character && <GatherPanel spot={gather} onRod={(on) => harbor.send({ type: "fishing", on })} pier={pierHere ?? undefined} at={self?.pos} vessel={self?.vessel ?? null} gilded={me.character?.title === BOOK_TITLE} renderer={renderer} onClose={() => setGather(null)} onStamina={setStamina} onPaid={() => void refresh()} />}
       {fishmonger && me.character && <CatchPanel buyer="market" onGold={() => void refresh()} onClose={() => setFishmonger(false)} />}
+      {gardenOf && me.character && you && renderer.current && (() => {
+        const owner = board.members.find((m) => m.id === gardenOf);
+        if (owner?.plot == null) return null;
+        return (
+          <Garden
+            world={renderer.current}
+            owner={gardenOf}
+            ownerName={owner.name}
+            you={you}
+            door={HARBOR_PLOTS[owner.plot]}
+            beds={gardenBeds(owner.hutTier ?? 1)}
+            live={owner.garden}
+            onClose={() => setGardenOf(null)}
+            onPicked={() => void refresh()}
+          />
+        );
+      })()}
       {shop && me.character && <ShopScreen me={me} refresh={refreshAll} onClose={() => setShop(false)} />}
       {me.character && <Trading me={me} partners={board.members.filter((m) => m.id !== you)} withId={tradeWith} onWith={setTradeWith} refresh={refresh} nudge={harbor.trades} />}
       {heroSheet.open && you && <HeroSheet id={heroSheet.open} you={you} onClose={heroSheet.close} logbook={me.character ? { hero: me.character, open: () => { heroSheet.close(); setBook(true); } } : undefined} />}

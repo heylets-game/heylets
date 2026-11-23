@@ -13,6 +13,7 @@ import type { ItemDef } from "./gear";
 import type { Stats } from "@gantt-quest/core";
 import type { HarborWorks } from "./projects";
 import type { Muster } from "./muster";
+import type { GardenBed } from "./garden";
 import { findPath, tileAt, type Biome, type Poi, type PoiKind, type Tile, type WorldMap } from "./map";
 
 /** What the crew's home port is called, wherever its name is shown. */
@@ -118,6 +119,20 @@ export const HARBOR_PLOTS: HexPos[] = [
 ];
 /** Which way each hut plot faces (see `footing`), so its hut fronts the path it stands on. */
 export const HARBOR_PLOT_FACING: number[] = [5, 3, 3, 5, 2, 0, 4, 2, 3, 2, 3, 0];
+/**
+ * Where a hero stands to tend each plot's herb garden (garden.ts): the hex beside it, on the far side of the
+ * garden's corner of the doorstep from the door, so the garden is a place of its own and the doorstep means only
+ * the hut. Grass where there is some; else the road that runs past.
+ */
+export const HARBOR_GARDEN_SPOTS: HexPos[] = [
+  { q: 20, r: 16 }, { q: 23, r: 15 }, { q: 21, r: 16 }, { q: 22, r: 14 }, { q: 24, r: 12 }, { q: 24, r: 15 },
+  { q: 22, r: 19 }, { q: 24, r: 17 }, { q: 27, r: 15 }, { q: 26, r: 11 }, { q: 29, r: 14 }, { q: 27, r: 13 },
+];
+/** The town well, on the green: a round wall of stone under a little roof, filling its hex (a piece of the town's dressing, not a building). */
+export const HARBOR_WELL_AT = at(16, 13);
+const WELL_AT = HARBOR_WELL_AT;
+/** Where a hero stands to draw water from the well (and fill a watering can): the hex down and to the left of it. */
+export const HARBOR_WELL: HexPos = { q: WELL_AT.q - 1, r: WELL_AT.r + 1 };
 /** The plank bridge from the east end of the High Street over to the housing island, the town's end first. */
 export const HARBOR_BRIDGE: HexPos[] = [at(24, 16), at(25, 16), at(26, 16)];
 /** The middle of the housing island, and how far out its shore lies, in hex widths. */
@@ -320,7 +335,7 @@ export const HARBOR_BOATS: { at: HexPos; turn: number }[] = [
  */
 export type DecorKind =
   | "lamp" | "pillar" | "pillar_broken" | "stump" | "brazier" | "planter" | "bench" | "crates" | "barrels" | "nets" | "bollard"
-  | "banner" | "milestone" | "rack" | "cairn" | "railpost" | "garden" | "mast" | "well" | "statue" | "crane";
+  | "banner" | "milestone" | "rack" | "cairn" | "railpost" | "mast" | "well" | "statue" | "crane";
 export interface HarborDecor {
   kind: DecorKind;
   at: HexPos;
@@ -346,7 +361,7 @@ export const HARBOR_DECOR: HarborDecor[] = [
   { kind: "milestone", at: at(5, 16), corner: 3 }, { kind: "milestone", at: at(22, 16), corner: 3 },
   { kind: "barrels", at: at(21, 12), corner: 2 },
   // The green: the town well, and one bench.
-  { kind: "well", at: at(16, 13) },
+  { kind: "well", at: WELL_AT },
   { kind: "bench", at: at(12, 20), corner: 0 },
   // The quay: the crane on its mole with one lot of cargo waiting by it, mooring posts along the water, the
   // harbour's signal mast at the foot of the middle pier, and the fishers' drying rack by their shack. Nothing else.
@@ -365,11 +380,10 @@ export const HARBOR_DECOR: HarborDecor[] = [
   // The bridge: a post with a rope rail at every point of its planking on both sides, and a lamp at each end.
   ...HARBOR_BRIDGE.flatMap((p): HarborDecor[] => [{ kind: "railpost", at: p, corner: 0 }, { kind: "railpost", at: p, corner: 3 }]),
   ...lamps([23, 16, 0], [27, 16, 3]),
-  // The housing island: a lamp where its paths meet, a bench on the green in the middle, and by every hut's door a
-  // patch of garden of its own behind a few pickets.
+  // The housing island: a lamp where its paths meet, and a bench on the green in the middle. (By every hut's door
+  // there is a patch of garden of its own behind a few pickets: that is a place, the hut's herb garden, garden.ts.)
   ...lamps([29, 15, 0]),
   { kind: "bench", at: at(31, 15), corner: 0 },
-  ...HARBOR_PLOTS.map((p, i): HarborDecor => ({ kind: "garden", at: p, corner: (HARBOR_PLOT_FACING[i] + 4) % 6, turn: 2 })),
 ];
 /** The hexes the big pieces of the town's dressing stand on: nobody walks through them. */
 export const HARBOR_FIXTURES: HexPos[] = HARBOR_DECOR.filter((d) => d.corner === undefined && FIXTURE_KINDS.has(d.kind)).map((d) => d.at);
@@ -493,7 +507,13 @@ export function generateHarbor(): WorldMap {
       if (t) t.built = true;
     }
   }
-  // The piers: planking from each pier head back to the shore.
+  // Round every hut's doorstep the grass is kept short: nothing tall grows up in front of the herb garden in the
+  // corner of the doorstep, or where its owner stands to tend it.
+  for (const p of [...HARBOR_PLOTS, ...HARBOR_GARDEN_SPOTS].flatMap((p) => [p, ...around(p)])) {
+    const t = tileAt(map, p);
+    if (t?.biome === "plains" && !t.grass) t.grass = "short";
+  }
+    // The piers: planking from each pier head back to the shore.
   for (const head of HARBOR_PIERS) {
     let p = head;
     for (let i = 0; i < 6 && tileAt(map, p)?.biome === "water"; i++) {
@@ -530,6 +550,7 @@ export function generateHarbor(): WorldMap {
     harborPoi("lapidary", "lapidary", HARBOR_LAPIDARY),
     harborPoi("townchest", "townchest", HARBOR_CHEST),
     harborPoi("waygate", "waygate", HARBOR_WAYGATE),
+    harborPoi("well", "well", HARBOR_WELL),
     harborPoi("fishing", "fishing", HARBOR_GATHER.fishing),
     harborPoi("felling", "felling", HARBOR_GATHER.felling),
     harborPoi("quarry", "quarry", HARBOR_GATHER.quarry),
@@ -741,6 +762,8 @@ export interface HarborMember {
   bin?: Resources;
   /** Out on a zone right now: which one, and whether they are in a fight there (nobody can teleport into one). */
   zone?: { code: string; fighting: boolean };
+  /** What is growing in the herb garden by their hut's door, a bed at a time (empty beds left out). Absent until the shack stands. */
+  garden?: GardenBed[];
 }
 
 /** A map the crew has open out through the waygate: its code, the atlas node it was made for, and what the place is called. */

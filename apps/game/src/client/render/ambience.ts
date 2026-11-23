@@ -372,6 +372,8 @@ export function tallGrass(t: Tile, x: number, z: number): boolean {
   if (t.biome !== "plains" || t.path) return false;
   // Set down as tall grass, whatever the swells say (the Harbor's oak hill).
   if (t.grass === "tall") return true;
+  // Kept short (round a hut's door).
+  if (t.grass === "short") return false;
   if (meadowAt(x, z) || dryPatch(t, x, z) >= 0) return false;
   return Math.sin(x * 0.29 + 0.4) * Math.sin(z * 0.35 + 5.1) + 0.6 * Math.sin((x * 0.6 - z) * 0.21 + 3.3) + 0.3 * Math.sin(x * 0.77 + z * 0.49 + 0.6) > 0.3;
 }
@@ -1406,7 +1408,8 @@ export class Ambience {
       // The fringe: short blades rooted all along the ragged edge, just behind the ridge, standing up and leaning a
       // little away from the path, so the grass crowds the edge without the wind laying it over the dirt. None at
       // a strip's end, where it runs on into the next hex.
-      for (let k = 0; k < 72; k++) {
+      // (None on a lawn kept short, round a hut's door: it would stand up through the herb garden there.)
+      for (let k = 0; k < (t.grass === "short" ? 0 : 72); k++) {
         const a = ((k + hash(t.q, t.r, 300 + k) * 0.8) / 72) * Math.PI * 2;
         if (atEnd(a)) continue;
         const edge = point(a, 1);

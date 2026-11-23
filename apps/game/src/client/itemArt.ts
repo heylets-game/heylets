@@ -595,6 +595,41 @@ const ART: Record<string, Art> = {
     p.r(7, 0, 2, 2, C.paper);
     p.r(6, 11, 4, 2, C.leather);
   },
+  "watering-can": (p) => {
+    // A tin watering can: a round body, a handle over the top, and a long spout out to a rose.
+    spans(p, "#8fa3ad", [[7, 6, 12], [8, 5, 13], [9, 5, 13], [10, 5, 13], [11, 5, 13], [12, 5, 13], [13, 6, 12]]);
+    spans(p, "#c3d2d9", [[8, 6, 7], [9, 6, 6], [10, 6, 6]]);
+    spans(p, "#6f828b", [[13, 6, 12], [12, 12, 13], [11, 13, 13]]);
+    p.r(7, 3, 5, 1, "#6f828b");
+    p.r(7, 3, 1, 4, "#6f828b");
+    p.r(11, 3, 1, 4, "#6f828b");
+    p.l(4, 11, 1, 6, "#8fa3ad");
+    p.l(4, 12, 1, 7, "#6f828b");
+    p.r(0, 4, 2, 3, "#c3d2d9");
+    p.r(7, 9, 4, 1, p.accent);
+  },
+  "res-seeds": (p) => {
+    // A paper packet of herb seed, its top folded over, a sprout drawn on the front and a few seeds spilt.
+    p.r(3, 2, 10, 12, C.paper);
+    p.r(3, 2, 10, 2, "#d9c7a0");
+    p.r(3, 4, 10, 1, "#b89a64");
+    p.r(4, 6, 8, 6, "#efe3c4");
+    p.l(8, 11, 8, 7, "#3d6b2c");
+    spans(p, "#6fae4a", [[7, 5, 7], [8, 4, 7], [7, 9, 11], [8, 9, 12]]);
+    p.r(7, 6, 2, 1, "#c9a3e6");
+    p.r(4, 13, 8, 1, "#b89a64");
+    for (const [x, y] of [[12, 14], [14, 13], [13, 15]]) p.r(x, y, 1, 1, "#c8a25a");
+  },
+  "res-bonemeal": (p) => {
+    // A clay bowl heaped with white bonemeal, a knuckle of bone not yet ground sticking out of it.
+    spans(p, C.bone, [[6, 6, 9], [7, 4, 11], [8, 3, 12], [9, 2, 13]]);
+    spans(p, C.shine, [[6, 7, 8], [7, 5, 7]]);
+    p.r(10, 3, 3, 3, C.bone);
+    p.r(11, 2, 2, 2, C.bone);
+    spans(p, "#b8693a", [[10, 1, 14], [11, 2, 13], [12, 2, 13], [13, 3, 12], [14, 5, 10]]);
+    spans(p, "#8a4a26", [[12, 2, 3], [13, 3, 4], [14, 5, 6]]);
+    p.r(3, 11, 10, 1, "#d98a52");
+  },
   "res-mushrooms": (p) => {
     // Two caps on pale stems, the near one larger.
     const shroom = (x: number, y: number, w: number) => {

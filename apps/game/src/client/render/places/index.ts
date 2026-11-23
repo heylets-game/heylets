@@ -14,6 +14,7 @@
 import type { PoiKind } from "@gantt-quest/world";
 import { landing, cache, gate, cave, crate, glowcap } from "./maps";
 import { lot, site, plot } from "./huts";
+import { garden } from "./garden";
 import { pub, shop, lapidary } from "./harborTown";
 import { works, waygate, townchest, board } from "./harborSquare";
 import { workshop } from "./workshops";
@@ -32,6 +33,7 @@ export const PLACE_MODELS: PlaceModels = new Map<PoiKind, PlaceModel>([
   ["lot", lot],
   ["site", site],
   ["plot", plot],
+  ["garden", garden],
   ["pub", pub],
   ["shop", shop],
   ["lapidary", lapidary],
