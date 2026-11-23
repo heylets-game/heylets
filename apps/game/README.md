@@ -83,12 +83,13 @@ A tab left open on an older build is told when a newer one is out (`src/client/N
 | `…/hut.ts`, `…/hutroom.ts` | Hut materials, furnishings and tiers; the walk-in room, placement and its message types |
 | `…/drops.ts` | What a searched cache gives for the hut |
 | `…/gather.ts` | Fishing, felling and the quarry: outings, timing, payouts, stamina and resting |
-| `…/fishing.ts`, `fishfight.ts`, `sitting.ts`, `fishcatalog.ts`, `fishmarket.ts`, `catchbook.ts` | Fishing: a sitting at a pier, the fight with one fish, the catalogue of what can be caught, selling it, and the Catch Book |
+| `…/fishing.ts`, `fishingholes.ts`, `fishfight.ts`, `sitting.ts`, `fishcatalog.ts`, `fishmarket.ts`, `catchbook.ts` | Fishing: a sitting anywhere along the shore or afloat, the crew's fishing holes (where the fish are, by the clock and the weather), the fight with one fish, the catalogue of what can be caught, selling it, and the Catch Book |
 | `…/felling.ts`, `mine.ts` | Felling's two rounds, and the quarry's rock face |
 | `…/timing.ts` | The timed stop used on the splitting block (and by the older gathering outings): markers, grades and how a stat eases them |
 | `…/projects.ts` | Crew projects |
 | `…/pub.ts`, `regulars.ts`, `salesman.ts` | The pub's room and its menu of meals; its regulars and their errands; the traveling salesmen |
 | `…/keepers.ts`, `apothecary.ts`, `smithy.ts`, `galley.ts` | The rooms you walk into with a keeper inside (smithy, apothecary, galley, Lapidary), their keepers, stock and haggling |
+| `…/gameclock.ts` | The Harbor's clock and weather, from the wall clock alone, so every browser and the server agree |
 | `…/dice.ts`, `shoals.ts`, `tide.ts`, `crew.ts`, `stakes.ts` | The pub's table games, each a pure reducer with a per-player view, and the stake they are played for |
 | `…/trade.ts` | Offers between crewmates and their validation |
 | `apps/game/src/releases.ts`, `scripts/release-notes.ts` | Release notes on the Harbor's notice board, read out of git at build time |

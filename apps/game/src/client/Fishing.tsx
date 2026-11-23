@@ -12,7 +12,14 @@ import {
   FISH_SPOTS,
   FURNISHINGS,
   PAGE_REWARD,
+  HARBOR_GATHER,
+  HARBOR_SIDES,
   HARBOR_SPAWN,
+  generateHarbor,
+  holeFishNames,
+  HOLE_NAMES,
+  tileAt,
+  type FishingHole,
   formatLength,
   formatLoad,
   formatWeight,
@@ -30,10 +37,33 @@ import { outingPaid } from "./gatherPaid";
 import { catchIcon } from "./render/catchArt";
 import { FishingStage, type FishHooks, type FishPhase } from "./render/FishingStage";
 import { hexToWorld, type WorldRenderer } from "./render/WorldRenderer";
-import { StaminaBolts } from "./StaminaBolts";
 import { units } from "./units";
 import "./quarry.css";
 import "./fishing.css";
+
+const HARBOR = generateHarbor();
+
+/**
+ * Which way to look out over the water from `here`: at the hole beside them if there is one (`toward`); else out
+ * over the water beside them, ashore; else (afloat, or nothing beside) away from the middle of the town.
+ */
+function seawardFrom(here: HexPos, toward?: HexPos): THREE.Vector3 {
+  const at = hexToWorld(here);
+  const dir = (p: HexPos) => {
+    const w = hexToWorld(p);
+    return new THREE.Vector3(w.x - at.x, 0, w.z - at.z);
+  };
+  if (toward && (toward.q !== here.q || toward.r !== here.r)) return dir(toward).normalize();
+  if (tileAt(HARBOR, here)?.biome !== "water") {
+    const sum = new THREE.Vector3();
+    for (const d of HARBOR_SIDES) {
+      const p = { q: here.q + d.q, r: here.r + d.r };
+      if (tileAt(HARBOR, p)?.biome === "water") sum.add(dir(p).normalize());
+    }
+    if (sum.lengthSq() > 0.01) return sum.normalize();
+  }
+  return dir(HARBOR_SPAWN).negate().normalize();
+}
 
 type Status = GatherStatus & { paid?: Resources; xp?: XpResult; sitting?: SittingPaid };
 /** Where the hero fishes from: the spot, and the hex they stand (or float) on. */
@@ -111,8 +141,9 @@ function Summary({ view, paid, xp, sitting }: { view: GatherView; paid?: Resourc
 }
 
 /** The card at a pier: how fishing works and the way in, or what the last sitting brought home. */
-function FishingIntro({ pier, status, ended, busy, error, onStart, onClose }: {
+function FishingIntro({ pier, hole, status, ended, busy, error, onStart, onClose }: {
   pier: Pier;
+  hole?: FishingHole;
   status: Status | null;
   ended: Status | null;
   busy: boolean;
@@ -121,15 +152,14 @@ function FishingIntro({ pier, status, ended, busy, error, onStart, onClose }: {
   onClose(): void;
 }) {
   const spot = FISH_SPOTS[pier];
-  const left = status?.stamina.left ?? 0;
   return (
     <div className="overlay quarry-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="quarry-intro fish-intro" role="dialog" aria-label={spot.name}>
         <SeaArt />
         <button className="qa-close small" onClick={onClose} aria-label="Close">✕</button>
         <div className="qa-head">
-          <h2>{spot.name}</h2>
-          <span className="qa-sub">{WATER_WORDS[spot.water]}</span>
+          <h2>{hole ? `${HOLE_NAMES[hole.kind]} ${hole.where}` : spot.name}</h2>
+          <span className="qa-sub">{hole ? `Biting here: ${holeFishNames(hole, 3)}` : WATER_WORDS[spot.water]}</span>
         </div>
         {ended?.outing?.sitting ? (
           <Summary view={ended.outing} paid={ended.paid} xp={ended.xp} sitting={ended.sitting} />
@@ -143,18 +173,13 @@ function FishingIntro({ pier, status, ended, busy, error, onStart, onClose }: {
         )}
         {error && <p className="bad qa-error">{error}</p>}
         <div className="qa-foot">
-          {status && (
-            <span className="qa-stamina" title={`${left} of ${status.stamina.max} outings left today`}>
-              <StaminaBolts left={left} max={status.stamina.max} size={18} />
-            </span>
-          )}
+          <span className="qa-cost">Fishing costs no stamina</span>
           <span className="spacer" />
-          {status && left > 0 && (
+          {status && (
             <button className="primary" disabled={busy} onClick={onStart} autoFocus>
-              {ended ? "Fish again" : "Cast a line"}<span className="qa-cost">· 1 stamina when you stop</span>
+              {ended ? "Fish again" : "Cast a line"}
             </button>
           )}
-          {status && left === 0 && <span className="bad qa-tired">Worn out for today. A rest or a meal gives stamina back.</span>}
         </div>
       </div>
     </div>
@@ -162,10 +187,12 @@ function FishingIntro({ pier, status, ended, busy, error, onStart, onClose }: {
 }
 
 /** The HUD over a sitting under way. */
-function Sitting({ outing, world, pier, at: here, vessel, gilded, apply, onRod, onClose }: {
+function Sitting({ outing, world, pier, at: here, hole, vessel, gilded, apply, onRod, onClose }: {
   outing: GatherView;
   gilded: boolean;
   at: HexPos;
+  /** The hole beside them, if they are fishing at one: they face it. */
+  hole?: FishingHole;
   vessel: Vessel | null;
   onRod?(on: boolean): void;
   world: WorldRenderer;
@@ -209,9 +236,7 @@ function Sitting({ outing, world, pier, at: here, vessel, gilded, apply, onRod, 
   };
 
   useEffect(() => {
-    const at = hexToWorld(here);
-    const town = hexToWorld(HARBOR_SPAWN);
-    const seaward = new THREE.Vector3(at.x - town.x, 0, at.z - town.z).normalize();
+    const seaward = seawardFrom(here, hole?.pos);
     const hooks: FishHooks = {
       phase: setPhase,
       hud: (h) => {
@@ -296,7 +321,7 @@ function Sitting({ outing, world, pier, at: here, vessel, gilded, apply, onRod, 
     };
     // Afloat, in whatever boat the hero has; ashore, on the pier.
     const boat = FISH_SPOTS[pier].vessel ? vessel ?? FISH_SPOTS[pier].vessel! : null;
-    const s = world.startMinigame((g) => new FishingStage(world, g, pier, seaward, hooks, boat, gilded), here, pier === "shore" ? "fishing" : undefined);
+    const s = world.startMinigame((g) => new FishingStage(world, g, pier, seaward, hooks, boat, gilded), here, here.q === HARBOR_GATHER.fishing.q && here.r === HARBOR_GATHER.fishing.r ? "fishing" : undefined);
     s.ease = sitting.ease;
     stage.current = s;
     document.body.classList.add("fishing");
@@ -368,7 +393,10 @@ function Sitting({ outing, world, pier, at: here, vessel, gilded, apply, onRod, 
   const live = view.sitting!;
   const fighting = phase === "fighting" || phase === "landing";
   const def = pending ? FISH[pending.species] : null;
-  const fills = pending && def?.kind !== "haul" ? live.creelGrams + pending.grams >= live.creelLimitG : false;
+  // The one that fills the basket goes in; once it is full, what more is kept is sold on the quay for less.
+  const full = live.creelGrams >= live.creelLimitG;
+  const fills = pending && def?.kind !== "haul" && !full ? live.creelGrams + pending.grams >= live.creelLimitG : false;
+  const overflow = !!pending && full;
   const prompt =
     phase === "idle" ? "Hold to wind up a cast, let go to throw"
     : phase === "charging" ? "Let go to cast"
@@ -450,7 +478,8 @@ function Sitting({ outing, world, pier, at: here, vessel, gilded, apply, onRod, 
             {def.kind !== "haul" && <span> · {formatLength(pending.mm, u)}</span>}
           </p>
           <p className="muted fish-blurb">{def.blurb}</p>
-          {fills && <p className="fish-fill">That fills your basket. You will head home with it.</p>}
+          {fills && <p className="fish-fill">That fills your basket. Keep fishing: anything more is sold on the quay at half price.</p>}
+          {overflow && <p className="fish-fill">Your basket is full. Keep this one and it is sold on the quay at half price.</p>}
           <div className="row">
             <button className="primary" disabled={busy} onClick={() => void putAway("keep")} autoFocus>{def.kind === "haul" ? "Keep it" : "Into the basket"}</button>
             <button disabled={busy} onClick={() => void putAway("release")}>{def.kind === "haul" ? "Toss it back" : "Throw it back"}</button>
@@ -481,9 +510,11 @@ function Sitting({ outing, world, pier, at: here, vessel, gilded, apply, onRod, 
 }
 
 /** Fishing at a pier or the shore: the card, or the sitting under way. */
-export function Fishing({ pier, at, vessel = null, gilded = false, world, onRod, onClose, onStamina, onPaid }: {
+export function Fishing({ pier, at, hole, vessel = null, gilded = false, world, onRod, onClose, onStamina, onPaid }: {
   pier: Pier;
   at: HexPos;
+  /** The hole beside them, if they are fishing at one. */
+  hole?: FishingHole;
   vessel?: Vessel | null;
   gilded?: boolean;
   world: WorldRenderer;
@@ -546,6 +577,6 @@ export function Fishing({ pier, at, vessel = null, gilded = false, world, onRod,
     if (active && !playing) setPlaying(active);
   }, [active, playing]);
   const shown = playing ?? active;
-  if (shown) return <Sitting outing={shown} world={world} pier={pier} at={at} vessel={vessel} gilded={gilded} apply={apply} onRod={onRod} onClose={onClose} />;
-  return <FishingIntro pier={pier} status={status} ended={ended} busy={busy} error={error} onStart={() => void start()} onClose={onClose} />;
+  if (shown) return <Sitting outing={shown} world={world} pier={pier} at={at} hole={hole} vessel={vessel} gilded={gilded} apply={apply} onRod={onRod} onClose={onClose} />;
+  return <FishingIntro pier={pier} hole={hole} status={status} ended={ended} busy={busy} error={error} onStart={() => void start()} onClose={onClose} />;
 }

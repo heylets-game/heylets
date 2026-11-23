@@ -4,7 +4,7 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { HexPos } from "@gantt-quest/core";
-import { GATHER_SPOTS, HARBOR_FISH_SPOTS, TIMING, STAT_LABEL, type ShoreSpot, type Vessel, type FishSpot, type GatherChoice, type GatherSpot, type GatherView, type Resources } from "@gantt-quest/world";
+import { GATHER_SPOTS, HARBOR_FISH_SPOTS, TIMING, STAT_LABEL, type ShoreSpot, type Vessel, type FishSpot, type FishingHole, type GatherChoice, type GatherSpot, type GatherView, type Resources } from "@gantt-quest/world";
 import { api, type GatherStatus, type XpResult } from "./api";
 import { DragPanel } from "./DragPanel";
 import { FellingGame } from "./FellingGame";
@@ -60,11 +60,13 @@ function Water({ outing, busy, cast }: { outing: GatherView; busy: boolean; cast
   );
 }
 
-export function GatherPanel({ spot, pier, at, vessel = null, gilded = false, onRod, renderer, onClose, onStamina, onPaid }: {
+export function GatherPanel({ spot, pier, at, hole, vessel = null, gilded = false, onRod, renderer, onClose, onStamina, onPaid }: {
   spot: GatherSpot;
   /** Fishing: where the hero is fishing from (a pier, the shore, or afloat), and the hex they are on. */
   pier?: FishSpot;
   at?: HexPos;
+  /** Fishing at one of the crew's holes: which, to face it and name it. */
+  hole?: FishingHole;
   /** The best boat the hero owns. */
   vessel?: Vessel | null;
   /** The Catch Book is full: the rod is gilded. */
@@ -89,6 +91,7 @@ export function GatherPanel({ spot, pier, at, vessel = null, gilded = false, onR
   };
   const [atPier] = useState(pier);
   const [atHex] = useState(at);
+  const [atHole] = useState(hole);
   const [paid, setPaid] = useState<Resources | null>(null);
   /** What the outing just ended paid in XP. */
   const [xp, setXp] = useState<XpResult | null>(null);
@@ -157,7 +160,7 @@ export function GatherPanel({ spot, pier, at, vessel = null, gilded = false, onR
     : null;
   if (spot === "fishing" && from && renderer.current) {
     if (!status && !error) return null;
-    if (!open || open.sitting) return <Fishing pier={from.spot} at={from.at} vessel={vessel} gilded={gilded} world={renderer.current} onRod={onRod} onClose={onClose} onStamina={onStamina} onPaid={onPaid} />;
+    if (!open || open.sitting) return <Fishing pier={from.spot} at={from.at} hole={from.at === atHex ? atHole : undefined} vessel={vessel} gilded={gilded} world={renderer.current} onRod={onRod} onClose={onClose} onStamina={onStamina} onPaid={onPaid} />;
   }
   // Felling is played in the Harbor itself, through the hero's eyes: no panel over it.
   if (outing?.felling && outing.spot === spot) {

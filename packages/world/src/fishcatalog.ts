@@ -56,8 +56,10 @@ export interface FishDef {
   /** Body, belly and accent colours. */
   palette: string[];
   pattern?: "stripes" | "spots" | "bars" | "glow";
-  /** Reserved: bites only at night, once the server keeps a clock for it. */
+  /** Bites only at night on the Harbor's clock (gameclock.ts). */
   night?: boolean;
+  /** Bites only in a storm. */
+  storm?: boolean;
 }
 
 type Entry = Omit<FishDef, "id">;
@@ -74,7 +76,7 @@ export const FISH: Record<string, FishDef> = Object.fromEntries(
     mullet: fish({ name: "Striped Mullet", blurb: "Jumps for no reason anyone has worked out.", kind: "fish", page: "shallows", water: ["shallows"], rarity: "uncommon", lengthCm: [30, 70], weightKg: [0.4, 4], style: "leaper", pricePerKg: 5, kitchen: true, shape: "torpedo", palette: ["#7d8c96", "#e4e8ea", "#3e4a52"], pattern: "stripes" }),
     glass_eel: fish({ name: "Glass Eel", blurb: "You can see its heart beating, and it can see yours.", kind: "fish", page: "shallows", water: ["shallows"], rarity: "uncommon", lengthCm: [30, 90], weightKg: [0.1, 1.5], style: "thrasher", pricePerKg: 9, shape: "eel", palette: ["#cfe6e8", "#f6fbfb", "#8ab8bd"] }),
     reed_barracuda: fish({ name: "Reed Barracuda", blurb: "Waits in the weed with its mouth open. A lot of teeth for a fish this thin.", kind: "fish", page: "shallows", water: ["shallows"], rarity: "uncommon", lengthCm: [50, 120], weightKg: [0.8, 9], style: "darter", pricePerKg: 5, shape: "pike", palette: ["#6b7f5a", "#dfe6cf", "#2f3a26"], pattern: "bars" }),
-    lantern_sole: fish({ name: "Lantern Sole", blurb: "A flatfish with a faint glow along its fins. Fishermen say it is lit from inside.", kind: "fish", page: "shallows", water: ["shallows"], rarity: "rare", lengthCm: [25, 60], weightKg: [0.3, 3], style: "plodder", pricePerKg: 18, shape: "flat", palette: ["#6e6a8a", "#f2efd8", "#ffe78a"], pattern: "glow" }),
+    lantern_sole: fish({ name: "Lantern Sole", blurb: "A flatfish with a faint glow along its fins. Fishermen say it is lit from inside.", kind: "fish", page: "shallows", water: ["shallows"], rarity: "rare", lengthCm: [25, 60], weightKg: [0.3, 3], style: "plodder", pricePerKg: 18, shape: "flat", palette: ["#6e6a8a", "#f2efd8", "#ffe78a"], pattern: "glow", night: true }),
     spotted_ray: fish({ name: "Spotted Ray", blurb: "Lies flat on the sand and then, suddenly, does not.", kind: "fish", page: "shallows", water: ["shallows"], rarity: "rare", lengthCm: [50, 140], weightKg: [3, 25], style: "diver", pricePerKg: 4, shape: "ray", palette: ["#8a7a62", "#e8e0d0", "#3b3226"], pattern: "spots" }),
     old_whiskers: fish({ name: "Old Whiskers", blurb: "The harbor wels. Older than the pier, and it knows where every post is.", kind: "fish", page: "shallows", water: ["shallows"], rarity: "legendary", lengthCm: [150, 260], weightKg: [40, 120], style: "diver", pricePerKg: 2.5, shape: "wels", palette: ["#4a4636", "#b8ab88", "#22201a"], pattern: "spots" }),
 
@@ -113,7 +115,7 @@ export const FISH: Record<string, FishDef> = Object.fromEntries(
     bluefin: fish({ name: "Bluefin", blurb: "Built like a cannonball and twice as determined.", kind: "fish", page: "sea", water: ["sea"], rarity: "rare", lengthCm: [90, 200], weightKg: [12, 120], style: "diver", pricePerKg: 2.5, shape: "tuna", palette: ["#1a2a4a", "#dce2ea", "#c8b040"] }),
     swordfish: fish({ name: "Broadbill Swordfish", blurb: "It has a sword. That is the whole of the warning.", kind: "fish", page: "sea", water: ["sea"], rarity: "rare", lengthCm: [150, 300], weightKg: [30, 200], style: "leaper", pricePerKg: 1.5, shape: "sword", palette: ["#4a4a5a", "#d8d8e0", "#2a2a36"] }),
     sailback: fish({ name: "Sailback", blurb: "Raises a sail along its back when it hunts, and goes faster than anything in the sea.", kind: "fish", page: "sea", water: ["sea"], rarity: "legendary", lengthCm: [180, 300], weightKg: [30, 90], style: "leaper", pricePerKg: 3, shape: "sail", palette: ["#2a4a8a", "#e0e6f0", "#6a4aa8"], pattern: "spots" }),
-    oarfish: fish({ name: "Ribbon Oarfish", blurb: "A silver ribbon as long as a ship, with a red crest. Sailors call it a sea serpent, and it does not argue.", kind: "fish", page: "sea", water: ["sea"], rarity: "legendary", lengthCm: [300, 600], weightKg: [20, 150], style: "plodder", pricePerKg: 2, shape: "ribbon", palette: ["#c8ccd4", "#f4f6f8", "#d03a3a"] }),
+    oarfish: fish({ name: "Ribbon Oarfish", blurb: "A silver ribbon as long as a ship, with a red crest. Sailors call it a sea serpent, and it does not argue.", kind: "fish", page: "sea", water: ["sea"], rarity: "legendary", lengthCm: [300, 600], weightKg: [20, 150], style: "plodder", pricePerKg: 2, shape: "ribbon", palette: ["#c8ccd4", "#f4f6f8", "#d03a3a"], storm: true }),
 
     // ---------- strays: any water ----------
     shore_crab: fish({ name: "Shore Crab", blurb: "Came up holding the bait and refuses to let go of it.", kind: "creature", page: "strays", water: ["shallows", "mouth", "deep"], rarity: "common", lengthCm: [6, 15], weightKg: [0.05, 0.4], style: "dead", pricePerKg: 12, kitchen: true, shape: "crab", palette: ["#5a6a3a", "#d8c890", "#2a3018"] }),

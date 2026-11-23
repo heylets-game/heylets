@@ -14,7 +14,7 @@ It runs entirely on Cloudflare: Workers, Durable Objects, D1, Workers AI and Ema
 ## The game
 
 **The Harbor** is your crew's home, a shared town you all walk around in together.
-- **Gathering:** fish off the piers and the shore, fell trees, work the quarry. Fishing is a fight with one fish at a time; the quarry is thirty seconds at a rock face, hunting for the seam; felling is played through your hero's eyes: thirty seconds chopping, then thirty seconds splitting the logs on a block.
+- **Gathering:** fish from anywhere along the shore, fell trees, work the quarry. Fishing is a fight with one fish at a time, costs no stamina, and is best where the fish shadows show (holes that move with the time of day and the weather); the quarry is thirty seconds at a rock face, hunting for the seam; felling is played through your hero's eyes: thirty seconds chopping, then thirty seconds splitting the logs on a block.
 - **Your hut:** buy a plot, fill a resource bin to raise a shack, then furnish it, craft for it and upgrade it. Rest there to recover.
 - **The pub:** a meal that gives back a gathering outing, table games played for a stake, the regulars and their errands, and traveling salesmen who drop in from time to time.
 - **Crew projects:** pay together into the Apothecary and Smithy first; once both stand, the Lighthouse and the Galley unlock.

@@ -6,7 +6,7 @@
 
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MINE_RECOVER_MS, SITTING_IDLE_MS, type GatherChoice, type Resources } from "@gantt-quest/world";
+import { HARBOR_FISH_SPOTS, MINE_RECOVER_MS, SITTING_IDLE_MS, type GatherChoice, type Resources } from "@gantt-quest/world";
 import { outingPaid } from "../src/client/gatherPaid";
 import { gatherStatus, startOuting, stepOuting } from "../src/server/gather";
 import { addHero, openDb } from "./d1";
@@ -90,7 +90,7 @@ describe("an answer that pays an outing is one the bag is read again for", () =>
   });
 
   it("a fishing sitting left alone: the look that finds it closed says it was paid", async () => {
-    const started = await startOuting(db, "ann", "fishing", "west");
+    const started = await startOuting(db, "ann", "fishing", "west", { crewId: "CREWAA", pos: HARBOR_FISH_SPOTS.west });
     if (typeof started === "string") throw new Error(started);
     expect(outingPaid(started)).toBe(false);
     at(clock + SITTING_IDLE_MS + 1000);

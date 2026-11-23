@@ -1,6 +1,7 @@
 // A fishing sitting: one gathering outing that lasts as long as the player
 // likes. Cast, wait for the bite, set the hook, fight it, then keep it or
-// throw it back; again, until they call it a day or the creel is full.
+// throw it back; again, until they call it a day. Once the creel is full,
+// what more they keep is sold on the quay as the sitting ends, for less.
 //
 // It is a GatherState like any outing (one at a time, held by the server),
 // with its own state under `sitting`. Unlike the other outings, it spends its
@@ -16,7 +17,9 @@ import { statPct } from "./check";
 import { FISH, aFish, type FishDef } from "./fishcatalog";
 import { FIGHT_OUTCOME_TEXT, edgesProblem, fightEase, makeFightScript, replayFight, type FightEase, type FightOutcome, type FightScript } from "./fishfight";
 import { FISH_SPOTS, FISH_SPOT_IDS, castMetres, vesselProblem, type Vessel, formatLength, formatWeight, rollCatch, rollSize, type FishSpot } from "./fishing";
+import { holeAt, withHole } from "./fishingholes";
 import type { GatherChoice, GatherState, GatherStep } from "./gather";
+import { harborSky } from "./gameclock";
 import type { Resources } from "./hut";
 import { makeRng } from "./rng";
 
@@ -51,6 +54,8 @@ export interface CaughtFish {
   gold?: number;
   /** Set once it has been kept or thrown back. */
   kept?: boolean;
+  /** Kept with the basket already full: sold on the quay when the sitting ends, at QUAY_RATE of its price. */
+  overflow?: boolean;
 }
 
 /** The line in the water. */
@@ -198,10 +203,13 @@ export function stepSitting(state: GatherState, choice: GatherChoice): GatherSte
     const afloat = vesselProblem(from, choice.vessel);
     if (afloat) return { state, error: afloat };
     const spot = FISH_SPOTS[from];
+    // At one of the crew's fishing holes, the line goes into the hole's water, a full cast reaches it from the
+    // shore, and what it is known for bites more often. Night and storm fish bite only under their own sky.
+    const hole = choice.at && choice.crew ? holeAt(choice.crew, now, choice.at) : null;
     const power = Math.max(0, Math.min(1, Number(choice.power) || 0));
-    const reach = power * spot.maxCast;
+    const reach = power * (hole ? 1 : spot.maxCast);
     const rng = makeRng(state.rng);
-    const caught = rollCatch(rng, spot.water, reach, spot.bonus);
+    const caught = rollCatch(rng, hole?.water ?? spot.water, reach, withHole(spot.bonus, hole), harborSky(now), choice.bait ?? null);
     const size = rollSize(rng, caught, reach);
     const metres = castMetres(reach);
     const biteMs = rng.int(BITE_MS[0], BITE_MS[1]);
@@ -258,11 +266,14 @@ export function stepSitting(state: GatherState, choice: GatherChoice): GatherSte
     if (choice.t === "release") {
       return { state: { ...state, log: log(`You let the ${def(fish.species).name.toLowerCase()} go.`), sitting: { ...busy, pending: null, landed: [...s.landed, { ...fish, kept: false }] } } };
     }
+    // The one that fills the basket goes in, however big it is. Once it is full the sitting goes on: anything more
+    // is kept to be sold on the quay as the sitting ends, at a quay price (fishmarket.ts).
+    if (s.creelGrams >= s.creelLimitG) {
+      const next: Sitting = { ...busy, pending: null, landed: [...s.landed, { ...fish, kept: true, overflow: true }] };
+      return { state: { ...state, log: log(`No room in the basket: ${describe(fish)}, to be sold on the quay.`), haul: sittingMaterials(next.landed), sitting: next } };
+    }
     const next: Sitting = { ...busy, pending: null, landed: [...s.landed, { ...fish, kept: true }], creelGrams: s.creelGrams + fish.grams };
-    const kept: GatherState = { ...state, log: log(`Into the basket: ${describe(fish)}.`), haul: sittingMaterials(next.landed), sitting: next };
-    // The one that fills it is kept, however big it is.
-    if (next.creelGrams >= next.creelLimitG) return { state: close(kept, next, "That is all you can carry. You head back with a full basket.", now) };
-    return { state: kept };
+    return { state: { ...state, log: log(`Into the basket: ${describe(fish)}.`), haul: sittingMaterials(next.landed), sitting: next } };
   }
 
   return { state, error: "Unknown choice." };

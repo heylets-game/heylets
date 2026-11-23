@@ -1,15 +1,16 @@
 // Fishing sittings on the server, against a real SQLite database with the
 // game's migrations applied (the stand-in for D1 in d1.ts):
-// stamina spent when a sitting ends rather than when it starts, the fish
-// kept, the Catch Book, crew records, and the idle close.
+// fishing is free (no stamina needed or spent), the fish kept, a full basket
+// sold on the quay, the Catch Book, crew records, and the idle close.
 
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { BOOK_TITLE, FISH, PAGE_REWARD, SITTING_IDLE_MS, gatherDay, type GatherChoice, type GatherView } from "@gantt-quest/world";
+import { BOOK_TITLE, FISH, HARBOR_FISH_SPOTS, QUAY_RATE, fishBoard, fishSalePrice, HARBOR_SIDES, HARBOR_SPAWN, PAGE_REWARD, SITTING_IDLE_MS, castMetres, fishFrom, fishingHoles, gatherDay, generateHarbor, holeAt, seaEdge, shoreAt, tileAt, type GatherChoice, type GatherView, type ShoreSpot } from "@gantt-quest/world";
+import type { HexPos } from "@gantt-quest/core";
 import { catchBook, hangAtHome, mountInPub, unmountInPub } from "../src/server/catchbook";
 import { getHut, type Env } from "../src/server/db";
 import { playFight } from "../../../packages/world/src/fishbot";
-import { gatherStatus, startOuting, stepOuting } from "../src/server/gather";
+import { gatherStatus, startOuting, stepOuting, type Standing } from "../src/server/gather";
 import { fishStock, gildedRod, moveFish, sellFish } from "../src/server/fishmarket";
 import { addHero, openDb, type Row } from "./d1";
 
@@ -21,8 +22,21 @@ const at = (ms: number) => vi.setSystemTime((clock = ms));
 const one = <T = Row>(text: string, ...args: (string | number)[]) => sql.prepare(text).get(...args) as T;
 const used = () => one<{ used: number } | undefined>("SELECT used FROM gathering WHERE player_id = 'ann'")?.used ?? 0;
 
+const harbor = generateHarbor();
+const around = (p: HexPos) => HARBOR_SIDES.map((d) => ({ q: p.q + d.q, r: p.r + d.r }));
+/** Where Ann stands in the Harbor, as its room would tell the server; null when she is not there. */
+let here: HexPos | null = null;
+const where = (): Standing | null => (here ? { crewId: "CREWAA", pos: here } : null);
+/** A hex of water a hero afloat fishes `spot` from. */
+const afloatAt = (spot: string): HexPos => harbor.tiles.find((t) => t.biome === "water" && (spot === "sea" ? seaEdge(harbor, t) && fishFrom(harbor, t, "rowboat") === "sea" : fishFrom(harbor, t, "barrel") === spot))!;
+/** Stand where `pier` is fished from (a pier head or the shack's shore, or afloat) and ask for a sitting there. */
+function sit(pier: string, pos: HexPos = pier in HARBOR_FISH_SPOTS ? HARBOR_FISH_SPOTS[pier as ShoreSpot] : afloatAt(pier)) {
+  here = pos;
+  return startOuting(db, "ann", "fishing", pier, where());
+}
+
 async function step(choice: GatherChoice) {
-  const r = await stepOuting(db, "ann", choice);
+  const r = await stepOuting(db, "ann", choice, where());
   if (typeof r === "string") throw new Error(r);
   return r;
 }
@@ -62,6 +76,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   at(T0);
   ({ sql, db } = openDb());
+  here = null;
   for (const [id, name] of [["ann", "Ann"], ["bo", "Bo"]] as const) addHero(sql, { id, name, str: 9, dex: 9, crew: "CREWAA", at: T0 });
 });
 
@@ -70,21 +85,25 @@ afterEach(() => {
 });
 
 describe("starting a sitting", () => {
-  it("needs stamina but does not spend it", async () => {
-    const r = await startOuting(db, "ann", "fishing", "west");
+  it("needs no stamina and spends none", async () => {
+    const r = await sit("west");
     if (typeof r === "string") throw new Error(r);
     expect(r.stamina.left).toBe(3);
     expect(used()).toBe(0);
     expect(r.outing!.sitting!.spot).toBe("west");
   });
 
-  it("is refused when the day's stamina is spent", async () => {
+  it("can be started when the day's stamina is spent", async () => {
     sql.prepare("INSERT INTO gathering (player_id, day, used) VALUES ('ann', ?, 3)").run(gatherDay(T0));
-    expect(await startOuting(db, "ann", "fishing", "east")).toMatch(/worn out/);
+    const r = await sit("east");
+    if (typeof r === "string") throw new Error(r);
+    expect(r.stamina.left).toBe(0);
+    await step({ t: "bank" });
+    expect(used()).toBe(3);
   });
 
-  it("is refused at the open sea until there are boats", async () => {
-    expect(await startOuting(db, "ann", "fishing", "sea")).toMatch(/boat/);
+  it("is refused out on the water without a boat, and anywhere that is not a spot", async () => {
+    expect(await sit("sea")).toMatch(/water's edge/);
     expect(await startOuting(db, "ann", "fishing", "pond")).toMatch(/cannot fish/);
   });
 
@@ -98,13 +117,12 @@ describe("starting a sitting", () => {
 });
 
 describe("ending a sitting", () => {
-  it("spends one stamina, keeps the fish, fills the Catch Book and sets a crew record", async () => {
-    await startOuting(db, "ann", "fishing", "middle");
+  it("spends no stamina, keeps the fish, fills the Catch Book and sets a crew record", async () => {
+    await sit("middle");
     const species = await keepAFish();
-    expect(used()).toBe(0);
     const done = await step({ t: "bank" });
     expect(done.outing!.status).toBe("banked");
-    expect(used()).toBe(1);
+    expect(used()).toBe(0);
     expect(one("SELECT session_json FROM gathering WHERE player_id = 'ann'")).toMatchObject({ session_json: null });
 
     const fish = sql.prepare("SELECT species, grams, place FROM fish WHERE player_id = 'ann'").all() as { species: string; grams: number; place: string }[];
@@ -124,42 +142,45 @@ describe("ending a sitting", () => {
     expect(done.xp!.granted).toBeGreaterThan(4);
   });
 
-  it("cannot be closed, or charged, twice", async () => {
-    await startOuting(db, "ann", "fishing", "west");
+  it("cannot be closed, or paid, twice", async () => {
+    await sit("west");
+    await keepAFish();
     await step({ t: "bank" });
-    expect(used()).toBe(1);
+    const fish = (sql.prepare("SELECT COUNT(*) AS n FROM fish WHERE player_id = 'ann'").get() as { n: number }).n;
     expect(await stepOuting(db, "ann", { t: "bank" })).toMatch(/not out gathering/);
-    expect(used()).toBe(1);
+    expect((sql.prepare("SELECT COUNT(*) AS n FROM fish WHERE player_id = 'ann'").get() as { n: number }).n).toBe(fish);
+    expect(used()).toBe(0);
   });
 
   it("ends by itself when left alone, the next time anyone looks", async () => {
-    await startOuting(db, "ann", "fishing", "east");
+    await sit("east");
     await keepAFish();
     at(clock + SITTING_IDLE_MS + 1000);
     const r = await gatherStatus(db, "ann");
     if (typeof r === "string") throw new Error(r);
     expect(r.outing!.status).toBe("banked");
     expect(r.sitting!.fish.length).toBeGreaterThan(0);
-    expect(used()).toBe(1);
+    expect(used()).toBe(0);
     // Looking again changes nothing.
     await gatherStatus(db, "ann");
-    expect(used()).toBe(1);
+    expect(used()).toBe(0);
     expect((sql.prepare("SELECT COUNT(*) AS n FROM fish WHERE player_id = 'ann'").get() as { n: number }).n).toBe(r.sitting!.fish.length);
   });
 
   it("closes an idle sitting before starting another outing", async () => {
-    await startOuting(db, "ann", "fishing", "west");
+    await sit("west");
     at(clock + SITTING_IDLE_MS + 1000);
     const r = await startOuting(db, "ann", "quarry");
     expect(typeof r).not.toBe("string");
-    expect(used()).toBe(2);
+    // The quarry's outing, and nothing for the sitting.
+    expect(used()).toBe(1);
   });
 
   it("leaves a crew record standing against a lighter fish", async () => {
     // Bo holds every record, at a weight nothing reaches.
     const insert = sql.prepare("INSERT INTO fish_records (crew_id, species, grams, mm, fish_id, player_id, caught_at) VALUES ('CREWAA', ?, 1000000000, 1, NULL, 'bo', 0)");
     for (const id of Object.keys(FISH)) insert.run(id);
-    await startOuting(db, "ann", "fishing", "west");
+    await sit("west");
     const species = await keepAFish();
     const done = await step({ t: "bank" });
     expect(done.sitting!.records).toEqual([]);
@@ -167,7 +188,7 @@ describe("ending a sitting", () => {
   });
 
   it("records what got away", async () => {
-    await startOuting(db, "ann", "fishing", "east");
+    await sit("east");
     at(clock + 1000);
     const cast = (await step({ t: "cast", power: 1 })).outing!.sitting!.cast!;
     at(clock + cast.biteMs + 40);
@@ -236,7 +257,7 @@ describe("selling and keeping fish", () => {
   it("sells what will not fit in the icebox when a sitting ends", async () => {
     // Full to the brim, so whatever is kept, however small, will not fit.
     put("full", "halibut", 60_000);
-    await startOuting(db, "ann", "fishing", "middle");
+    await sit("middle");
     await keepAFish();
     const before = gold();
     const done = await step({ t: "bank" });
@@ -251,7 +272,7 @@ describe("the Catch Book, records and mounts", () => {
   const caught = (species: string, who = "ann") => sql.prepare("INSERT OR IGNORE INTO fish_bests (player_id, species, grams, mm, caught, first_at) VALUES (?, ?, 100, 100, 1, 0)").run(who, species);
 
   it("rewards the page a sitting finishes: its wall piece, once, and the book for the last", async () => {
-    await startOuting(db, "ann", "fishing", "west");
+    await sit("west");
     // Land something, then have everything else on its page already in the book.
     let pending: string | undefined;
     for (let i = 0; i < 60 && !pending; i++) {
@@ -305,24 +326,88 @@ describe("fishing from a boat", () => {
   const boat = (defId: string) => sql.prepare("INSERT INTO furnishings (player_id, def_id, label, meta_json, created_at) VALUES ('ann', ?, ?, '{}', 0)").run(defId, defId);
 
   it("needs a boat to fish afloat, and a rowboat for the open sea", async () => {
-    expect(await startOuting(db, "ann", "fishing", "coast_west")).toMatch(/need a boat/);
+    expect(await sit("coast_west")).toMatch(/water's edge/);
     boat("float_barrel");
-    expect(await startOuting(db, "ann", "fishing", "sea")).toMatch(/rowboat/);
-    const r = await startOuting(db, "ann", "fishing", "wreck");
+    // At the map's edge in a barrel, it is still the coast's water, not the open sea.
+    const r = await sit("sea", afloatAt("coast_west"));
     if (typeof r === "string") throw new Error(r);
-    // Cast out to sea from there: the server knows it is only a barrel.
-    expect(await stepOuting(db, "ann", { t: "cast", power: 0.5, spot: "sea", vessel: "rowboat" })).toMatch(/rowboat/);
+    expect(r.outing!.sitting!.spot).toBe("coast_west");
+    // Cast out to sea from there: the server knows where she is, and that it is only a barrel.
+    const cast = await stepOuting(db, "ann", { t: "cast", power: 0.5, spot: "sea", vessel: "rowboat" }, where());
+    if (typeof cast === "string") throw new Error(cast);
+    expect(cast.outing!.sitting!.spot).toBe("coast_west");
   });
 
   it("carries more in a rowboat, and brings up the open sea's fish", async () => {
     boat("rowboat");
-    const r = await startOuting(db, "ann", "fishing", "sea");
+    const r = await sit("sea");
     if (typeof r === "string") throw new Error(r);
     const plain = 25_000 + 9 * 1000;
     expect(r.outing!.sitting!.creelLimitG).toBe(plain + 20_000);
-    const cast = await stepOuting(db, "ann", { t: "cast", power: 0.5 });
+    const cast = await stepOuting(db, "ann", { t: "cast", power: 0.5 }, where());
     if (typeof cast === "string") throw new Error(cast);
     expect(cast.outing!.sitting!.spot).toBe("sea");
+  });
+});
+
+describe("a full basket", () => {
+  it("keeps the sitting going, and sells what more is kept on the quay at the quay price", async () => {
+    await sit("east");
+    // Fill the basket to the brim as the server holds it, then land and keep one more.
+    const row = one<{ session_json: string }>("SELECT session_json FROM gathering WHERE player_id = 'ann'");
+    const state = JSON.parse(row.session_json);
+    state.sitting.creelGrams = state.sitting.creelLimitG;
+    state.sitting.pending = { species: "silver_king", grams: 30_000, mm: 1500, specimen: true, spot: "east", at: clock };
+    sql.prepare("UPDATE gathering SET session_json = ? WHERE player_id = 'ann'").run(JSON.stringify(state));
+    const kept = await step({ t: "keep" });
+    expect(kept.outing!.status).toBe("active");
+    const done = await step({ t: "bank" });
+    expect(one("SELECT place FROM fish WHERE player_id = 'ann' AND species = 'silver_king'")).toMatchObject({ place: "sold" });
+    const board = fishBoard("CREWAA", clock);
+    const full = fishSalePrice({ species: "silver_king", grams: 30_000, specimen: true }, "market", board)!;
+    expect(done.sitting!.gold).toBe(Math.max(1, Math.round(full * QUAY_RATE)));
+    expect(used()).toBe(0);
+  });
+});
+
+describe("where a line is cast from", () => {
+  /** A hex along the shore, not a pier head or the shack, with no hole beside it now. */
+  const plainShore = () => harbor.tiles.find((t) => shoreAt(harbor, t) && fishFrom(harbor, t, null) === "shore" && !holeAt("CREWAA", clock, t) && Math.abs(t.q) > 3)!;
+
+  it("is wherever the hero stands along the shore, whatever spot the client names", async () => {
+    const r = await sit("east", plainShore());
+    if (typeof r === "string") throw new Error(r);
+    expect(r.outing!.sitting!.spot).toBe("shore");
+  });
+
+  it("is refused away from the water, and when the hero is not in the Harbor at all", async () => {
+    expect(await sit("west", HARBOR_SPAWN)).toMatch(/water's edge/);
+    here = null;
+    expect(await startOuting(db, "ann", "fishing", "west", null)).toMatch(/water's edge/);
+    expect(used()).toBe(0);
+  });
+
+  it("follows the hero from cast to cast, and refuses one made inland", async () => {
+    await sit("west", plainShore());
+    here = HARBOR_FISH_SPOTS.middle;
+    expect((await step({ t: "cast", power: 0.5, spot: "west" })).outing!.sitting!.spot).toBe("middle");
+    await stepOuting(db, "ann", { t: "reel" }, where());
+    here = HARBOR_SPAWN;
+    expect(await stepOuting(db, "ann", { t: "cast", power: 0.5, spot: "middle" }, where())).toMatch(/water's edge/);
+    expect(await stepOuting(db, "ann", { t: "cast", power: 0.5, spot: "middle" }, null)).toMatch(/water's edge/);
+  });
+
+  it("reaches a hole in full from the shore beside it, though the shore's own casts are short", async () => {
+    const hole = fishingHoles("CREWAA", clock).find((h) => h.near)!;
+    const beside = around(hole.pos).find((p) => shoreAt(harbor, p) && fishFrom(harbor, p, null) === "shore")!;
+    await sit("west", plainShore());
+    const short = (await step({ t: "cast", power: 1 })).outing!.sitting!.cast!;
+    expect(short.metres).toBe(castMetres(0.5));
+    await stepOuting(db, "ann", { t: "reel" }, where());
+    here = beside;
+    expect(tileAt(harbor, beside)?.biome).not.toBe("water");
+    const full = (await step({ t: "cast", power: 1 })).outing!.sitting!.cast!;
+    expect(full.metres).toBe(castMetres(1));
   });
 });
 

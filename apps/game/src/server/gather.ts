@@ -41,11 +41,24 @@ import {
   type FishSpot,
   ROWBOAT_CREEL_G,
   vesselProblem,
+  fishFrom,
+  generateHarbor,
 } from "@gantt-quest/world";
+import type { HexPos } from "@gantt-quest/core";
 import { heroInitFor } from "./db";
 import { closeSitting, type SittingPaid } from "./fishing";
 import { ownedVessel } from "./fishmarket";
 import { prepareXp, readHarborXp, xpOutcome, type XpResult } from "./harbor-xp";
+
+/** Where a hero stands in their crew's Harbor, as its room knows it: never as the client says. */
+export interface Standing {
+  crewId: string;
+  pos: HexPos;
+}
+
+const HARBOR = generateHarbor();
+/** Said when a line is asked for from somewhere it cannot be cast. */
+const NOT_AT_WATER = "Walk to the water's edge to fish.";
 
 export interface GatherStatus {
   stamina: { left: number; max: number; resetsAt: number };
@@ -142,16 +155,16 @@ export async function rest(db: D1Database, playerId: string, place: RestPlace): 
 }
 
 /**
- * Start an outing, spending one of the day's three. Fishing from a pier
- * (`pier` given) starts a sitting instead, which needs stamina left but only
- * spends it when it ends. Returns an error string if refused.
+ * Start an outing, spending one of the day's three. Fishing (`pier` given)
+ * starts a sitting instead, which needs no stamina and spends none. Returns an
+ * error string if refused.
  */
-export async function startOuting(db: D1Database, playerId: string, spot: unknown, pier?: unknown): Promise<GatherStatus | string> {
+export async function startOuting(db: D1Database, playerId: string, spot: unknown, pier?: unknown, where: Standing | null = null): Promise<GatherStatus | string> {
   if (!GATHER_SPOT_IDS.includes(spot as GatherSpot)) return "There is nothing to gather there.";
   const stats = await gatherStats(db, playerId);
   if (!stats) return "Create a character first.";
   await settleIdle(db, playerId, await readRow(db, playerId));
-  if (spot === "fishing" && pier !== undefined) return startSittingOuting(db, playerId, pier, stats);
+  if (spot === "fishing" && pier !== undefined) return startSittingOuting(db, playerId, pier, where, stats);
   const seed = crypto.getRandomValues(new Uint32Array(1))[0];
   const state = startGather(spot as GatherSpot, seed, stats[spot as GatherSpot]);
   const today = gatherDay(Date.now());
@@ -171,13 +184,18 @@ export async function startOuting(db: D1Database, playerId: string, spot: unknow
   return status(db, playerId, stats);
 }
 
-/** Sit down to fish at `pier`. Stamina is checked, not spent: the sitting spends it when it ends. */
-async function startSittingOuting(db: D1Database, playerId: string, pier: unknown, stats: Record<GatherSpot, number>): Promise<GatherStatus | string> {
+/**
+ * Sit down to fish where the hero stands. `pier` is only the client asking for a sitting: where it is fished from
+ * is worked out here from `where`, the hero's own hex in the Harbor. Fishing is free: no stamina is needed or spent.
+ */
+async function startSittingOuting(db: D1Database, playerId: string, pier: unknown, where: Standing | null, stats: Record<GatherSpot, number>): Promise<GatherStatus | string> {
   if (!FISH_SPOT_IDS.includes(pier as FishSpot)) return "You cannot fish from there.";
-  const spot = FISH_SPOTS[pier as FishSpot];
-  if (spot.closed) return spot.closed;
   const [angler, vessel] = await Promise.all([anglerStats(db, playerId), ownedVessel(db, playerId)]);
   if (!angler) return "Create a character first.";
+  const from = where ? fishFrom(HARBOR, where.pos, vessel) : null;
+  if (!from) return NOT_AT_WATER;
+  const spot = FISH_SPOTS[from];
+  if (spot.closed) return spot.closed;
   const afloat = vesselProblem(spot.id, vessel);
   if (afloat) return afloat;
   const now = Date.now();
@@ -185,19 +203,16 @@ async function startSittingOuting(db: D1Database, playerId: string, pier: unknow
   const extra = spot.vessel && vessel === "rowboat" ? ROWBOAT_CREEL_G : 0;
   const state = startSitting(spot.id, crypto.getRandomValues(new Uint32Array(1))[0], angler, now, extra);
   const today = gatherDay(now);
-  // As a start: no outing already under way, and stamina left today. Unlike a start, nothing is spent yet.
+  // Only if no outing is already under way. Fishing needs no stamina, and spends none.
   const res = await db
     .prepare(
       `INSERT INTO gathering (player_id, day, used, session_json) VALUES (?1, ?2, 0, ?3)
        ON CONFLICT(player_id) DO UPDATE SET used = CASE WHEN day = ?2 THEN used ELSE 0 END, day = ?2, session_json = ?3
-       WHERE session_json IS NULL AND (day <> ?2 OR used < ?4)`,
+       WHERE session_json IS NULL`,
     )
-    .bind(playerId, today, JSON.stringify(state), GATHER_DAILY_OUTINGS)
+    .bind(playerId, today, JSON.stringify(state))
     .run();
-  if (res.meta.changes === 0) {
-    const row = await readRow(db, playerId);
-    return row?.session_json ? "Finish the outing you are on first." : "You are worn out. Come back tomorrow.";
-  }
+  if (res.meta.changes === 0) return "Finish the outing you are on first.";
   return status(db, playerId, stats);
 }
 
@@ -242,7 +257,7 @@ function timed(state: GatherState, choice: GatherChoice, now: number): GatherCho
 }
 
 /** Apply one choice to the outing in progress. A finished outing is paid and cleared in the same batch. */
-export async function stepOuting(db: D1Database, playerId: string, choice: unknown): Promise<(GatherStatus & { paid?: Resources; xp?: XpResult; sitting?: SittingPaid }) | string> {
+export async function stepOuting(db: D1Database, playerId: string, choice: unknown, where: Standing | null = null): Promise<(GatherStatus & { paid?: Resources; xp?: XpResult; sitting?: SittingPaid }) | string> {
   // Neither read needs the other's answer, so they are asked for together.
   const [stats, row] = await Promise.all([gatherStats(db, playerId), readRow(db, playerId)]);
   if (!stats) return "Create a character first.";
@@ -251,9 +266,15 @@ export async function stepOuting(db: D1Database, playerId: string, choice: unkno
   if (idle) return { ...(await status(db, playerId, stats, idle.ended)), paid: idle.paid.paid, xp: idle.paid.xp, sitting: idle.paid };
   const current = JSON.parse(row.session_json) as GatherState;
   let asked = (choice ?? {}) as GatherChoice;
-  // A cast afloat is judged against the boat the hero really owns, never one the client names.
-  if (current.sitting && asked.t === "cast") asked = { ...asked, vessel: await ownedVessel(db, playerId) };
-  else if (asked.t === "cast") asked = { ...asked, vessel: null };
+  if (current.sitting && asked.t === "cast") {
+    // A cast is made from where the hero really is, in the boat they really own, at whichever of the crew's holes
+    // is there: none of it is taken from the client.
+    const vessel = await ownedVessel(db, playerId);
+    const from = where ? fishFrom(HARBOR, where.pos, vessel) : null;
+    if (!from || !where) return NOT_AT_WATER;
+    // No bait yet: nothing sells it (the fishmonger will). Whatever the client names is never taken.
+    asked = { ...asked, vessel, spot: from, at: where.pos, crew: where.crewId, bait: null };
+  } else if (asked.t === "cast") asked = { ...asked, vessel: null, at: null, crew: null, bait: null };
   const step = stepGather(current, timed(current, asked, Date.now()));
   if (step.error) return step.error;
   const next = step.state;

@@ -110,17 +110,22 @@ describe("a sitting", () => {
     expect(stepGather(state, { t: "cast", power: 0.5, now: T0 + 999_999 }).error).toBeTruthy();
   });
 
-  it("ends when the creel is full, keeping the one that filled it", () => {
+  it("goes on once the creel is full, sending what more is kept to the quay", () => {
     let state = startSitting("east", 8, { str: 0, dex: 9 }, T0);
     let now = T0;
-    for (let i = 0; i < 400 && state.status === "active"; i++) {
+    for (let i = 0; i < 400 && state.sitting!.creelGrams < state.sitting!.creelLimitG; i++) {
       ({ state, now } = landOne(state, now));
       state = step(state, { t: "keep", now: now + 10 });
     }
-    expect(state.status).toBe("banked");
-    expect(state.sitting!.creelGrams).toBeGreaterThanOrEqual(CREEL_BASE_G);
-    expect(state.log.at(-1)!.text).toMatch(/all you can carry/);
-    expect(stepGather(state, { t: "cast", power: 1, now: now + 20 }).error).toBeTruthy();
+    expect(state.status).toBe("active");
+    const full = state.sitting!.creelGrams;
+    expect(full).toBeGreaterThanOrEqual(CREEL_BASE_G);
+    ({ state, now } = landOne(state, now));
+    state = step(state, { t: "keep", now: now + 10 });
+    expect(state.status).toBe("active");
+    expect(state.sitting!.creelGrams).toBe(full);
+    expect(state.sitting!.landed.at(-1)!.overflow).toBe(true);
+    expect(state.log.at(-1)!.text).toMatch(/sold on the quay/);
   });
 
   it("ends when the player stops, keeping a landed catch not yet put away", () => {

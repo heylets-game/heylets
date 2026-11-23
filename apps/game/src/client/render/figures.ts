@@ -5468,8 +5468,15 @@ function drawHeld(id: string, b: Biped, trim: string, look: Look, shield: boolea
       w.cyl("#b8875a", 0.5, 0.5, 2.4, 0, 0.6, 0, 6);
       w.cyl(GEAR.iron, 0.8, 0.8, 0.5, 0.7, 1.4, 0, 8, [0, 0, HALF_PI]);
       w.cyl(rodInHand === "gilded" ? GEAR.gold : "#3a2a1c", 0.18, 0.38, 15, 0, 9.3, 0, 5);
-      w.box("#e8eef2", 0.12, 7, 0.12, 0, 13.4, 1.4, [0.95, 0, 0]);
-      w.ball("#d8352a", 0.5, 0, 11.4, 4.3);
+      // The line: from the tip of the blank (y 16.8) down to the float, so the two meet at both ends.
+      {
+        const tip = new THREE.Vector3(0, 16.8, 0);
+        const float = new THREE.Vector3(0, 11.4, 4.3);
+        const mid = tip.clone().add(float).multiplyScalar(0.5);
+        const run = float.clone().sub(tip);
+        w.box("#e8eef2", 0.12, run.length(), 0.12, mid.x, mid.y, mid.z, [Math.atan2(-run.z, -run.y), 0, 0]);
+        w.ball("#d8352a", 0.5, float.x, float.y, float.z);
+      }
       return { arm: -0.85, tilt: 0.75 };
     }
     case "lantern":

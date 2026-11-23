@@ -21,8 +21,7 @@ import {
   HARBOR_PUB,
   HARBOR_SPAWN,
   generateHarbor,
-  fishSpotAt,
-  waterSpotAt,
+  fishFrom,
   harborPath,
   type HarborClientMessage,
   type HarborPlayer,
@@ -94,6 +93,14 @@ export class HarborRoom extends DurableObject<Env> {
     // Who is walking the Harbor right now: the crewmates who would go down into the caves together.
     if (pathname === "/present") {
       return Response.json({ ids: this.here.players().map((p) => p.id) });
+    }
+
+    // Where a hero is standing in the Harbor (or afloat), if they are here: a line is cast from where the hero is,
+    // never from where their client says they are (server/gather.ts).
+    if (pathname === "/where") {
+      const who = searchParams.get("id");
+      const player = who ? this.here.players().find((p) => p.id === who) : undefined;
+      return Response.json({ pos: player?.pos ?? null });
     }
 
     // The crew's muster: how it stands; one called; an answer to it. (The worker has checked who is asking.)
@@ -265,7 +272,7 @@ export class HarborRoom extends DurableObject<Env> {
       this.here.show(ws, { ...player, bedroll: player.pos });
     } else if (msg.type === "fishing") {
       // Purely for show, like the bedroll: the sitting itself is the server's over HTTP. Only at a fishing spot.
-      const on = msg.on === true && (fishSpotAt(player.pos) !== null || waterSpotAt(MAP, player.pos) !== null);
+      const on = msg.on === true && fishFrom(MAP, player.pos, player.vessel ?? null) !== null;
       if (!!player.fishing === on) return;
       this.here.show(ws, { ...player, fishing: on || undefined });
     } else if (msg.type === "look") {
