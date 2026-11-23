@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { KEEPER_HOUSES } from "./keepers";
 import { REGULARS } from "./regulars";
 import { SALESMEN } from "./salesman";
-import { TALK_PAGE, TALK_PER_DAY, TALK_VOICES, barkeepTalk, dealerTalk, keeperTalk, pagesOf, regularTalk, salesmanTalk, talkProblem, type Conversation } from "./talk";
+import { TALK_PAGE, TALK_PER_DAY, TALK_VOICES, barkeepTalk, dealerTalk, keeperTalk, loneChoice, pagesOf, regularTalk, salesmanTalk, talkProblem, type Conversation } from "./talk";
 
 const everyone: Conversation[] = [
   barkeepTalk("Nobody in the corner."),
@@ -37,6 +37,15 @@ describe("talking to the townsfolk", () => {
     expect(asking.map((c) => c.unit)).toEqual(["barkeep"]);
     expect(asking[0].tired).toBeTruthy();
     expect(barkeepTalk("Nobody in the corner.").greeting.at(-1)).toBe("Nobody in the corner.");
+  });
+
+  it("takes the one thing someone offers straight away, and puts a choice only before those who offer several", () => {
+    expect(loneChoice(regularTalk(REGULARS[0]))?.opens).toBe("errand");
+    expect(loneChoice(salesmanTalk(SALESMEN[0]))?.opens).toBe("trade");
+    expect(loneChoice(keeperTalk("smithy"))?.opens).toBe("shop");
+    expect(loneChoice(keeperTalk("galley"))?.says).toBeTruthy();
+    expect(loneChoice(barkeepTalk())).toBeNull();
+    expect(loneChoice(dealerTalk())).toBeNull();
   });
 
   it("stops the questions at the day's limit", () => {

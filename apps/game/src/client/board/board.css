@@ -1,9 +1,5 @@
 /* The pub dealer's panel and the Harbor's notice-board panel. */
 
-/* What a job on the dealer's list pays. */
-.errand-reward { color: var(--gold); font-size: 12px; white-space: nowrap; }
-.errand-reward .cost-chips { gap: 6px; flex-wrap: nowrap; }
-
 /* Leaves room for the top bar, which sits above the overlay. */
 .overlay .panel.notice-board { max-width: 560px; max-height: calc(100% - 56px); display: flex; flex-direction: column; gap: 8px; }
 .notice-head { display: flex; align-items: center; gap: 10px; padding-right: 46px; }
@@ -18,12 +14,6 @@
   .notice-head { padding-right: 68px; }
 }
 
-/* Errands at the pub (ErrandsNotice). */
-.errands-list .gold-text { color: var(--gold); }
-.errands-list .errand-reward { display: inline-flex; align-items: center; gap: 6px; }
-.errands-list .errand-xp { color: var(--gold); font-weight: bold; }
-.errands-list li.away { opacity: 0.85; }
-
 /* The notice board's release notes. */
 .release-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .release { border: 1px solid var(--line); padding: 8px 10px; }
@@ -34,12 +24,44 @@
 .release-notes { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; font-size: 14px; white-space: normal; }
 .release-older { align-self: flex-start; }
 
-/* The dealer's panel in the pub. */
-.story.pub-bar.dealer-panel { width: min(460px, calc(100% - 24px)); }
+/* The dealer's panel in the pub: trading materials, and his supply contracts. */
+.story.pub-bar.dealer-panel { width: min(540px, calc(100% - 24px)); }
 .dealer-panel .regular-head .grow { flex: 1; min-width: 0; }
+.dealer-tabs { display: flex; align-items: center; gap: 6px; margin: 6px 0; }
+.dealer-gold { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; color: var(--gold); }
+.dealer-said { margin: 0 0 6px; font-size: 13px; }
+.dealer-said.good { color: var(--good); }
+.dealer-said.bad { color: var(--bad); }
+.dealer-said.muted { color: var(--muted); }
 .dealer-body { display: flex; flex-direction: column; gap: 8px; }
 .dealer-body h3 { margin: 8px 0 0; }
 .dealer-body p { margin: 0; }
+.dealer-body .gold-text { color: var(--gold); }
+.dealer-board { width: 100%; border-collapse: collapse; font-size: 13px; }
+.dealer-board th, .dealer-board td { padding: 4px 6px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+.dealer-board thead th { font-weight: normal; color: var(--muted); font-size: 12px; }
+.dealer-board tbody th { font-weight: normal; white-space: nowrap; }
+.dealer-board tbody th > * { vertical-align: middle; }
+.dealer-board tr.wanted th { color: var(--gold); }
+.dealer-btns { display: inline-flex; gap: 4px; margin-left: 6px; }
+.dealer-tag { margin-left: 6px; padding: 0 5px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: #1a1424; background: var(--gold); }
+.dealer-tag.glut { background: var(--good); }
+.dealer-held { border: 1px solid var(--gold); padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.dealer-held h3 { margin: 0; }
+.dealer-progress { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.dealer-progress li { display: flex; align-items: center; gap: 6px; }
+.dealer-bar { flex: 1; height: 8px; background: rgba(0, 0, 0, 0.4); border: 1px solid var(--line); min-width: 60px; }
+.dealer-bar > span { display: block; height: 100%; background: var(--gold); }
+.dealer-held .row { display: flex; gap: 6px; }
+.dealer-offers { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.dealer-offers li { display: flex; gap: 8px; align-items: center; border: 1px solid var(--line); padding: 6px 8px; font-size: 13px; }
+.dealer-offers li.taken { opacity: 0.55; }
+.dealer-pay { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; white-space: nowrap; }
+
+@media (max-width: 760px) {
+  .dealer-btns { display: flex; margin: 4px 0 0; }
+  .dealer-board th, .dealer-board td { padding: 3px 4px; }
+}
 
 
 /* The crew's newest fishing records, above the release notes. */
