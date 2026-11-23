@@ -67,14 +67,15 @@ export const site: PlaceModel = (poi, kit) => {
 /** A hut. */
 export const plot: PlaceModel = (poi, kit) => {
   const { g, add, box, lambert } = kit;
-  // Roof colour is picked from the owner's id so each hut is recognisable.
+  // The roof's colour is the one its owner chose at Nell's stall; else one picked from the owner's id, so each hut
+  // is recognisable. The shutters and the Lodge's pennant are painted to match.
   const roofs = ["#8c3b2f", "#2f6f8c", "#6b8c2f", "#8c6a2f", "#6a2f8c", "#2f8c7a"];
   let hash = 0;
   for (const ch of poi.id) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
   // Each tier is its own building, not a bigger copy: a Shack of rough planks under a shingled roof, a Cottage
   // of stone, plaster and timber with a chimney and flower boxes, a Lodge with a porch, dormers, a wing and a banner.
   const tier = Math.max(1, Math.min(3, poi.tier ?? 1));
-  const roofHex = roofs[hash % roofs.length];
+  const roofHex = poi.roof ?? roofs[hash % roofs.length];
   const roofMat = lambert(roofHex);
   const roofDark = lambert("#" + new THREE.Color(roofHex).multiplyScalar(0.7).getHexString());
   const timber = lambert("#4a2f22");

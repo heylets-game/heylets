@@ -4,6 +4,7 @@ import * as THREE from "three";
 import { pixelTexture, stamp, type BuildingGlow } from "../ambience";
 import { buildLapidary } from "../lapidary";
 import { foldByLook, warmPane, type PlaceModel } from "./kit";
+import { finishesOf } from "@gantt-quest/world";
 
 /** The pub's painted sign: a foaming tankard on an oxblood board with a gold edge. Made once and shared. */
 let pubSignTexture: THREE.CanvasTexture | null = null;
@@ -269,4 +270,65 @@ export const lapidary: PlaceModel = (_poi, kit) => {
   // cut stones and a sign like a faceted gem (lapidary.ts).
   buildLapidary(g, warmPane);
   foldByLook(g);
+};
+
+/**
+ * Nell's stall, beside the market stall: a little open stall she stands in, behind a low counter with sample
+ * squares of flooring and a paste pot on it; a rack behind her hung with lengths of her wallpapers; rolls of paper
+ * standing in a basket at one end; a row of little painted roofs along the top of the rack, one for each colour she
+ * sells; and a short sage-striped awning over the rack, not over her, so she is seen from above. The samples are in the catalogue's own colours.
+ */
+export const finishes: PlaceModel = (_poi, kit) => {
+  const { g, add, box, lambert } = kit;
+  const timber = lambert("#4a2f22");
+  const plank = lambert("#a07a4c");
+  const sage = lambert("#8fa478");
+  const cream = lambert("#efe6cf");
+  const walls = finishesOf("wall");
+  const floors = finishesOf("floor");
+  const roofs = finishesOf("roof");
+  // The platform she stands on.
+  add(box(0.9, 0.04, 0.8), lambert("#6b5138"), 0, 0.02, 0);
+  // The counter in front of her: a plank front and a top, with floor samples laid across it in a row.
+  add(box(0.74, 0.2, 0.14), lambert("#7a5230"), 0, 0.12, 0.3);
+  add(box(0.8, 0.03, 0.2), plank, 0, 0.235, 0.3);
+  floors.slice(0, 6).forEach((f, i) => {
+    if (f.kind !== "floor") return;
+    const x = -0.3 + i * 0.12;
+    add(box(0.1, 0.012, 0.1), lambert(f.look.tones[0]), x, 0.256, 0.3, (i % 2 ? 0.12 : -0.1));
+    if (f.look.tones[1]) add(box(0.05, 0.013, 0.05), lambert(f.look.tones[1]), x + 0.022, 0.257, 0.278);
+  });
+  // A paste pot with a brush standing in it, at one end.
+  add(new THREE.CylinderGeometry(0.035, 0.03, 0.06, 8), lambert("#d8d2c2"), 0.34, 0.28, 0.32);
+  add(box(0.012, 0.11, 0.012), timber, 0.345, 0.33, 0.32).rotation.z = 0.3;
+  // The rack behind her: two posts and a rail, and lengths of paper hanging from it.
+  for (const x of [-0.4, 0.4]) add(new THREE.CylinderGeometry(0.022, 0.022, 1.24, 6), timber, x, 0.62, -0.3);
+  add(box(0.86, 0.03, 0.04), timber, 0, 1.06, -0.3);
+  walls.slice(0, 6).forEach((w, i) => {
+    if (w.kind !== "wall") return;
+    const x = -0.31 + i * 0.124;
+    const len = 0.42 + (i % 2) * 0.08;
+    add(box(0.1, len, 0.008), lambert(w.look.ground), x, 1.05 - len / 2, -0.29);
+    // Its figure, as a stripe down the middle: enough to tell one paper from another at a glance.
+    add(box(w.look.pattern === "plain" ? 0.02 : 0.045, len * 0.9, 0.009), lambert(w.look.ink), x, 1.05 - len / 2, -0.284);
+    if (w.look.dado) add(box(0.1, 0.08, 0.01), lambert(w.look.dado), x, 1.05 - len + 0.04, -0.283);
+  });
+  // Rolls of paper standing in a basket at the end of the counter.
+  add(new THREE.CylinderGeometry(0.09, 0.075, 0.12, 8), lambert("#b08a52"), -0.38, 0.1, 0.14);
+  walls.slice(2, 6).forEach((w, i) => {
+    if (w.kind !== "wall") return;
+    add(new THREE.CylinderGeometry(0.026, 0.026, 0.3, 8), lambert(w.look.ground), -0.41 + (i % 2) * 0.055, 0.2 + (i % 3) * 0.02, 0.11 + Math.floor(i / 2) * 0.055).rotation.z = (i - 1.5) * 0.08;
+  });
+  // A row of little roofs along the top of the rack, one in every colour she sells.
+  roofs.forEach((r, i) => {
+    if (r.kind !== "roof") return;
+    const x = -0.36 + (i * 0.72) / Math.max(1, roofs.length - 1);
+    const shape = new THREE.Shape([new THREE.Vector2(-0.04, 0), new THREE.Vector2(0.04, 0), new THREE.Vector2(0, 0.04)]);
+    add(new THREE.ExtrudeGeometry(shape, { depth: 0.05, bevelEnabled: false }).translate(0, 0, -0.025), lambert(r.look.color), x, 1.075, -0.3);
+  });
+  // The awning: a short one over the rack only, sloping forward off its top, so she stands out from under it in
+  // sage and cream stripes with a scalloped edge.
+  const pitch = 0.35;
+  for (let i = 0; i < 6; i++) add(box(0.15, 0.02, 0.42), i % 2 ? cream : sage, -0.375 + i * 0.15, 1.17, -0.17).rotation.x = pitch;
+  for (let i = 0; i < 6; i++) add(new THREE.ConeGeometry(0.04, 0.05, 4), i % 2 ? cream : sage, -0.375 + i * 0.15, 1.07, 0.03, Math.PI / 4).rotation.x = Math.PI;
 };

@@ -53,6 +53,7 @@ export * from "./lapidary";
 export * from "./garden";
 export * from "./well";
 export * from "./talk";
+export * from "./finishes";
 export * from "./gameclock";
 export * from "./wander";
 export * from "./fishingholes";
