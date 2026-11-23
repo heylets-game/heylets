@@ -71,7 +71,8 @@ function enemyUnit(state: ZoneState, kind: string, pos: HexPos, group: string): 
     maxFocus: 0,
     armor: 0,
     power: 0,
-    abilities: [],
+    // Its own copy of what its kind starts with: one enemy can be given more, or fewer, than the rest.
+    abilities: [...(ENEMIES[kind].abilities ?? [])],
     conditions: [],
     down: false,
     cooldowns: {},
@@ -91,6 +92,18 @@ export function ensureMouth(state: ZoneState): ZoneState {
   state.map.pois.push({ id: "landing", kind: "landing", pos: { q: state.start.q, r: state.start.r }, hidden: false, cleared: false, usedBy: [], enemies: [] });
   return state;
 }
+
+/**
+ * An enemy saved before enemies carried their own abilities has none: it is given what its kind starts with. Run on
+ * every saved zone as it is loaded (loadZone). Returns the same state, changed in place.
+ */
+export function ensureEnemyAbilities(state: ZoneState): ZoneState {
+  for (const u of state.units) if (u.side === "enemy" && (u.abilities?.length ?? 0) === 0) u.abilities = [...(ENEMIES[u.kind]?.abilities ?? [])];
+  return state;
+}
+
+/** A saved zone, brought up to date as it is loaded: a way out of a cave (ensureMouth), and enemies' abilities (ensureEnemyAbilities). */
+export const loadZone = (state: ZoneState): ZoneState => ensureEnemyAbilities(ensureMouth(state));
 
 export function createZone(code: string, seed: string, options: ZoneOptions): ZoneState {
   const plan = options.delve ? generateDelve(seed, options) : generateZone(seed, options);

@@ -3,7 +3,10 @@
 // tiles is in zone/zone.test.ts.
 
 import { describe, expect, it } from "vitest";
-import { ENEMIES, LURKERS, TROLL_REGEN, bandKinds } from "./index";
+import { ENEMIES, ENEMY_ABILITIES, LURKERS, TROLL_REGEN, bandKinds, type EnemyDef } from "./index";
+
+/** What an enemy kind starts with, as ability definitions. */
+const attacksOf = (def: EnemyDef) => def.abilities.map((id) => ENEMY_ABILITIES[id]);
 
 describe("the bear", () => {
   it("is a slow, tough bruiser that hits harder than a wolf and tears rather than clubs", () => {
@@ -13,12 +16,12 @@ describe("the bear", () => {
     expect(bear.hp).toBeGreaterThan(wolf.hp * 2);
     expect(bear.speed).toBeLessThan(wolf.speed);
     expect(bear.speed).toBeLessThanOrEqual(brute.speed);
-    const hardest = Math.max(...bear.attacks.map((a) => a.damage));
-    expect(hardest).toBeGreaterThan(Math.max(...wolf.attacks.map((a) => a.damage)));
+    const hardest = Math.max(...attacksOf(bear).map((a) => a.damage));
+    expect(hardest).toBeGreaterThan(Math.max(...attacksOf(wolf).map((a) => a.damage)));
     // Its heavy blow makes them bleed; only its roar stuns.
-    const swipe = bear.attacks.find((a) => a.damage === hardest)!;
+    const swipe = attacksOf(bear).find((a) => a.damage === hardest)!;
     expect(swipe.perfect?.effect).toBe("bleeding");
-    expect(bear.attacks.some((a) => a.name === "Roar" && a.perfect?.effect === "stunned")).toBe(true);
+    expect(attacksOf(bear).some((a) => a.name === "Roar" && a.perfect?.effect === "stunned")).toBe(true);
   });
 
   it("has a boss of its own: bigger, and its roar shakes the whole party", () => {
@@ -26,7 +29,7 @@ describe("the bear", () => {
     expect(big.boss).toBe(true);
     expect(big.hp).toBeGreaterThan(ENEMIES.bear.hp);
     expect(big.speed).toBeLessThan(ENEMIES.alpha.speed);
-    expect(big.attacks.some((a) => a.target === "all_heroes" && a.perfect?.effect === "stunned")).toBe(true);
+    expect(attacksOf(big).some((a) => a.shape === "burst" && a.perfect?.effect === "stunned")).toBe(true);
   });
 
   it("roams alone, or as a pair for a full party", () => {
@@ -46,10 +49,10 @@ describe("the ogre", () => {
     expect(ogre.hp).toBeGreaterThan(bear.hp);
     expect(ogre.speed).toBeLessThan(bear.speed);
     const rank = Object.values(ENEMIES).filter((e) => !e.boss && e.kind !== "dummy");
-    expect(Math.max(...ogre.attacks.map((a) => a.damage))).toBe(Math.max(...rank.flatMap((e) => e.attacks.map((a) => a.damage))));
-    expect(ogre.attacks.find((a) => a.name === "Club Smash")?.perfect?.effect).toBe("stunned");
+    expect(Math.max(...attacksOf(ogre).map((a) => a.damage))).toBe(Math.max(...rank.flatMap((e) => attacksOf(e).map((a) => a.damage))));
+    expect(attacksOf(ogre).find((a) => a.name === "Club Smash")?.perfect?.effect).toBe("stunned");
     // Its stomp reaches the whole party, and leaves them slow.
-    expect(ogre.attacks.some((a) => a.target === "all_heroes" && a.perfect?.effect === "slowed")).toBe(true);
+    expect(attacksOf(ogre).some((a) => a.shape === "burst" && a.perfect?.effect === "slowed")).toBe(true);
     expect(ogre.xp).toBeGreaterThan(brute.xp);
   });
 
@@ -75,8 +78,8 @@ describe("the training dummy", () => {
     const dummy = ENEMIES.dummy;
     expect(dummy.xp).toBe(0);
     expect(dummy.boss).toBeFalsy();
-    const softest = Math.min(...Object.values(ENEMIES).filter((e) => e.kind !== "dummy").flatMap((e) => e.attacks.map((a) => a.damage)));
-    for (const a of dummy.attacks) expect(a.damage).toBeLessThan(softest);
+    const softest = Math.min(...Object.values(ENEMIES).filter((e) => e.kind !== "dummy").flatMap((e) => attacksOf(e).map((a) => a.damage)));
+    for (const a of attacksOf(dummy)) expect(a.damage).toBeLessThan(softest);
     expect(dummy.hp).toBeGreaterThan(Math.max(...Object.values(ENEMIES).filter((e) => !e.boss && e.kind !== "dummy").map((e) => e.hp)));
   });
 });

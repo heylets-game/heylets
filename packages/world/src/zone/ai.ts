@@ -34,8 +34,7 @@ import { BELL_AP, goesForBell, liveBell, ringBell, somethingToRouse } from "./be
 import { apForMove, checkCommon, doCommon, enemyAct, leavesReach, shiftInto, shoveDest, walk, walkAp } from "./combat";
 import { attackContext, defenceOf, has, saveBonus, unseen, type Ctx } from "./engine";
 import { HIGH_REACH, blast, close, elevOf, flies, heldAgainst, inFight, pathIn, reachFrom, sameHex, seesFor, stepCost, strikes, zoneReach, type Reached } from "./geometry";
-import { AP_MAX, COMMON_ACTIONS, ENEMY_BURST, ENEMY_KIT, ITEM_AP, enemyShove, enemyStrikes, jumpRange, type EnemyStrike } from "./kit";
-import { modsOf } from "./mods";
+import { AP_MAX, COMMON_ACTIONS, ENEMY_BURST, ENEMY_KIT, ITEM_AP, enemyShove, jumpRange, unitStrikes, type EnemyStrike } from "./kit";
 import { diceAverage, hitChance } from "./rules";
 import { HARMFUL } from "./surfaces";
 import type { Budget, Unit, ZoneState } from "./types";
@@ -155,7 +154,8 @@ export function enemyTurn(ctx: Ctx, enemy: Unit, budget: Budget): boolean {
 function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): void {
   const { state } = ctx;
   if (state.aiOff) return;
-  const blows = enemyStrikes(enemy.kind, enemy.level, state.options.threat, modsOf(state.options).edge);
+  // Its own abilities, those that are ready: looked at again once one is used and has to wait (a cooldown).
+  let blows = unitStrikes(state, enemy);
   // The Unseen are not there, as far as it knows.
   const standing = () => state.units.filter((u) => u.side === "hero" && !u.down && !unseen(u) && inFight(state, u.id));
   let heroes = standing();
@@ -399,9 +399,14 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
     // It may not have got where it meant to: look again from where it stands.
     const still = standing();
     const goadedNow = taunter(enemy, still);
-    const option = (goadedNow ? bestAttack(state, enemy, enemy.pos, blows, [goadedNow]) : null) ?? (still.length > 0 ? bestAttack(state, enemy, enemy.pos, blows, still) : null);
+    const affordable = blows.filter((b) => b.cost <= budget.ap);
+    const option = (goadedNow ? bestAttack(state, enemy, enemy.pos, affordable, [goadedNow]) : null) ?? (still.length > 0 ? bestAttack(state, enemy, enemy.pos, affordable, still) : null);
     if (!option) return;
-    budget.ap -= ITEM_AP.attack;
+    budget.ap -= option.attack.cost;
+    if (option.attack.cooldown > 0) {
+      enemy.cooldowns[option.attack.id] = option.attack.cooldown;
+      blows = unitStrikes(state, enemy);
+    }
     enemyAct(ctx, enemy, option.attack, option.target);
   }
 }

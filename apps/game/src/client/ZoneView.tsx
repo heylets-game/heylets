@@ -36,6 +36,7 @@ import {
   CONDITION_INFO,
   CRATE_HP,
   ENEMIES,
+  ENEMY_ABILITIES,
   FLEE_RANGE,
   FREE_WALK,
   pathIn,
@@ -2637,7 +2638,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
             <>
               <strong>{under.name}</strong> <span className="muted">· {under.hp}/{under.maxHp} HP · Defence {defenceOf(under, state)}{under.down ? " · down" : ""}</span>
               {under.conditions.length > 0 && <div>{under.conditions.map((c) => <span key={c.kind} className="zone-cond" style={{ color: CONDITION_INFO[c.kind].color }} title={CONDITION_INFO[c.kind].blurb}>{CONDITION_INFO[c.kind].name}{stacksOf(c) > 1 ? ` ×${c.amount}` : ""} {c.rounds}</span>)}</div>}
-              {under.side === "enemy" && <div className="muted">{ENEMIES[under.kind]?.attacks.map((a) => a.name).join(", ")}</div>}
+              {under.side === "enemy" && <div className="muted">{under.abilities.map((id) => ENEMY_ABILITIES[id]?.name ?? id).join(", ")}</div>}
               {alsoHere.map((u) => <div key={u.id}><span className="muted">Sharing the hex:</span> <strong>{u.name}</strong> <span className="muted">· {u.hp}/{u.maxHp} HP{u.down ? " · down" : ""}</span></div>)}
               {/* Where a shove would send them: over an edge, into a pit, or only back a hex. */}
               {shoveInto && <div style={{ color: shoveInto.how === "open" ? undefined : "#ffb070" }} className={shoveInto.how === "open" ? "muted" : ""}>{shoveInto.how === "pit" ? `Shoved from here they go ${shoveInto.pit === "lava" ? "into the lava" : shoveInto.pit === "water" ? "into deep water" : "off the edge of the land"}, and are lost, unless they catch the edge (they roll ${edgeDc(asState(state), act)} or better).` : shoveInto.how === "drop" ? `Shoved from here they go over a drop of ${shoveInto.levels} levels (${shoveInto.levels - 1}d4 and Prone), unless they catch the edge (they roll ${edgeDc(asState(state), act)} or better).` : "Shoved from here they go back a hex."}</div>}

@@ -5,9 +5,11 @@
 // puts them on a map. A test fails if an ability or an enemy has no entry.
 
 import type { StatKey, Stats } from "@gantt-quest/core";
-import { ABILITIES, EFFECT_INFO, ENEMIES, SUNDERED_DEFENCE, type AbilityDef, type EffectKind, type EnemyAttack } from "../content";
+import { ABILITIES, EFFECT_INFO, ENEMIES, SUNDERED_DEFENCE, type AbilityDef, type EffectKind } from "../content";
+import { ENEMY_ABILITIES, type EnemyAbilityDef } from "./enemyabilities";
+import { modsOf } from "./mods";
 import { diceFor, type Dice } from "./rules";
-import type { CommonAction, Condition, ShantyKind, SurfaceKind, Throwable, WeatherKind } from "./types";
+import type { CommonAction, Condition, ShantyKind, SurfaceKind, Throwable, Unit, WeatherKind, ZoneState } from "./types";
 
 /**
  * - `single`: one enemy, an attack roll.
@@ -663,16 +665,8 @@ export const jumpRange = (strMod: number): number => Math.max(2, 2 + strMod);
 
 // ---------- enemies ----------
 
-export interface EnemyAttackKit {
-  /** Hexes it reaches: 1 for a blow. */
-  range?: number;
-  /** Left under the target when it lands. */
-  surface?: { kind: SurfaceKind; rounds: number };
-  /** Knocks the target back a hex when it lands. */
-  push?: boolean;
-  /** Freezes water under the target. */
-  chills?: boolean;
-}
+/** What an enemy's ability does besides its damage, when it lands. */
+export type EnemyAttackKit = Pick<EnemyAbilityDef, "surface" | "push" | "chills">;
 
 export interface EnemyKit {
   /** Keeps its distance and likes high ground. */
@@ -683,8 +677,6 @@ export interface EnemyKit {
   pack?: boolean;
   /** It has the hands and the wit for it: it will shove someone beside it over a drop or into a pit (its bonus action). */
   shoves?: boolean;
-  /** Attacks that are not plain blows, by name. */
-  attacks?: Record<string, EnemyAttackKit>;
 }
 
 export const ENEMY_KIT: Record<string, EnemyKit> = {
@@ -695,41 +687,45 @@ export const ENEMY_KIT: Record<string, EnemyKit> = {
   // Its Stomp, like anything that strikes the whole crew, is a burst around it.
   ogre: { shoves: true },
   // It rakes up close, and will throw a rock at whoever keeps away. (Its wounds closing is in zone.ts, at the start of its turn.)
-  troll: { shoves: true, attacks: { "Hurl Rock": { range: 5 } } },
-  cultist: { ranged: true, attacks: { "Dark Bolt": { range: 5 }, Immolate: { range: 5, surface: { kind: "fire", rounds: 2 } } } },
-  brute: { shoves: true, attacks: { Shove: { push: true } } },
-  archer: { ranged: true, attacks: { Volley: { range: 7 }, "Barbed Arrow": { range: 7 } } },
+  troll: { shoves: true },
+  cultist: { ranged: true },
+  brute: { shoves: true },
+  archer: { ranged: true },
   alpha: { pack: true },
   great_bear: { shoves: true },
   guardian: { shoves: true },
-  shade: { attacks: { "Chill Touch": { chills: true } } },
+  shade: {},
   bat: { fly: true },
   skeleton: { shoves: true },
-  // Its acid eats into whoever it hits and is spent: it leaves no pool behind (that is poison's way).
-  slime: { attacks: { "Acid Splash": { range: 3 } } },
+  slime: {},
   haunt: {},
   villain: { shoves: true },
-  spider: { pack: true, attacks: { "Venomous Bite": { surface: { kind: "poison", rounds: 2 } }, "Web Spit": { range: 4, surface: { kind: "slime", rounds: 2 } } } },
-  broodmother: { attacks: { "Web Spit": { range: 5, surface: { kind: "slime", rounds: 2 } } } },
-  frost_wolf: { pack: true, attacks: { "Rime Bite": { chills: true } } },
+  spider: { pack: true },
+  broodmother: {},
+  frost_wolf: { pack: true },
   ember_hound: { pack: true },
   snow_bear: { shoves: true },
-  wraith: { ranged: true, attacks: { "Frost Lance": { range: 5, chills: true } } },
-  witch: { ranged: true, attacks: { "Thorn Hex": { range: 5 }, "Evil Eye": { range: 5 } } },
+  wraith: { ranged: true },
+  witch: { ranged: true },
 };
 
 /** How far an attack on every hero reaches out from the enemy making it. */
 export const ENEMY_BURST = 2;
 
 export interface EnemyStrike {
+  /** The ability's id (enemyabilities.ts). */
+  id: string;
   name: string;
   /** 1 for a blow; more needs a clear line. An attack on every hero is a burst around the enemy. */
   range: number;
   burst: boolean;
   dice: Dice;
   bonus: number;
-  perfect?: EnemyAttack["perfect"];
+  perfect?: EnemyAbilityDef["perfect"];
   weight: number;
+  /** Action Points it takes, and the turns it is not ready for after. */
+  cost: number;
+  cooldown: number;
   kit: EnemyAttackKit;
 }
 
@@ -740,29 +736,41 @@ const clampThreat = (threat: number | undefined) => Math.max(1, Math.min(3, Math
 const THREAT_HP = [1, 1.9, 2.7];
 
 /**
- * An enemy kind's attacks as they work on the tiles, for a party of this level and at this threat.
- * `more` is what the map's modifiers add to every attack's damage and its bonus to hit (zone/mods.ts).
+ * Enemy abilities (by id) as they work on the tiles, for an enemy of this level and at this threat. `more` is what
+ * the map's modifiers add to every attack's damage and its bonus to hit (zone/mods.ts). An id the pool does not
+ * have is passed over.
  */
-export function enemyStrikes(kind: string, level: number, threat?: number, more = 0): EnemyStrike[] {
+export function abilityStrikes(ids: readonly string[], level: number, threat?: number, more = 0): EnemyStrike[] {
   const edge = clampThreat(threat) - 1 + more;
-  const def = ENEMIES[kind];
-  if (!def) return [];
-  const kit = ENEMY_KIT[kind] ?? {};
-  return def.attacks.map((a) => {
-    const own = kit.attacks?.[a.name] ?? {};
-    return {
-      name: a.name,
-      range: a.target === "all_heroes" ? ENEMY_BURST : (own.range ?? 1),
-      burst: a.target === "all_heroes",
-      dice: diceFor(a.damage + Math.floor(level / 2) + edge),
-      // Threat sharpens it.
-      bonus: a.toHit + Math.floor((Math.max(1, level) - 1) / 4) + edge,
-      perfect: a.perfect,
-      weight: a.weight,
-      kit: own,
-    };
+  return ids.flatMap((id) => {
+    const a = ENEMY_ABILITIES[id];
+    if (!a) return [];
+    const burst = a.shape === "burst";
+    return [
+      {
+        id,
+        name: a.name,
+        range: burst ? ENEMY_BURST : (a.range ?? 1),
+        burst,
+        dice: diceFor(a.damage + Math.floor(level / 2) + edge),
+        // Threat sharpens it.
+        bonus: a.toHit + Math.floor((Math.max(1, level) - 1) / 4) + edge,
+        perfect: a.perfect,
+        weight: a.weight,
+        cost: a.cost ?? ACTION_AP,
+        cooldown: a.cooldown ?? 0,
+        kit: { surface: a.surface, push: a.push, chills: a.chills },
+      },
+    ];
   });
 }
+
+/** What an enemy kind starts with, as abilityStrikes makes them. */
+export const enemyStrikes = (kind: string, level: number, threat?: number, more = 0): EnemyStrike[] => abilityStrikes(ENEMIES[kind]?.abilities ?? [], level, threat, more);
+
+/** What this enemy can do just now: its own abilities, those that are ready, on this map. */
+export const unitStrikes = (state: Pick<ZoneState, "options">, unit: Unit): EnemyStrike[] =>
+  abilityStrikes(unit.abilities, unit.level, state.options.threat, modsOf(state.options).edge).filter((s) => !(unit.cooldowns[s.id] > 0));
 
 /** The quick are hard to hit: 10, one more for every 30 of speed, one more for a boss. */
 export const enemyDefence = (kind: string): number => 10 + Math.floor((ENEMIES[kind]?.speed ?? 0) / 30) + (ENEMIES[kind]?.boss ? 1 : 0);

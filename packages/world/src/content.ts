@@ -306,16 +306,6 @@ export const abilitiesFor = (weapon: string | null | undefined): string[] => (we
 
 // ---------- enemies ----------
 
-export interface EnemyAttack {
-  name: string;
-  /** Added to its roll to hit. */
-  toHit: number;
-  damage: number;
-  target: "hero" | "all_heroes";
-  perfect?: { effect: EffectKind; turns: number };
-  weight: number;
-}
-
 export interface EnemyDef {
   kind: string;
   name: string;
@@ -324,7 +314,8 @@ export interface EnemyDef {
   speed: number;
   xp: number;
   boss?: boolean;
-  attacks: EnemyAttack[];
+  /** The abilities it starts with, by id (zone/enemyabilities.ts ENEMY_ABILITIES). Each enemy carries its own copy. */
+  abilities: string[];
   /** Grows back `amount` HP at the start of each of its turns, unless it has the effect `unless` on it (a troll and fire). */
   regen?: { amount: number; unless: EffectKind; name: string };
 }
@@ -336,194 +327,129 @@ export const ENEMIES: Record<string, EnemyDef> = {
   // A training dummy, for a practice map: it soaks up a whole rotation of abilities, barely hits back and never moves.
   dummy: {
     kind: "dummy", name: "Training Dummy", hp: 60, speed: 0, xp: 0,
-    attacks: [{ name: "Wobble", toHit: 0, damage: 1, target: "hero", weight: 1 }],
+    abilities: ["wobble"],
   },
   bandit: {
     kind: "bandit", name: "Bandit", hp: 12, speed: 60, xp: 12,
-    attacks: [
-      { name: "Slash", toHit: 3, damage: 6, target: "hero", weight: 3 },
-      { name: "Cheap Shot", toHit: 3, damage: 5, target: "hero", perfect: { effect: "bleeding", turns: 2 }, weight: 1 },
-    ],
+    abilities: ["slash", "cheap_shot"],
   },
   wolf: {
     kind: "wolf", name: "Dire Wolf", hp: 9, speed: 75, xp: 10,
-    attacks: [{ name: "Bite", toHit: 5, damage: 5, target: "hero", perfect: { effect: "bleeding", turns: 2 }, weight: 1 }],
+    abilities: ["wolf_bite"],
   },
   // A beast bruiser: slow and thick-hided, and every blow lands like a falling tree.
   // Where the Brute stuns with a club, the bear tears (bleeding) and only its roar stuns.
   bear: {
     kind: "bear", name: "Cave Bear", hp: 26, speed: 30, xp: 20,
-    attacks: [
-      { name: "Mauling Swipe", toHit: 4, damage: 12, target: "hero", perfect: { effect: "bleeding", turns: 2 }, weight: 3 },
-      { name: "Roar", toHit: 3, damage: 4, target: "hero", perfect: { effect: "stunned", turns: 1 }, weight: 1 },
-    ],
+    abilities: ["mauling_swipe", "roar"],
   },
   // The heaviest thing that walks ashore: very slow, and its club lands like a dropped mast. Its stomp
   // shakes the whole crew and leaves them slow on their feet. A pair's worth on its own, like a bear.
   ogre: {
     kind: "ogre", name: "Ogre", hp: 32, speed: 22, xp: 24,
-    attacks: [
-      { name: "Club Smash", toHit: 3, damage: 13, target: "hero", perfect: { effect: "stunned", turns: 1 }, weight: 3 },
-      { name: "Stomp", toHit: 3, damage: 4, target: "all_heroes", perfect: { effect: "slowed", turns: 2 }, weight: 1 },
-    ],
+    abilities: ["club_smash", "stomp"],
   },
   // A troll: no tougher than a brute to look at, but its wounds close as you watch. It grows back every
   // turn unless it is Burning, so fire (or a lot of damage at once) is how it is put down.
   troll: {
     kind: "troll", name: "Troll", hp: 20, speed: 40, xp: 22,
     regen: { amount: TROLL_REGEN, unless: "burning", name: "Regenerate" },
-    attacks: [
-      { name: "Rake", toHit: 4, damage: 7, target: "hero", perfect: { effect: "bleeding", turns: 2 }, weight: 3 },
-      { name: "Hurl Rock", toHit: 3, damage: 6, target: "hero", perfect: { effect: "stunned", turns: 1 }, weight: 1 },
-    ],
+    abilities: ["rake", "hurl_rock"],
   },
   cultist: {
     kind: "cultist", name: "Cultist", hp: 11, speed: 50, xp: 14,
-    attacks: [
-      { name: "Dark Bolt", toHit: 4, damage: 7, target: "hero", weight: 3 },
-      { name: "Immolate", toHit: 2, damage: 4, target: "hero", perfect: { effect: "burning", turns: 2 }, weight: 1 },
-    ],
+    abilities: ["dark_bolt", "immolate"],
   },
   brute: {
     kind: "brute", name: "Brute", hp: 18, speed: 35, xp: 18,
-    attacks: [
-      { name: "Maul", toHit: 3, damage: 11, target: "hero", perfect: { effect: "stunned", turns: 1 }, weight: 3 },
-      { name: "Shove", toHit: 4, damage: 6, target: "hero", weight: 1 },
-    ],
+    abilities: ["maul", "brute_shove"],
   },
   archer: {
     kind: "archer", name: "Archer", hp: 9, speed: 70, xp: 13,
-    attacks: [
-      { name: "Volley", toHit: 4, damage: 6, target: "hero", weight: 3 },
-      { name: "Barbed Arrow", toHit: 3, damage: 5, target: "hero", perfect: { effect: "bleeding", turns: 3 }, weight: 2 },
-    ],
+    abilities: ["volley", "barbed_arrow"],
   },
   // A beast boss: fast, and it makes its victims bleed.
   alpha: {
     kind: "alpha", name: "Pack Leader", hp: 27, speed: 75, xp: 40, boss: true,
-    attacks: [
-      { name: "Savage Bite", toHit: 5, damage: 9, target: "hero", perfect: { effect: "bleeding", turns: 3 }, weight: 3 },
-      { name: "Pounce", toHit: 4, damage: 8, target: "hero", perfect: { effect: "stunned", turns: 1 }, weight: 2 },
-      { name: "Rending Howl", toHit: 3, damage: 5, target: "all_heroes", weight: 1 },
-    ],
+    abilities: ["savage_bite", "pounce", "rending_howl"],
   },
   // A beast boss that comes alone: slow, huge, and it tears; its roar can stun the whole crew.
   great_bear: {
     kind: "great_bear", name: "Great Bear", hp: 42, speed: 35, xp: 44, boss: true,
-    attacks: [
-      { name: "Crushing Maul", toHit: 5, damage: 13, target: "hero", perfect: { effect: "bleeding", turns: 3 }, weight: 3 },
-      { name: "Thunderous Roar", toHit: 3, damage: 5, target: "all_heroes", perfect: { effect: "stunned", turns: 1 }, weight: 2 },
-    ],
+    abilities: ["crushing_maul", "thunderous_roar"],
   },
   // A guardian boss: slow and alone, but each blow lands like a wall.
   guardian: {
     kind: "guardian", name: "Guardian", hp: 35, speed: 30, xp: 44, boss: true,
-    attacks: [
-      { name: "Stone Fist", toHit: 5, damage: 12, target: "hero", perfect: { effect: "stunned", turns: 1 }, weight: 3 },
-      { name: "Quake", toHit: 3, damage: 6, target: "all_heroes", weight: 2 },
-    ],
+    abilities: ["stone_fist", "quake"],
   },
   // The Haunted Caverns' dead. A shade is quick and weak, and its touch chills (slows) whoever it lays a hand on.
   shade: {
     kind: "shade", name: "Shade", hp: 10, speed: 70, xp: 12,
-    attacks: [
-      { name: "Chill Touch", toHit: 3, damage: 5, target: "hero", perfect: { effect: "slowed", turns: 2 }, weight: 3 },
-      { name: "Wail", toHit: 3, damage: 3, target: "all_heroes", weight: 1 },
-    ],
+    abilities: ["chill_touch", "wail"],
   },
   // Cave bats: weak alone, but quick, and they come in swarms.
   bat: {
     kind: "bat", name: "Cave Bat", hp: 6, speed: 90, xp: 7,
-    attacks: [
-      { name: "Bite", toHit: 4, damage: 4, target: "hero", perfect: { effect: "bleeding", turns: 2 }, weight: 3 },
-      { name: "Screech", toHit: 3, damage: 2, target: "all_heroes", weight: 1 },
-    ],
+    abilities: ["bat_bite", "screech"],
   },
   // The smugglers' dead, still guarding their camp: slow and steady, and hard to put down.
   skeleton: {
     kind: "skeleton", name: "Skeleton", hp: 15, speed: 45, xp: 14,
-    attacks: [
-      { name: "Rusted Cutlass", toHit: 4, damage: 7, target: "hero", weight: 3 },
-      { name: "Bone Rattle", toHit: 3, damage: 4, target: "hero", perfect: { effect: "stunned", turns: 1 }, weight: 1 },
-    ],
+    abilities: ["rusted_cutlass", "bone_rattle"],
   },
   // A cave slime: very slow and very tough, and its acid leaves its prey exposed (taking more from every hit). The acid
-  // burns and is spent: it leaves no poison lying about (kit.ts).
+  // burns and is spent: it leaves no poison lying about (enemyabilities.ts).
   slime: {
     kind: "slime", name: "Cave Slime", hp: 20, speed: 25, xp: 13,
-    attacks: [
-      { name: "Engulf", toHit: 3, damage: 6, target: "hero", perfect: { effect: "slowed", turns: 2 }, weight: 3 },
-      { name: "Acid Splash", toHit: 3, damage: 4, target: "hero", perfect: { effect: "exposed", turns: 2 }, weight: 2 },
-    ],
+    abilities: ["engulf", "acid_splash"],
   },
   // What is bound in the caverns' deepest chamber, guarding the hoard.
   haunt: {
     kind: "haunt", name: "Haunt", hp: 30, speed: 55, xp: 44, boss: true,
-    attacks: [
-      { name: "Grave Grasp", toHit: 5, damage: 9, target: "hero", perfect: { effect: "stunned", turns: 1 }, weight: 3 },
-      { name: "Keening", toHit: 3, damage: 5, target: "all_heroes", perfect: { effect: "slowed", turns: 2 }, weight: 2 },
-    ],
+    abilities: ["grave_grasp", "keening"],
   },
   // ---- what lives out on the atlas's maps ----
   // A hunting spider the size of a hound: quick and frail, its bite leaves venom on the ground, and its web slows
   // whoever it catches from across the way.
   spider: {
     kind: "spider", name: "Giant Spider", hp: 10, speed: 72, xp: 11,
-    attacks: [
-      { name: "Venomous Bite", toHit: 4, damage: 5, target: "hero", weight: 3 },
-      { name: "Web Spit", toHit: 3, damage: 3, target: "hero", perfect: { effect: "slowed", turns: 2 }, weight: 2 },
-    ],
+    abilities: ["venomous_bite", "spider_web_spit"],
   },
   // What the nest belongs to: a spider the size of a cart, that webs the whole crew at once.
   broodmother: {
     kind: "broodmother", name: "Broodmother", hp: 38, speed: 50, xp: 44, boss: true,
-    attacks: [
-      { name: "Impaling Fang", toHit: 5, damage: 11, target: "hero", perfect: { effect: "bleeding", turns: 3 }, weight: 3 },
-      { name: "Web Spit", toHit: 4, damage: 5, target: "hero", perfect: { effect: "slowed", turns: 2 }, weight: 2 },
-      { name: "Brood Swarm", toHit: 3, damage: 5, target: "all_heroes", perfect: { effect: "slowed", turns: 1 }, weight: 1 },
-    ],
+    abilities: ["impaling_fang", "brood_web_spit", "brood_swarm"],
   },
   // The frost's wolves: a dire wolf in all but coat, and the cold in its bite slows what it bleeds.
   frost_wolf: {
     kind: "frost_wolf", name: "Frost Wolf", hp: 10, speed: 75, xp: 11,
-    attacks: [{ name: "Rime Bite", toHit: 5, damage: 5, target: "hero", perfect: { effect: "slowed", turns: 2 }, weight: 1 }],
+    abilities: ["rime_bite"],
   },
   // The ashlands' hounds, and what they bite catches fire.
   ember_hound: {
     kind: "ember_hound", name: "Ember Hound", hp: 11, speed: 70, xp: 12,
-    attacks: [{ name: "Searing Bite", toHit: 5, damage: 5, target: "hero", perfect: { effect: "burning", turns: 2 }, weight: 1 }],
+    abilities: ["searing_bite"],
   },
   // A cave bear's white cousin: as slow, as thick-hided, and every bit as cross.
   snow_bear: {
     kind: "snow_bear", name: "Snow Bear", hp: 28, speed: 30, xp: 21,
-    attacks: [
-      { name: "Mauling Swipe", toHit: 4, damage: 12, target: "hero", perfect: { effect: "bleeding", turns: 2 }, weight: 3 },
-      { name: "Roar", toHit: 3, damage: 4, target: "hero", perfect: { effect: "stunned", turns: 1 }, weight: 1 },
-    ],
+    abilities: ["mauling_swipe", "roar"],
   },
   // The frost's dead: it keeps its distance, and what its cold reaches is slow to move after.
   wraith: {
     kind: "wraith", name: "Rime Wraith", hp: 11, speed: 60, xp: 14,
-    attacks: [
-      { name: "Frost Lance", toHit: 4, damage: 6, target: "hero", perfect: { effect: "slowed", turns: 2 }, weight: 3 },
-      { name: "Wail", toHit: 3, damage: 3, target: "all_heroes", weight: 1 },
-    ],
+    abilities: ["frost_lance", "wail"],
   },
   // Whoever it is that lives alone in the wood or the fen, and does not care for callers. Thorns from across the
   // clearing, and a hex that leaves whoever it lands on easy to hit.
   witch: {
     kind: "witch", name: "Hedge Witch", hp: 12, speed: 50, xp: 15,
-    attacks: [
-      { name: "Thorn Hex", toHit: 4, damage: 6, target: "hero", perfect: { effect: "bleeding", turns: 2 }, weight: 3 },
-      { name: "Evil Eye", toHit: 3, damage: 4, target: "hero", perfect: { effect: "exposed", turns: 2 }, weight: 2 },
-    ],
+    abilities: ["thorn_hex", "evil_eye"],
   },
   villain: {
     kind: "villain", name: "Villain", hp: 26, speed: 55, xp: 40, boss: true,
-    attacks: [
-      { name: "Crushing Strike", toHit: 5, damage: 9, target: "hero", perfect: { effect: "stunned", turns: 1 }, weight: 3 },
-      { name: "Sweeping Ruin", toHit: 3, damage: 6, target: "all_heroes", weight: 2 },
-    ],
+    abilities: ["crushing_strike", "sweeping_ruin"],
   },
 };
 

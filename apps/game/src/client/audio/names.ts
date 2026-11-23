@@ -6,7 +6,7 @@
 // lists every name the game can ask for; a test checks the manifest against it,
 // so a misspelt event is caught rather than silently never playing.
 
-import { ABILITIES, ENEMIES, RARITIES, RESOURCE_KINDS, WEAPONS, type Biome, type EffectKind } from "@gantt-quest/world";
+import { ABILITIES, ENEMIES, ENEMY_ABILITIES, RARITIES, RESOURCE_KINDS, WEAPONS, type Biome, type EffectKind } from "@gantt-quest/world";
 import { slug } from "./select";
 
 /** How an attack travels, which the renderer already decides for its effects. */
@@ -95,7 +95,7 @@ export const soundName = {
 export function soundNames(): Set<string> {
   const names = new Set<string>();
   const add = (list: string[] | null) => list?.forEach((n) => names.add(n));
-  const attacks = [...Object.values(ABILITIES).map((a) => a.name), ...Object.values(ENEMIES).flatMap((e) => e.attacks.map((a) => a.name))];
+  const attacks = [...Object.values(ABILITIES).map((a) => a.name), ...Object.values(ENEMY_ABILITIES).map((a) => a.name)];
   const fighters: Fighter[] = [
     ...[...new Set(Object.values(WEAPONS).map((w) => w.classId))].filter((kind): kind is string => !!kind).map((kind) => ({ side: "hero" as const, kind })),
     ...Object.keys(ENEMIES).map((kind) => ({ side: "enemy" as const, kind })),

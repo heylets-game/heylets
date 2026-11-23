@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { GRID, at, fails, flatBoard, has, must, standEnemy as enemy, standHero, unit } from "../test/zoneBoard";
 import { STARTING_STATS, hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/core";
+import { ENEMY_ABILITIES } from "./enemyabilities";
 import { ABILITIES, EFFECT_TICK, ENEMIES, HERO_CLASSES, SUNDERED_DEFENCE, WEAPONS, abilitiesFor } from "../content";
 import { CLIMES, type Tile } from "../map";
 import { makeRng } from "../rng";
@@ -12,10 +13,10 @@ import { ALERT_RANGE, DEFAULT_ZONE_OPTIONS, JOIN_RANGE, generateZone, zoneOption
 import { HEX_ROOM, adjacent, blast, blockerAt, flies, isDead, seesFor, solid, stepCost, unitAt, zoneReach } from "./geometry";
 import { propOf } from "./props";
 import { SITE_IDS, backdropOf, siteInside, type SiteId } from "./sites";
-import { ACTION_AP, AP_MAX, AP_TURN, AQUEOUS, RALLY, SUMMON_AP_TURN, AURAS, CHART, COMMON_ACTIONS, BLOCK, BONUS_AP, BOLSTER, AGAINST_WAVES, ENDURE, STAND_STRONG, STURDY, ENEMY_BURST, ENEMY_HP_SCALE, ENEMY_KIT, ENEMY_MOVE_AP, EXPLORE_ROUND_MS, FLEE_RANGE, LIGHT_RADIUS, SHIELD_SET_ASIDE, TACTICS, TORCH_GROUND_ROUNDS, TORCH_HELD_ROUNDS, TORCH_ROUND_MS, abilityDice as abilityDiceFor, commonCost, enemyHp, enemyMove, enemyStrikes, tacticOf } from "./kit";
+import { ACTION_AP, AP_MAX, AP_TURN, AQUEOUS, RALLY, SUMMON_AP_TURN, AURAS, CHART, COMMON_ACTIONS, BLOCK, BONUS_AP, BOLSTER, AGAINST_WAVES, ENDURE, STAND_STRONG, STURDY, ENEMY_BURST, ENEMY_HP_SCALE, ENEMY_KIT, ENEMY_MOVE_AP, EXPLORE_ROUND_MS, FLEE_RANGE, LIGHT_RADIUS, SHIELD_SET_ASIDE, TACTICS, TORCH_GROUND_ROUNDS, TORCH_HELD_ROUNDS, TORCH_ROUND_MS, abilityDice as abilityDiceFor, commonCost, enemyHp, abilityStrikes, enemyMove, enemyStrikes, tacticOf, unitStrikes } from "./kit";
 import { MAX_CATCHUP_ROUNDS } from "./clock";
 import { d20, diceAverage, diceFor, heroMove, hitChance } from "./rules";
-import { createZone, ensureMouth, spentOut, standInHero, stepZone, zoneView } from "./zone";
+import { createZone, ensureMouth, loadZone, spentOut, standInHero, stepZone, zoneView } from "./zone";
 import { DELVE_CRATES, DELVE_GLOWCAPS as GLOWCAP_COUNT, generateDelve } from "./delve";
 import { litHexes } from "./light";
 import { poolFor } from "../classabilities";
@@ -131,11 +132,37 @@ describe("the kit", () => {
     for (const id of Object.keys(TACTICS)) expect(ABILITIES[id], id).toBeDefined();
   });
 
-  it("has an entry for every enemy, naming only attacks that enemy has", () => {
+  it("has an entry for every enemy, and every ability an enemy starts with is in the pool", () => {
     for (const kind of Object.keys(ENEMIES)) {
       expect(ENEMY_KIT[kind], kind).toBeDefined();
-      for (const name of Object.keys(ENEMY_KIT[kind].attacks ?? {})) expect(ENEMIES[kind].attacks.some((a) => a.name === name), `${kind}: ${name}`).toBe(true);
-      expect(enemyStrikes(kind, 1).length).toBe(ENEMIES[kind].attacks.length);
+      expect(ENEMIES[kind].abilities.length, kind).toBeGreaterThan(0);
+      for (const id of ENEMIES[kind].abilities) expect(ENEMY_ABILITIES[id], `${kind}: ${id}`).toBeDefined();
+      expect(enemyStrikes(kind, 1).length).toBe(ENEMIES[kind].abilities.length);
+    }
+  });
+
+  it("gives each enemy its own copy of its kind's abilities, so one can be given another, and fills in one saved without any", () => {
+    const state = createZone("ABL", "abilities", zoneOptions({ size: "small", biome: "meadow", groups: 2, party: 2 }));
+    const [a, b] = state.units.filter((u) => u.side === "enemy");
+    expect(a.abilities).toEqual(ENEMIES[a.kind].abilities);
+    expect(a.abilities).not.toBe(ENEMIES[a.kind].abilities);
+    a.abilities.push("frost_lance");
+    expect(unitStrikes(state, a).map((s) => s.id)).toContain("frost_lance");
+    expect(b.abilities).not.toContain("frost_lance");
+    expect(ENEMIES[a.kind].abilities).not.toContain("frost_lance");
+    // One that has to wait for an ability (a cooldown) does not have it to use.
+    a.cooldowns.frost_lance = 1;
+    expect(unitStrikes(state, a).map((s) => s.id)).not.toContain("frost_lance");
+    // Saved before enemies carried their own: given their kind's on load.
+    b.abilities = [];
+    expect(loadZone(state).units.find((u) => u.id === b.id)!.abilities).toEqual(ENEMIES[b.kind].abilities);
+  });
+
+  it("has every ability in the pool named, and none an enemy cannot use", () => {
+    for (const [id, a] of Object.entries(ENEMY_ABILITIES)) {
+      expect(a.id, id).toBe(id);
+      expect(a.name.length, id).toBeGreaterThan(0);
+      expect(abilityStrikes([id], 1)).toHaveLength(1);
     }
   });
 
