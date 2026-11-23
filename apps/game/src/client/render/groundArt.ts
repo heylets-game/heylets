@@ -6,6 +6,7 @@
 // runs on unbroken from one hex into the next.
 
 import * as THREE from "three";
+import type { FloorLook, WallLook } from "@gantt-quest/world";
 
 /** Pixels across one sheet. */
 const SIZE = 256;
@@ -935,5 +936,395 @@ export function lapidaryWallTexture(): THREE.CanvasTexture {
     ctx.fillRect(0, railTop + 4, W, 1);
     timberBand(ctx, W, skirt, H, "#2e2117");
     timberBand(ctx, W, 0, beam, "#2e2117");
+  });
+}
+
+// ---------- home finishes: Nell's wallpapers and floors (packages/world/src/finishes.ts) ----------
+
+/** A colour a little lighter (t > 0) or darker (t < 0), as a CSS colour. */
+function shade(hex: string, t: number): string {
+  const c = mix(rgb(hex), t > 0 ? [255, 255, 255] : [0, 0, 0], Math.abs(t));
+  return `rgb(${c.map((v) => Math.round(v)).join(",")})`;
+}
+
+/** A soft mottle of `tone` (an "r,g,b") over a band of a wall sheet, wrapping round its sides. */
+function mottle(ctx: CanvasRenderingContext2D, W: number, y0: number, y1: number, tone: string, alpha: number, salt: number, count = 18) {
+  for (let i = 0; i < count; i++) {
+    const x = hash(i, 1, salt) * W;
+    const y = y0 + hash(i, 2, salt) * (y1 - y0);
+    const r = 16 + hash(i, 3, salt) * 32;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(${tone},${alpha})`);
+    g.addColorStop(1, `rgba(${tone},0)`);
+    ctx.fillStyle = g;
+    for (const shift of [-W, 0, W]) ctx.fillRect(x - r + shift, y - r, r * 2, r * 2);
+  }
+}
+
+/** Draw `motif` at every point of a lattice `step` across and `rise` down over a band, every other row shifted half a step. */
+function lattice(ctx: CanvasRenderingContext2D, W: number, y0: number, y1: number, step: number, rise: number, motif: (row: number, col: number) => void) {
+  for (let row = 0; y0 + row * rise < y1 + rise; row++) {
+    for (let col = -1; col * step < W + step; col++) {
+      ctx.save();
+      ctx.translate(col * step + (row % 2 ? step / 2 : 0), y0 + row * rise);
+      motif(row, col);
+      ctx.restore();
+    }
+  }
+}
+
+/** The paper itself, over its band of the wall, in its pattern. */
+function paper(ctx: CanvasRenderingContext2D, W: number, y0: number, y1: number, look: WallLook) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, y0, W, y1 - y0);
+  ctx.clip();
+  ctx.fillStyle = look.ground;
+  ctx.fillRect(0, y0, W, y1 - y0);
+  const ink = look.ink;
+  ctx.fillStyle = ink;
+  ctx.strokeStyle = ink;
+  switch (look.pattern) {
+    case "plain":
+    case "boards":
+      // Limewash: brushed on, a little uneven.
+      mottle(ctx, W, y0, y1, rgb(ink).join(","), 0.16, 1200, 26);
+      break;
+    case "stripe":
+      // A broad stripe and a fine one beside it, eight to a sheet.
+      for (let x = 0; x < W; x += 32) {
+        ctx.globalAlpha = 0.75;
+        ctx.fillRect(x + 4, y0, 12, y1 - y0);
+        ctx.globalAlpha = 0.5;
+        ctx.fillRect(x + 22, y0, 2, y1 - y0);
+      }
+      ctx.globalAlpha = 1;
+      break;
+    case "check":
+      // Bands of colour across and down, darker where they cross: a soft woven check.
+      ctx.globalAlpha = 0.35;
+      for (let x = 0; x < W; x += 64) ctx.fillRect(x + 8, y0, 20, y1 - y0);
+      for (let y = y0; y < y1; y += 64) ctx.fillRect(0, y + 8, W, 20);
+      ctx.globalAlpha = 0.6;
+      for (let x = 0; x < W; x += 64) ctx.fillRect(x + 44, y0, 2, y1 - y0);
+      for (let y = y0; y < y1; y += 64) ctx.fillRect(0, y + 44, W, 2);
+      ctx.globalAlpha = 1;
+      break;
+    case "sprig":
+      // A little flower on a stem, two leaves, on a diamond lattice.
+      lattice(ctx, W, y0 + 12, y1, 32, 30, () => {
+        ctx.lineWidth = 1.3;
+        ctx.globalAlpha = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(0, 7);
+        ctx.quadraticCurveTo(1.5, 1, 0, -3);
+        ctx.stroke();
+        for (const s of [-1, 1]) {
+          ctx.beginPath();
+          ctx.ellipse(s * 3, 3, 3, 1.4, s * 0.6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        for (let p = 0; p < 5; p++) {
+          const a = (p / 5) * Math.PI * 2;
+          ctx.beginPath();
+          ctx.arc(Math.cos(a) * 2.6, -6 + Math.sin(a) * 2.6, 1.8, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      });
+      break;
+    case "shell":
+      // Scallop shells: a fan of ribs over a hinge.
+      lattice(ctx, W, y0 + 16, y1, 64, 40, (row) => {
+        ctx.rotate(row % 2 ? 0.25 : -0.25);
+        ctx.globalAlpha = 0.85;
+        ctx.beginPath();
+        ctx.moveTo(0, 8);
+        ctx.arc(0, 8, 13, Math.PI * 1.12, Math.PI * 1.88);
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = look.ground;
+        ctx.lineWidth = 1;
+        for (let k = 1; k < 6; k++) {
+          const a = Math.PI * (1.12 + (0.76 * k) / 6);
+          ctx.beginPath();
+          ctx.moveTo(0, 8);
+          ctx.lineTo(Math.cos(a) * 12, 8 + Math.sin(a) * 12);
+          ctx.stroke();
+        }
+        ctx.fillRect(-3, 7, 6, 3);
+        ctx.strokeStyle = ink;
+      });
+      break;
+    case "damask":
+      // A tall ornament of curling leaves round a stem, with a small one between, faded gold on deep colour.
+      lattice(ctx, W, y0 + 20, y1, 64, 56, () => {
+        ctx.globalAlpha = 0.7;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(0, -18);
+        ctx.lineTo(0, 18);
+        ctx.stroke();
+        for (const s of [-1, 1]) {
+          ctx.beginPath();
+          ctx.moveTo(0, 12);
+          ctx.bezierCurveTo(s * 16, 8, s * 16, -10, s * 4, -12);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.ellipse(s * 9, -2, 5, 2.4, s * -1, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.ellipse(s * 6, 10, 4, 1.8, s * 0.7, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.beginPath();
+        ctx.moveTo(0, -24);
+        ctx.lineTo(4, -17);
+        ctx.lineTo(0, -12);
+        ctx.lineTo(-4, -17);
+        ctx.closePath();
+        ctx.fill();
+        // The small one between, half a step across and down.
+        ctx.globalAlpha = 0.45;
+        ctx.beginPath();
+        ctx.arc(32, 28, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      });
+      break;
+  }
+  // Paper ages: a faint mottle, and a little shadow under the beam.
+  mottle(ctx, W, y0, y1, "90,70,40", 0.07, 1210, 10);
+  const g = ctx.createLinearGradient(0, y0, 0, y0 + 18);
+  g.addColorStop(0, "rgba(30,20,10,0.22)");
+  g.addColorStop(1, "rgba(30,20,10,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, y0, W, 18);
+  ctx.restore();
+}
+
+/** Upright painted boards below a rail, four to a sheet, each its own shade, with a groove between. */
+function dadoBoards(ctx: CanvasRenderingContext2D, W: number, y0: number, y1: number, tone: string) {
+  const bw = W / 4;
+  for (let i = 0; i < 4; i++) {
+    const x = i * bw;
+    ctx.fillStyle = shade(tone, (hash(i, 1, 1220) - 0.5) * 0.12);
+    ctx.fillRect(x, y0, bw, y1 - y0);
+    const g = ctx.createLinearGradient(x, 0, x + bw, 0);
+    g.addColorStop(0, "rgba(255,240,210,0.12)");
+    g.addColorStop(0.25, "rgba(255,240,210,0)");
+    g.addColorStop(0.8, "rgba(20,10,0,0)");
+    g.addColorStop(1, "rgba(20,10,0,0.22)");
+    ctx.fillStyle = g;
+    ctx.fillRect(x, y0, bw, y1 - y0);
+    ctx.fillStyle = "rgba(10,5,0,0.45)";
+    ctx.fillRect(x, y0, 2, y1 - y0);
+  }
+  mottle(ctx, W, y0, y1, "20,12,6", 0.08, 1230, 8);
+}
+
+/**
+ * A hut's wallpaper inside, from one of Nell's finishes: the paper from the beam down to a rail at waist height over
+ * a dado of painted boards (or, with no dado, down to the skirting), dark timber for the rail, skirting and beam.
+ * One sheet is one unit of wall across; it repeats along the wall. Painted once a page for each finish.
+ */
+export function wallpaperTexture(id: string, look: WallLook): THREE.CanvasTexture {
+  return wallSheet(`finish:${id}`, (ctx, W, H, at) => {
+    const timber = look.timber ?? "#3a2a1c";
+    const beam = at(0.93);
+    const skirt = at(0.05);
+    const railTop = at(0.53);
+    const rail = at(0.5);
+    if (look.dado) {
+      paper(ctx, W, beam, railTop, look);
+      dadoBoards(ctx, W, rail, skirt, look.dado);
+      timberBand(ctx, W, railTop, rail, timber);
+      const lip = ctx.createLinearGradient(0, rail, 0, rail + 10);
+      lip.addColorStop(0, "rgba(5,5,5,0.32)");
+      lip.addColorStop(1, "rgba(5,5,5,0)");
+      ctx.fillStyle = lip;
+      ctx.fillRect(0, rail, W, 10);
+    } else {
+      paper(ctx, W, beam, skirt, look);
+    }
+    timberBand(ctx, W, skirt, H, timber);
+    timberBand(ctx, W, 0, beam, timber);
+  });
+}
+
+/** Square tiles with pale grout: two tones in a checker, three or more mixed at random. */
+function tiles(ctx: CanvasRenderingContext2D, look: FloorLook, salt: number) {
+  const n = 8;
+  const s = SIZE / n;
+  ctx.fillStyle = look.gap;
+  ctx.fillRect(0, 0, SIZE, SIZE);
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      const tone = look.tones.length === 2 ? look.tones[(r + c) % 2] : look.tones[Math.floor(hash(r, c, salt) * look.tones.length)];
+      const [x, y] = [c * s + 1.5, r * s + 1.5];
+      ctx.fillStyle = tone;
+      ctx.fillRect(x, y, s - 3, s - 3);
+      // A glaze: lit along the top edge, a soft sheen, shaded along the foot.
+      ctx.fillStyle = "rgba(255,250,240,0.16)";
+      ctx.fillRect(x, y, s - 3, 2);
+      ctx.fillStyle = "rgba(15,10,5,0.18)";
+      ctx.fillRect(x, y + s - 5, s - 3, 2);
+      const g = ctx.createRadialGradient(x + s * 0.35, y + s * 0.3, 1, x + s * 0.35, y + s * 0.3, s * 0.6);
+      g.addColorStop(0, `rgba(255,255,255,${0.06 + hash(r, c, salt + 1) * 0.06})`);
+      g.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(x, y, s - 3, s - 3);
+    }
+  }
+}
+
+/** Slabs of stone in rows of uneven lengths, each its own tone, worn paler where feet go, now and then cracked. */
+function slabs(ctx: CanvasRenderingContext2D, look: FloorLook, salt: number) {
+  ctx.fillStyle = look.gap;
+  ctx.fillRect(0, 0, SIZE, SIZE);
+  const rows = 3;
+  const rh = SIZE / rows;
+  for (let r = 0; r < rows; r++) {
+    const y = r * rh;
+    let x = hash(r, 0, salt) * 70;
+    let k = 0;
+    const end = x + SIZE;
+    while (x < end) {
+      const w = Math.min(end - x, 60 + hash(r, k, salt + 1) * 70);
+      const tone = look.tones[Math.floor(hash(r, k, salt + 2) * look.tones.length)];
+      for (const shift of [0, -SIZE]) {
+        const [x0, y0, bw, bh] = [x + shift + 2, y + 2, w - 4, rh - 4];
+        if (x0 > SIZE || x0 + bw < 0) continue;
+        ctx.fillStyle = tone;
+        ctx.fillRect(x0, y0, bw, bh);
+        const g = ctx.createRadialGradient(x0 + bw / 2, y0 + bh / 2, 4, x0 + bw / 2, y0 + bh / 2, Math.max(bw, bh) * 0.7);
+        g.addColorStop(0, "rgba(255,250,240,0.1)");
+        g.addColorStop(1, "rgba(20,15,10,0.22)");
+        ctx.fillStyle = g;
+        ctx.fillRect(x0, y0, bw, bh);
+        ctx.fillStyle = "rgba(255,245,230,0.12)";
+        ctx.fillRect(x0, y0, bw, 2);
+        ctx.fillStyle = "rgba(10,6,4,0.22)";
+        ctx.fillRect(x0, y0 + bh - 2, bw, 2);
+        if (hash(r, k, salt + 3) < 0.3) {
+          ctx.strokeStyle = "rgba(30,25,20,0.45)";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          let cx = x0 + bw * (0.2 + hash(r, k, salt + 4) * 0.3);
+          let cy = y0 + 3;
+          ctx.moveTo(cx, cy);
+          for (let s = 0; s < 6; s++) {
+            cx += (hash(r * 9 + k, s, salt + 5) - 0.3) * 10;
+            cy += bh / 7;
+            ctx.lineTo(cx, cy);
+          }
+          ctx.stroke();
+        }
+        for (let d = 0; d < 12; d++) {
+          ctx.fillStyle = hash(r * 31 + k, d, salt + 6) < 0.5 ? "rgba(20,15,10,0.18)" : "rgba(255,245,230,0.08)";
+          ctx.fillRect(x0 + hash(r * 31 + k, d, salt + 7) * bw, y0 + hash(r * 31 + k, d, salt + 8) * bh, 2, 2);
+        }
+      }
+      x += w;
+      k++;
+    }
+  }
+}
+
+/**
+ * Short oak blocks laid in a zigzag: columns of slanting blocks, each column leaning the other way from the one
+ * beside it, so the joints run in chevrons down the floor.
+ */
+function herringbone(ctx: CanvasRenderingContext2D, look: FloorLook, salt: number) {
+  ctx.fillStyle = look.gap;
+  ctx.fillRect(0, 0, SIZE, SIZE);
+  const cw = 32;
+  const bh = 16;
+  const lean = 16;
+  for (let c = 0; c < SIZE / cw; c++) {
+    const x = c * cw;
+    const dir = c % 2 ? -1 : 1;
+    for (let i = -2; i < SIZE / bh + 2; i++) {
+      const y = i * bh;
+      const tone = look.tones[Math.floor(hash(c, i, salt) * look.tones.length)];
+      // A parallelogram: its left edge at y, its right edge `lean` lower (or higher), a joint's width inside.
+      const a = dir > 0 ? 0 : lean;
+      const b = dir > 0 ? lean : 0;
+      ctx.beginPath();
+      ctx.moveTo(x + 1, y + a + 1);
+      ctx.lineTo(x + cw - 1, y + b + 1);
+      ctx.lineTo(x + cw - 1, y + b + bh - 1);
+      ctx.lineTo(x + 1, y + a + bh - 1);
+      ctx.closePath();
+      ctx.fillStyle = tone;
+      ctx.fill();
+      ctx.save();
+      ctx.clip();
+      const g = ctx.createLinearGradient(0, y + Math.min(a, b), 0, y + Math.max(a, b) + bh);
+      g.addColorStop(0, "rgba(255,240,210,0.14)");
+      g.addColorStop(1, "rgba(40,20,0,0.16)");
+      ctx.fillStyle = g;
+      ctx.fillRect(x, y, cw, bh + lean);
+      ctx.strokeStyle = shade(tone, -0.18);
+      ctx.globalAlpha = 0.35;
+      ctx.lineWidth = 0.8;
+      for (let k = 0; k < 3; k++) {
+        const gy = y + 4 + k * 4 + hash(c * 7 + i, k, salt + 1) * 2;
+        ctx.beginPath();
+        ctx.moveTo(x, gy + a);
+        ctx.lineTo(x + cw, gy + b);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+}
+
+/** Boards painted over in a lattice of diamonds, the paint worn through to the wood here and there. */
+function paintedDiamonds(ctx: CanvasRenderingContext2D, look: FloorLook, salt: number) {
+  const [base, ink] = look.tones;
+  planks(ctx, { boards: [base, shade(base, -0.04), shade(base, 0.03), shade(base, -0.02)], gap: look.gap, grain: shade(base, -0.2), nail: shade(look.gap, -0.2) }, salt);
+  const step = 64;
+  ctx.fillStyle = ink;
+  ctx.globalAlpha = 0.78;
+  for (let row = -1; row <= SIZE / step; row++) {
+    for (let col = -1; col <= SIZE / step; col++) {
+      if ((row + col) % 2) continue;
+      const cx = col * step + step / 2;
+      const cy = row * step + step / 2;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - step / 2);
+      ctx.lineTo(cx + step / 2, cy);
+      ctx.lineTo(cx, cy + step / 2);
+      ctx.lineTo(cx - step / 2, cy);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+  // Worn through where feet go most.
+  for (let i = 0; i < 14; i++) {
+    const x = hash(i, 1, salt + 9) * SIZE;
+    const y = hash(i, 2, salt + 9) * SIZE;
+    const r = 6 + hash(i, 3, salt + 9) * 14;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, "rgba(170,130,90,0.35)");
+    g.addColorStop(1, "rgba(170,130,90,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+}
+
+/** A hut's floor, from one of Nell's finishes. Painted once a page for each finish; it tiles across the room. */
+export function finishFloorTexture(id: string, look: FloorLook): THREE.CanvasTexture {
+  return sheet(`finish:${id}`, (ctx) => {
+    let salt = 0;
+    for (const ch of id) salt = (salt * 31 + ch.charCodeAt(0)) % 997;
+    if (look.pattern === "boards") planks(ctx, { boards: look.tones, gap: look.gap, grain: shade(look.tones[0], -0.22), nail: shade(look.gap, -0.25) }, 300 + salt);
+    else if (look.pattern === "tiles") tiles(ctx, look, salt);
+    else if (look.pattern === "flags") slabs(ctx, look, salt);
+    else if (look.pattern === "herringbone") herringbone(ctx, look, salt);
+    else paintedDiamonds(ctx, look, salt);
   });
 }

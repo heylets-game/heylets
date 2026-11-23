@@ -4,6 +4,8 @@
 // furnishings catalogue and hut sizes.
 // Rules that act on a hut (room layout, placement, crafting) build on it.
 
+import type { HutFinish } from "./finishes";
+
 export const RESOURCE_KINDS = ["wood", "stone", "iron", "copper", "fur", "bone", "herbs", "mushrooms", "slime", "gem", "seeds", "bonemeal"] as const;
 export type ResourceKind = (typeof RESOURCE_KINDS)[number];
 export type Resources = Partial<Record<ResourceKind, number>>;
@@ -374,6 +376,8 @@ export interface HutSummary {
   /** Materials and gear kept in the hut's containers. */
   stash: StashedStack[];
   stowed: StowedGear[];
+  /** The wallpaper, floor and roof the hut is dressed in (finishes.ts). */
+  finish: HutFinish;
 }
 
 // ---------- spending: crafting, the stall, and a bigger hut ----------

@@ -9,12 +9,12 @@
 // sky.
 
 import * as THREE from "three";
-import { cobbleTexture, flagstoneTexture, floorTexture, pierTexture } from "./groundArt";
+import { cobbleTexture, finishFloorTexture, flagstoneTexture, floorTexture, pierTexture } from "./groundArt";
 import { devTools } from "../devTools";
 import { fancy, fancyGrass } from "./fancy";
 import { WIND_DIR, addFieldSway, gustAt, setFieldCalm, windPower } from "./wind";
 import { addCutaway } from "./cutaway";
-import { nightAt, rainOf, stormAt, timeOfDay, weatherAt, type Tile } from "@gantt-quest/world";
+import { nightAt, rainOf, stormAt, timeOfDay, weatherAt, type FloorLook, type Tile } from "@gantt-quest/world";
 import type { LightKind } from "./props";
 import type { LampLight } from "./tableLamps";
 
@@ -745,8 +745,8 @@ export class Ambience {
   readonly sunDir = new THREE.Vector3(-0.4, 0.8, 0.4);
   /** A hut's hanging lamp over the middle of the room, which its owner can put out. */
   private lamp = new THREE.PointLight("#ffd7a1", 0, 0, 0);
-  /** What a room's floor is laid with: boards, as in the huts and the pub, or flagstones (the smithy). Read when the ground is built. */
-  floorLook: "planks" | "flags" = "planks";
+  /** What a room's floor is laid with: boards, as in the huts and the pub, flagstones (the smithy), or a hut's own finish. Read when the ground is built. */
+  floorLook: "planks" | "flags" | { id: string; look: FloorLook } = "planks";
   /** Whether the hut's hanging lamp is lit. Off, the room is lit only by its candles, lanterns and fires. */
   private lampOn = true;
   /**
@@ -1225,7 +1225,8 @@ export class Ambience {
       mesh.receiveShadow = true;
       this.group.add(mesh);
     };
-    lay("floor", this.floorLook === "flags" ? flagstoneTexture : floorTexture);
+    const floor = this.floorLook;
+    lay("floor", floor === "flags" ? flagstoneTexture : floor === "planks" ? floorTexture : () => finishFloorTexture(floor.id, floor.look));
     lay("cobble", cobbleTexture);
     lay("dock", pierTexture);
     // The Harbor's grass is drabbed by the wet, as the renderer does for every grass tile in a port.

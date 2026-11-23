@@ -130,6 +130,10 @@ export const LOOKS: Record<string, Look> = {
   // blue-grey shirt with the sleeves off under a canvas apron pale with stone dust, and in her hand the dop she holds
   // a stone to the wheel with.
   keeper_lapidary: { skin: "#e3bd9c", hair: "#7c828f", hairStyle: "bun", body: "#4f6478", legs: "#3a3d48", accent: "#7fd0ff", hat: "none", weapon: "dop", sleeveless: true, apron: "#b9b3a4", loupe: "#c79a3e", eyes: "narrow", boots: "#2a2622" },
+  // Nell Ashby, who sells wallpaper, floors and roof colours from her stall by the market stall (packages/world/src/
+  // finishes.ts): auburn hair up in a bun out of the paste, a cream blouse under a sage waistcoat, a terracotta
+  // apron with her shears in its pocket, and a roll of paper in her hand.
+  keeper_decor: { skin: "#ecc7a4", hair: "#a0522d", hairStyle: "bun", body: "#efe2c4", legs: "#4a3a5a", accent: "#8fa478", hat: "none", weapon: "scroll", vest: "#7f9468", apron: "#c97a5a", eyes: "big", boots: "#3a2c22" },
   npc: { skin: "#e8b891", hair: "#b9b9b9", body: "#e3dccb", legs: "#5a4632", accent: "#e8dcc0", hat: "none", weapon: "none", stripes: "#2d3a5a", boots: "#3a2c22" },
   // Fight enemies, made over for the sea. The Bandit is a deckhand raider: a red kerchief knotted at the side, a
   // shirt banded in navy, a leather vest, a sash, and a cutlass.

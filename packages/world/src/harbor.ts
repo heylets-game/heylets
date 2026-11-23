@@ -14,6 +14,7 @@ import type { Stats } from "@gantt-quest/core";
 import type { HarborWorks } from "./projects";
 import type { Muster } from "./muster";
 import type { GardenBed } from "./garden";
+import { HARBOR_FINISHES } from "./finishes";
 import { findPath, tileAt, type Biome, type Poi, type PoiKind, type Tile, type WorldMap } from "./map";
 
 /** What the crew's home port is called, wherever its name is shown. */
@@ -234,6 +235,7 @@ export const HARBOR_BUILDINGS: { id: string; door: HexPos; shape: Footing; groun
   { id: "lighthouse", door: HARBOR_LIGHTHOUSE, shape: "flower", ground: "mud" },
   { id: "works", door: HARBOR_WORKS, shape: "pair", ground: "cobble", facing: 1 },
   { id: "shop", door: HARBOR_SHOP, shape: "pair", ground: "cobble", facing: 3 },
+  { id: "finishes", door: HARBOR_FINISHES, shape: "single", ground: "cobble", facing: 3 },
   { id: "apothecary", door: HARBOR_APOTHECARY, shape: "trio", ground: "cobble", facing: 2 },
   { id: "smithy", door: HARBOR_SMITHY, shape: "trio", ground: "cobble", facing: 5 },
   { id: "galley", door: HARBOR_GALLEY, shape: "trio", ground: "cobble", facing: 3 },
@@ -536,7 +538,7 @@ export function generateHarbor(): WorldMap {
   raiseOakHill(map);
   layPaths(map);
   map.pois = [
-    harborPoi("board", "board", HARBOR_BOARD), harborPoi("shop", "shop", HARBOR_SHOP), harborPoi("ring", "ring", HARBOR_RING),
+    harborPoi("board", "board", HARBOR_BOARD), harborPoi("shop", "shop", HARBOR_SHOP), harborPoi("finishes", "finishes", HARBOR_FINISHES), harborPoi("ring", "ring", HARBOR_RING),
     harborPoi("pub", "pub", HARBOR_PUB), harborPoi("works", "works", HARBOR_WORKS),
     harborPoi("apothecary", "apothecary", HARBOR_APOTHECARY), harborPoi("smithy", "smithy", HARBOR_SMITHY),
     harborPoi("galley", "galley", HARBOR_GALLEY),
@@ -758,6 +760,8 @@ export interface HarborMember {
   zone?: { code: string; fighting: boolean };
   /** What is growing in the herb garden by their hut's door, a bed at a time (empty beds left out). Absent until the shack stands. */
   garden?: GardenBed[];
+  /** The roof they chose for their hut (a finish id: finishes.ts), if they chose one. Absent while the shack is still to go up. */
+  roof?: string;
 }
 
 /** A map the crew has open out through the waygate: its code, the atlas node it was made for, and what the place is called. */

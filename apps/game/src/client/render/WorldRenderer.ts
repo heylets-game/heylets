@@ -10,13 +10,13 @@ import { flamesIn, flickerFlame, torchFlame } from "./torchFlame";
 import { buildCaveDressing } from "./caveDressing";
 import { reportEnv } from "../ui/env";
 import { makeRenderer } from "./graphics";
-import { apothecaryWallTexture, galleyWallTexture, lapidaryWallTexture, panelTexture, smithyWallTexture } from "./groundArt";
+import { apothecaryWallTexture, galleyWallTexture, lapidaryWallTexture, panelTexture, smithyWallTexture, wallpaperTexture } from "./groundArt";
 import { Ambience, type RoomLight, TILE_FILLET, TILE_RADIUS, TORCH_LIFT, dryPatch, hexTop, meadowAt, tallGrass, type BuildingGlow } from "./ambience";
 import "./camera.css";
 import { PINCH_PAN_SLACK, followIconSvg, readFollow, writeFollow } from "./cameraFollow";
 import type { HexPos } from "@gantt-quest/core";
 import { hexDistance } from "@gantt-quest/core";
-import { lookStep, lookYaw, BASE_HEIGHT, HARBOR_HEART_AT, BIG_REACH, ENEMIES, HEX_DIRS, SEATS, tileCost, WALL_FACE_HALF, WALL_ITEM_BOTTOM, WALL_ITEM_TOP, hexAt, xpProgress, reachable, tileAt, wallFace, wallFaces, type Biome, type Clime, type Emote, type Outfit, type Poi, type Tile, type WorldMap } from "@gantt-quest/world";
+import { lookStep, lookYaw, BASE_HEIGHT, HARBOR_HEART_AT, BIG_REACH, ENEMIES, HEX_DIRS, SEATS, tileCost, WALL_FACE_HALF, WALL_ITEM_BOTTOM, WALL_ITEM_TOP, hexAt, xpProgress, reachable, tileAt, wallFace, wallFaces, type Biome, type Clime, type Emote, type Outfit, type Poi, type Tile, type WorldMap, type FloorLook, type WallLook } from "@gantt-quest/world";
 import { fancy, fancyGrass } from "./fancy";
 import { NightLife } from "./nightlife";
 import { Storm } from "./storm";
@@ -127,9 +127,9 @@ export interface RenderState {
   /** With `lampOff`: a room kept dim for the mood of it, each small light a pool with dark between (the apothecary's shop). */
   gloom?: boolean;
   /** How a room's walls are dressed inside: the pub's oak and plaster, the smithy's stone and sooted timber, the apothecary's green wainscot and paper, the galley's oxblood boards, tiles and limewash, the Lapidary's slate-blue boards and stencilled plaster. The pub's is the default for the pub; other rooms have bare walls without it. */
-  walls?: WallDressing;
-  /** What a room's floor is laid with: boards (the default) or flagstones (the smithy). */
-  floor?: "planks" | "flags";
+  walls?: WallDressing | FinishWalls;
+  /** What a room's floor is laid with: boards (the default), flagstones (the smithy), or a hut's own finish from Nell's stall. Changing it relays the floor. */
+  floor?: FloorDressing;
   /** Your gathering outings, shown as lightning bolts on your own plate. */
   stamina?: { left: number; max: number };
   /** A piece being carried: a ghost of it follows the pointer, and a click sets it down (RendererCallbacks.onPlace). */
@@ -164,6 +164,15 @@ export interface RenderState {
 /** The ways a room's walls can be dressed inside (see RenderState.walls). */
 export type WallDressing = "pub" | "smithy" | "apothecary" | "galley" | "lapidary";
 const WALL_DRESSINGS: Record<WallDressing, () => THREE.CanvasTexture> = { pub: panelTexture, smithy: smithyWallTexture, apothecary: apothecaryWallTexture, galley: galleyWallTexture, lapidary: lapidaryWallTexture };
+/** A hut's walls papered with one of Nell's finishes (packages/world/src/finishes.ts): its id, and how it is painted. */
+export interface FinishWalls {
+  id: string;
+  look: WallLook;
+}
+/** A room's floor: the stock boards or flagstones, or one of Nell's finishes. */
+export type FloorDressing = "planks" | "flags" | { id: string; look: FloorLook };
+/** A name for a way of dressing walls or floor, to tell when it has changed (and to keep one material for each). */
+const dressingKey = (d: WallDressing | FinishWalls | FloorDressing | null | undefined) => (d == null ? "" : typeof d === "string" ? d : `finish:${d.id}`);
 
 /** An enemy standing on a hex of its own. */
 export interface RenderUnit {
@@ -1513,6 +1522,13 @@ export class WorldRenderer {
     // The ground is redrawn for a new map, and whenever this one has more or fewer hexes than it was drawn with.
     const hexCount = state.map.tiles.length;
     this.ambience.floorLook = state.floor ?? "planks";
+    // A hut's wallpaper or floor changed while it is open (its owner chose another from Nell's): papered and laid again.
+    const floorKey = dressingKey(state.floor ?? "planks");
+    const relaid = !first && floorKey !== this.floorKey;
+    this.floorKey = floorKey;
+    const wallsKey = dressingKey(state.walls ?? (state.kind === "pub" ? "pub" : null));
+    const repapered = !first && (relaid || wallsKey !== this.wallsKey);
+    this.wallsKey = wallsKey;
     // What lies round the map, the sea or a void it floats over: known before the ground is built, whose rim is faced to suit.
     const backdrop: BackdropKind = state.indoors || state.far || this.opts.backdrop ? "sea" : (state.backdrop ?? "sea");
     const turned = backdrop !== this.backdropKind;
@@ -1521,7 +1537,7 @@ export class WorldRenderer {
     if (first || turned) this.ambience.heldTime = state.far ? FAR_TIME : backdrop === "dark" ? ROOF_TIME : null;
     // And for another window of a world (see RenderState.far), under a camera that stays where it is.
     const began = performance.now();
-    if (first || turned || hexCount !== this.hexCount || (!!state.far && state.map.tiles !== this.tiles)) this.buildTerrain(state, first);
+    if (first || turned || relaid || hexCount !== this.hexCount || (!!state.far && state.map.tiles !== this.tiles)) this.buildTerrain(state, first);
     if (first || turned) {
       if (this.voidBackdrop) {
         this.scene.remove(this.voidBackdrop.group);
@@ -1532,7 +1548,7 @@ export class WorldRenderer {
       if (!first) this.sea.visible = !this.voidBackdrop && state.kind !== "caverns";
     }
     if (first) this.buildPanes(state);
-    if (first) this.buildWallPanels(state);
+    if (first || repapered) this.buildWallPanels(state);
     this.hexCount = hexCount;
     this.state = state;
     this.ambience.setGloom(!!state.gloom);
@@ -2940,10 +2956,10 @@ export class WorldRenderer {
     this.wallPanels.clear();
     const dressing = state.walls ?? (state.kind === "pub" ? "pub" : null);
     if (!dressing) return;
-    let material = this.panelMaterials.get(dressing);
+    let material = this.panelMaterials.get(dressingKey(dressing));
     if (!material) {
-      material = new THREE.MeshLambertMaterial({ map: WALL_DRESSINGS[dressing]() });
-      this.panelMaterials.set(dressing, material);
+      material = new THREE.MeshLambertMaterial({ map: typeof dressing === "string" ? WALL_DRESSINGS[dressing]() : wallpaperTexture(dressing.id, dressing.look) });
+      this.panelMaterials.set(dressingKey(dressing), material);
     }
     const byWall = new Map<string, number[][]>();
     for (const f of wallFaces(state.map)) {
@@ -2977,7 +2993,10 @@ export class WorldRenderer {
     }
   }
   /** One material for each way of dressing walls, made the first time it is wanted. */
-  private panelMaterials = new Map<WallDressing, THREE.MeshLambertMaterial>();
+  private panelMaterials = new Map<string, THREE.MeshLambertMaterial>();
+  /** The walls and floor the room was last dressed in (dressingKey), to see when they change. */
+  private wallsKey = "";
+  private floorKey = "";
 
   private buildPanes(state: RenderState | null) {
     for (const pane of this.panes.children) {
@@ -3594,7 +3613,7 @@ export class WorldRenderer {
   // ---------- points of interest ----------
 
   private buildPois(state: RenderState) {
-    const sig = state.map.pois.map((p) => `${p.id}:${p.cleared}:${p.tier ?? ""}:${p.fill ?? ""}:${p.hp ?? ""}:${bedsSig(p.beds)}`).join("|");
+    const sig = state.map.pois.map((p) => `${p.id}:${p.cleared}:${p.tier ?? ""}:${p.roof ?? ""}:${p.fill ?? ""}:${p.hp ?? ""}:${bedsSig(p.beds)}`).join("|");
     if (sig === this.poiSig) return;
     this.poiSig = sig;
     // The old models' shapes are to go with them: the renderer holds a shape's buffers until told it is done with.

@@ -6,6 +6,7 @@
 // Their words are the ones they already had: a regular's or a keeper's hello and line, a salesman's greeting, the
 // dealer's hello. Old Tam had none written, so his are here.
 
+import { DECORATOR } from "./finishes";
 import { KEEPER_PLACES, type KeeperHouse } from "./keepers";
 import { PUB_BARKEEP, PUB_DEALER } from "./pub";
 import type { Regular } from "./regulars";
@@ -86,6 +87,7 @@ export const TALK_VOICES: Record<string, number> = {
   "keeper:apothecary": 2,
   "keeper:galley": -7,
   "keeper:lapidary": 6,
+  [DECORATOR.id]: 4,
 };
 
 const BYE: TalkChoice = { id: "bye", label: "Goodbye", bye: true };
@@ -171,5 +173,20 @@ export function keeperTalk(shop: KeeperHouse): Conversation {
     voice: TALK_VOICES[keeper.id] ?? 0,
     greeting: pagesOf([keeper.hello, keeper.line]),
     choices: [KEEPER_ASKS[shop], BYE],
+  };
+}
+
+/** Nell Ashby, at her stall beside the market stall: wallpaper, floors and roofs for your hut. */
+export function decoratorTalk(): Conversation {
+  return {
+    unit: DECORATOR.id,
+    name: DECORATOR.name,
+    voice: TALK_VOICES[DECORATOR.id],
+    greeting: pagesOf([DECORATOR.hello]),
+    choices: [
+      { id: "finishes", label: "Show me your patterns", opens: "finishes" },
+      { id: "how", label: "How does it work?", says: DECORATOR.line + " Open Decorate at home and pick from what you've bought." },
+      BYE,
+    ],
   };
 }

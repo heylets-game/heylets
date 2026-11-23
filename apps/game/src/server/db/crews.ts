@@ -2,7 +2,7 @@
 // in its Harbor is shown (who is in it and where, its works, the maps it has
 // open).
 
-import { atlasNodeById, type GardenBed, type HarborBoard } from "@gantt-quest/world";
+import { atlasNodeById, roofColor, type GardenBed, type HarborBoard } from "@gantt-quest/world";
 import { crewWorks } from "../projects";
 import { crewPresence } from "../zones";
 import { parseBin } from "./plots";
@@ -85,13 +85,13 @@ export async function harborBoard(db: D1Database, crewId: string): Promise<Harbo
     crewWorks(db, crewId),
     db
       .prepare(
-        `SELECT m.player_id AS id, c.name, c.class_id AS classId, c.level, COALESCE(h.tier, 1) AS hutTier, h.plot AS plot, h.bin_json AS bin
+        `SELECT m.player_id AS id, c.name, c.class_id AS classId, c.level, COALESCE(h.tier, 1) AS hutTier, h.plot AS plot, h.bin_json AS bin, h.roof AS roof
          FROM crew_members m JOIN characters c ON c.player_id = m.player_id AND c.status = 'active'
          LEFT JOIN huts h ON h.player_id = m.player_id
          WHERE m.crew_id = ? ORDER BY m.joined_at, m.player_id`,
       )
       .bind(crewId)
-      .all<{ id: string; name: string; classId: string; level: number; hutTier: number; plot: number | null; bin: string | null }>(),
+      .all<{ id: string; name: string; classId: string; level: number; hutTier: number; plot: number | null; bin: string | null; roof: string | null }>(),
     // Who is out on a zone, and whether they are fighting there.
     crewPresence(db, crewId),
     // The maps the crew has open out through the waygate: made for a place on its atlas, not cleared, and walked on
@@ -114,8 +114,10 @@ export async function harborBoard(db: D1Database, crewId: string): Promise<Harbo
 
   // Members whose shack is not up yet carry what is in its bin, so the site can be drawn filling up.
   // Members whose shack stands carry what grows in their garden (an empty list for a bare one).
-  const roster = members.results.map(({ bin, ...m }) => ({
+  // And the roof they chose for their hut, if it is still one Nell sells.
+  const roster = members.results.map(({ bin, roof, ...m }) => ({
     ...m,
+    ...(m.plot !== null && bin === null && roofColor(roof) ? { roof: roof! } : {}),
     ...(m.plot !== null && bin !== null ? { bin: parseBin(bin) } : {}),
     ...(m.plot !== null && bin === null ? { garden: gardenOf.get(m.id) ?? [] } : {}),
     ...(zoneOf.has(m.id) ? { zone: zoneOf.get(m.id) } : {}),

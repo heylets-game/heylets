@@ -3,7 +3,7 @@
 
 import { useCallback, useState } from "react";
 import type { HexPos } from "@gantt-quest/core";
-import type { Furnishing, HarborPlayer, HutClientMessage, HutServerMessage, XpMessage } from "@gantt-quest/world";
+import { BARE_FINISH, type Furnishing, type HarborPlayer, type HutClientMessage, type HutFinish, type HutServerMessage, type XpMessage } from "@gantt-quest/world";
 import { PROFILE } from "./api";
 import { useRoomPeople, useRoomSocket, type ChatLine } from "./useRoom";
 
@@ -16,6 +16,8 @@ export interface HutConnection {
   players: HarborPlayer[];
   /** Everything the owner has, placed (q/r set) and stored. */
   furnishings: Furnishing[];
+  /** The wallpaper, floor and roof the owner has dressed the hut in. */
+  finish: HutFinish;
   chat: ChatLine[];
   status: "connecting" | "open" | "closed";
   /** The connection failed, or the hut is not yours to enter. */
@@ -31,6 +33,7 @@ export function useHut(ownerId: string, onMoved: (id: string, path: HexPos[]) =>
   const [tier, setTier] = useState<number | null>(null);
   const [canEdit, setCanEdit] = useState(false);
   const [furnishings, setFurnishings] = useState<Furnishing[]>([]);
+  const [finish, setFinish] = useState<HutFinish>(BARE_FINISH);
   const [refused, setRefused] = useState<string | null>(null);
   const people = useRoomPeople(onMoved, onXp, onSaid);
 
@@ -49,9 +52,11 @@ export function useHut(ownerId: string, onMoved: (id: string, path: HexPos[]) =>
         setTier(msg.tier);
         setCanEdit(msg.canEdit);
         setFurnishings(msg.furnishings);
+        setFinish(msg.finish ?? BARE_FINISH);
       } else if (msg.type === "furnishings") {
         setTier(msg.tier);
         setFurnishings(msg.furnishings);
+        if (msg.finish) setFinish(msg.finish);
         setRefused(null);
       } else if (msg.type === "refused") {
         setRefused(msg.reason);
@@ -66,5 +71,5 @@ export function useHut(ownerId: string, onMoved: (id: string, path: HexPos[]) =>
     if (message.type !== "move" && message.type !== "say") setRefused(null);
     post(message);
   }, []);
-  return { you: people.you, owner, tier, canEdit, players: people.players, furnishings, chat: people.chat, status: socket.status, error: socket.error, refused, send };
+  return { you: people.you, owner, tier, canEdit, players: people.players, furnishings, finish, chat: people.chat, status: socket.status, error: socket.error, refused, send };
 }

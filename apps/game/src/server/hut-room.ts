@@ -32,6 +32,7 @@ import {
   wrapAngle,
   type Furnishing,
   type HutClientMessage,
+  type HutFinish,
   type HutServerMessage,
   type Placed,
   type WorldMap, } from "@gantt-quest/world";
@@ -45,6 +46,7 @@ interface Hut {
   tier: number;
   room: WorldMap;
   furnishings: Furnishing[];
+  finish: HutFinish;
 }
 
 /**
@@ -96,8 +98,8 @@ export class HutRoom extends DurableObject<Env> {
   }
 
   private async read(ownerId: string): Promise<Hut> {
-    const { tier, furnishings } = await getHut(this.env.DB, ownerId);
-    return { tier, room: hutRoom(tier), furnishings };
+    const { tier, furnishings, finish } = await getHut(this.env.DB, ownerId);
+    return { tier, room: hutRoom(tier), furnishings, finish };
   }
 
   /** The hut, from memory or D1. Concurrent callers share one read. */
@@ -162,11 +164,11 @@ export class HutRoom extends DurableObject<Env> {
     // A hero earned XP: show it over their head, if they are here.
     if (pathname === "/xp") return this.here.xpPosted(request);
 
-    // The hut changed from outside this room (a new furnishing, a bigger hut): re-read it.
+    // The hut changed from outside this room (a new furnishing, a bigger hut, new wallpaper): re-read it.
     if (pathname === "/refresh") {
       if (this.ctx.getWebSockets().length > 0) {
         const hut = await this.load(ownerId, true);
-        this.here.broadcast({ type: "furnishings", tier: hut.tier, furnishings: hut.furnishings });
+        this.here.broadcast({ type: "furnishings", tier: hut.tier, furnishings: hut.furnishings, finish: hut.finish });
       } else {
         this.hut = null;
       }
@@ -193,6 +195,7 @@ export class HutRoom extends DurableObject<Env> {
       canEdit,
       players: this.here.players(),
       furnishings: hut.furnishings,
+      finish: hut.finish,
     });
     this.here.broadcast({ type: "joined", player }, pair[1]);
     return new Response(null, { status: 101, webSocket: pair[0] });

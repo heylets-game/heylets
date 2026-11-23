@@ -18,7 +18,7 @@ import { catchIcon } from "./render/catchArt";
 import { units } from "./units";
 import { useAudioScene } from "./audio/useAudioScene";
 import type { HexPos } from "@gantt-quest/core";
-import { DEFAULT_APPEARANCE, FURNISHINGS, type PublicHero, besideHexes, coveredHexes, hutPath, isBeside, useOf, useProblem, type FurnishingUse, craftProblem, footprintCentre, furnitureSellPrice, sellFurnitureProblem, footprintOf, hexCentre, hexSpan, hutDoor, hutRoom, hutTier, isFlat, isMounted, isSmall, nextHutTier, placeProblem, placedFurnishings, poiAt, smallPlaceProblem, turnOf, upgradeProblem, wallPlaceProblem, wrapAngle, type Furnishing } from "@gantt-quest/world";
+import { DEFAULT_APPEARANCE, FURNISHINGS, type PublicHero, besideHexes, coveredHexes, hutPath, isBeside, useOf, useProblem, type FurnishingUse, craftProblem, footprintCentre, furnitureSellPrice, sellFurnitureProblem, floorLook, wallLook, footprintOf, hexCentre, hexSpan, hutDoor, hutRoom, hutTier, isFlat, isMounted, isSmall, nextHutTier, placeProblem, placedFurnishings, poiAt, smallPlaceProblem, turnOf, upgradeProblem, wallPlaceProblem, wrapAngle, type Furnishing } from "@gantt-quest/world";
 import { api, type Hut, type Me } from "./api";
 import { ChangeLook, LOOK_CHANGED } from "./ChangeLook";
 import { ChatInput } from "./ChatInput";
@@ -35,6 +35,7 @@ import { PixelIcon } from "./PixelIcon";
 import { WorldRenderer, type PlaceTarget, type RenderState } from "./render/WorldRenderer";
 import { HeroSheet, useHeroSheet } from "./HeroSheet";
 import { useHut } from "./useHut";
+import { FinishPicker } from "./FinishPicker";
 import "./hut.css";
 import { blurb, label } from "./labels";
 import { ThingIcon, furnishingIcon } from "./thingIcons";
@@ -168,7 +169,7 @@ export function HutView({ ownerId, me, refresh, onLeave }: { ownerId: string; me
     (m) => renderer.current?.playEvents(xpEvents(m)),
     (id, text) => renderer.current?.say(id, text),
   );
-  const { you, players, furnishings, canEdit, tier, owner } = hut;
+  const { you, players, furnishings, canEdit, tier, owner, finish } = hut;
   /** Edit mode: the owner is decorating. Everything that changes the room happens only here; outside it a click uses a piece. */
   const [editing, setEditing] = useState(false);
   const decorating = canEdit && editing;
@@ -206,6 +207,9 @@ export function HutView({ ownerId, me, refresh, onLeave }: { ownerId: string; me
       }),
       freeRoam: true,
       indoors: true,
+      // Papered and laid as the owner chose from Nell's finishes; bare walls and honey boards otherwise.
+      ...(finish.wall && wallLook(finish.wall) ? { walls: { id: finish.wall, look: wallLook(finish.wall)! } } : {}),
+      ...(finish.floor && floorLook(finish.floor) ? { floor: { id: finish.floor, look: floorLook(finish.floor)! } } : {}),
       lampOff,
       stamina: stamina ? { left: stamina.stamina.left, max: stamina.stamina.max } : undefined,
       props: placed.map((f) => {
@@ -237,7 +241,7 @@ export function HutView({ ownerId, me, refresh, onLeave }: { ownerId: string; me
         ? { model: defOf(held)?.model ?? held.defId, small: isSmall(held.defId), mount: defOf(held)?.mount, footprint: isSmall(held.defId) || defOf(held)?.mount ? undefined : footprintOf(held.defId), facing: 0, angle: turn }
         : null,
     };
-  }, [ownerId, tier, room, players, you, placed, selected, holding, held, decorating, turn, turning, lampOff, stamina]);
+  }, [ownerId, tier, room, players, you, placed, selected, holding, held, decorating, turn, turning, lampOff, stamina, finish]);
   const latest = useRef(scene);
   latest.current = scene;
   const snapRef = useRef(snap);
@@ -770,6 +774,8 @@ export function HutView({ ownerId, me, refresh, onLeave }: { ownerId: string; me
           ))}
         </DragPanel>
       )}
+
+      {decorating && <FinishPicker finish={finish} />}
 
       {decorating && (
         <DragPanel id="hut.craft" title="Craft" foldOnPhone startFolded className="panel hut-craft">

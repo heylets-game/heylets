@@ -86,7 +86,7 @@ describe("walking into a hut", () => {
   it("gives the owner their first furniture, tells them what is here and that it is theirs to move", async () => {
     const ann = await enter("ann", "Ann");
     expect(ann.sent).toEqual([
-      { type: "snapshot", you: "ann", owner: { id: "ann", name: "Ann" }, tier: 1, canEdit: true, players: [expect.objectContaining({ id: "ann", name: "Ann", classId: "cleric", level: 1, xp: 0, pos: DOOR })], furnishings: expect.any(Array) },
+      { type: "snapshot", you: "ann", owner: { id: "ann", name: "Ann" }, tier: 1, canEdit: true, players: [expect.objectContaining({ id: "ann", name: "Ann", classId: "cleric", level: 1, xp: 0, pos: DOOR })], furnishings: expect.any(Array), finish: { wall: null, floor: null, roof: null } },
     ]);
     expect(ann.furnishings.map((f) => f.defId).sort()).toEqual(["table", "chair", "rug", ...HOME_FREEBIES].sort());
     // Every socket here carries its player's id and the hut's owner.
