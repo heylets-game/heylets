@@ -175,7 +175,8 @@ export function poiAt(map: WorldMap, pos: HexPos): Poi | undefined {
 
 // ---------- pathfinding ----------
 
-type CostFn = (tile: Tile) => number;
+/** The cost of stepping onto `tile`, from `from` (the hex the step leaves). */
+type CostFn = (tile: Tile, from: Tile) => number;
 const terrainCost: CostFn = tileCost;
 
 interface Reached {
@@ -185,7 +186,7 @@ interface Reached {
 }
 
 /**
- * Dijkstra from `from`. The cost of a step is the cost of the tile entered.
+ * Dijkstra from `from`. The cost of a step is what `costFn` asks for the tile entered (given the one left).
  * Returns every hex reachable within `budget`.
  */
 export function reachable(
@@ -204,10 +205,11 @@ export function reachable(
     const cur = frontier.splice(best, 1)[0];
     const curKey = posKey(cur.pos);
     if (out.get(curKey)!.cost < cur.cost) continue;
+    const left = tileAt(map, cur.pos);
     for (const n of hexNeighbors(cur.pos, map.grid)) {
       const tile = tileAt(map, n);
       if (!tile) continue;
-      const step = costFn(tile);
+      const step = left ? costFn(tile, left) : costFn(tile, tile);
       if (!Number.isFinite(step)) continue;
       const cost = cur.cost + step;
       if (cost > budget) continue;

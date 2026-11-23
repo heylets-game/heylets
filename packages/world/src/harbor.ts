@@ -613,18 +613,41 @@ function layPaths(map: WorldMap) {
 export const HARBOR_MAX_PATH = 60;
 
 /**
- * A walkable route between two Harbor hexes, or null. Every step costs the same here; the rampart cannot be
- * crossed, nor a building walked through, nor the water crossed without a boat. A barrel keeps to water beside
- * the land; a rowboat goes anywhere on it. Neither goes onto the rocks or the wreck.
+ * What each step of a walk costs, so a route keeps to the streets and lanes where it can: a road (a cobbled
+ * street, a dirt lane, the planking of a pier or the bridge) is the cheapest ground, and open grass, shore and
+ * woods cost twice as much, so a walk goes a little out of its way to keep to a road. Putting out from land onto
+ * the water costs as much as fifteen steps of road, so a hero with a boat walks round by the bridge rather than
+ * paddle across, and takes to the water only to go somewhere on it or where the walk round is far longer. Once
+ * afloat, rowing on is as cheap as a road.
+ */
+const ROAD_STEP = 2;
+const ROUGH_STEP = 4;
+const LAUNCH_STEP = 30;
+const onRoad = (t: Tile) => t.biome === "cobble" || t.biome === "dock" || !!t.path;
+
+/**
+ * A walkable route between two Harbor hexes, or null: the cheapest by the costs above, so it follows a road
+ * where there is one. The rampart cannot be crossed, nor a building walked through, nor the water crossed
+ * without a boat. A barrel keeps to water beside the land; a rowboat goes anywhere on it. Neither goes onto the
+ * rocks or the wreck. If keeping to the roads would make a walk longer than one request may be, it goes the
+ * shortest way instead.
  */
 export function harborPath(map: WorldMap, from: HexPos, to: HexPos, vessel: Vessel | null = null): HexPos[] | null {
-  const route = findPath(map, from, to, HARBOR_MAX_PATH, (t) => {
-    if (t.biome === "rampart" || t.built || t.blocker) return Infinity;
-    if (t.biome !== "water") return 1;
-    if (!vessel || HAZARDS.has(`${t.q},${t.r}`)) return Infinity;
-    return vessel === "rowboat" || coastal(map, t) ? 1 : Infinity;
+  const open = (t: Tile) => {
+    if (t.biome === "rampart" || t.built || t.blocker) return false;
+    if (t.biome !== "water") return true;
+    if (!vessel || HAZARDS.has(`${t.q},${t.r}`)) return false;
+    return vessel === "rowboat" || coastal(map, t);
+  };
+  const route = findPath(map, from, to, Infinity, (t, left) => {
+    if (!open(t)) return Infinity;
+    if (t.biome === "water") return left.biome === "water" ? ROAD_STEP : LAUNCH_STEP;
+    return onRoad(t) ? ROAD_STEP : ROUGH_STEP;
   });
-  return route && route.path.length > 0 ? route.path : null;
+  if (!route || route.path.length === 0) return null;
+  if (route.path.length <= HARBOR_MAX_PATH) return route.path;
+  const shortest = findPath(map, from, to, HARBOR_MAX_PATH, (t) => (open(t) ? 1 : Infinity));
+  return shortest && shortest.path.length > 0 ? shortest.path : null;
 }
 
 /** The rocks and the wreck stand in the water: no boat goes onto them. */

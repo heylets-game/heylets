@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { FISH } from "./fishcatalog";
 import { FISH_SPOTS, rollCatch, vesselProblem } from "./fishing";
 import { gatherView, stepGather } from "./gather";
-import { HARBOR_PIERS, HARBOR_ROCKS, HARBOR_WRECK, coastal, generateHarbor, harborPath, seaEdge, waterSpotAt } from "./harbor";
+import { HARBOR_BRIDGE, HARBOR_PIERS, HARBOR_ROCKS, HARBOR_WRECK, coastal, generateHarbor, harborPath, seaEdge, waterSpotAt } from "./harbor";
 import { VESSEL_OF, bestVessel, FURNISHINGS } from "./hut";
 import { hutRoom, placeProblem } from "./hutroom";
 import { makeRng } from "./rng";
@@ -41,6 +41,29 @@ describe("boats", () => {
     expect(harborPath(map, pier, open, "rowboat")).not.toBeNull();
     expect(harborPath(map, pier, HARBOR_WRECK, "rowboat")).toBeNull();
     for (const r of HARBOR_ROCKS) expect(harborPath(map, pier, r, "rowboat")).toBeNull();
+  });
+
+  it("walk round by the bridge rather than paddle across to the housing island", () => {
+    const dist = (a: { q: number; r: number }, b: { q: number; r: number }) => Math.max(Math.abs(a.q - b.q), Math.abs(a.r - b.r), Math.abs(a.q + a.r - b.q - b.r));
+    const dry = map.tiles.filter((t) => t.biome !== "water" && !t.built && !HARBOR_BRIDGE.some((b) => b.q === t.q && b.r === t.r));
+    const town = dry.filter((t) => dist(t, HARBOR_BRIDGE[0]) <= 3 && t.q < HARBOR_BRIDGE[0].q);
+    const island = dry.filter((t) => dist(t, HARBOR_BRIDGE.at(-1)!) <= 3 && t.q > HARBOR_BRIDGE.at(-1)!.q);
+    expect(town.length).toBeGreaterThan(5);
+    expect(island.length).toBeGreaterThan(5);
+    for (const vessel of ["barrel", "rowboat"] as const) {
+      for (const a of town) for (const b of island) {
+        const walk = harborPath(map, a, b, vessel);
+        if (walk) expect(walk.some((p) => tileAt(map, p)!.biome === "water"), `${vessel} ${a.q},${a.r} to ${b.q},${b.r}`).toBe(false);
+      }
+    }
+  });
+
+  it("still put out onto the water to go somewhere on it, and row on without climbing out", () => {
+    const onto = harborPath(map, pier, open, "rowboat")!;
+    expect(onto.at(-1)).toMatchObject({ q: open.q, r: open.r });
+    const launched = onto.findIndex((p) => tileAt(map, p)!.biome === "water");
+    expect(onto.slice(launched).every((p) => tileAt(map, p)!.biome === "water")).toBe(true);
+    expect(harborPath(map, edge, open, "rowboat")!.every((p) => tileAt(map, p)!.biome === "water")).toBe(true);
   });
 
   it("names the water a hero is on, with the wreck's own", () => {
