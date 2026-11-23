@@ -25,7 +25,8 @@
 // against it: a walk the server cut short or refused is cut back, and what
 // was already shown is not played twice. Nothing with dice in it is guessed.
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { holdTap } from "./holdTap";
 import { hexDistance, posKey, type HexPos } from "@gantt-quest/core";
 import {
   ABILITIES,
@@ -1739,6 +1740,11 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   useEffect(() => {
     if (known) renderer.current?.setCombat(fighting, code);
   }, [known, fighting, code]);
+  // Hold to confirm (Options, on a touch screen): in a fight, a tap on the map only shows the hex until it is held.
+  const holdOn = useSyncExternalStore(holdTap.subscribe, holdTap.get);
+  useEffect(() => {
+    renderer.current?.setHoldToTap(fighting && holdOn);
+  }, [fighting, holdOn]);
 
   // ---------- what a pick reaches, and what it would cover ----------
 

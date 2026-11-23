@@ -329,6 +329,8 @@ const FAR_ZOOM = 40;
 const FAR_FINE = 2.6;
 /** Below 1 makes a pinch zoom less than the fingers move. */
 const PINCH_DAMPING = 0.55;
+/** With hold-to-confirm on (setHoldToTap), how long a finger stays still on a hex for that to count as a tap. */
+const TAP_HOLD_MS = 400;
 /** The angle equal to `to` (mod a full turn) that is closest to `from`, so easing takes the short way round. */
 function nearestTurn(from: number, to: number): number {
   const full = Math.PI * 2;
@@ -1111,6 +1113,16 @@ export class WorldRenderer {
    */
   private panFrom: { x: number; y: number } | null = null;
   private pointer = { x: 0, y: 0, downX: 0, downY: 0, down: false, dragged: false, dirty: false, inside: false };
+  /** Whether a finger's tap on the map must be held to count (setHoldToTap). */
+  private holdToTap = false;
+  /**
+   * What the press now down will do on letting go: "tap" acts as ever; "hold" (a finger, with hold-to-confirm on)
+   * only shows the hex unless it is held long enough, when it acts there and then and becomes "held".
+   */
+  private press: "tap" | "hold" | "held" = "tap";
+  private holdTimer = 0;
+  /** The ring that fills round a held finger. */
+  private holdRing: HTMLDivElement;
   /** Called every frame before drawing, after the camera is placed, by things a view has added to the scene (see addTicker). */
   private tickers = new Set<(dt: number, camera: THREE.PerspectiveCamera, clock: number) => void>();
 
@@ -1217,6 +1229,11 @@ export class WorldRenderer {
     // And the combat view's, under them: there only on a battle map (see setCombat).
     this.rotateButtons.appendChild(cutawayButton(this.combat));
     container.appendChild(this.rotateButtons);
+    this.holdRing = document.createElement("div");
+    this.holdRing.className = "hold-ring";
+    this.holdRing.style.setProperty("--hold-ms", `${TAP_HOLD_MS}ms`);
+    this.holdRing.innerHTML = '<svg viewBox="0 0 40 40" aria-hidden="true"><circle class="track" cx="20" cy="20" r="17"/><circle class="fill" cx="20" cy="20" r="17" pathLength="1"/></svg>';
+    container.appendChild(this.holdRing);
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(container);
     // Name plates, speech bubbles and health bars sit on their own layer, so the finishing pass can leave them alone.
@@ -1399,6 +1416,8 @@ export class WorldRenderer {
     removeEventListener("keyup", this.onKeyUp);
     removeEventListener("blur", this.onBlur);
     this.rotateButtons.remove();
+    this.cancelHold();
+    this.holdRing.remove();
     this.unwatchFancy();
     this.unwatchGrass();
     this.nightLife.dispose();
@@ -4516,8 +4535,11 @@ export class WorldRenderer {
       this.pointer.dragged = false;
       this.pointer.downX = this.pointer.x = e.clientX;
       this.pointer.downY = this.pointer.y = e.clientY;
+      this.press = this.holdToTap && e.pointerType === "touch" && !this.rotating ? "hold" : "tap";
+      if (this.press === "hold") this.armHold(e.clientX, e.clientY);
     } else if (this.touches.size === 2) {
       // A second finger: this is a pinch, never a tap.
+      this.cancelHold();
       this.pointer.dragged = true;
       this.rotating = false;
       this.pinch = { ...this.pinchState(), zoom: this.userDist };
@@ -4709,7 +4731,10 @@ export class WorldRenderer {
     this.pointer.y = e.clientY;
     this.pointer.inside = true;
     if (this.pointer.down) {
-      if (Math.hypot(e.clientX - this.pointer.downX, e.clientY - this.pointer.downY) > 6) this.pointer.dragged = true;
+      if (Math.hypot(e.clientX - this.pointer.downX, e.clientY - this.pointer.downY) > 6) {
+        this.pointer.dragged = true;
+        this.cancelHold();
+      }
       if (this.pointer.dragged) {
         if (this.rotating) {
           this.turn(-dx * 0.008);
@@ -4745,7 +4770,62 @@ export class WorldRenderer {
     // A right-click, or a Shift/Alt click, is the start of a turn, not an order to walk.
     const wasClick = this.pointer.down && !this.pointer.dragged && !this.rotating && e.type === "pointerup";
     this.pointer.down = false;
-    if (!wasClick) return;
+    const press = this.press;
+    this.press = "tap";
+    this.cancelHold();
+    // Held long enough, it has already acted; let go too soon, it only showed the hex (see armHold).
+    if (!wasClick || press !== "tap") return;
+    this.tap();
+  };
+
+  /**
+   * With hold-to-confirm on, a finger has come down on the map: the hex under it shows (its path, its highlight)
+   * and a ring fills round the finger. Still there and unmoved when it is full, the press is a tap on that hex.
+   */
+  private armHold(x: number, y: number) {
+    this.cancelHold();
+    this.setHovered(this.pick());
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const ring = this.holdRing;
+    ring.style.left = `${x - rect.left}px`;
+    ring.style.top = `${y - rect.top}px`;
+    // Off and on again, with a layout between, so the fill starts over from empty.
+    ring.classList.remove("on");
+    void ring.offsetWidth;
+    ring.classList.add("on");
+    this.holdTimer = window.setTimeout(() => {
+      this.holdTimer = 0;
+      ring.classList.remove("on");
+      if (this.press !== "hold" || !this.pointer.down || this.pointer.dragged || this.touches.size !== 1) return;
+      this.press = "held";
+      try {
+        navigator.vibrate?.(12);
+      } catch {
+        // No buzz on this device; the ring said enough.
+      }
+      this.tap();
+    }, TAP_HOLD_MS);
+  }
+
+  private cancelHold() {
+    if (this.holdTimer) clearTimeout(this.holdTimer);
+    this.holdTimer = 0;
+    this.holdRing?.classList.remove("on");
+  }
+
+  /**
+   * In a fight on a touch screen, whether a tap on the map must be held a moment to act (the player's choice, see
+   * holdTap.ts): a quick tap only shows the hex, so a finger can drag the view about without walking anyone off.
+   */
+  setHoldToTap(on: boolean) {
+    if (on === this.holdToTap) return;
+    this.holdToTap = on;
+    if (!on && this.press === "hold") this.press = "tap";
+    if (!on) this.cancelHold();
+  }
+
+  /** A tap (or click) on the map, where the pointer is: placing what is carried, a prop, or a hex. */
+  private tap() {
     if (this.state?.holding && this.callbacks.onPlace) {
       const target = this.aim();
       if (target) this.callbacks.onPlace(target);
@@ -4757,10 +4837,11 @@ export class WorldRenderer {
     }
     const pos = this.pick();
     if (pos) this.callbacks.onHexClick(pos, this.pickedPlace ?? undefined, this.pickedUnit ?? undefined);
-  };
+  }
 
-  private onPointerLeave = () => {
-    if (this.touches.size > 0) return;
+  private onPointerLeave = (e: PointerEvent) => {
+    // A lifted finger leaves the canvas too; with hold-to-confirm, the hex it showed stays shown until the next.
+    if (this.touches.size > 0 || (this.holdToTap && e.pointerType === "touch")) return;
     this.pointer.inside = false;
     this.setHovered(null);
     this.setHoveredPlace(null);
