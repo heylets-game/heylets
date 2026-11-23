@@ -1,10 +1,10 @@
 // Kept fish: the icebox and the trophy chest. Opened three ways: from the
-// inventory (to look and to move fish between the two), at the fishmonger's
-// stall on the shore (to sell at today's board), and at the bar (to sell to
-// Old Tam, who only takes what he can cook).
+// inventory (to look and to move fish between the two), from a word with Bram
+// the fishmonger at his shack (to sell at today's board), and at the bar (to
+// sell to Old Tam, who only takes what he can cook).
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { FISH, FISH_WANTED_BONUS, formatLength, formatLoad, formatWeight, type FishBuyer } from "@gantt-quest/world";
+import { FISH, FISHMONGER, FISH_WANTED_BONUS, formatLength, formatLoad, formatWeight, type FishBuyer } from "@gantt-quest/world";
 import { api, type FishStock } from "./api";
 import { DragPanel } from "./DragPanel";
 import { catchIcon } from "./render/catchArt";
@@ -13,7 +13,7 @@ import "./fishing.css";
 
 type Kept = FishStock["icebox"][number];
 
-const TITLE: Record<FishBuyer | "none", string> = { market: "The fishmonger", tam: "Old Tam buys fish", none: "Your catch" };
+const TITLE: Record<FishBuyer | "none", string> = { market: `${FISHMONGER.short} buys fish`, tam: "Old Tam buys fish", none: "Your catch" };
 
 function until(at: number): string {
   const minutes = Math.max(1, Math.ceil((at - Date.now()) / 60_000));

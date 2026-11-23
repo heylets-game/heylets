@@ -16,7 +16,7 @@
 import { statPct } from "./check";
 import { FISH, aFish, type FishDef } from "./fishcatalog";
 import { FIGHT_OUTCOME_TEXT, edgesProblem, fightEase, makeFightScript, replayFight, type FightEase, type FightOutcome, type FightScript } from "./fishfight";
-import { FISH_SPOTS, FISH_SPOT_IDS, castMetres, vesselProblem, type Vessel, formatLength, formatWeight, rollCatch, rollSize, type FishSpot } from "./fishing";
+import { BAIT_SALE, FISH_SPOTS, FISH_SPOT_IDS, castMetres, vesselProblem, type BaitId, type Vessel, formatLength, formatWeight, rollCatch, rollSize, type FishSpot } from "./fishing";
 import { holeAt, withHole } from "./fishingholes";
 import type { GatherChoice, GatherState, GatherStep } from "./gather";
 import { harborSky } from "./gameclock";
@@ -73,6 +73,8 @@ export interface CastState {
   script: FightScript;
   /** Server clock when the hook was set, once it is. */
   hookedAt: number | null;
+  /** What was on the hook: the server checked the hero had it. Missing from casts made before there was bait. */
+  bait?: BaitId | null;
 }
 
 export interface Sitting {
@@ -216,7 +218,7 @@ export function stepSitting(state: GatherState, choice: GatherChoice): GatherSte
     const nibbles = Array.from({ length: rng.int(0, NIBBLES_MAX) }, () => rng.int(800, Math.max(900, biteMs - 600))).sort((a, b) => a - b);
     const fish: CaughtFish = { species: caught.id, ...size, spot: from, at: now, ...(caught.gold ? { gold: rng.int(caught.gold[0], caught.gold[1]) } : {}) };
     const script = makeFightScript(rng, caught, size.grams / 1000, metres);
-    const cast: CastState = { at: now, power, metres, biteMs, nibbles, windowMs: Math.round(HOOK_WINDOW_MS + HOOK_WINDOW_DEX_MS * s.ease.dex), fish, script, hookedAt: null };
+    const cast: CastState = { at: now, power, metres, biteMs, nibbles, windowMs: Math.round(HOOK_WINDOW_MS + HOOK_WINDOW_DEX_MS * s.ease.dex), fish, script, hookedAt: null, bait: choice.bait ?? null };
     return { state: { ...state, rng: rng.state(), step: state.step + 1, sitting: { ...busy, spot: from, vessel: spot.vessel ? choice.vessel ?? null : null, cast, last: null } } };
   }
 
@@ -277,6 +279,19 @@ export function stepSitting(state: GatherState, choice: GatherChoice): GatherSte
   }
 
   return { state, error: "Unknown choice." };
+}
+
+/** Fights that end with the line gone, and whatever was on the end of it. */
+const LINE_GONE: ReadonlySet<FightOutcome> = new Set(["snapped", "spooled"]);
+
+/**
+ * The lure lost going from sitting `before` to `after`, if one was: a hooked fish broke the line or took all of it, or
+ * the line was cut, with a lure on the end. Bait is eaten at the cast, so only a lure is ever lost this way.
+ */
+export function lureLost(before: Sitting | undefined, after: Sitting | undefined): BaitId | null {
+  const bait = before?.cast?.bait;
+  if (!bait || !BAIT_SALE[bait].lure || before!.cast!.hookedAt == null || !after || after.cast) return null;
+  return after.last && after.last !== before!.last && LINE_GONE.has(after.last.outcome) ? bait : null;
 }
 
 /** What the client may see of a sitting. */

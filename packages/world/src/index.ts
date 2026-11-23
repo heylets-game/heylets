@@ -56,3 +56,4 @@ export * from "./talk";
 export * from "./gameclock";
 export * from "./wander";
 export * from "./fishingholes";
+export * from "./fishmonger";

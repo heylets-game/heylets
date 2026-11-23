@@ -2,7 +2,7 @@
 
 import type { StatKey } from "@gantt-quest/core";
 import type { Muster, MusterAnswer } from "@gantt-quest/world";
-import type { Appearance, CarryState, FishSpot, GatherChoice, HarborXpStatus, GatherSpot, HarborWorks, HutSummary, ItemDef, Lodestone, ProjectAmounts, PublicHero, Resources, SalesEntry, SalesmanId, SalesmanVisit, ShopEntry, Throwable, TradeSide } from "@gantt-quest/world";
+import type { Appearance, BaitCounts, BaitId, CarryState, FishSpot, GatherChoice, HarborXpStatus, GatherSpot, HarborWorks, HutSummary, ItemDef, Lodestone, ProjectAmounts, PublicHero, Resources, SalesEntry, SalesmanId, SalesmanVisit, ShopEntry, Throwable, TradeSide } from "@gantt-quest/world";
 import { devTools } from "./devTools";
 import { forcedSalesman } from "./salesmanClock";
 import type { GatherStatus } from "../server/gather";
@@ -192,6 +192,8 @@ export const api = {
   gather: () => request<GatherStatus & { sitting?: SittingPaid }>("/api/gather"),
   /** Kept fish: the icebox and the trophy chest, with today's prices. */
   fish: () => request<FishStock>("/api/fish"),
+  bait: () => request<{ bait: BaitCounts; gold: number }>("/api/fish/bait"),
+  buyBait: (kind: BaitId) => request<{ bait: BaitCounts; gold: number }>("/api/fish/bait", { kind }),
   sellFish: (ids: string[], to: "market" | "tam") => request<FishStock & { sold: { id: string; gold: number }[] }>("/api/fish/sell", { ids, to }),
   moveFish: (id: string, to: "trophy" | "icebox") => request<FishStock>("/api/fish/move", { id, to }),
   /** The Catch Book, with the crew's records. */
