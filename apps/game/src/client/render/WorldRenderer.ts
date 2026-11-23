@@ -30,6 +30,7 @@ import { fishMount } from "./catchArt";
 import { FRAME, OUTLINE, SITTING_DROP, inflate, makeFigure, type Figure } from "./figures";
 import { HIDES, hidingMaterial } from "./silhouette";
 import { BOAT_SCALE, OARLOCKS, ROWER_SEAT, aimOar, rowboatModel, shipOar } from "./rowboat";
+import { BoatWake, WAKE_STEP } from "./wake";
 import { Rise } from "./rise";
 import { gaze } from "../gaze";
 import { emotes } from "../emotes";
@@ -593,6 +594,8 @@ interface Unit {
   /** At the oars: how far round the stroke is (radians), and where it has the hands, 0 (forward) to 1 (pulled in). */
   oarPhase?: number;
   oarPull?: number;
+  /** Afloat: where its boat last left foam behind it (see BoatWake). */
+  wakeAt?: { x: number; z: number };
   /** The model, and its root: where the unit stands (its feet) and which way it is turned. */
   figure: Figure;
   root: THREE.Group;
@@ -1015,6 +1018,8 @@ export class WorldRenderer {
   private sea: THREE.Mesh;
   private unitGroup = new THREE.Group();
   private fxGroup = new THREE.Group();
+  /** The foam left behind boats on the water. */
+  private wake = new BoatWake();
   /** Torches lying burning on the ground, and which hexes they are on. */
   private groundTorches = new THREE.Group();
   private groundTorchKey = "";
@@ -1217,7 +1222,7 @@ export class WorldRenderer {
     this.hoverRing = this.buildHoverMarker();
     this.hoverRing.visible = false;
 
-    this.scene.add(this.decor, this.poiGroup, this.propGroup, this.pathGroup, this.hoverRing, this.unitGroup, this.fxGroup, this.groundTorches);
+    this.scene.add(this.decor, this.poiGroup, this.propGroup, this.pathGroup, this.hoverRing, this.unitGroup, this.fxGroup, this.wake.group, this.groundTorches);
 
     canvas.addEventListener("pointerdown", this.onPointerDown);
     canvas.addEventListener("pointermove", this.onPointerMove);
@@ -2367,8 +2372,14 @@ export class WorldRenderer {
     // Heroes stand a quarter hex toward the camera from the middle of their hex (see syncUnits).
     const under = worldToHex(feet.x, feet.z - 0.25);
     const biome = tileAt(state.map, under)?.biome;
+    // On the water a hero is in a boat: there is no foot to land, so no step is heard, and each stroke only sets
+    // a ring going on the sea.
+    if (biome === "water") {
+      if (fancy.get()) addWaterRipple(feet.x, feet.z);
+      return;
+    }
     // At the water's edge the step sets a ring going on the sea beside it.
-    if (fancy.get() && biome && biome !== "water") {
+    if (fancy.get() && biome) {
       const here = hexToWorld(under);
       let nearest: { x: number; z: number } | null = null;
       let best = Infinity;
@@ -2564,6 +2575,7 @@ export class WorldRenderer {
     this.land.x = spots.reduce((n, s) => n + s.x, 0) / Math.max(1, spots.length);
     this.land.z = spots.reduce((n, s) => n + s.z, 0) / Math.max(1, spots.length);
     this.land.reach = Math.max(2, ...spots.map((s) => Math.hypot(s.x - this.land.x, s.z - this.land.z)));
+    this.wake.clear();
     this.deep = new Set(
       this.tiles
         .filter((t) => {
@@ -2573,6 +2585,9 @@ export class WorldRenderer {
           // lies round it is mist, not water.
           // Nor is any of it left out over a void: there is no sea there to show in its place.
           if (land.length === 0 || state.far || this.backdropKind !== "sea") return false;
+          // The Harbor's sea is only as wide as a boat can go (HARBOR_SEA_REACH), and all of it is drawn, so its
+          // edge is where the rowing stops.
+          if (this.mapCode === "harbor") return false;
           const near = Math.min(...land.map((l) => hexDistance(l, t)));
           return near > 2 || (near === 2 && noise(t.q, t.r, 31) < 0.45);
         })
@@ -3518,13 +3533,16 @@ export class WorldRenderer {
    * rower faces, whichever way that is (walking, or looking toward the pointer), with its rowing seat under them;
    * each oar's handle is put in their fist and laid through its oarlock.
    */
-  private rideBoat(unit: Unit, p: THREE.Vector3, dt: number) {
+  private rideBoat(id: string, unit: Unit, p: THREE.Vector3, dt: number) {
     const boat = unit.boat;
     if (!boat) return;
     const ground = this.groundAt(p.x, p.z);
     const afloat = ground?.biome === "water";
     boat.visible = afloat && unit.root.visible;
-    if (!afloat) return;
+    if (!afloat) {
+      unit.wakeAt = undefined;
+      return;
+    }
     const swell = Math.sin(this.clock * 1.4 + p.x) * 0.025;
     if (unit.boatKind === "barrel") {
       boat.position.set(p.x, ground!.top + swell, p.z - 0.1);
@@ -3534,6 +3552,7 @@ export class WorldRenderer {
         boat.rotation.y = Math.atan2(to.x - p.x, to.z - p.z);
       }
       boat.rotation.z = Math.sin(this.clock * 1.1 + p.z) * 0.06;
+      this.churnWake(id, unit, p.x, ground!.top, p.z, boat.rotation.y, 0.3, 0.55);
       // Sat down in it, to the chest.
       unit.sunk = 0.24 - swell;
       p.y -= unit.sunk;
@@ -3545,6 +3564,7 @@ export class WorldRenderer {
     const seatZ = ROWER_SEAT.z * BOAT_SCALE;
     boat.position.set(p.x - sin * seatZ, ground!.top + swell, p.z - cos * seatZ);
     boat.rotation.set(0, turn, Math.sin(this.clock * 1.1 + p.z) * 0.05);
+    this.churnWake(id, unit, boat.position.x, ground!.top, boat.position.z, turn, 0.62 * BOAT_SCALE, 1);
     // Seated on the thwart: the figure's origin as far below the seat as a seated figure's is.
     unit.sunk = SITTING_DROP * unit.size - ROWER_SEAT.y * BOAT_SCALE - swell;
     p.y -= unit.sunk;
@@ -3567,6 +3587,22 @@ export class WorldRenderer {
       oars[i].parent!.worldToLocal(fist);
       aimOar(oars[i], fist, OARLOCKS[i]);
     });
+  }
+
+  /**
+   * A boat moving on the water lays its wake at its stern, `back` behind the point `x, z` it turns about, each
+   * time it has gone another WAKE_STEP. A boat sitting still lays none, and what it left behind narrows away.
+   */
+  private churnWake(id: string, unit: Unit, x: number, top: number, z: number, yaw: number, back: number, size: number) {
+    const last = unit.wakeAt;
+    if (!last) {
+      unit.wakeAt = { x, z };
+      return;
+    }
+    if (Math.hypot(x - last.x, z - last.z) < WAKE_STEP * size) return;
+    unit.wakeAt = { x, z };
+    if (!unit.root.visible) return;
+    this.wake.lay(id, x - Math.sin(yaw) * back, top, z - Math.cos(yaw) * back, yaw, size, this.clock);
   }
 
   /** Whether a unit is still on its way along a walked path. */
@@ -5393,6 +5429,7 @@ export class WorldRenderer {
     // Gulls keep to fair daylight: they are gone by night and in a storm.
     this.gulls.update(dt, walkers, openSky ? (1 - night) * (1 - this.ambience.storming) : 0);
     this.holes.update(dt, this.clock, night, this.ambience.storming, fancy.get());
+    this.wake.setNight(openSky ? night : 0);
     const clearSky = lively * (1 - this.ambience.overcast);
     // The moon's reflection lies on the sea off the island's shore, on the side the moon is on.
     const moon = this.ambience.sunDir;
@@ -5420,6 +5457,7 @@ export class WorldRenderer {
     this.scenery?.update(this.clock, dt, this.target, Math.max(night, underground ? 1 : 0, this.voidBackdrop && openSky ? this.voidBackdrop.gloom : 0));
     // The HUD's trim and the health orb are lit by the same sun or moon, from wherever the camera stands.
     reportEnv(this.ambience.sunDir, this.yaw, this.ambience.sunGlint(this.litRim), this.scene.background as THREE.Color);
+    this.wake.update(this.clock);
     updateWater(fancy.get(), this.clock, this.ambience.sunDir, this.ambience.sunGlint(this.litRim), (this.sea.material as THREE.MeshLambertMaterial).color, this.scene.background as THREE.Color, this.ambience.raining);
     const step = Math.round(night * 10);
     if (step !== this.paintedNight) {
@@ -5556,7 +5594,7 @@ export class WorldRenderer {
       unit.feet.set(p.x, ground, p.z);
       if (touched) this.touchdown(unit);
       else if (landed) this.footfall(id, unit);
-      this.rideBoat(unit, p, dt);
+      this.rideBoat(id, unit, p, dt);
       // On a stool: the figure's origin as far below the seat's top as a seated figure's is, with a small hop on the way up.
       let perch = 0;
       if (unit.sit) {
