@@ -9,6 +9,7 @@ import type { GatherStatus } from "../server/gather";
 import type { SittingPaid } from "../server/fishing";
 import type { FishStock } from "../server/fishmarket";
 import type { BaitCounter } from "../server/bait";
+import type { FlotsamTaken } from "../server/flotsam";
 import type { DealerView, HeldContractView } from "../server/dealer";
 import type { CatchBook, PubWall } from "../server/catchbook";
 import type { PubGame, PubLeaderboard, PubScore } from "../server/pub-scores";
@@ -200,6 +201,9 @@ export const api = {
   buyBait: (kind: BaitId) => request<BaitCounter>("/api/fish/bait", { kind }),
   buyRod: (kind: RodId) => request<BaitCounter>("/api/fish/rod", { kind }),
   buyBoat: (kind: BoatId) => request<BaitCounter>("/api/fish/boat", { kind }),
+  /** Which of this tide's flotsam the crew has taken; and taking a piece from where the hero stands. */
+  flotsam: () => request<{ taken: string[] }>("/api/flotsam"),
+  takeFlotsam: (id: string) => request<FlotsamTaken>("/api/flotsam/take", { id }),
   sellFish: (ids: string[], to: "market" | "tam") => request<FishStock & { sold: { id: string; gold: number }[] }>("/api/fish/sell", { ids, to }),
   moveFish: (id: string, to: "trophy" | "icebox") => request<FishStock>("/api/fish/move", { id, to }),
   /** The Catch Book, with the crew's records. */

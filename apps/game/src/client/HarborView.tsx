@@ -7,6 +7,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 import { useAudioScene } from "./audio/useAudioScene";
 import { hexDistance, hexNeighbors, type HexPos } from "@gantt-quest/core";
 import { GATHER_SPOTS, GATHER_SPOT_IDS, HARBOR_APOTHECARY, HARBOR_LAPIDARY, HARBOR_BOARD, HARBOR_BUILDINGS, footing, HARBOR_CAVE, HARBOR_WAYGATE, HARBOR_CHEST, HARBOR_GALLEY, HARBOR_LIGHTHOUSE, HARBOR_SMITHY, HARBOR_GATHER, HARBOR_NAME, HARBOR_PLOTS, HARBOR_PLOT_FACING, HARBOR_PUB, HARBOR_RING, HARBOR_SHOP, HARBOR_SPAWN, HARBOR_WORKS, PLOT_PRICE, RESOURCE_KINDS, SHACK_COST, binFill, binNeeds, builtProjects, BOOK_TITLE, fishFrom, harborDoor, tileAt, type FishSpot, FISH_SPOTS, HOLE_NAMES, holeFishNames, generateHarbor, projectById, projectProgress, harborPoi, hutTier, poiAt, salesman, gardenBeds, gardenCorner, gardenLooks, plotAt, gardenSpotAt, GARDEN_SPOTS, HARBOR_WELL, HARBOR_WELL_AT, bedProgress, nextReady, readyCount, growText, type GardenBed, type GatherSpot, type Resources, regular as regularOf, regularTalk, type RegularId, roofColor, DECORATOR, FINISHES_STALL, HARBOR_FINISHES, decoratorTalk, FISHMONGER, FISHMONGER_FACES, FISHMONGER_POS, isFishmongerAt, fishmongerAdvice, fishmongerTalk, fishmongerTip, bestHole } from "@gantt-quest/world";
+import { FURNISHINGS as FURNITURE, flotsamName, flotsamWithin } from "@gantt-quest/world";
 import type { Poi, Vessel, WorldMap } from "@gantt-quest/world";
 import { MusterPanel, useMuster } from "./atlas/Muster";
 import { api, type Me, type RegularsView } from "./api";
@@ -25,6 +26,8 @@ import { HudBar } from "./ui/Hud";
 import { Logbook } from "./Logbook";
 import { GatherPanel } from "./GatherPanel";
 import { useFishingHoles } from "./useFishingHoles";
+import { useFlotsam } from "./useFlotsam";
+import { BottleNote } from "./BottleNote";
 import { Garden } from "./Garden";
 import { WellMenu } from "./WellMenu";
 import { GardenMarks, type GardenMarkInfo } from "./GardenMarks";
@@ -222,6 +225,9 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
   const about = useRegularsAbout(renderer, me.crew?.id, "harbor", wantRegular ?? chatWith, !resting);
   // Where the fish are on the water right now: the crew's fishing holes, drawn on the water and named in the prompt.
   const holes = useFishingHoles(renderer, me.crew?.id, !resting);
+  // What the sea has brought in: flotsam on the beach and the water, less what the crew has taken.
+  const flotsam = useFlotsam(renderer, me.crew?.id, !resting, harbor.flotsam.gone, harbor.flotsam.sync);
+  const [bottle, setBottle] = useState<{ note: string; line: string } | null>(null);
   const aboutRef = useRef(about);
   aboutRef.current = about;
   /** Your gathering outings left today, drawn as lightning bolts on your plate. Read on the way in and after anything that spends or restores them. */
@@ -746,6 +752,23 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
   const goDown = () => {
     api.caves().then(({ code }) => goInside(`${HARBOR_CAVE.q},${HARBOR_CAVE.r}`, `zone/${code}`), (e: Error) => setNote(e.message));
   };
+  // Flotsam bobbing beside the hero (or under their boat): fished out from the beach or from a boat.
+  const flotsamHere = self ? flotsamWithin(flotsam.pieces, self.pos) : null;
+  const takeFlotsam = async (id: string) => {
+    try {
+      const r = await api.takeFlotsam(id);
+      flotsam.took(id);
+      void refresh();
+      const got = [costText(r.find.resources), r.find.gold ? `${r.find.gold} gold` : "", r.find.furnishing ? `a ${FURNITURE[r.find.furnishing].name.toLowerCase()} (in your hut's storage)` : ""].filter((t) => t && t !== "nothing");
+      if (r.find.note) setBottle({ note: r.find.note, line: r.find.line });
+      else say_(`${r.find.line}${got.length ? ` You get ${got.join(", ")}.` : ""}`);
+    } catch (e) {
+      const why = (e as Error).message;
+      // Gone already (a crewmate was quicker, or the tide turned): off the water with it.
+      if (/first|tide/i.test(why)) flotsam.took(id);
+      say_(why);
+    }
+  };
   // The sparring ring is shut while it is rebuilt on the new combat (fights on the tiles themselves):
   // it says so and offers nothing to do.
   const shut = (title: ReactNode) => ({ title, label: "", run: () => {}, closed: true });
@@ -782,6 +805,8 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
         run: () => setGardenOf(gardenHere.id),
       }
     : atRing ? shut(<>The sparring ring <span className="muted">· being rebuilt for a new way of fighting. Coming soon.</span></>)
+    // Flotsam bobbing beside them: fished out.
+    : flotsamHere ? { title: <>{flotsamName(flotsamHere)} <span className="muted">· bobbing {flotsamHere.shallows ? "in the shallows" : "on the water"}</span></>, label: "Fish it out", run: () => void takeFlotsam(flotsamHere.id), press: true }
     : gatherHere ? {
         title: gatherHere === "fishing" && holeHere ? <>{HOLE_NAMES[holeHere.kind]} {holeHere.where} <span className="muted">· {holeFishNames(holeHere)} biting</span></>
           : gatherHere === "fishing" && pierHere ? FISH_SPOTS[pierHere].name : GATHER_SPOTS[gatherHere].name,
@@ -848,7 +873,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     : null;
   hereNow.current = here;
   // Anything laid over the Harbor takes the floating button away.
-  const panelOpen = sheet || book || shop || notices || !!gather || fishmonger || baitOpen || works || account || !!tradeWith || !!gardenOf || talking || finishesOpen;
+  const panelOpen = sheet || book || shop || notices || !!gather || fishmonger || baitOpen || works || account || !!tradeWith || !!gardenOf || talking || finishesOpen || !!bottle;
   // Over your own garden, how its next bed is coming on; over a crewmate's near you, a drop while it wants water.
   const gardenMarks: GardenMarkInfo[] = [];
   for (const m of board.members) {
@@ -977,6 +1002,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
       {chest && me.character && <TownChest me={me} refresh={refresh} onClose={() => setChest(false)} />}
       {gather && me.character && <GatherPanel spot={gather} onRod={(on) => harbor.send({ type: "fishing", on })} pier={pierHere ?? undefined} at={self?.pos} hole={holeHere} vessel={self?.vessel ?? null} gilded={me.character?.title === BOOK_TITLE} renderer={renderer} onClose={() => setGather(null)} onStamina={setStamina} onPaid={() => void refresh()} />}
       {fishmonger && me.character && <CatchPanel buyer="market" onGold={() => void refresh()} onClose={() => setFishmonger(false)} />}
+      {bottle && <BottleNote note={bottle.note} line={bottle.line} onClose={() => setBottle(null)} />}
       {baitOpen && me.character && <BaitPanel gold={gold} onGold={() => void refresh()} onBoat={() => void refreshAll()} onClose={() => setBaitOpen(false)} />}
       {wellOpen && atWell && me.character && (
         <WellMenu renderer={renderer} onClose={() => setWellOpen(false)} onChanged={() => void refresh()} />
