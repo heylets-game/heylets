@@ -79,6 +79,41 @@ function weighted<T>(rng: Rng, items: [T, number][]): T {
   return items[items.length - 1][0];
 }
 
+/**
+ * Bait on the hook: makes some kinds of fish bite more often, by rarity. Hauls do not care what is on the hook.
+ * Each suits one kind of fishing hole (fishingholes.ts), and is at its best there: worms for a shoal's middling
+ * fish, shrimp for a deep hole's big ones, a glow lure for night feeders (and only after dark).
+ */
+export type BaitId = "worms" | "shrimp" | "glow_lure";
+export const BAIT_IDS: BaitId[] = ["worms", "shrimp", "glow_lure"];
+
+export interface BaitDef {
+  id: BaitId;
+  name: string;
+  blurb: string;
+  /** How much more (or less) often each rarity bites with it on. */
+  rarity: Partial<Record<FishRarity, number>>;
+  /** Works only after dark. */
+  nightOnly?: boolean;
+  /** Night fish bite this much more often again (after dark). */
+  nightFish?: number;
+  /** The kind of fishing hole it suits. */
+  suits: "shoal" | "deep" | "night";
+}
+
+export const BAITS: Record<BaitId, BaitDef> = {
+  worms: { id: "worms", name: "Worms", blurb: "Everyday bait. Fewer tiddlers, more of the fish worth keeping.", rarity: { common: 0.6, uncommon: 2, rare: 1.1 }, suits: "shoal" },
+  shrimp: { id: "shrimp", name: "Shrimp", blurb: "What the big fish eat. The small ones leave it alone.", rarity: { common: 0.5, uncommon: 0.7, rare: 1.6, legendary: 1.3 }, suits: "deep" },
+  glow_lure: { id: "glow_lure", name: "Glow lure", blurb: "A painted lure that shines in the dark. Useless by day.", rarity: { rare: 1.4, legendary: 1.5 }, nightOnly: true, nightFish: 2.5, suits: "night" },
+};
+
+/** How much more often `f` bites with `bait` on, under a sky that is `night` or not. */
+export function baitWeight(f: FishDef, bait: BaitId | null | undefined, night: boolean): number {
+  const b = bait ? BAITS[bait] : undefined;
+  if (!b || f.kind === "haul" || (b.nightOnly && !night)) return 1;
+  return (b.rarity[f.rarity] ?? 1) * (f.night && night ? b.nightFish ?? 1 : 1);
+}
+
 /** The sky a cast is made under: night and storm fish bite only then. */
 export interface CastSky {
   night: boolean;
@@ -88,11 +123,11 @@ export interface CastSky {
 /** Whether `f` bites at all under `sky`. */
 export const bitesUnder = (f: FishDef, sky: CastSky): boolean => (!f.night || sky.night) && (!f.storm || sky.storm);
 
-/** What bites on a cast into `water` that reached `reach` (0 to 1) of the way out, under `sky` (by day, fair, if not given). */
-export function rollCatch(rng: Rng, water: Water, reach: number, bonus: Record<string, number> = {}, sky: CastSky = { night: false, storm: false }): FishDef {
+/** What bites on a cast into `water` that reached `reach` (0 to 1) of the way out, under `sky` (by day, fair, if not given), with `bait` on the hook. */
+export function rollCatch(rng: Rng, water: Water, reach: number, bonus: Record<string, number> = {}, sky: CastSky = { night: false, storm: false }, bait: BaitId | null = null): FishDef {
   const haul = rng.next() < HAUL_SHARE;
   const pool = FISH_IDS.map((id) => FISH[id]).filter((f) => f.water.includes(water) && (f.kind === "haul") === haul && bitesUnder(f, sky));
-  return weighted(rng, pool.map((f) => [f, (haul ? RARITY_WEIGHT[f.rarity] : reachWeight(f.rarity, reach)) * (bonus[f.id] ?? 1)] as [FishDef, number]));
+  return weighted(rng, pool.map((f) => [f, (haul ? RARITY_WEIGHT[f.rarity] : reachWeight(f.rarity, reach)) * (bonus[f.id] ?? 1) * baitWeight(f, bait, sky.night)] as [FishDef, number]));
 }
 
 export interface FishSize {

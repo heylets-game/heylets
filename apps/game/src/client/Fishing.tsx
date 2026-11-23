@@ -37,7 +37,6 @@ import { outingPaid } from "./gatherPaid";
 import { catchIcon } from "./render/catchArt";
 import { FishingStage, type FishHooks, type FishPhase } from "./render/FishingStage";
 import { hexToWorld, type WorldRenderer } from "./render/WorldRenderer";
-import { StaminaBolts } from "./StaminaBolts";
 import { units } from "./units";
 import "./quarry.css";
 import "./fishing.css";
@@ -153,7 +152,6 @@ function FishingIntro({ pier, hole, status, ended, busy, error, onStart, onClose
   onClose(): void;
 }) {
   const spot = FISH_SPOTS[pier];
-  const left = status?.stamina.left ?? 0;
   return (
     <div className="overlay quarry-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="quarry-intro fish-intro" role="dialog" aria-label={spot.name}>
@@ -175,18 +173,13 @@ function FishingIntro({ pier, hole, status, ended, busy, error, onStart, onClose
         )}
         {error && <p className="bad qa-error">{error}</p>}
         <div className="qa-foot">
-          {status && (
-            <span className="qa-stamina" title={`${left} of ${status.stamina.max} outings left today`}>
-              <StaminaBolts left={left} max={status.stamina.max} size={18} />
-            </span>
-          )}
+          <span className="qa-cost">Fishing costs no stamina</span>
           <span className="spacer" />
-          {status && left > 0 && (
+          {status && (
             <button className="primary" disabled={busy} onClick={onStart} autoFocus>
-              {ended ? "Fish again" : "Cast a line"}<span className="qa-cost">· 1 stamina when you stop</span>
+              {ended ? "Fish again" : "Cast a line"}
             </button>
           )}
-          {status && left === 0 && <span className="bad qa-tired">Worn out for today. A rest or a meal gives stamina back.</span>}
         </div>
       </div>
     </div>
@@ -400,7 +393,10 @@ function Sitting({ outing, world, pier, at: here, hole, vessel, gilded, apply, o
   const live = view.sitting!;
   const fighting = phase === "fighting" || phase === "landing";
   const def = pending ? FISH[pending.species] : null;
-  const fills = pending && def?.kind !== "haul" ? live.creelGrams + pending.grams >= live.creelLimitG : false;
+  // The one that fills the basket goes in; once it is full, what more is kept is sold on the quay for less.
+  const full = live.creelGrams >= live.creelLimitG;
+  const fills = pending && def?.kind !== "haul" && !full ? live.creelGrams + pending.grams >= live.creelLimitG : false;
+  const overflow = !!pending && full;
   const prompt =
     phase === "idle" ? "Hold to wind up a cast, let go to throw"
     : phase === "charging" ? "Let go to cast"
@@ -482,7 +478,8 @@ function Sitting({ outing, world, pier, at: here, hole, vessel, gilded, apply, o
             {def.kind !== "haul" && <span> · {formatLength(pending.mm, u)}</span>}
           </p>
           <p className="muted fish-blurb">{def.blurb}</p>
-          {fills && <p className="fish-fill">That fills your basket. You will head home with it.</p>}
+          {fills && <p className="fish-fill">That fills your basket. Keep fishing: anything more is sold on the quay at half price.</p>}
+          {overflow && <p className="fish-fill">Your basket is full. Keep this one and it is sold on the quay at half price.</p>}
           <div className="row">
             <button className="primary" disabled={busy} onClick={() => void putAway("keep")} autoFocus>{def.kind === "haul" ? "Keep it" : "Into the basket"}</button>
             <button disabled={busy} onClick={() => void putAway("release")}>{def.kind === "haul" ? "Toss it back" : "Throw it back"}</button>

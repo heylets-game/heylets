@@ -155,9 +155,9 @@ export async function rest(db: D1Database, playerId: string, place: RestPlace): 
 }
 
 /**
- * Start an outing, spending one of the day's three. Fishing from a pier
- * (`pier` given) starts a sitting instead, which needs stamina left but only
- * spends it when it ends. Returns an error string if refused.
+ * Start an outing, spending one of the day's three. Fishing (`pier` given)
+ * starts a sitting instead, which needs no stamina and spends none. Returns an
+ * error string if refused.
  */
 export async function startOuting(db: D1Database, playerId: string, spot: unknown, pier?: unknown, where: Standing | null = null): Promise<GatherStatus | string> {
   if (!GATHER_SPOT_IDS.includes(spot as GatherSpot)) return "There is nothing to gather there.";
@@ -186,8 +186,7 @@ export async function startOuting(db: D1Database, playerId: string, spot: unknow
 
 /**
  * Sit down to fish where the hero stands. `pier` is only the client asking for a sitting: where it is fished from
- * is worked out here from `where`, the hero's own hex in the Harbor. Stamina is checked, not spent: the sitting
- * spends it when it ends.
+ * is worked out here from `where`, the hero's own hex in the Harbor. Fishing is free: no stamina is needed or spent.
  */
 async function startSittingOuting(db: D1Database, playerId: string, pier: unknown, where: Standing | null, stats: Record<GatherSpot, number>): Promise<GatherStatus | string> {
   if (!FISH_SPOT_IDS.includes(pier as FishSpot)) return "You cannot fish from there.";
@@ -204,19 +203,16 @@ async function startSittingOuting(db: D1Database, playerId: string, pier: unknow
   const extra = spot.vessel && vessel === "rowboat" ? ROWBOAT_CREEL_G : 0;
   const state = startSitting(spot.id, crypto.getRandomValues(new Uint32Array(1))[0], angler, now, extra);
   const today = gatherDay(now);
-  // As a start: no outing already under way, and stamina left today. Unlike a start, nothing is spent yet.
+  // Only if no outing is already under way. Fishing needs no stamina, and spends none.
   const res = await db
     .prepare(
       `INSERT INTO gathering (player_id, day, used, session_json) VALUES (?1, ?2, 0, ?3)
        ON CONFLICT(player_id) DO UPDATE SET used = CASE WHEN day = ?2 THEN used ELSE 0 END, day = ?2, session_json = ?3
-       WHERE session_json IS NULL AND (day <> ?2 OR used < ?4)`,
+       WHERE session_json IS NULL`,
     )
-    .bind(playerId, today, JSON.stringify(state), GATHER_DAILY_OUTINGS)
+    .bind(playerId, today, JSON.stringify(state))
     .run();
-  if (res.meta.changes === 0) {
-    const row = await readRow(db, playerId);
-    return row?.session_json ? "Finish the outing you are on first." : "You are worn out. Come back tomorrow.";
-  }
+  if (res.meta.changes === 0) return "Finish the outing you are on first.";
   return status(db, playerId, stats);
 }
 
@@ -276,8 +272,9 @@ export async function stepOuting(db: D1Database, playerId: string, choice: unkno
     const vessel = await ownedVessel(db, playerId);
     const from = where ? fishFrom(HARBOR, where.pos, vessel) : null;
     if (!from || !where) return NOT_AT_WATER;
-    asked = { ...asked, vessel, spot: from, at: where.pos, crew: where.crewId };
-  } else if (asked.t === "cast") asked = { ...asked, vessel: null, at: null, crew: null };
+    // No bait yet: nothing sells it (the fishmonger will). Whatever the client names is never taken.
+    asked = { ...asked, vessel, spot: from, at: where.pos, crew: where.crewId, bait: null };
+  } else if (asked.t === "cast") asked = { ...asked, vessel: null, at: null, crew: null, bait: null };
   const step = stepGather(current, timed(current, asked, Date.now()));
   if (step.error) return step.error;
   const next = step.state;

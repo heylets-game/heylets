@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FISH } from "./fishcatalog";
-import { FISH_BOARD_MS, FISH_RATE_MAX, FISH_RATE_MIN, FISH_WANTED, FISH_WANTED_BONUS, ICEBOX_G, TROPHY_SLOTS, fishBoard, fishSalePrice, iceboxProblem, stowCatch, trophyProblem } from "./fishmarket";
+import { FISH_BOARD_MS, FISH_RATE_MAX, FISH_RATE_MIN, FISH_WANTED, FISH_WANTED_BONUS, ICEBOX_G, QUAY_RATE, TROPHY_SLOTS, fishBoard, fishSalePrice, iceboxProblem, stowCatch, trophyProblem } from "./fishmarket";
 
 const T = 1_800_000_000_000;
 const herring = { species: "herring", grams: 400, specimen: false };
@@ -84,5 +84,13 @@ describe("keeping fish", () => {
     // Something Tam cooks goes to him.
     const full = stowCatch([{ species: "pollock", grams: 3000, specimen: false }], ICEBOX_G, b);
     expect(full.sold[0].buyer).toBe("tam");
+  });
+
+  it("sells a catch kept with the basket full on the quay, at the quay price, however much room the icebox has", () => {
+    const b = fishBoard("A", T);
+    const fish = { species: "silver_king", grams: 30_000, specimen: true };
+    const { stowed, sold } = stowCatch([{ ...fish, overflow: true }], 0, b);
+    expect(stowed).toHaveLength(0);
+    expect(sold[0].gold).toBe(Math.max(1, Math.round(fishSalePrice(fish, "market", b)! * QUAY_RATE)));
   });
 });

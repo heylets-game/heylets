@@ -12,6 +12,8 @@ import { makeRng, seedFromString } from "./rng";
 
 /** How long one board of prices stands. */
 export const FISH_BOARD_MS = 6 * 60 * 60_000;
+/** What a catch kept with the basket full fetches on the quay, against what it would sell for from the icebox. */
+export const QUAY_RATE = 0.5;
 /** The fishmonger's rates run between these, against a fish's base price. */
 export const FISH_RATE_MIN = 0.6;
 export const FISH_RATE_MAX = 1.6;
@@ -86,12 +88,20 @@ export function iceboxProblem(fish: { species: string; grams: number }, iceboxG:
  * on the quay. Old Tam takes what he can cook; the fishmonger the rest, at the
  * board's rate.
  */
-export function stowCatch<T extends { species: string; grams: number; specimen: boolean }>(items: T[], iceboxG: number, board: FishBoard): { stowed: T[]; sold: (T & { gold: number; buyer: FishBuyer })[] } {
+export function stowCatch<T extends { species: string; grams: number; specimen: boolean; overflow?: boolean }>(items: T[], iceboxG: number, board: FishBoard): { stowed: T[]; sold: (T & { gold: number; buyer: FishBuyer })[] } {
   const stowed: T[] = [];
   const sold: (T & { gold: number; buyer: FishBuyer })[] = [];
   let room = ICEBOX_G - iceboxG;
   for (const f of items) {
     const def = FISH[f.species];
+    // Caught with the basket full: it never reaches the icebox, and goes at the quay price.
+    if (f.overflow) {
+      const tam = fishSalePrice(f, "tam", board);
+      const buyer: FishBuyer = tam !== null ? "tam" : "market";
+      const full = (buyer === "tam" ? tam : fishSalePrice(f, "market", board)) ?? 0;
+      sold.push({ ...f, gold: full > 0 ? Math.max(1, Math.round(full * QUAY_RATE)) : 0, buyer });
+      continue;
+    }
     if (!inIcebox(def) || f.grams <= room) {
       stowed.push(f);
       if (inIcebox(def)) room -= f.grams;

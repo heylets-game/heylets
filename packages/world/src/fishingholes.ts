@@ -1,7 +1,7 @@
 // Fishing holes: where the fish are in the Harbor's waters right now, and fishing from anywhere along the shore.
 //
 // A handful of holes lie on the water at a time, some close in along the shore and some further out, where only a
-// boat gets to. They move every quarter of a day on the Harbor's clock (gameclock.ts), and the sky changes them:
+// boat gets to. They move every half a day on the Harbor's clock (gameclock.ts), and the sky changes them:
 // after dark one of them turns to night feeders, and in a storm one far out churns with what a storm brings up.
 // Each is known for a few fish, which bite there more often (the same `bonus` a fishing spot carries).
 //
@@ -17,8 +17,8 @@ import { HARBOR_BOATS, HARBOR_BRIDGE, HARBOR_CAVE, HARBOR_LAPIDARY, HARBOR_PLOTS
 import { tileAt, type WorldMap } from "./map";
 import { makeRng, seedFromString, type Rng } from "./rng";
 
-/** The holes stay put this long, then move: a quarter of the Harbor's day. */
-export const HOLE_SLOT_MS = GAME_DAY_MS / 4;
+/** The holes stay put this long, then move: half the Harbor's day, about one short spell of fishing. */
+export const HOLE_SLOT_MS = GAME_DAY_MS / 2;
 /** Holes close in, fishable from the shore beside them, and holes further out, for a boat. */
 export const NEAR_HOLES = 3;
 export const FAR_HOLES = 2;
@@ -195,7 +195,7 @@ function stock(rng: Rng, kind: HoleKind, water: Water, sky: CastSky): Record<str
 /** Whether a night (or storm) hole on this water would have anything of its own to show. */
 const hasOwn = (water: Water, sky: CastSky, flag: "night" | "storm") => catchOf(water, sky, FISH_RARITIES_LIVING).some((f) => f[flag]);
 
-/** Where the crew's holes lie in the quarter-day `slot`: places only, as the sky does not move them. */
+/** Where the crew's holes lie in the half-day `slot`: places only, as the sky does not move them. */
 function laid(crewId: string, slot: number): { pos: HexPos; near: boolean; base: HoleKind }[] {
   const rng = makeRng(seedFromString(`${crewId}:holes:${slot}`));
   const { near, far } = placesOf();
@@ -221,7 +221,7 @@ function laid(crewId: string, slot: number): { pos: HexPos; near: boolean; base:
 }
 
 /**
- * The crew's fishing holes at `now`: where they lie this quarter-day, what each is known for under this sky. After
+ * The crew's fishing holes at `now`: where they lie this half-day, what each is known for under this sky. After
  * dark the first hole close in is night feeders; in a storm the first far out is storm water.
  */
 export function fishingHoles(crewId: string, now: number): FishingHole[] {

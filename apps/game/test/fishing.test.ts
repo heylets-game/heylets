@@ -1,11 +1,11 @@
 // Fishing sittings on the server, against a real SQLite database with the
 // game's migrations applied (the stand-in for D1 in d1.ts):
-// stamina spent when a sitting ends rather than when it starts, the fish
-// kept, the Catch Book, crew records, and the idle close.
+// fishing is free (no stamina needed or spent), the fish kept, a full basket
+// sold on the quay, the Catch Book, crew records, and the idle close.
 
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { BOOK_TITLE, FISH, HARBOR_FISH_SPOTS, HARBOR_SIDES, HARBOR_SPAWN, PAGE_REWARD, SITTING_IDLE_MS, castMetres, fishFrom, fishingHoles, gatherDay, generateHarbor, holeAt, seaEdge, shoreAt, tileAt, type GatherChoice, type GatherView, type ShoreSpot } from "@gantt-quest/world";
+import { BOOK_TITLE, FISH, HARBOR_FISH_SPOTS, QUAY_RATE, fishBoard, fishSalePrice, HARBOR_SIDES, HARBOR_SPAWN, PAGE_REWARD, SITTING_IDLE_MS, castMetres, fishFrom, fishingHoles, gatherDay, generateHarbor, holeAt, seaEdge, shoreAt, tileAt, type GatherChoice, type GatherView, type ShoreSpot } from "@gantt-quest/world";
 import type { HexPos } from "@gantt-quest/core";
 import { catchBook, hangAtHome, mountInPub, unmountInPub } from "../src/server/catchbook";
 import { getHut, type Env } from "../src/server/db";
@@ -85,7 +85,7 @@ afterEach(() => {
 });
 
 describe("starting a sitting", () => {
-  it("needs stamina but does not spend it", async () => {
+  it("needs no stamina and spends none", async () => {
     const r = await sit("west");
     if (typeof r === "string") throw new Error(r);
     expect(r.stamina.left).toBe(3);
@@ -93,9 +93,13 @@ describe("starting a sitting", () => {
     expect(r.outing!.sitting!.spot).toBe("west");
   });
 
-  it("is refused when the day's stamina is spent", async () => {
+  it("can be started when the day's stamina is spent", async () => {
     sql.prepare("INSERT INTO gathering (player_id, day, used) VALUES ('ann', ?, 3)").run(gatherDay(T0));
-    expect(await sit("east")).toMatch(/worn out/);
+    const r = await sit("east");
+    if (typeof r === "string") throw new Error(r);
+    expect(r.stamina.left).toBe(0);
+    await step({ t: "bank" });
+    expect(used()).toBe(3);
   });
 
   it("is refused out on the water without a boat, and anywhere that is not a spot", async () => {
@@ -113,13 +117,12 @@ describe("starting a sitting", () => {
 });
 
 describe("ending a sitting", () => {
-  it("spends one stamina, keeps the fish, fills the Catch Book and sets a crew record", async () => {
+  it("spends no stamina, keeps the fish, fills the Catch Book and sets a crew record", async () => {
     await sit("middle");
     const species = await keepAFish();
-    expect(used()).toBe(0);
     const done = await step({ t: "bank" });
     expect(done.outing!.status).toBe("banked");
-    expect(used()).toBe(1);
+    expect(used()).toBe(0);
     expect(one("SELECT session_json FROM gathering WHERE player_id = 'ann'")).toMatchObject({ session_json: null });
 
     const fish = sql.prepare("SELECT species, grams, place FROM fish WHERE player_id = 'ann'").all() as { species: string; grams: number; place: string }[];
@@ -139,12 +142,14 @@ describe("ending a sitting", () => {
     expect(done.xp!.granted).toBeGreaterThan(4);
   });
 
-  it("cannot be closed, or charged, twice", async () => {
+  it("cannot be closed, or paid, twice", async () => {
     await sit("west");
+    await keepAFish();
     await step({ t: "bank" });
-    expect(used()).toBe(1);
+    const fish = (sql.prepare("SELECT COUNT(*) AS n FROM fish WHERE player_id = 'ann'").get() as { n: number }).n;
     expect(await stepOuting(db, "ann", { t: "bank" })).toMatch(/not out gathering/);
-    expect(used()).toBe(1);
+    expect((sql.prepare("SELECT COUNT(*) AS n FROM fish WHERE player_id = 'ann'").get() as { n: number }).n).toBe(fish);
+    expect(used()).toBe(0);
   });
 
   it("ends by itself when left alone, the next time anyone looks", async () => {
@@ -155,10 +160,10 @@ describe("ending a sitting", () => {
     if (typeof r === "string") throw new Error(r);
     expect(r.outing!.status).toBe("banked");
     expect(r.sitting!.fish.length).toBeGreaterThan(0);
-    expect(used()).toBe(1);
+    expect(used()).toBe(0);
     // Looking again changes nothing.
     await gatherStatus(db, "ann");
-    expect(used()).toBe(1);
+    expect(used()).toBe(0);
     expect((sql.prepare("SELECT COUNT(*) AS n FROM fish WHERE player_id = 'ann'").get() as { n: number }).n).toBe(r.sitting!.fish.length);
   });
 
@@ -167,7 +172,8 @@ describe("ending a sitting", () => {
     at(clock + SITTING_IDLE_MS + 1000);
     const r = await startOuting(db, "ann", "quarry");
     expect(typeof r).not.toBe("string");
-    expect(used()).toBe(2);
+    // The quarry's outing, and nothing for the sitting.
+    expect(used()).toBe(1);
   });
 
   it("leaves a crew record standing against a lighter fish", async () => {
@@ -341,6 +347,26 @@ describe("fishing from a boat", () => {
     const cast = await stepOuting(db, "ann", { t: "cast", power: 0.5 }, where());
     if (typeof cast === "string") throw new Error(cast);
     expect(cast.outing!.sitting!.spot).toBe("sea");
+  });
+});
+
+describe("a full basket", () => {
+  it("keeps the sitting going, and sells what more is kept on the quay at the quay price", async () => {
+    await sit("east");
+    // Fill the basket to the brim as the server holds it, then land and keep one more.
+    const row = one<{ session_json: string }>("SELECT session_json FROM gathering WHERE player_id = 'ann'");
+    const state = JSON.parse(row.session_json);
+    state.sitting.creelGrams = state.sitting.creelLimitG;
+    state.sitting.pending = { species: "silver_king", grams: 30_000, mm: 1500, specimen: true, spot: "east", at: clock };
+    sql.prepare("UPDATE gathering SET session_json = ? WHERE player_id = 'ann'").run(JSON.stringify(state));
+    const kept = await step({ t: "keep" });
+    expect(kept.outing!.status).toBe("active");
+    const done = await step({ t: "bank" });
+    expect(one("SELECT place FROM fish WHERE player_id = 'ann' AND species = 'silver_king'")).toMatchObject({ place: "sold" });
+    const board = fishBoard("CREWAA", clock);
+    const full = fishSalePrice({ species: "silver_king", grams: 30_000, specimen: true }, "market", board)!;
+    expect(done.sitting!.gold).toBe(Math.max(1, Math.round(full * QUAY_RATE)));
+    expect(used()).toBe(0);
   });
 });
 

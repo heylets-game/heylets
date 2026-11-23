@@ -1,5 +1,5 @@
-// Closing a fishing sitting in D1: the stamina it spends, the fish it keeps,
-// the Catch Book and the crew's records.
+// Closing a fishing sitting in D1: the fish it keeps (and what it sells on
+// the quay), the Catch Book and the crew's records. Fishing spends no stamina.
 //
 // Every statement is conditional on the claim the closing statement writes,
 // so a sitting closed twice (two requests racing, or an idle close beside a
@@ -10,8 +10,6 @@ import {
   FISH,
   NEW_SPECIES_XP,
   RESOURCE_KINDS,
-  gatherDay,
-  GATHER_DAILY_OUTINGS,
   sittingGold,
   sittingItems,
   sittingMaterials,
@@ -38,7 +36,7 @@ export interface SittingPaid {
   gold: number;
   /** The catches kept as items, with the ids they were stored under. */
   fish: (CaughtFish & { id: string })[];
-  /** Catches that would not fit in the icebox, sold on the quay as the sitting ended (their gold is in `gold`). */
+  /** Catches that would not fit in the icebox, or were kept with the basket full, sold on the quay as the sitting ended (their gold is in `gold`). */
   sold: { id: string; species: string; gold: number; buyer: FishBuyer }[];
   /** Catch Book pages this sitting finished (each earns its wall piece), and whether it filled the book. */
   book: { pages: BookPage[]; full: boolean };
@@ -57,7 +55,7 @@ function heaviest(items: (CaughtFish & { id: string })[]): Map<string, CaughtFis
 
 /**
  * Close a sitting that has ended (`next.status` is no longer active): clear
- * the outing, spend the day's stamina, and write what it caught. Returns null
+ * the outing and write what it caught. Returns null
  * if the outing had already been closed or played by another request.
  */
 export async function closeSitting(db: D1Database, playerId: string, before: string, next: GatherState): Promise<SittingPaid | null> {
@@ -92,16 +90,9 @@ export async function closeSitting(db: D1Database, playerId: string, before: str
   const beaten = crew ? [...best.values()].filter((f) => FISH[f.species].kind !== "haul" && f.grams > (recordFor.get(f.species) ?? 0)) : [];
 
   const xp = await prepareXp(db, playerId, sittingXp(next), { bonus: newSpecies.length * NEW_SPECIES_XP + beaten.length * CREW_RECORD_XP + book.pages.length * PAGE_XP, bonusFor: "firsts and records" });
-  const today = gatherDay(now);
   const statements: D1PreparedStatement[] = [
-    // The sitting ends, and only now spends its stamina.
-    db
-      .prepare(
-        `UPDATE gathering SET session_json = NULL, claim = ?1,
-           used = CASE WHEN day = ?4 THEN MIN(used + 1, ?5) ELSE 1 END, day = ?4
-         WHERE player_id = ?2 AND session_json = ?3`,
-      )
-      .bind(claim, playerId, before, today, GATHER_DAILY_OUTINGS),
+    // The sitting ends. Fishing spends no stamina: the day's outings are left as they were.
+    db.prepare("UPDATE gathering SET session_json = NULL, claim = ?1 WHERE player_id = ?2 AND session_json = ?3").bind(claim, playerId, before),
     ...RESOURCE_KINDS.filter((kind) => paid[kind]).map((kind) =>
       db
         .prepare(`INSERT INTO resources (player_id, kind, qty) SELECT ?1, ?2, ?3 WHERE ${guard} ON CONFLICT(player_id, kind) DO UPDATE SET qty = qty + ?3`)
