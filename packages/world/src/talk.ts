@@ -90,6 +90,15 @@ export const TALK_VOICES: Record<string, number> = {
 
 const BYE: TalkChoice = { id: "bye", label: "Goodbye", bye: true };
 
+/**
+ * The one thing a townsperson offers, when there is only one besides goodbye (a regular's job, a keeper's shop): it
+ * is not put behind a choice, but taken as soon as they have said their piece. Null when there are several.
+ */
+export function loneChoice(c: Pick<Conversation, "choices">): TalkChoice | null {
+  const real = c.choices.filter((ch) => !ch.bye);
+  return real.length === 1 ? real[0] : null;
+}
+
 /** Old Tam, behind his bar. `word` is his news of the corner: who is in it, or who is due. */
 export function barkeepTalk(word?: string): Conversation {
   return {
@@ -108,14 +117,18 @@ export function barkeepTalk(word?: string): Conversation {
   };
 }
 
-/** Hollis, by the pillar: word of the regulars' errands. */
+/** Hollis, by the pillar: the dealer in materials, and his supply contracts. */
 export function dealerTalk(): Conversation {
   return {
     unit: PUB_DEALER.id,
     name: PUB_DEALER.name,
     voice: TALK_VOICES[PUB_DEALER.id],
-    greeting: pagesOf(PUB_DEALER.hello),
-    choices: [{ id: "errands", label: "Any work going?", opens: "errands" }, BYE],
+    greeting: pagesOf([PUB_DEALER.hello, PUB_DEALER.line]),
+    choices: [
+      { id: "trade", label: "Let's trade", opens: "trade" },
+      { id: "contracts", label: "Any contracts going?", opens: "contracts" },
+      BYE,
+    ],
   };
 }
 

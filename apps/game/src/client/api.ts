@@ -8,6 +8,7 @@ import { forcedSalesman } from "./salesmanClock";
 import type { GatherStatus } from "../server/gather";
 import type { SittingPaid } from "../server/fishing";
 import type { FishStock } from "../server/fishmarket";
+import type { DealerView, HeldContractView } from "../server/dealer";
 import type { CatchBook, PubWall } from "../server/catchbook";
 import type { PubGame, PubLeaderboard, PubScore } from "../server/pub-scores";
 import type { XpResult } from "../server/harbor-xp";
@@ -23,6 +24,7 @@ import type { WellView } from "../server/well";
 export type { Chart, ChartNode, ChestView, HeldStone };
 export type { ApothecaryView, SmithyView, GalleyView, ErrandPaid, RegularsView, HaggleResult, KeeperWare };
 
+export type { DealerView, HeldContractView };
 export type { CatchBook, FishStock, GatherStatus, PubGame, PubLeaderboard, PubScore, PubWall, SittingPaid, XpResult };
 
 /** What came of ordering a meal at the pub. */
@@ -215,6 +217,11 @@ export const api = {
   buyFromSalesman: (index: number) => request<{ got: SalesEntry }>("/api/pub/salesman/buy", { index }, salesmanHeader()),
   regulars: () => request<RegularsView>("/api/pub/regulars"),
   errand: (regular: string, action: "accept" | "handin" | "trade" | "drop") => request<Partial<ErrandPaid> & { ok?: true }>("/api/pub/errand", { regular, action }),
+  /** Hollis Crane, the dealer in materials: his board, what you have traded with him today, and his contracts. */
+  dealer: () => request<DealerView>("/api/dealer"),
+  dealerTrade: (side: "sell" | "buy", kind: string, qty: number) => request<{ gold: number; price: number; view: DealerView }>("/api/dealer/trade", { side, kind, qty }),
+  dealerContract: (action: "take" | "deliver" | "drop", offer?: string) =>
+    request<{ done: { paid?: number; early?: boolean; gave?: Partial<Record<string, number>>; xp?: XpResult } & Partial<HeldContractView>; view: DealerView }>("/api/dealer/contract", { action, offer }),
   projects: () => request<Works>("/api/projects"),
   apothecary: () => request<ApothecaryView>("/api/apothecary"),
   brewFlask: (kind: string) => request<ApothecaryView & { xp?: XpResult }>("/api/apothecary/flask", { kind }),

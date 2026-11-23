@@ -116,7 +116,7 @@ export function pubRoutes(app: GameApp): void {
       "The board is meals only: no drink is sold. A meal gives a hero back one gathering outing, once a day.",
       "There is a dice table in the pub where crewmates bluff each other for a small stake.",
       salesmanFact(crew.id),
-      `${PUB_DEALER.name}, ${PUB_DEALER.trade}, leans on the pillar at the end of the bar and knows which regulars are in and what small jobs they have going. The Harbor's notice board outside is for news of the Harbor itself.`,
+      `${PUB_DEALER.name}, ${PUB_DEALER.trade}, leans on the pillar at the end of the bar: he buys wood, stone, iron and the rest, sells what people are short of at prices that move through the day, and offers supply contracts that run a few days. The regulars hand out their own small jobs; find them in here at night or about the Harbor by day. The Harbor's notice board outside is for news of the Harbor itself.`,
       ...(news ? news.notes.slice(0, 4).map((n) => `News pinned on the Harbor's notice board: ${n.area ? `${n.area}: ` : ""}${n.text}.`) : []),
     ];
     const say = await barkeepReply(c.env, { hero: character.name, crew: crew.name, text, facts });
