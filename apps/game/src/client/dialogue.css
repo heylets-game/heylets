@@ -3,6 +3,11 @@
 
 /* While talking, the room's floating panels, the bar and the tips are put away: the two of you have the screen. */
 body.talking .draggable, body.talking .tip, body.talking .hud, body.talking .hud-left, body.talking .toast, body.talking .tile-action { display: none !important; }
+/* A reply opened their panel: it stands beside the two of you, still close up, and nothing else comes back. */
+body.talking-panel .draggable:not(.pub-bar):not(.catch-panel), body.talking-panel .tip, body.talking-panel .hud, body.talking-panel .hud-left, body.talking-panel .toast, body.talking-panel .tile-action { display: none !important; }
+
+/* With a reply's panel open: the way back to the conversation, under the two of you. */
+.talk-back { position: absolute; left: 50%; bottom: 16px; translate: -50% 0; z-index: 30; min-height: 38px; padding: 4px 16px; font-size: 15px; animation: talk-in 0.2s ease-out; }
 
 .talk-dock {
   position: absolute; left: 50%; bottom: 14px; translate: -50% 0; z-index: 30; width: min(760px, calc(100% - 24px));

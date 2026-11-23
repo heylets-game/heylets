@@ -3339,9 +3339,13 @@ function lowHead(head: Part, look: Look, asleep: boolean, covered = false) {
     mouths.push(mouth.joint);
     const [rx, ry] = EYE_SIZE[eyes] ?? EYE_SIZE.round;
     for (const s of [-1, 1]) {
+      // Laid on the face like the eye itself (an inlay, no outline), just over it and a little larger: skin, with
+      // the shut eye's lash line across it, as a sleeper's.
       const x = s * (eyes === "beady" ? 1.05 : 1.15);
-      const lid = new Part(head.joint, x, 3.05 + (eyes === "big" ? 0.05 : 0), faceZ(rings, x, 3.05) + 0.04);
-      lid.box(tone(skin, -0.08), rx * 2 + 0.18, ry * 2 + 0.16, 0.28);
+      const y = 3.05 + (eyes === "big" ? 0.05 : 0);
+      const lid = new Part(head.joint);
+      lid.inlay(skin, inlayPoints(rings, x, y, rx + 0.09, ry + 0.09, 0.13));
+      lid.inlay(OUTLINE, inlayPoints(rings, x, y - 0.1, 0.5, 0.09, 0.15, (px, py) => py + 0.16 * ((px - x) / 0.5) ** 2));
       lid.joint.visible = false;
       extraParts.push(lid);
       lids.push(lid.joint);
@@ -3371,7 +3375,7 @@ function lowHead(head: Part, look: Look, asleep: boolean, covered = false) {
     head.loft(look.mask, [r(chinY + 0.15, 0.1), r(1.2, 0.13), r(2, 0.24), r(2.5, 0.14)], 10);
     head.loft(tone(look.mask, -0.12), [r(2.4, 0.16), r(2.56, 0.16)], 10);
   }
-  lowHair(head, look.hair, (chosen ?? face)?.hairStyle ?? "short", rings, covered);
+  lowHair(head, look.hair, chosen?.hairStyle ?? look.hairStyle ?? face?.hairStyle ?? "short", rings, covered);
   if (look.bandana) {
     // A cloth band round the brow, knotted behind with two short tails.
     head.loft(look.bandana, fitted([[3.85, 3.86, 3.56], [4.5, 3.89, 3.59]]), 10);

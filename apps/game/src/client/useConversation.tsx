@@ -1,6 +1,7 @@
 // A conversation with one of the townsfolk, as the pub and the shops have them: the camera swings in close
 // (render/TalkStage.ts), their words are typed out in a box along the bottom (Dialogue.tsx) in their voice, and
-// you pick a reply. A reply opens their panel, has them say more, lets you ask them anything (where they can be
+// you pick a reply. A reply opens their panel (the camera stays close, framing the two of you beside it, and
+// shutting the panel brings the replies back), has them say more, lets you ask them anything (where they can be
 // asked), or says goodbye. Escape, or walking off, ends it.
 
 import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
@@ -11,15 +12,22 @@ import { Dialogue } from "./Dialogue";
 import { TalkStage } from "./render/TalkStage";
 import type { WorldRenderer } from "./render/WorldRenderer";
 
-type Phase = "arriving" | "speaking" | "choosing" | "asking" | "waiting";
+type Phase = "arriving" | "speaking" | "choosing" | "asking" | "waiting" | "panel";
+
+/** The panels a reply opens (their outer, floating element): the view frames the two of you beside whichever is up. */
+const PANELS = ".draggable.pub-bar, .draggable.catch-panel";
 
 export interface ConversationHost {
   world: RefObject<WorldRenderer | null>;
   /** Your hero's unit id, and the hex they stand on. */
   you: string | null;
   at: HexPos | null;
-  /** A reply opened one of their panels (TalkChoice.opens): the conversation has ended. */
+  /** A reply opened one of their panels (TalkChoice.opens). The conversation waits, close, until it is shut. */
   onOpen(what: string): void;
+  /** Whether a panel opened from the conversation is still up: once none is, the replies come back. */
+  panelOpen: boolean;
+  /** Shut whatever panel the conversation opened (back to the replies). */
+  closePanels(): void;
   /** Answer a typed question, for a conversation that can be asked (TalkChoice.ask). */
   ask?(text: string): Promise<{ say: string; left: number }>;
   /** How many questions are left today. */
@@ -112,7 +120,8 @@ export function useConversation(host: ConversationHost): { active: Conversation 
     if (!convo) return;
     if (ch.bye) return close();
     if (ch.opens) {
-      close();
+      panelSeen.current = false;
+      setPhase("panel");
       return latest.current.onOpen(ch.opens);
     }
     if (ch.says) {
@@ -162,6 +171,37 @@ export function useConversation(host: ConversationHost): { active: Conversation 
     return () => clearTimeout(t);
   }, [convo, phase, shown, text]);
 
+  // A panel opened from a reply: once it has been up and is shut again, back to the replies.
+  const panelSeen = useRef(false);
+  const panelOpen = host.panelOpen;
+  useEffect(() => {
+    if (phase !== "panel") return;
+    if (panelOpen) panelSeen.current = true;
+    else if (panelSeen.current) setPhase("choosing");
+  }, [phase, panelOpen]);
+  // While it is up the camera frames the two of you in what it leaves clear (looked for again as it is moved or resized).
+  useEffect(() => {
+    if (phase !== "panel") return;
+    const r = latest.current.world.current;
+    let last: Element | null = null;
+    const find = () => {
+      // A panel docked along the bottom (a phone's) is framed above; one down the left side has them stand right of it.
+      const panel = document.querySelector<HTMLElement>(PANELS);
+      const box = panel?.getBoundingClientRect();
+      const docked = panel && box && box.width > innerWidth * 0.7 ? panel : null;
+      if (docked !== last) r?.setCover(docked);
+      last = docked;
+      const side = !docked && box && box.width > 0 && box.left < innerWidth / 3 ? Math.min(0.6, box.right / innerWidth) : 0;
+      stage.current?.setAside(side / 2);
+    };
+    find();
+    const t = setInterval(find, 250);
+    return () => {
+      clearInterval(t);
+      stage.current?.setAside(0);
+    };
+  }, [phase]);
+
   // Their mouth moves while their words are typed.
   const talking = !!convo && phase === "speaking" && !done;
   useEffect(() => {
@@ -174,6 +214,7 @@ export function useConversation(host: ConversationHost): { active: Conversation 
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "Escape") {
+        if (phase === "panel") return latest.current.closePanels();
         if (phase === "asking") setPhase("choosing");
         else close();
         e.preventDefault();
@@ -200,12 +241,13 @@ export function useConversation(host: ConversationHost): { active: Conversation 
     if (convo && was && at && (was.q !== at.q || was.r !== at.r)) close();
   }, [at, convo, close]);
 
-  // While it is up the room's panels and bar are put away (dialogue.css).
+  // While it is up the room's panels and bar are put away (dialogue.css); all but the one a reply opened, while it is up.
+  const look = !convo ? null : phase === "panel" ? "talking-panel" : "talking";
   useEffect(() => {
-    if (!convo) return;
-    document.body.classList.add("talking");
-    return () => document.body.classList.remove("talking");
-  }, [convo]);
+    if (!look) return;
+    document.body.classList.add(look);
+    return () => document.body.classList.remove(look);
+  }, [look]);
 
   // Gone with the view: the camera is given back.
   useEffect(
@@ -219,7 +261,11 @@ export function useConversation(host: ConversationHost): { active: Conversation 
   /** The view frames the two of you in what the box leaves clear. */
   const dock = useCallback((el: HTMLDivElement | null) => latest.current.world.current?.setCover(el), []);
 
-  const node = convo && phase !== "arriving" && (
+  const node = convo && phase === "panel" ? (
+    <button className="talk-back" onClick={() => latest.current.closePanels()}>
+      ◀ Back to {convo.name}
+    </button>
+  ) : convo && phase !== "arriving" && (
     <Dialogue
       dock={dock}
       name={convo.name}

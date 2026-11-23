@@ -374,6 +374,11 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
     },
     ask: api.pubTalk,
     askLeft: api.pubTalkLeft,
+    panelOpen: barOpen || sellingFish || records || dealing || !!talkTo || trading,
+    closePanels: () => {
+      for (const shut of [setBarOpen, setSellingFish, setRecords, setDealing, setTrading]) shut(false);
+      setTalkTo(null);
+    },
   });
   /** The regular being talked to, for their errand. */
   const talkingRegular = useRef<RegularId | null>(null);

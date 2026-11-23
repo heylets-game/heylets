@@ -50,6 +50,9 @@ export class TalkStage implements WorldMinigame {
   /** Where the two last stood, should either go missing for a frame. */
   private hero = new THREE.Vector3();
   private them = new THREE.Vector3();
+  /** How far right of the middle of the screen to keep them (a share of its width), and how far it has got: clear of a panel down the left. */
+  private asideGoal = 0;
+  private aside = 0;
 
   /** `side`: which of your shoulders to look over (1 right, -1 left), where the room has something in the way of the other. */
   constructor(private world: WorldRenderer, _group: THREE.Group, private you: string, private npc: string, private hooks: TalkHooks, private side?: 1 | -1) {
@@ -78,6 +81,7 @@ export class TalkStage implements WorldMinigame {
         this.hooks.arrived();
       }
       if (this.leaving && this.inT <= 0) setTimeout(() => this.finish(), 0);
+      this.aside += (this.asideGoal - this.aside) * (this.still ? 1 : 1 - Math.exp(-dt * 5));
     }
     return { ...this.shot(aspect), blend: smoother(this.inT) };
   }
@@ -87,7 +91,8 @@ export class TalkStage implements WorldMinigame {
     const head = this.world.unitHead(this.npc);
     const look = new THREE.Vector3(this.them.x, head ? head.y - 0.55 : this.them.y + 1.25, this.them.z);
     const apart = Math.hypot(this.hero.x - this.them.x, this.hero.z - this.them.z);
-    const tall = aspect < 1;
+    // A tall window (a phone held upright), not a narrow space beside a panel: only then is the shot pulled back.
+    const tall = aspect < 1 && innerHeight > innerWidth;
     let reach = Math.max(NEAR, apart + BEHIND);
     if (tall) reach *= THREE.MathUtils.clamp(0.9 / aspect, 1, 1.35);
     // A slow push in while they talk.
@@ -103,6 +108,13 @@ export class TalkStage implements WorldMinigame {
     const eye = new THREE.Vector3(look.x + Math.sin(bearing) * reach, eyeY, look.z + Math.cos(bearing) * reach);
     // Narrower the further back, so their head is the same size on the screen however far apart the two stand.
     const fov = THREE.MathUtils.clamp(2 * Math.atan((Math.tan(15 * DEG) * NEAR) / reach) / DEG, 20, 34);
+    if (Math.abs(this.aside) > 0.001) {
+      // Slid sideways, eye and all, so they stand that far right of the middle: the view's half width there, times two, times the share.
+      const across = 2 * reach * Math.tan((fov * DEG) / 2) * aspect * this.aside;
+      const left = new THREE.Vector3(-Math.cos(bearing), 0, Math.sin(bearing)).multiplyScalar(across);
+      eye.add(left);
+      look.add(left);
+    }
     return { eye, look, fov };
   }
 
@@ -124,6 +136,11 @@ export class TalkStage implements WorldMinigame {
   /** The camera is all the way in. */
   get arrived(): boolean {
     return this.inT >= 0.6 && !this.leaving;
+  }
+
+  /** Keep them this share of the screen's width right of the middle (0: in the middle): clear of a panel down the left. */
+  setAside(share: number) {
+    this.asideGoal = share;
   }
 
   /** Speaking: their mouth moves while their words are typed out. */

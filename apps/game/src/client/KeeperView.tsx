@@ -14,9 +14,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useLayoutEffect } from "react";
 import * as THREE from "three";
-import { hexNeighbors, type HexPos } from "@gantt-quest/core";
+import { type HexPos } from "@gantt-quest/core";
 import { useOwnLook } from "./ownLook";
-import { KEEPER_GRID, KEEPER_PLACES, keeperPath, keeperRoom, keeperTalk, keeperWallPieces, outfitOf, type KeeperHouse } from "@gantt-quest/world";
+import { KEEPER_PLACES, keeperPath, keeperRoom, keeperTalk, keeperWallPieces, outfitOf, type KeeperHouse } from "@gantt-quest/world";
 import { api, type ApothecaryView, type GalleyView, type Me, type SmithyView } from "./api";
 import { useAudioScene } from "./audio/useAudioScene";
 import { InventoryScreen } from "./InventoryScreen";
@@ -208,7 +208,7 @@ export function KeeperView({ shop, me, refresh, onLeave, resting = false }: { sh
   const open = shop === "lapidary" || !!view?.built;
   /** Their panel was asked for (from the conversation); stepping away puts it away. */
   const [shopOpen, setShopOpen] = useState(false);
-  const talk = useConversation({ world: renderer, you, at: pos, onOpen: (what) => what === "shop" && setShopOpen(true) });
+  const talk = useConversation({ world: renderer, you, at: pos, onOpen: (what) => what === "shop" && setShopOpen(true), panelOpen: shopOpen, closePanels: () => setShopOpen(false) });
   /** Talking: the keeper has put their work down. */
   const chatting = useRef(false);
   chatting.current = !!talk.active;
@@ -224,24 +224,21 @@ export function KeeperView({ shop, me, refresh, onLeave, resting = false }: { sh
   }, [atKeeper, keeper, shop]);
   const say = useCallback((text: string) => renderer.current?.say(keeper.id, text), [keeper]);
   /** Dealing with the keeper: their panel is up, and the hotbar is put away so the list has the screen. */
-  const dealing = open && atKeeper && shopOpen && !talk.active;
-  const panel = { reload, refresh, onSay: say, onDone: () => stepAway() };
+  const dealing = open && atKeeper && shopOpen;
+  // Done with the panel: back to talking to them (the camera never left).
+  const panel = { reload, refresh, onSay: say, onDone: () => setShopOpen(false) };
   // While dealing, the camera brings the keeper clear of the panel so you can watch them work: to the right of it
   // on a wide screen (the panel is on the left), above it on a phone (it is docked along the bottom). Stepping
   // away puts the camera back on the middle of the room.
   useEffect(() => {
     const r = renderer.current;
-    if (!r) return;
+    // (In a conversation the camera is the conversation's.)
+    if (!r || talk.active) return;
     const k = place.keeperPos;
     const phone = typeof matchMedia === "function" && matchMedia("(max-width: 760px)").matches;
     r.lookAt(dealing ? (phone ? { q: k.q - 2, r: k.r + 3 } : { q: k.q - 1, r: k.r }) : { q: k.q, r: k.r + 1 });
-  }, [dealing, place]);
-  /** Step back from the keeper onto the floor beside the counter, toward the room: the panel goes, the hotbar comes back. */
-  const stepAway = () => {
-    const away = hexNeighbors(place.stand, KEEPER_GRID).filter((n) => !same(n, place.keeperPos) && keeperPath(shop, room, place.stand, n));
-    away.sort((a, b) => b.r - a.r);
-    if (away[0]) walk.current(away[0]);
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dealing, place, !!talk.active]);
 
   const [bag, setBag] = useState(false);
   const [book, setBook] = useState(false);
@@ -266,7 +263,7 @@ export function KeeperView({ shop, me, refresh, onLeave, resting = false }: { sh
       <div key="stage" className="stage" ref={mount} />
 
       {dealing && (shop === "lapidary"
-        ? <LapidaryKeeperPanel me={me} refresh={refresh} onSay={say} onDone={() => stepAway()} />
+        ? <LapidaryKeeperPanel me={me} refresh={refresh} onSay={say} onDone={panel.onDone} />
         : shop === "apothecary" ? <ApothecaryKeeperPanel view={view as ApothecaryView} setView={setView} {...panel} />
         : shop === "smithy" ? <SmithyKeeperPanel me={me} view={view as SmithyView} setView={setView} {...panel} />
         : <GalleyKeeperPanel onDone={panel.onDone} />)}
