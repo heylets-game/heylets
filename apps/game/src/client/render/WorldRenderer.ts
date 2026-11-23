@@ -2696,8 +2696,7 @@ export class WorldRenderer {
       // Nothing grows or lies about where a place stands, under a building, or in a thicket or a boulder heap.
       // The Harbor's gaps of rubble have their boulders from the woods, not the ambience's hill rocks.
       // (Grass does grow round the foot of a lone oak.)
-      // Nor on a lawn kept short (round a hut's door, where its garden is).
-      (t) => poiKeys.has(key(t)) || !!t.built || !!t.prop || t.grass === "short" || (!!t.blocker && t.blocker !== "oak" && !state.far) || (this.sodden && t.biome === "hills"),
+      (t) => poiKeys.has(key(t)) || !!t.built || !!t.prop || (!!t.blocker && t.blocker !== "oak" && !state.far) || (this.sodden && t.biome === "hills"),
       (t) => ({ ...hexToWorld(t), y: tileTop(t) }),
       !!state.far,
     );
@@ -3062,6 +3061,21 @@ export class WorldRenderer {
     return { x: ((v.x + 1) / 2) * this.container.clientWidth, y: ((1 - v.y) / 2) * this.container.clientHeight, on: Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1 };
   }
 
+  /** Keep the grass off the ground round a point for now (a garden tended up close), or (null) let it grow back. */
+  clearGrass(at: { x: number; z: number } | null, r = 2.2) {
+    this.ambience.setClearing(at ? { x: at.x, z: at.z, r } : null);
+  }
+
+  /** At the town well: lower the bucket into the water and wind it back up. */
+  wellDraw() {
+    this.townDressing?.drawWater();
+  }
+
+  /** At the town well: a coin tossed in, and what the well gives back for it. */
+  wellCoin(gift: "gem" | "xp" | null) {
+    this.townDressing?.tossCoin(gift);
+  }
+
   /** The pointer's look over the canvas, for a minigame: a hand over something to press, or the usual arrow (""). */
   setCursor(cursor: "" | "pointer") {
     this.renderer.domElement.style.cursor = cursor;
@@ -3187,6 +3201,8 @@ export class WorldRenderer {
     });
     for (const h of m.hidden) h.obj.visible = h.was;
     if (m.felled) this.woods?.restore();
+    // Any grass a game kept off the ground (a garden's) grows back.
+    this.ambience.setClearing(null);
     const mine = this.state?.you ? this.units.get(this.state.you) : undefined;
     if (mine) for (const obj of [mine.root, mine.label, mine.ring]) if (obj) obj.visible = true;
     for (const id of this.stageHidden) this.showUnit(id);

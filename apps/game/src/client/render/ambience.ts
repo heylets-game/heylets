@@ -372,8 +372,6 @@ export function tallGrass(t: Tile, x: number, z: number): boolean {
   if (t.biome !== "plains" || t.path) return false;
   // Set down as tall grass, whatever the swells say (the Harbor's oak hill).
   if (t.grass === "tall") return true;
-  // Kept short (round a hut's door).
-  if (t.grass === "short") return false;
   if (meadowAt(x, z) || dryPatch(t, x, z) >= 0) return false;
   return Math.sin(x * 0.29 + 0.4) * Math.sin(z * 0.35 + 5.1) + 0.6 * Math.sin((x * 0.6 - z) * 0.21 + 3.3) + 0.3 * Math.sin(x * 0.77 + z * 0.49 + 0.6) > 0.3;
 }
@@ -821,6 +819,15 @@ export class Ambience {
   /** The grass, one mesh for each shape of tuft. */
   private grass: THREE.InstancedMesh[] = [];
   private tufts: Tuft[] = [];
+  /**
+   * A patch of ground kept clear of grass for now (a hut's garden, while it is being tended up close): tufts and
+   * whole patches of grass standing within `r` of it are not drawn, nor the grass along the paths.
+   */
+  private clearing: { x: number; z: number; r: number } | null = null;
+  /** The whole patches of grass (meadows, dry patches, tall grass): each instance's place, to hide one and put it back. */
+  private fieldSpots: { mesh: THREE.InstancedMesh; x: number; z: number; m: THREE.Matrix4 }[][] = [];
+  /** The grass along the paths' edges: one mesh, hidden whole while there is a clearing. */
+  private fringe: THREE.Object3D | null = null;
   private waves: THREE.InstancedMesh[] = [];
   private crests: Crest[] = [];
   private wisps: Wisp[] = [];
@@ -922,8 +929,31 @@ export class Ambience {
    * seen from high up: its hills are heaped with more and smaller stones, and no grass is laid (a blade of it
    * would stand as tall as a tree there).
    */
+  /**
+   * Keep the grass off a patch of ground for now (null: let it grow back): every tuft and whole patch of grass
+   * within `r` of (x, z), and the grass along the paths. For a garden being tended up close, which grass would stand
+   * in front of and grow up through.
+   */
+  setClearing(clearing: { x: number; z: number; r: number } | null) {
+    this.clearing = clearing;
+    const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    // A patch covers its whole hex: it goes if any of it is within reach.
+    const reach = (clearing?.r ?? 0) + 0.9;
+    for (const spots of this.fieldSpots) {
+      for (let i = 0; i < spots.length; i++) {
+        const f = spots[i];
+        const gone = !!clearing && (f.x - clearing.x) ** 2 + (f.z - clearing.z) ** 2 < reach * reach;
+        f.mesh.setMatrixAt(i, gone ? zero : f.m);
+      }
+      if (spots[0]) spots[0].mesh.instanceMatrix.needsUpdate = true;
+    }
+    if (this.fringe) this.fringe.visible = !clearing;
+  }
+
   build(tiles: Tile[], skip: (t: Tile) => boolean, place: (t: Tile) => { x: number; y: number; z: number }, small = false) {
     this.clear();
+    this.fieldSpots = [];
+    this.fringe = null;
 
     // ---- rocks: one to three per hill, in three shapes and a few greys ----
     const shapes = [
@@ -1314,8 +1344,14 @@ export class Ambience {
         mesh.frustumCulled = false;
         mesh.receiveShadow = true;
         this.group.add(mesh);
+        this.fieldSpots.push(list.map((m, i) => {
+          const mat = new THREE.Matrix4();
+          mesh.getMatrixAt(i, mat);
+          return { mesh, x: m.x, z: m.z, m: mat };
+        }));
       }
     };
+    this.fieldSpots = [];
     fields(meadows, MEADOW_KINDS, meadowGeometry, MEADOW_H, drab);
     fields(drys, DRY_KINDS, dryGeometry, DRY_H, new THREE.Color(1, 1, 1));
     fields(talls, TALL_KINDS, tallGeometry, TALL_H, drab);
@@ -1385,8 +1421,7 @@ export class Ambience {
       // The fringe: short blades rooted all along the ragged edge, just behind the ridge, standing up and leaning a
       // little away from the path, so the grass crowds the edge without the wind laying it over the dirt. None at
       // a strip's end, where it runs on into the next hex.
-      // (None on a lawn kept short, round a hut's door: it would stand up through the herb garden there.)
-      for (let k = 0; k < (t.grass === "short" ? 0 : 72); k++) {
+      for (let k = 0; k < 72; k++) {
         const a = ((k + hash(t.q, t.r, 300 + k) * 0.8) / 72) * Math.PI * 2;
         if (atEnd(a)) continue;
         const edge = point(a, 1);
@@ -1483,6 +1518,7 @@ export class Ambience {
       mesh.frustumCulled = false;
       mesh.receiveShadow = true;
       this.group.add(mesh);
+      this.fringe = mesh;
     }
 
     // ---- puddles: standing water on the mud and in the dips of the street ----
@@ -1720,6 +1756,9 @@ export class Ambience {
           -sin * w, WIND_DIR.z * lean * h, cos * w, t.z,
           0, 0, 0, 1,
         );
+        // In a clearing (a garden being tended up close), not drawn at all.
+        const c = this.clearing;
+        if (c && (t.x - c.x) ** 2 + (t.z - c.z) ** 2 < c.r * c.r) this.m.makeScale(0, 0, 0);
         this.grass[t.kind!].setMatrixAt(t.index!, this.m);
       }
       for (const mesh of this.grass) mesh.instanceMatrix.needsUpdate = true;

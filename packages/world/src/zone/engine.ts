@@ -239,6 +239,7 @@ export function attackContext(state: ZoneState, attacker: Unit, target: Unit, op
   if (opts.focus) adv("Focus");
   if (has(attacker, "invisible")) adv("you are Unseen");
   if (has(attacker, "inspired")) adv("you are Inspired");
+  if (has(attacker, "lucky")) adv("you are Lucky");
   if (has(target, "guiding_light") && target.side !== attacker.side) adv("the target is lit by Guiding Light");
   if (attacker.side === "enemy" && ENEMY_KIT[attacker.kind]?.pack && state.units.some((u) => u.id !== attacker.id && u.side === "enemy" && !u.down && close(u.pos, target.pos))) adv("the pack is on the target");
   if (state.units.some((u) => u.side === attacker.side && !u.down && has(u, "beacon") && hexDistance(u.pos, attacker.pos) <= AURAS.range)) adv(has(attacker, "beacon") ? "your Beacon" : "an ally's Beacon");
@@ -274,9 +275,21 @@ export function attackRoll(ctx: Ctx, attacker: Unit, target: Unit, opts: { label
   const roll = d20(ctx.rng, { kind: "attack", id: attacker.id, target: target.id, label: opts.label, bonus: opts.bonus + c.mods, vs: defenceOf(target, ctx.state), adv: c.adv });
   removeCondition(attacker, "glitched");
   removeCondition(attacker, "inspired");
+  spendLuck(attacker);
   ctx.events.push({ t: "roll", roll });
   return roll;
 }
+
+/** A roll to hit was made: one lucky roll is spent (Lucky's rounds count the rolls, not the turns). */
+export function spendLuck(unit: Unit): void {
+  const luck = unit.conditions.find((c) => c.kind === "lucky");
+  if (!luck) return;
+  luck.rounds -= 1;
+  if (luck.rounds <= 0) removeCondition(unit, "lucky");
+}
+
+/** Conditions that keep, turn after turn, until something else uses them up: Lucky, spent a roll at a time. */
+export const UNTIMED: ReadonlySet<string> = new Set(["lucky"]);
 
 /** Roll a save against a difficulty and say so. */
 export function saveRoll(ctx: Ctx, unit: Unit, stat: StatKey, vs: number, label: string, disadvantage = false): Roll {

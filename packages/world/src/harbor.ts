@@ -507,12 +507,6 @@ export function generateHarbor(): WorldMap {
       if (t) t.built = true;
     }
   }
-  // Round every hut's doorstep the grass is kept short: nothing tall grows up in front of the herb garden in the
-  // corner of the doorstep, or where its owner stands to tend it.
-  for (const p of [...HARBOR_PLOTS, ...HARBOR_GARDEN_SPOTS].flatMap((p) => [p, ...around(p)])) {
-    const t = tileAt(map, p);
-    if (t?.biome === "plains" && !t.grass) t.grass = "short";
-  }
     // The piers: planking from each pier head back to the shore.
   for (const head of HARBOR_PIERS) {
     let p = head;

@@ -124,8 +124,8 @@ interface Kit {
   fires: { at: THREE.Vector3; size: number }[];
   /** Pieces that hang in the air and bob: where each rests, and what it is. */
   floats: { at: THREE.Vector3; kind: "capital" | "drum"; turn: number; scale: number }[];
-  /** Buckets hung on a rope (the well's): where the rope is made fast, which they swing from in the breeze. */
-  swings: { at: THREE.Vector3 }[];
+  /** Buckets hung on a rope (the well's): where the rope is made fast, which they swing from in the breeze, and where the water is below. */
+  swings: { at: THREE.Vector3; water: THREE.Vector3 }[];
 }
 
 /** A ship's lantern on a bracket: glass that glows, caged in iron, under a cap. Its middle at (x, y, z). */
@@ -416,7 +416,7 @@ const DRAW: Record<DecorKind, (k: Kit, d: HarborDecor) => void> = {
     s.box(IRON, 0.025, 0.18, 0.025, 0.68, AXLE - 0.17, 0);
     s.cyl(TIMBER_DARK, 0.022, 0.022, 0.11, 0.735, AXLE - 0.17 - 0.055, 0, 6, 0, 0, Math.PI / 2);
     // (The coil of rope on the windlass lies with its middle at 1.27, 0.085 round: the rope leaves from under it.)
-    k.swings.push({ at: s.at(0.06, 1.19, 0) });
+    k.swings.push({ at: s.at(0.06, 1.19, 0), water: s.at(0, 0.345, 0) });
     // The roof: two pitches of shingles and a ridge.
     for (const side of [1, -1]) {
       for (let course = 0; course < 3; course++) s.box(course % 2 ? "#7a4a36" : "#8a5540", 1.56 - course * 0.03, 0.04, 0.24, 0, 1.92 - course * 0.13, side * (0.1 + course * 0.2), 0, side * 0.6);
@@ -611,6 +611,10 @@ export interface TownDressing {
   /** Where anything of it stands, so nothing wild (an old oak) is grown through it. */
   spots: { x: number; z: number }[];
   update(clock: number, dark: number): void;
+  /** Lower the well's bucket into the water and wind it back up. */
+  drawWater(): void;
+  /** A coin tossed in the well, and what (if anything) the well gives back for it. */
+  tossCoin(gift: "gem" | "xp" | null): void;
   dispose(): void;
 }
 
@@ -829,36 +833,65 @@ export function buildTownDressing(map: WorldMap, place: (p: HexPos) => Place): T
       return p.mesh(floatMat).geometry;
     })(),
   };
-  // ---- the well's bucket, on its rope down from the windlass into the shaft: a mesh of its own, to swing ----
+  // ---- the well's bucket, on its rope down from the windlass into the shaft: a mesh of its own, to swing, and
+  // the rope another, to pay out when the bucket is lowered into the water ----
+  /** How far below the windlass the bucket's handle hangs at rest, and lowered to fill (its rim just under the water). */
+  const ROPE_REST = 0.54;
+  const ROPE_DOWN = 0.72;
+  const ropeShape = (() => {
+    const p = new Paint();
+    p.cyl(ROPE, 0.012, 0.012, 1, 0, -1, 0, 5);
+    return p.mesh(floatMat).geometry;
+  })();
   const bucketShape = (() => {
     const p = new Paint();
-    // The rope, from the windlass down to the handle; the handle arched over the bucket; the bucket, banded in
-    // iron, with water in it.
-    // It hangs in the shaft clear of the water, its rim just showing over the wall (the water is 0.34 up, the
-    // wall's top 0.5, the rope leaves the windlass at 1.19).
-    p.cyl(ROPE, 0.012, 0.012, 0.54, 0, -0.54, 0, 5);
-    p.shape(new THREE.TorusGeometry(0.1, 0.011, 4, 10, Math.PI), IRON, 0, -0.64, 0);
-    // Open at the top: a ring of staves round a bottom, two iron hoops about them, and water inside a little
-    // way down, so it reads as a bucket and not a drum.
+    // The handle arched over the bucket (its top where the rope is tied), and the bucket: open at the top, a ring
+    // of staves round a bottom, two iron hoops about them, and water inside a little way down.
+    p.shape(new THREE.TorusGeometry(0.1, 0.011, 4, 10, Math.PI), IRON, 0, -0.1, 0);
     const STAVES = 11;
     for (let i = 0; i < STAVES; i++) {
       const a = (i / STAVES) * Math.PI * 2;
-      p.box(i % 3 === 0 ? TIMBER : TIMBER_PALE, 0.062, 0.18, 0.018, Math.cos(a) * 0.098, -0.82, Math.sin(a) * 0.098, -a + Math.PI / 2);
+      p.box(i % 3 === 0 ? TIMBER : TIMBER_PALE, 0.062, 0.18, 0.018, Math.cos(a) * 0.098, -0.28, Math.sin(a) * 0.098, -a + Math.PI / 2);
     }
-    p.cyl(TIMBER, 0.095, 0.095, 0.015, 0, -0.82, 0, 10);
-    p.cyl("#2b4a5a", 0.088, 0.088, 0.01, 0, -0.71, 0, 10);
-    for (const y of [-0.67, -0.79]) p.shape(new THREE.TorusGeometry(0.109, 0.007, 4, 14), IRON, 0, y, 0, 0, Math.PI / 2);
+    p.cyl(TIMBER, 0.095, 0.095, 0.015, 0, -0.28, 0, 10);
+    p.cyl("#2b4a5a", 0.088, 0.088, 0.01, 0, -0.17, 0, 10);
+    for (const y of [-0.13, -0.25]) p.shape(new THREE.TorusGeometry(0.109, 0.007, 4, 14), IRON, 0, y, 0, 0, Math.PI / 2);
     return p.mesh(floatMat).geometry;
   })();
   const swings = kit.swings.map((sw, i) => {
-    const mesh = new THREE.Mesh(bucketShape, floatMat);
-    mesh.castShadow = true;
     const pivot = new THREE.Group();
     pivot.position.copy(sw.at);
-    pivot.add(mesh);
+    const rope = new THREE.Mesh(ropeShape, floatMat);
+    rope.scale.y = ROPE_REST;
+    const bucket = new THREE.Mesh(bucketShape, floatMat);
+    bucket.position.y = -ROPE_REST;
+    for (const m of [rope, bucket]) {
+      m.castShadow = true;
+      pivot.add(m);
+    }
     group.add(pivot);
-    return { pivot, phase: i * 2.1 + 0.4 };
+    return { pivot, rope, bucket, water: sw.water, phase: i * 2.1 + 0.4, drawn: -1 };
   });
+
+  // ---- what happens at the well: splashes, a coin falling in, and what comes back up out of it ----
+  const fx: { mesh: THREE.Mesh; born: number; life: number; step(m: THREE.Mesh, age: number): void }[] = [];
+  const glow = (color: string) => new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+  /** A ring spreading out over the water where something went in. */
+  const splash = (at: THREE.Vector3, born: number, size = 1) => {
+    const mesh = new THREE.Mesh(new THREE.RingGeometry(0.04, 0.06, 18).rotateX(-Math.PI / 2), glow("#cfefff"));
+    mesh.position.copy(at).add(new THREE.Vector3(0, 0.005, 0));
+    group.add(mesh);
+    fx.push({ mesh, born, life: 0.9, step: (m, age) => {
+      m.scale.setScalar(1 + age * 5 * size);
+      (m.material as THREE.MeshBasicMaterial).opacity = 0.8 * (1 - age / 0.9);
+    } });
+  };
+  let clockNow = 0;
+  let lastClock = 0;
+  /** Seconds a drawing of water takes: down, a moment in the water, and back up. */
+  const DRAW_S = 2.5;
+  const smooth = (x: number) => x * x * (3 - 2 * x);
+  const still = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
   const floats = kit.floats.map((f, i) => {
     const mesh = new THREE.Mesh(shapes[f.kind], floatMat);
     mesh.position.copy(f.at);
@@ -885,7 +918,6 @@ export function buildTownDressing(map: WorldMap, place: (p: HexPos) => Place): T
     group.add(motes.points);
   }
 
-  const still = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
   return {
     group,
     glows: kit.glows,
@@ -899,13 +931,98 @@ export function buildTownDressing(map: WorldMap, place: (p: HexPos) => Place): T
         f.mesh.position.y = f.at.y + Math.sin(t * 0.7 + f.phase) * 0.07;
         f.mesh.rotation.set(Math.sin(t * 0.4 + f.phase) * 0.07, f.turn + t * (f.kind === "drum" ? 0.16 : 0.06), Math.sin(t * 0.33 + f.phase * 2) * 0.07);
       }
-      // The well's bucket sways on its rope, and turns a little this way and that.
-      for (const w of swings) w.pivot.rotation.set(Math.sin(t * 0.9 + w.phase) * 0.05, Math.sin(t * 0.37 + w.phase) * 0.35, Math.sin(t * 0.71 + w.phase * 1.3) * 0.045);
+      clockNow = clock;
+      // The well's bucket sways on its rope, and turns a little this way and that. Drawing water, the rope pays out
+      // and the bucket goes down into the water, sits there filling, and is wound back up, swinging more for it.
+      for (const w of swings) {
+        const age = w.drawn < 0 ? -1 : clock - w.drawn;
+        let down = 0;
+        if (age >= 0 && age < DRAW_S) {
+          const k = age < 0.9 ? smooth(age / 0.9) : age < 1.5 ? 1 : 1 - smooth((age - 1.5) / 1.0);
+          down = k;
+          if (age >= 0.85 && age - (clock - lastClock) < 0.85) splash(w.water, clock, 1.2);
+        } else if (age >= DRAW_S) w.drawn = -1;
+        const len = ROPE_REST + (ROPE_DOWN - ROPE_REST) * down;
+        w.rope.scale.y = len;
+        w.bucket.position.y = -len;
+        const swing = age >= 1.5 && age < DRAW_S + 2 ? 2.2 : 1;
+        w.pivot.rotation.set(Math.sin(t * 0.9 + w.phase) * 0.05 * swing * (1 - down), Math.sin(t * 0.37 + w.phase) * 0.35, Math.sin(t * 0.71 + w.phase * 1.3) * 0.045 * swing * (1 - down));
+      }
+      for (const f of fx) f.step(f.mesh, clock - f.born);
+      for (let i = fx.length - 1; i >= 0; i--) {
+        if (clock - fx[i].born < fx[i].life) continue;
+        group.remove(fx[i].mesh);
+        fx[i].mesh.geometry.dispose();
+        (fx[i].mesh.material as THREE.Material).dispose();
+        fx.splice(i, 1);
+      }
+      lastClock = clock;
       motes?.tick(t);
       // The boats ride the swell: up and down a hand's breadth, rolling and nodding a little, each in her own time.
       for (const b of boats) {
         b.group.position.y = b.y - 0.05 + Math.sin(t * 1.1 + b.phase) * 0.035;
         b.group.rotation.set(Math.sin(t * 0.9 + b.phase) * 0.035, b.turn + Math.sin(t * 0.31 + b.phase) * 0.03, Math.sin(t * 1.3 + b.phase * 1.7) * 0.06);
+      }
+    },
+    drawWater() {
+      for (const w of swings) w.drawn = clockNow;
+    },
+    tossCoin(gift) {
+      const w = swings[0];
+      if (!w) return;
+      const born = clockNow;
+      // The coin: flipped up from the near side of the wall, over, and down into the water, glinting as it turns.
+      const from = w.water.clone().add(new THREE.Vector3(0.1, 0.42, 0.55));
+      const to = w.water.clone().add(new THREE.Vector3(0.05, 0, 0.05));
+      const coin = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.008, 12), new THREE.MeshBasicMaterial({ color: "#ffd84a", transparent: true }));
+      group.add(coin);
+      fx.push({ mesh: coin, born, life: 0.75, step: (m, age) => {
+        const k = Math.min(1, age / 0.7);
+        m.position.lerpVectors(from, to, k);
+        m.position.y += Math.sin(k * Math.PI) * 0.45;
+        m.rotation.set(age * 14, 0, age * 9);
+        (m.material as THREE.MeshBasicMaterial).opacity = k < 0.97 ? 1 : 0;
+      } });
+      const after = born + 0.7;
+      // Its splash, once it is in.
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.03, 0.045, 16).rotateX(-Math.PI / 2), glow("#fff3b0"));
+      ring.position.copy(to).add(new THREE.Vector3(0, 0.005, 0));
+      ring.visible = false;
+      group.add(ring);
+      fx.push({ mesh: ring, born, life: 1.6, step: (m, age) => {
+        const a = age - 0.7;
+        m.visible = a > 0;
+        m.scale.setScalar(1 + Math.max(0, a) * 6);
+        (m.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 0.9 * (1 - a / 0.9));
+      } });
+      if (gift === "gem") {
+        // A gem bobs up out of the water, turning and shining, and rises away.
+        const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.06, 0), glow("#ff7ae0"));
+        gem.position.copy(to);
+        gem.visible = false;
+        group.add(gem);
+        fx.push({ mesh: gem, born: after, life: 2.4, step: (m, age) => {
+          m.visible = true;
+          m.position.y = to.y + Math.min(1, age / 0.8) * 0.75 + Math.sin(age * 4) * 0.03;
+          m.rotation.y = age * 4;
+          m.scale.setScalar(1 + Math.sin(age * 9) * 0.12);
+          (m.material as THREE.MeshBasicMaterial).opacity = age < 1.9 ? 1 : Math.max(0, 1 - (age - 1.9) / 0.5);
+        } });
+      } else if (gift === "xp") {
+        // A spray of glints up out of the well.
+        for (let i = 0; i < 12; i++) {
+          const a = (i / 12) * Math.PI * 2;
+          const g = new THREE.Mesh(new THREE.OctahedronGeometry(0.022, 0), glow(i % 2 ? "#fff3b0" : "#bfe8ff"));
+          g.visible = false;
+          group.add(g);
+          const vx = Math.cos(a) * 0.25, vz = Math.sin(a) * 0.25, vy = 0.9 + (i % 3) * 0.2;
+          fx.push({ mesh: g, born: after + (i % 4) * 0.05, life: 1.2, step: (m, age) => {
+            m.visible = true;
+            m.position.set(to.x + vx * age, to.y + vy * age - 0.6 * age * age, to.z + vz * age);
+            m.rotation.y = age * 8;
+            (m.material as THREE.MeshBasicMaterial).opacity = Math.max(0, 1 - age / 1.2);
+          } });
+        }
       }
     },
     dispose() {
@@ -918,6 +1035,7 @@ export function buildTownDressing(map: WorldMap, place: (p: HexPos) => Place): T
       shapes.capital.dispose();
       shapes.drum.dispose();
       bucketShape.dispose();
+      ropeShape.dispose();
       motes?.dispose();
       group.clear();
     },

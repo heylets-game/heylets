@@ -70,6 +70,8 @@ export class GardenStage implements WorldMinigame {
     this.root.matrixAutoUpdate = false;
     this.group.add(this.root);
     this.setBeds(beds);
+    // The grass round the garden is not drawn while it is tended up close: it would stand in front of the beds.
+    if (this.place()) world.clearGrass(this.out(0, 0, 0.3));
   }
 
   /** How many beds the garden has (it grows with the hut). */
@@ -324,6 +326,7 @@ export class GardenStage implements WorldMinigame {
   private finish() {
     if (this.disposed) return;
     this.disposed = true;
+    this.world.clearGrass(null);
     if (this.world.playing === this) this.world.endMinigame();
   }
 }
