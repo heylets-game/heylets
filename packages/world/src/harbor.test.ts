@@ -155,7 +155,7 @@ describe("harbor map", () => {
     const quay = street(7);
     const edge = (p: Hex) => ["water", "dock", "rampart"].includes(tileAt(map, p)?.biome ?? "water") || quay.has(key(p));
     const places = HARBOR_BUILDINGS.filter((b) => !b.id.startsWith("plot") && !["waygate", "lighthouse", "fishing"].includes(b.id));
-    expect(places.map((b) => b.id).sort()).toEqual(["apothecary", "board", "galley", "lapidary", "pub", "shop", "smithy", "townchest", "works"]);
+    expect(places.map((b) => b.id).sort()).toEqual(["apothecary", "board", "finishes", "galley", "lapidary", "pub", "shop", "smithy", "townchest", "works"]);
     for (const b of places) {
       const ground = footing(b.door, b.shape, b.facing);
       // On the shoreline: its ground touches the water's edge. (The board, which is the pub's, stands beside the pub

@@ -136,6 +136,10 @@ export const LOOKS: Record<string, Look> = {
   // yellow oilskin raincoat with the hood up over a navy jersey, a grizzled full beard and a scowl, and black sea
   // boots; empty-handed. (Old Moss wears oilskins too, but a sou'wester and no hood or beard.)
   keeper_fishmonger: { skin: "#c98f68", hair: "#8a8a86", body: "#25324a", legs: "#2a2f38", accent: "#f2c230", hat: "hood", hatColor: "#f2c230", hoodTrim: "#c99a1a", weapon: "none", coat: true, coatColor: "#f2c230", coatTrim: "#c99a1a", beard: "full", mustache: "bushy", eyes: "fierce", nose: "broad", boots: "#16181c" },
+  // Nell Ashby, who sells wallpaper, floors and roof colours from her stall by the market stall (packages/world/src/
+  // finishes.ts): auburn hair up in a bun out of the paste, a cream blouse under a sage waistcoat, a terracotta
+  // apron with her shears in its pocket, and a roll of paper in her hand.
+  keeper_decor: { skin: "#ecc7a4", hair: "#a0522d", hairStyle: "bun", body: "#efe2c4", legs: "#4a3a5a", accent: "#8fa478", hat: "none", weapon: "scroll", vest: "#7f9468", apron: "#c97a5a", eyes: "big", boots: "#3a2c22" },
   npc: { skin: "#e8b891", hair: "#b9b9b9", body: "#e3dccb", legs: "#5a4632", accent: "#e8dcc0", hat: "none", weapon: "none", stripes: "#2d3a5a", boots: "#3a2c22" },
   // Fight enemies, made over for the sea. The Bandit is a deckhand raider: a red kerchief knotted at the side, a
   // shirt banded in navy, a leather vest, a sash, and a cutlass.

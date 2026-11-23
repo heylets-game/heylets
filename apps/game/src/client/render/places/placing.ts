@@ -48,6 +48,8 @@ export const PLACE: Partial<Record<Poi["kind"], { scale: number; back: number; t
   // (A small shop: no bigger than the market stall, on the two hexes behind its door.)
   lapidary: { scale: 2, back: 1.6 },
   townchest: { scale: 1.6, back: SQRT3, turn: 0.5 },
+  // Nell's stall stands on the hex beside where she is talked to, as the town chest does, at the size of a hero's room to stand in it.
+  finishes: { scale: 1.5, back: SQRT3, turn: 0.5 },
   // The waygate hangs over the middle of the hex beside the one it is used from, at its own size.
   waygate: { scale: 1, back: SQRT3, turn: 0.5 },
   ring: { scale: 1.5, back: 0.42 },

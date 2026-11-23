@@ -6,7 +6,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAudioScene } from "./audio/useAudioScene";
 import { hexDistance, hexNeighbors, type HexPos } from "@gantt-quest/core";
-import { GATHER_SPOTS, GATHER_SPOT_IDS, HARBOR_APOTHECARY, HARBOR_LAPIDARY, HARBOR_BOARD, HARBOR_BUILDINGS, footing, HARBOR_CAVE, HARBOR_WAYGATE, HARBOR_CHEST, HARBOR_GALLEY, HARBOR_LIGHTHOUSE, HARBOR_SMITHY, HARBOR_GATHER, HARBOR_NAME, HARBOR_PLOTS, HARBOR_PLOT_FACING, HARBOR_PUB, HARBOR_RING, HARBOR_SHOP, HARBOR_SPAWN, HARBOR_WORKS, PLOT_PRICE, RESOURCE_KINDS, SHACK_COST, binFill, binNeeds, builtProjects, BOOK_TITLE, fishFrom, harborDoor, tileAt, type FishSpot, FISH_SPOTS, HOLE_NAMES, holeFishNames, generateHarbor, projectById, projectProgress, harborPoi, hutTier, poiAt, salesman, gardenBeds, gardenCorner, gardenLooks, plotAt, gardenSpotAt, GARDEN_SPOTS, HARBOR_WELL, HARBOR_WELL_AT, bedProgress, nextReady, readyCount, growText, type GardenBed, type GatherSpot, type Resources, regular as regularOf, regularTalk, type RegularId, FISHMONGER, FISHMONGER_FACES, FISHMONGER_POS, isFishmongerAt, fishmongerAdvice, fishmongerTalk, fishmongerTip, bestHole } from "@gantt-quest/world";
+import { GATHER_SPOTS, GATHER_SPOT_IDS, HARBOR_APOTHECARY, HARBOR_LAPIDARY, HARBOR_BOARD, HARBOR_BUILDINGS, footing, HARBOR_CAVE, HARBOR_WAYGATE, HARBOR_CHEST, HARBOR_GALLEY, HARBOR_LIGHTHOUSE, HARBOR_SMITHY, HARBOR_GATHER, HARBOR_NAME, HARBOR_PLOTS, HARBOR_PLOT_FACING, HARBOR_PUB, HARBOR_RING, HARBOR_SHOP, HARBOR_SPAWN, HARBOR_WORKS, PLOT_PRICE, RESOURCE_KINDS, SHACK_COST, binFill, binNeeds, builtProjects, BOOK_TITLE, fishFrom, harborDoor, tileAt, type FishSpot, FISH_SPOTS, HOLE_NAMES, holeFishNames, generateHarbor, projectById, projectProgress, harborPoi, hutTier, poiAt, salesman, gardenBeds, gardenCorner, gardenLooks, plotAt, gardenSpotAt, GARDEN_SPOTS, HARBOR_WELL, HARBOR_WELL_AT, bedProgress, nextReady, readyCount, growText, type GardenBed, type GatherSpot, type Resources, regular as regularOf, regularTalk, type RegularId, roofColor, DECORATOR, FINISHES_STALL, HARBOR_FINISHES, decoratorTalk, FISHMONGER, FISHMONGER_FACES, FISHMONGER_POS, isFishmongerAt, fishmongerAdvice, fishmongerTalk, fishmongerTip, bestHole } from "@gantt-quest/world";
 import type { Poi } from "@gantt-quest/world";
 import { MusterPanel, useMuster } from "./atlas/Muster";
 import { api, type Me, type RegularsView } from "./api";
@@ -43,8 +43,10 @@ import { TownChest, readChestAhead } from "./chest/TownChest";
 import { label } from "./labels";
 import { xpEvents } from "./xpEvents";
 import { RegularPanel } from "./RegularPanel";
+import { FinishesPanel } from "./FinishesPanel";
 import { useConversation } from "./useConversation";
 import { regularHero, regularOn, regularUnit, useRegularsAbout } from "./useRegularsAbout";
+import { useBanter } from "./useBanter";
 import "./pub.css";
 
 const same = (a: HexPos, b: HexPos) => a.q === b.q && a.r === b.r;
@@ -171,6 +173,8 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
   /** The regular you are talking to, and whether their job's panel is open. */
   const [chatWith, setChatWith] = useState<RegularId | null>(null);
   const [jobOpen, setJobOpen] = useState(false);
+  /** Nell's catalogue, opened from a word with her at her stall. */
+  const [finishesOpen, setFinishesOpen] = useState(false);
   /** Where this player stands with each regular, from the server: read as you walk up to one. */
   const [regs, setRegs] = useState<RegularsView | null>(null);
   const loadRegs = () => void api.regulars().then(setRegs, () => undefined);
@@ -260,7 +264,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
         const facing = HARBOR_PLOT_FACING[i];
         if (!owner) return harborPoi(`lot:${i}`, "lot", pos, facing);
         if (owner.bin) return { ...harborPoi(`site:${owner.id}`, "site", pos, facing), fill: binFill(owner.bin) };
-        return { ...harborPoi(`plot:${owner.id}`, "plot", pos, facing), tier: owner.hutTier ?? 1 };
+        return { ...harborPoi(`plot:${owner.id}`, "plot", pos, facing), tier: owner.hutTier ?? 1, ...(roofColor(owner.roof) ? { roof: roofColor(owner.roof) } : {}) };
       }),
       // By every hut's door, in a corner of its doorstep, its herb garden: drawn as each bed has grown while the hut
       // stands, and as a plain patch of greens before. (After the plots, so the doorstep's own place is the hut.)
@@ -280,6 +284,8 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
         ...about.map(regularHero),
         // Bram the fishmonger, at his shack by the pier, day and night.
         { id: FISHMONGER.id, classId: FISHMONGER.look, pos: FISHMONGER_POS, label: FISHMONGER.name },
+        // Nell, at her counter among her samples, beside the market stall.
+        { id: DECORATOR.id, classId: DECORATOR.look, pos: FINISHES_STALL, label: DECORATOR.name },
       ],
       freeRoam: true,
       homeYaw: HARBOR_VIEW_YAW,
@@ -366,14 +372,18 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
       if (what === "errand") setJobOpen(true);
       else if (what === "fish") setFishmonger(true);
       else if (what === "bait") setBaitOpen(true);
+      else if (what === "finishes") setFinishesOpen(true);
     },
-    panelOpen: jobOpen || fishmonger || baitOpen,
+    panelOpen: jobOpen || fishmonger || baitOpen || finishesOpen,
     closePanels: () => {
       setJobOpen(false);
       setFishmonger(false);
       setBaitOpen(false);
+      setFinishesOpen(false);
     },
   });
+  // The regulars passing the time of day with each other as they go about the town (not whoever you are with).
+  useBanter(renderer, me.crew?.id, "harbor", !resting, [talk.active?.unit, wantRegular ? regularUnit(wantRegular) : null, chatWith ? regularUnit(chatWith) : null]);
   // The conversation over: they are on their way again.
   const talking = !!talk.active;
   useEffect(() => {
@@ -382,6 +392,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     setJobOpen(false);
     setFishmonger(false);
     setBaitOpen(false);
+    setFinishesOpen(false);
   }, [talking]);
   // Bram looks out at his shack's door and the water past it, but for while he is talking to someone.
   const bramDrawn = !!scene;
@@ -498,6 +509,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     : hoverPoi.kind === "cave" ? "The Haunted Caverns: go down and fight what lurks in the dark"
     : hoverPoi.kind === "board" ? (unseen ? "Notice board: news of what has changed. Something new is pinned up!" : "Notice board: news of what has changed")
     : hoverPoi.kind === "shop" ? "Market stall: gear, and furniture for your hut"
+    : hoverPoi.kind === "finishes" ? `${DECORATOR.name}, ${DECORATOR.trade}: wallpaper, floors and roof colours for your hut. Click to walk up and talk.`
     : hoverPoi.kind === "ring" ? "Sparring ring: being rebuilt"
     : hoverPoi.kind === "fishing" ? `The fish shack: ${FISHMONGER.short} the fishmonger buys your catch and sells bait. Cast a line from its jetty, or anywhere along the shore`
     : hoverPoi.kind === "felling" || hoverPoi.kind === "quarry" ? `${GATHER_SPOTS[hoverPoi.kind].name}: gather hut materials`
@@ -526,6 +538,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     : hoverPoi.kind === "lapidary" ? "The Lapidary"
     : hoverPoi.kind === "board" ? "Notice Board"
     : hoverPoi.kind === "shop" ? "Market Stall"
+    : hoverPoi.kind === "finishes" ? "Home Furnishings"
     : hoverPoi.kind === "ring" ? "Sparring Ring"
     : hoverPoi.kind === "fishing" ? "The Fish Shack"
     : hoverPoi.kind === "felling" ? "The Tree Line"
@@ -568,6 +581,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     return () => window.removeEventListener(LOOK_CHANGED, onLook);
   }, []);
   const atShop = !!self && same(self.pos, HARBOR_SHOP);
+  const atFinishes = !!self && same(self.pos, HARBOR_FINISHES);
   // The spot a hut's herb garden is tended from, and whose garden it is (only once their shack stands).
   const gardenSpot = self ? gardenSpotAt(self.pos) : -1;
   const gardenHere = gardenSpot >= 0 ? board.members.find((m) => m.plot === gardenSpot && m.garden && !m.bin) : undefined;
@@ -751,6 +765,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     : atLapidary ? { title: <>The Lapidary <span className="muted">· lodestones for the atlas are cut and worked here, and gems bought</span></>, label: "Go in", run: () => goInside(`${HARBOR_LAPIDARY.q},${HARBOR_LAPIDARY.r}`, "lapidary") }
     : atCave ? { title: <>The Haunted Caverns <span className="muted">· something lurks in the dark</span></>, label: "Go down", run: goDown }
     : atShop ? { title: "The market stall", label: "Browse the wares", run: () => setShop(true) }
+    : atFinishes ? { title: <>{DECORATOR.name} <span className="muted">· wallpaper, floors and roof colours for your hut</span></>, label: `Talk to ${DECORATOR.short}`, run: () => talk.begin(decoratorTalk()) }
     // Beside a hut's herb garden (once its shack stands): the camera goes down over the beds.
     : gardenHere ? {
         title: <>{gardenHere.id === you ? "Your herb garden" : `${gardenHere.name}'s herb garden`} <span className="muted">· {gardenStatus(gardenHere)}</span></>,
@@ -824,7 +839,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     : null;
   hereNow.current = here;
   // Anything laid over the Harbor takes the floating button away.
-  const panelOpen = sheet || book || shop || notices || !!gather || fishmonger || baitOpen || works || account || !!tradeWith || !!gardenOf || talking;
+  const panelOpen = sheet || book || shop || notices || !!gather || fishmonger || baitOpen || works || account || !!tradeWith || !!gardenOf || talking || finishesOpen;
   // Over your own garden, how its next bed is coming on; over a crewmate's near you, a drop while it wants water.
   const gardenMarks: GardenMarkInfo[] = [];
   for (const m of board.members) {
@@ -897,6 +912,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
         const view = regs.regulars.find((v) => v.regular === chatWith);
         return view ? <RegularPanel key={chatWith} view={view} handedIn={regs.handedIn} cap={regs.cap} reload={async () => loadRegs()} refresh={refreshAll} onClose={() => setJobOpen(false)} /> : null;
       })()}
+      {finishesOpen && <FinishesPanel refresh={refreshAll} onClose={() => setFinishesOpen(false)} />}
 
       {/* (Put away while talking to a regular too: the conversation has the screen.) */}
       {!(gather && me.character) && !talking && <HudBar

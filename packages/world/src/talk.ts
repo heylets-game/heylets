@@ -10,6 +10,7 @@ import { FISH } from "./fishcatalog";
 import { BAITS, BAIT_IDS } from "./fishing";
 import { HOLE_NAMES, type FishingHole } from "./fishingholes";
 import { FISHMONGER } from "./fishmonger";
+import { DECORATOR } from "./finishes";
 import { KEEPER_PLACES, type KeeperHouse } from "./keepers";
 import { PUB_BARKEEP, PUB_DEALER } from "./pub";
 import type { Regular } from "./regulars";
@@ -91,6 +92,7 @@ export const TALK_VOICES: Record<string, number> = {
   "keeper:galley": -7,
   "keeper:lapidary": 6,
   [FISHMONGER.id]: -5,
+  [DECORATOR.id]: 4,
 };
 
 const BYE: TalkChoice = { id: "bye", label: "Goodbye", bye: true };
@@ -207,6 +209,21 @@ export function fishmongerTalk(tip: string, advice: () => string): Conversation 
       { id: "bait", label: "What have you got for bait?", opens: "bait" },
       { id: "tip", label: "Where are they biting?", says: tip },
       { id: "advice", label: "Got any advice?", says: advice },
+      BYE,
+    ],
+  };
+}
+
+/** Nell Ashby, at her stall beside the market stall: wallpaper, floors and roofs for your hut. */
+export function decoratorTalk(): Conversation {
+  return {
+    unit: DECORATOR.id,
+    name: DECORATOR.name,
+    voice: TALK_VOICES[DECORATOR.id],
+    greeting: pagesOf([DECORATOR.hello]),
+    choices: [
+      { id: "finishes", label: "Show me your patterns", opens: "finishes" },
+      { id: "how", label: "How does it work?", says: DECORATOR.line + " Open Decorate at home and pick from what you've bought." },
       BYE,
     ],
   };

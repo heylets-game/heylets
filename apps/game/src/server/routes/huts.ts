@@ -5,6 +5,7 @@
 import { HARBOR_PLOTS } from "@gantt-quest/world";
 import { buyPlot, craftFurnishing, crewFor, fillBin, getCharacter, getHut, refreshHarbor, refreshHut, stashMaterial, stowGear, unstowGear, upgradeHut } from "../db";
 import { announceXp } from "../harbor-xp";
+import { buyFinish, finishesView, setFinish } from "../finishes";
 import { enterHut } from "../hut-room";
 import { inOwnHut, type GameApp } from "./shared";
 
@@ -60,6 +61,30 @@ export function hutRoutes(app: GameApp): void {
     if (error) return c.json({ error }, 409);
     c.executionCtx.waitUntil(refreshHut(c.env, player.id));
     return c.json({ ok: true });
+  });
+
+  // ---------- home finishes: Nell's wallpaper, floors and roofs ----------
+
+  // Her catalogue as you see it: what you own, what your hut wears, your gold.
+  app.get("/api/finishes", async (c) => c.json(await finishesView(c.env.DB, c.get("player").id)));
+
+  // Buy a finish from Nell, for good.
+  app.post("/api/finishes/buy", async (c) => {
+    const body = await c.req.json<{ id?: unknown }>().catch(() => ({}) as { id?: unknown });
+    const result = await buyFinish(c.env.DB, c.get("player").id, body.id);
+    return typeof result === "string" ? c.json({ error: result }, 409) : c.json(result);
+  });
+
+  // Dress your hut's walls, floor or roof in a finish you own (`id` null: back to plain). Everyone inside sees it at
+  // once, and a new roof is seen from the Harbor.
+  app.post("/api/hut/finish", async (c) => {
+    const player = c.get("player");
+    const body = await c.req.json<{ kind?: unknown; id?: unknown }>().catch(() => ({}) as { kind?: unknown; id?: unknown });
+    const result = await setFinish(c.env.DB, player.id, body.kind, body.id ?? null);
+    if (typeof result === "string") return c.json({ error: result }, 409);
+    await refreshHut(c.env, player.id);
+    if (body.kind === "roof") c.executionCtx.waitUntil(crewFor(c.env.DB, player.id).then((crew) => refreshHarbor(c.env, crew?.id ?? null)));
+    return c.json({ finish: result });
   });
 
   // Walk into a hut's room: your own, or a crewmate's.

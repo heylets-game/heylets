@@ -3,7 +3,7 @@
 // holds is in containers.ts, what is built and bought in spending.ts, and
 // the ground the hut stands on in plots.ts.
 
-import { RESOURCE_KINDS, STARTER_BLUEPRINTS, type FurnishingGrant, type HutSummary, type ResourceKind, type Resources } from "@gantt-quest/world";
+import { RESOURCE_KINDS, STARTER_BLUEPRINTS, cleanFinish, type FurnishingGrant, type HutSummary, type ResourceKind, type Resources } from "@gantt-quest/world";
 import { now, type Env } from "./rows";
 
 // ---------- huts: materials, blueprints and furnishings ----------
@@ -34,7 +34,7 @@ export function furnishingStatement(db: D1Database, playerId: string, furnishing
 /** A player's hut tier, materials, known blueprints and furnishings. Everyone has a tier 1 hut by default. */
 export async function getHut(db: D1Database, playerId: string): Promise<HutSummary> {
   const [hut, resources, blueprints, furnishings, stash, stowed] = await Promise.all([
-    db.prepare("SELECT tier FROM huts WHERE player_id = ?").bind(playerId).first<{ tier: number }>(),
+    db.prepare("SELECT tier, wall, floor, roof FROM huts WHERE player_id = ?").bind(playerId).first<{ tier: number; wall: string | null; floor: string | null; roof: string | null }>(),
     db.prepare("SELECT kind, qty FROM resources WHERE player_id = ? AND qty > 0").bind(playerId).all<{ kind: ResourceKind; qty: number }>(),
     db.prepare("SELECT blueprint_id FROM blueprints WHERE player_id = ?").bind(playerId).all<{ blueprint_id: string }>(),
     db
@@ -58,6 +58,7 @@ export async function getHut(db: D1Database, playerId: string): Promise<HutSumma
     furnishings: furnishings.results.map(({ meta, ...f }) => (f.defId === "mounted_fish" ? { ...f, fish: (JSON.parse(meta || "{}") as { fish?: HutSummary["furnishings"][number]["fish"] }).fish ?? null } : f)),
     stash: stash.results,
     stowed: stowed.results,
+    finish: cleanFinish(hut ?? {}),
   };
 }
 

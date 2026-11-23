@@ -106,7 +106,7 @@ export function tileCost(t: Tile): number {
  * crew member's hut. `board` and `shop` are its notice board and market stall, and `dealer` is where one stands to
  * deal with whoever keeps a shop, or with the pub's dealer. `door` is the way out of a hut's room.
  */
-export type PoiKind = "waygate" | "cave" | "landing" | "lair" | "shrine" | "cache" | "camp" | "plot" | "board" | "shop" | "ring" | "dice" | "door" | "works" | "pub" | "counter" | "shoals" | "crew" | "tide" | "trader" | "rocks" | "wreck" | "lot" | "site" | "pickup" | "fishing" | "felling" | "quarry" | "apothecary" | "smithy" | "galley" | "lighthouse" | "gate" | "dealer" | "crate" | "glowcap" | "lapidary" | "townchest" | "garden" | "well";
+export type PoiKind = "waygate" | "cave" | "landing" | "lair" | "shrine" | "cache" | "camp" | "plot" | "board" | "shop" | "ring" | "dice" | "door" | "works" | "pub" | "counter" | "shoals" | "crew" | "tide" | "trader" | "rocks" | "wreck" | "lot" | "site" | "pickup" | "fishing" | "felling" | "quarry" | "apothecary" | "smithy" | "galley" | "lighthouse" | "gate" | "dealer" | "crate" | "glowcap" | "lapidary" | "townchest" | "garden" | "well" | "finishes";
 
 export interface Poi {
   id: string;
@@ -122,6 +122,8 @@ export interface Poi {
   enemies: string[];
   /** For a hut plot in the Harbor: the hut's tier, which sets how big the building is drawn. */
   tier?: number;
+  /** For a hut plot in the Harbor: the colour its owner chose for its roof (finishes.ts), if they chose one. */
+  roof?: string;
   /**
    * For a building in the Harbor: which way it faces, in sixths of a turn. 0 has its door to the south and the
    * building behind it to the north; each step turns it a sixth clockwise as seen from above (see `footing`).

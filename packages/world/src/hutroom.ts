@@ -5,6 +5,7 @@
 // Durable Object checks each request against the rules here: where the walls
 // are, where a furnishing may stand, and that furniture is walked around.
 
+import type { HutFinish } from "./finishes";
 import { allHexesInGrid, posKey, type HexGrid, type HexPos } from "@gantt-quest/core";
 import { harborPoi, type HarborPlayer, type EmoteMessage, type EmoteRequest, type LookMessage, type LookRequest, type XpMessage } from "./harbor";
 import { FURNISHINGS, HUT_TIERS, SEATS, type Furnishing, type HutTier } from "./hut";
@@ -661,9 +662,11 @@ export type HutServerMessage =
       canEdit: boolean;
       players: HarborPlayer[];
       furnishings: Furnishing[];
+      /** The wallpaper, floor and roof the owner has dressed the hut in. */
+      finish: HutFinish;
     }
-  /** The owner's whole list, placed and stored, after any change. */
-  | { type: "furnishings"; tier: number; furnishings: Furnishing[] }
+  /** The owner's whole list, placed and stored, after any change (and the hut's finish, when it is re-read). */
+  | { type: "furnishings"; tier: number; furnishings: Furnishing[]; finish?: HutFinish }
   | { type: "joined"; player: HarborPlayer }
   | { type: "left"; id: string }
   | { type: "moved"; id: string; path: HexPos[] }

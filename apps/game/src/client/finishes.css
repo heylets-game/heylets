@@ -1,0 +1,30 @@
+/* Nell's catalogue (FinishesPanel) and a hut's walls, floor and roof in edit mode (FinishPicker). */
+.story.pub-bar.finishes-panel { width: min(520px, calc(100% - 24px)); }
+.finishes-panel .small-note { font-size: 11px; }
+.finish-tabs { display: flex; gap: 4px; align-items: center; margin-bottom: 6px; }
+.finish-tabs .spacer { flex: 1; }
+.finish-gold { display: inline-flex; align-items: center; gap: 3px; color: var(--gold); font-weight: bold; }
+.finish-grid { list-style: none; margin: 0 0 6px; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 6px; max-height: calc(52vh / var(--ui-z, 1)); overflow-y: auto; }
+.finish-card { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 3px; padding: 6px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.18); }
+.finish-card.owned { border-color: var(--good); }
+.finish-card strong { font-size: 12px; line-height: 1.2; }
+.finish-card .small-note { line-height: 1.25; flex: 1; }
+.finish-card .tag.good { color: var(--good); }
+.finish-swatch { display: block; border: 1px solid var(--line); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); flex: none; }
+.finish-swatch.roof { border: 0; box-shadow: none; background: rgba(150, 190, 230, 0.18); }
+.hut-finish .finish-row h4 { margin: 6px 0 3px; }
+.finish-choices { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.finish-choices button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 3px; width: 74px; font-size: 11px; line-height: 1.15; }
+.finish-choices button.selected { outline: 2px solid var(--gold); }
+@media (max-width: 760px) {
+  .story.pub-bar.finishes-panel:not(.folded) { top: auto; bottom: 8px; max-height: calc(60vh / var(--ui-z, 1)); z-index: 14; }
+  .finish-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); max-height: calc(36vh / var(--ui-z, 1)); }
+}
+.hut-finish { position: absolute; top: 290px; right: 10px; width: 262px; z-index: 10; max-height: calc(100vh / var(--ui-z, 1) - 390px); }
+.hut-finish:not(.folded) { display: flex; flex-direction: column; overflow: hidden; }
+.hut-finish:not(.folded) > .panel-body { overflow-y: auto; min-height: 0; }
+.hut-finish .small-note { font-size: 11px; margin: 6px 0 0; }
+@media (max-width: 760px) {
+  .hut-finish { top: 276px; right: 6px; width: calc(64vw / var(--ui-z, 1)); max-height: calc(45vh / var(--ui-z, 1)); font-size: 12px; }
+  .hut-finish:not(.folded) { z-index: 13; }
+}

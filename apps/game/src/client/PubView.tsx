@@ -43,6 +43,7 @@ import { blurb, label } from "./labels";
 import { xpEvents } from "./xpEvents";
 import { useConversation } from "./useConversation";
 import { regularHero, regularOn, regularUnit, useRegularsAbout } from "./useRegularsAbout";
+import { useBanter } from "./useBanter";
 import "./hut.css";
 import "./pub.css";
 
@@ -399,6 +400,8 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
   /** The regular being talked to, for their errand. */
   const talkingRegular = useRef<RegularId | null>(null);
   talkingWith.current = talk.active && you ? [you, talk.active.unit] : [];
+  // The pub's people talking among themselves now and then, bubbles over their heads (not whoever you are with).
+  useBanter(renderer, me.crew?.id, "pub", !resting, [talk.active?.unit, holdFor ? regularUnit(holdFor) : null]);
   // The conversation over: whoever it was with is on their way again (unless you have just clicked them once more).
   const chatting = !!talk.active;
   useEffect(() => {
