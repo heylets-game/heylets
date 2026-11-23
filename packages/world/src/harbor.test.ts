@@ -312,6 +312,18 @@ describe("harbor map", () => {
     expect(dist(felling, HARBOR_SMITHY)).toBeLessThanOrEqual(5);
   });
 
+  it("keeps a walk to the streets and lanes where there is one", () => {
+    const road = (p: Hex) => tileAt(map, p)!.biome === "cobble" || tileAt(map, p)!.biome === "dock" || !!tileAt(map, p)!.path;
+    // From the square to any door or pier, no more than a couple of steps off a road on the way.
+    for (const to of [...doors, ...HARBOR_PIERS]) {
+      const walk = harborPath(map, HARBOR_SPAWN, to);
+      if (!walk) continue;
+      expect(walk.slice(0, -1).filter((p) => !road(p)).length, key(to)).toBeLessThanOrEqual(2);
+    }
+    // The quarry is up its own track, though cutting across the grass would be shorter.
+    expect(harborPath(map, HARBOR_SPAWN, HARBOR_GATHER.quarry)!.slice(0, -1).every(road)).toBe(true);
+  });
+
   it("keeps every walk within what one request may ask for, and the daily places a short walk from the gate", () => {
     const steps = (from: Hex, to: Hex) => harborPath(map, from, to)!.length;
     // The longest walk there is from where heroes arrive: to any door, plot, pier or gathering spot.
