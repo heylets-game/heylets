@@ -658,7 +658,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
         menu={
           <OptionsMenu
             title={HARBOR_NAME}
-            subtitle={<>{harbor.crew?.name ?? me.crew?.name}{harbor.crew && <> · invite code {harbor.crew.id}</>}</>}
+            subtitle={<>{harbor.crew?.name ?? me.crew?.name}{harbor.crew && <> · invite code <span className="selectable code">{harbor.crew.id}</span></>}</>}
             actions={[
               { label: copied ? "Invite link copied" : "Copy the crew's invite link", run: () => void copy(), stay: true },
               { label: me.player.email ? "Account" : "Save your progress", hint: me.player.email ?? "Guest account: not saved yet", tone: me.player.email ? undefined : "nudge", run: () => setAccount(true) },
