@@ -577,6 +577,8 @@ interface Unit {
   sit?: number;
   /** Holding a fishing rod: in a rowboat, the oars are shipped and the hands left for the rod. */
   rod?: boolean;
+  /** Fishing from the shore: which way the water is from where they stand (worked out once per spot), or null for none beside them. */
+  waterward?: { x: number; z: number; yaw: number | null };
   /** At the oars: how far round the stroke is (radians), and where it has the hands, 0 (forward) to 1 (pulled in). */
   oarPhase?: number;
   oarPull?: number;
@@ -3325,6 +3327,30 @@ export class WorldRenderer {
    * high its top stands, and whether a point of interest (a building, a spot)
    * is on that hex. Null off the map.
    */
+  /**
+   * Which way a hero standing at (x, z) on land faces to look out over the water: toward the water hexes beside
+   * them, all together. Null afloat (water all round) or with no water beside them. Kept on the unit for its spot.
+   */
+  private waterwardOf(unit: Unit, x: number, z: number): number | null {
+    const was = unit.waterward;
+    if (was && Math.abs(was.x - x) < 0.05 && Math.abs(was.z - z) < 0.05) return was.yaw;
+    let yaw: number | null = null;
+    if (this.groundAt(x, z)?.biome !== "water") {
+      // The six hexes round this one lie √3 off, a sixth of a turn apart; sample twelve ways so either layout is caught.
+      let sx = 0;
+      let sz = 0;
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2;
+        const dx = Math.sin(a) * SQRT3;
+        const dz = Math.cos(a) * SQRT3;
+        if (this.groundAt(x + dx, z + dz)?.biome === "water") (sx += dx, sz += dz);
+      }
+      if (Math.hypot(sx, sz) > 0.3) yaw = Math.atan2(sx, sz);
+    }
+    unit.waterward = { x, z, yaw };
+    return yaw;
+  }
+
   groundAt(x: number, z: number): { biome: string; top: number; poi: boolean } | null {
     if (!this.state) return null;
     const pos = worldToHex(x, z);
@@ -5487,6 +5513,12 @@ export class WorldRenderer {
         // Someone else's hero looks where their player's pointer is, while they stand idle. Walking off, they face the way they go.
         if (unit.path.length > 0) this.looks.delete(id);
         else if (!unit.asleep && !flat) unit.turnGoal = this.looks.get(id)!;
+      }
+      // Rod in hand and standing on the shore, they face the water to fish, whatever way they walked up or where
+      // their player is pointing. Every view works it out from the same map, so everyone sees them face the same way.
+      if (unit.rod && unit.path.length === 0 && !flat && !unit.asleep) {
+        const yaw = this.waterwardOf(unit, unit.goal.x, unit.goal.z);
+        if (yaw !== null) unit.turnGoal = yaw;
       }
       // A sleeper lies with their head toward the left of the view, as the bedrolls are laid.
       if (unit.asleep) unit.turnGoal = this.yaw + Math.PI / 2;
