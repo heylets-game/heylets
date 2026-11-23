@@ -17,7 +17,7 @@
 // have. The server holds the state: `gatherView` is what a client may see,
 // and leaves out the seed, the RNG and anything still hidden.
 
-import type { StatKey } from "@gantt-quest/core";
+import type { HexPos, StatKey } from "@gantt-quest/core";
 import { rollCheck, statPct, MAX_PCT, MIN_PCT, type CheckResult } from "./check";
 import type { ResourceKind, Resources } from "./hut";
 import { makeRng, type Rng } from "./rng";
@@ -148,8 +148,12 @@ export type GatherChoice =
   | { t: "dig"; now?: number }
   /** Quarry: the blows struck since the last report, each with when it landed. `now` is the server's clock. */
   | { t: "blows"; blows: Blow[]; now?: number }
-  /** A sitting: throw the line, `power` 0 to 1 of the spot's reach, from `spot` if the player has moved to another. `now` is the server's clock, filled in by the server. */
-  | { t: "cast"; power: number; spot?: FishSpot; now?: number; vessel?: Vessel | null }
+  /**
+   * A sitting: throw the line, `power` 0 to 1 of the spot's reach, from `spot` if the player has moved to another.
+   * `now` is the server's clock; `spot`, `vessel`, `at` (the hex the hero stands on) and `crew` (whose holes they
+   * are fishing: fishingholes.ts) are filled in by the server from where the hero really is.
+   */
+  | { t: "cast"; power: number; spot?: FishSpot; now?: number; vessel?: Vessel | null; at?: HexPos | null; crew?: string | null }
   /** A sitting: set the hook, `at` ms after the cast as the client saw it. */
   | { t: "hook"; at: number; now?: number }
   /** A sitting: wind the line in (cutting it, if something is on). */

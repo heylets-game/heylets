@@ -24,6 +24,7 @@ import { WIND_DIR, gustAt, setFieldWalkers, updateWind } from "./wind";
 import { waveFlag } from "./flag";
 import { OAK_SHAPES, Woods, tintOf, type BoulderSpot, type TreeSpot } from "./woods";
 import { Gulls, type GullSpot } from "./gulls";
+import { FishingHoleMarks, type HoleMark } from "./fishingHoles";
 import { OVERLAY_LAYER, PostFx, type Air } from "./post";
 import { fishMount } from "./catchArt";
 import { FRAME, OUTLINE, SITTING_DROP, inflate, makeFigure, type Figure } from "./figures";
@@ -902,6 +903,8 @@ export class WorldRenderer {
   private nightLife = new NightLife();
   /** The gulls that come and go by day on any map with the sea round it. */
   private gulls = new Gulls();
+  /** The crew's fishing holes on the Harbor's water (set by the Harbor view; none elsewhere). */
+  private holes = new FishingHoleMarks();
   /** Lightning in a storm. On the dev server, `__gqWorld.strike()` sets one off. */
   private storm = new Storm();
   /** How wet the ground is, 0 to 1: it follows the rain up quickly and down slowly. */
@@ -1186,7 +1189,7 @@ export class WorldRenderer {
 
     // Sky, sun and moon, shadows, and the moving decoration.
     this.ambience = new Ambience(this.scene, this.renderer);
-    this.scene.add(this.nightLife.group, this.gulls.group, this.storm.bolt, this.panes, this.wallPanels);
+    this.scene.add(this.nightLife.group, this.gulls.group, this.holes.group, this.storm.bolt, this.panes, this.wallPanels);
 
     // Far bigger than anything the camera can see the end of: it is kept under the camera (see frame), and its far
     // reaches are lost in the mist.
@@ -1439,6 +1442,7 @@ export class WorldRenderer {
     this.unwatchGrass();
     this.nightLife.dispose();
     this.gulls.dispose();
+    this.holes.dispose();
     this.storm.dispose();
     this.outlookMap?.dispose();
     this.scenery?.dispose();
@@ -3248,7 +3252,12 @@ export class WorldRenderer {
    * point of interest on the hex (the game brings its own) and the camera
    * buttons.
    */
-  startMinigame<T extends WorldMinigame>(make: (group: THREE.Group) => T, at: HexPos, hidePoi?: string): T {
+  /** Where the fish are on the water: the crew's fishing holes as they are now (an empty list for none). */
+  setFishingHoles(marks: HoleMark[]): void {
+    this.holes.set(marks);
+  }
+
+    startMinigame<T extends WorldMinigame>(make: (group: THREE.Group) => T, at: HexPos, hidePoi?: string): T {
     this.endMinigame();
     const group = new THREE.Group();
     group.position.copy(this.standAt(at));
@@ -5334,6 +5343,7 @@ export class WorldRenderer {
     this.nightLife.update(this.clock, lively);
     // Gulls keep to fair daylight: they are gone by night and in a storm.
     this.gulls.update(dt, walkers, openSky ? (1 - night) * (1 - this.ambience.storming) : 0);
+    this.holes.update(dt, this.clock, night, this.ambience.storming, fancy.get());
     const clearSky = lively * (1 - this.ambience.overcast);
     // The moon's reflection lies on the sea off the island's shore, on the side the moon is on.
     const moon = this.ambience.sunDir;

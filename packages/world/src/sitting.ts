@@ -16,7 +16,9 @@ import { statPct } from "./check";
 import { FISH, aFish, type FishDef } from "./fishcatalog";
 import { FIGHT_OUTCOME_TEXT, edgesProblem, fightEase, makeFightScript, replayFight, type FightEase, type FightOutcome, type FightScript } from "./fishfight";
 import { FISH_SPOTS, FISH_SPOT_IDS, castMetres, vesselProblem, type Vessel, formatLength, formatWeight, rollCatch, rollSize, type FishSpot } from "./fishing";
+import { holeAt, withHole } from "./fishingholes";
 import type { GatherChoice, GatherState, GatherStep } from "./gather";
+import { harborSky } from "./gameclock";
 import type { Resources } from "./hut";
 import { makeRng } from "./rng";
 
@@ -198,10 +200,13 @@ export function stepSitting(state: GatherState, choice: GatherChoice): GatherSte
     const afloat = vesselProblem(from, choice.vessel);
     if (afloat) return { state, error: afloat };
     const spot = FISH_SPOTS[from];
+    // At one of the crew's fishing holes, the line goes into the hole's water, a full cast reaches it from the
+    // shore, and what it is known for bites more often. Night and storm fish bite only under their own sky.
+    const hole = choice.at && choice.crew ? holeAt(choice.crew, now, choice.at) : null;
     const power = Math.max(0, Math.min(1, Number(choice.power) || 0));
-    const reach = power * spot.maxCast;
+    const reach = power * (hole ? 1 : spot.maxCast);
     const rng = makeRng(state.rng);
-    const caught = rollCatch(rng, spot.water, reach, spot.bonus);
+    const caught = rollCatch(rng, hole?.water ?? spot.water, reach, withHole(spot.bonus, hole), harborSky(now));
     const size = rollSize(rng, caught, reach);
     const metres = castMetres(reach);
     const biteMs = rng.int(BITE_MS[0], BITE_MS[1]);

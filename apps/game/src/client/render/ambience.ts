@@ -14,7 +14,7 @@ import { devTools } from "../devTools";
 import { fancy, fancyGrass } from "./fancy";
 import { WIND_DIR, addFieldSway, gustAt, setFieldCalm, windPower } from "./wind";
 import { addCutaway } from "./cutaway";
-import { nightAt, timeOfDay, type Tile } from "@gantt-quest/world";
+import { nightAt, rainOf, stormAt, timeOfDay, weatherAt, type Tile } from "@gantt-quest/world";
 import type { LightKind } from "./props";
 import type { LampLight } from "./tableLamps";
 
@@ -457,8 +457,6 @@ const GROUND_SPAN = 1.76;
 const DROPS = 150;
 /** Droplets in one splash against the rocks. */
 const SPLASH_DROPS = 6;
-/** How long one spell of weather lasts before the sky starts turning to the next. */
-const WEATHER_SPELL_MS = 7 * 60 * 1000;
 /** Puffs of smoke in the air over one chimney at a time. */
 const PUFFS = 5;
 /** Lumps in one puff: a small low-poly cloud. */
@@ -1702,13 +1700,8 @@ export class Ambience {
       const forced = (globalThis as { __gqWeather?: number }).__gqWeather;
       if (typeof forced === "number") return forced;
     }
-    const at = Date.now() / WEATHER_SPELL_MS;
-    const spell = Math.floor(at);
-    const bias = this.wetPort ? 0.12 : -0.08;
-    const of = (k: number) => Math.max(0, Math.min(1, hash(k, 7, 700) + bias));
-    // Hold each spell for most of its length, then ease into the next.
-    const blend = smooth(0.7, 1, at - spell);
-    return of(spell) * (1 - blend) + of(spell + 1) * blend;
+    // The same weather the rules see (packages/world's gameclock.ts).
+    return weatherAt(Date.now(), this.wetPort);
   }
 
   /**
@@ -1724,12 +1717,7 @@ export class Ambience {
       // Holding the weather by hand holds the storm off too, unless it is asked for.
       if (typeof (globalThis as { __gqWeather?: number }).__gqWeather === "number") return 0;
     }
-    const at = Date.now() / WEATHER_SPELL_MS;
-    const spell = Math.floor(at);
-    const bias = this.wetPort ? 0.12 : -0.08;
-    const of = (k: number) => (hash(k, 7, 700) + bias > 0.85 && hash(k, 11, 700) < 0.5 ? 1 : 0);
-    const blend = smooth(0.7, 1, at - spell);
-    return of(spell) * (1 - blend) + of(spell + 1) * blend;
+    return stormAt(Date.now(), this.wetPort);
   }
 
   /** A time of day the scene is held at, whatever the clock says (0 to 1 through the day), and in fair weather; null to follow the clock and the sky. */
@@ -2551,7 +2539,7 @@ export class Ambience {
    */
   sky(): { time: number; night: number; rain: number; storm: number } {
     const time = this.timeOfDay();
-    const rain = smooth(0.6, 0.9, this.weather());
+    const rain = rainOf(this.weather());
     return { time, night: nightAt(time), rain, storm: this.stormy() * rain };
   }
 
@@ -2622,7 +2610,7 @@ export class Ambience {
     // Cloud comes in before the rain does; indoors there is no sky.
     const wet = this.outdoors ? this.weather() : 0;
     this.cloud = smooth(0.3, 0.6, wet);
-    this.rainfall = smooth(0.6, 0.9, wet);
+    this.rainfall = rainOf(wet);
     if (this.cloud > 0) {
       // Low cloud: a weaker, greyer sun, a slate sky, and everything a shade cooler.
       const c = this.cloud;

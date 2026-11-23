@@ -9,7 +9,7 @@ import { FISH, FISH_IDS, KEPT_HAUL_PRICE, type FishDef, type FishRarity, type Wa
 import type { Rng } from "./rng";
 
 /**
- * Where a sitting is fished from: a pier head or the old shore spot; afloat, the coast's waters (by barrel or
+ * Where a sitting is fished from: a pier head, or anywhere else along the shore; afloat, the coast's waters (by barrel or
  * rowboat), by the rocks and the wreck; or, by rowboat, the open sea.
  */
 export type FishSpot = "west" | "middle" | "east" | "shore" | "coast_west" | "coast_south" | "coast_east" | "wreck" | "sea";
@@ -45,7 +45,7 @@ export const FISH_SPOTS: Record<FishSpot, FishSpotDef> = {
   west: { id: "west", name: "The west pier", water: "shallows", maxCast: 1 },
   middle: { id: "middle", name: "The middle pier", water: "mouth", maxCast: 1 },
   east: { id: "east", name: "The east pier", water: "deep", maxCast: 1 },
-  shore: { id: "shore", name: "The shore", water: "shallows", maxCast: 0.5 },
+  shore: { id: "shore", name: "From the shore", water: "shallows", maxCast: 0.5 },
   coast_west: { id: "coast_west", name: "Off the west coast", water: "shallows", maxCast: 1, vessel: "barrel" },
   coast_south: { id: "coast_south", name: "In the harbor mouth", water: "mouth", maxCast: 1, vessel: "barrel" },
   coast_east: { id: "coast_east", name: "Off the east coast", water: "deep", maxCast: 1, vessel: "barrel" },
@@ -79,10 +79,19 @@ function weighted<T>(rng: Rng, items: [T, number][]): T {
   return items[items.length - 1][0];
 }
 
-/** What bites on a cast into `water` that reached `reach` (0 to 1) of the way out. */
-export function rollCatch(rng: Rng, water: Water, reach: number, bonus: Record<string, number> = {}): FishDef {
+/** The sky a cast is made under: night and storm fish bite only then. */
+export interface CastSky {
+  night: boolean;
+  storm: boolean;
+}
+
+/** Whether `f` bites at all under `sky`. */
+export const bitesUnder = (f: FishDef, sky: CastSky): boolean => (!f.night || sky.night) && (!f.storm || sky.storm);
+
+/** What bites on a cast into `water` that reached `reach` (0 to 1) of the way out, under `sky` (by day, fair, if not given). */
+export function rollCatch(rng: Rng, water: Water, reach: number, bonus: Record<string, number> = {}, sky: CastSky = { night: false, storm: false }): FishDef {
   const haul = rng.next() < HAUL_SHARE;
-  const pool = FISH_IDS.map((id) => FISH[id]).filter((f) => f.water.includes(water) && (f.kind === "haul") === haul);
+  const pool = FISH_IDS.map((id) => FISH[id]).filter((f) => f.water.includes(water) && (f.kind === "haul") === haul && bitesUnder(f, sky));
   return weighted(rng, pool.map((f) => [f, (haul ? RARITY_WEIGHT[f.rarity] : reachWeight(f.rarity, reach)) * (bonus[f.id] ?? 1)] as [FishDef, number]));
 }
 

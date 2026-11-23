@@ -3,7 +3,9 @@
 // that module.
 
 import type { Hono } from "hono";
-import type { Env, Player } from "../db";
+import type { HexPos } from "@gantt-quest/core";
+import { crewFor, type Env, type Player } from "../db";
+import type { Standing } from "../gather";
 import { crewPlaces } from "../zones";
 
 /** What every handler is given: the Worker's bindings, and (past the sign-in check) the player asking. */
@@ -28,4 +30,20 @@ export async function harborParty(env: Env, crewId: string, playerId: string) {
     .then((r) => (r.ok ? (r.json() as Promise<{ ids: string[] }>) : { ids: [] }))
     .then((r) => new Set([...r.ids, playerId]), () => new Set([playerId]));
   return (await crewPlaces(env.DB, crewId)).filter((m) => here.has(m.id));
+}
+
+/**
+ * Where the player is standing in their crew's Harbor right now, as its room knows it (the room checked every step
+ * of the way there), and whose Harbor it is; null if they are not walking it.
+ */
+export async function harborStanding(env: Env, playerId: string): Promise<Standing | null> {
+  const crew = await crewFor(env.DB, playerId);
+  if (!crew) return null;
+  try {
+    const res = await env.HARBOR_ROOM.get(env.HARBOR_ROOM.idFromName(crew.id)).fetch(`https://harbor/where?id=${encodeURIComponent(playerId)}`, { headers: { "x-crew-id": crew.id } });
+    const { pos } = (await res.json()) as { pos: HexPos | null };
+    return pos ? { crewId: crew.id, pos } : null;
+  } catch {
+    return null;
+  }
 }
