@@ -14,12 +14,10 @@ import { devTools } from "../devTools";
 import { fancy, fancyGrass } from "./fancy";
 import { WIND_DIR, addFieldSway, gustAt, setFieldCalm, windPower } from "./wind";
 import { addCutaway } from "./cutaway";
-import type { Tile } from "@gantt-quest/world";
+import { nightAt, timeOfDay, type Tile } from "@gantt-quest/world";
 import type { LightKind } from "./props";
 import type { LampLight } from "./tableLamps";
 
-/** One full day, in milliseconds. */
-const DAY_MS = 10 * 60 * 1000;
 /** Half-width of the area around the camera target that gets shadows. */
 const SHADOW_REACH = 24;
 
@@ -1743,7 +1741,8 @@ export class Ambience {
       const forced = (globalThis as { __gqTime?: number }).__gqTime;
       if (typeof forced === "number") return forced;
     }
-    return (Date.now() % DAY_MS) / DAY_MS;
+    // The Harbor's clock, shared with the townsfolk's hours (packages/world/src/gameclock.ts).
+    return timeOfDay(Date.now());
   }
 
   /** Advance the sky and everything that sways. `yaw` is the camera's turn; `target` is what it looks at. */
@@ -2552,9 +2551,8 @@ export class Ambience {
    */
   sky(): { time: number; night: number; rain: number; storm: number } {
     const time = this.timeOfDay();
-    const height = Math.sin((time - 0.25) * Math.PI * 2) + 0.2;
     const rain = smooth(0.6, 0.9, this.weather());
-    return { time, night: 1 - smooth(-0.25, 0.3, height), rain, storm: this.stormy() * rain };
+    return { time, night: nightAt(time), rain, storm: this.stormy() * rain };
   }
 
   private light(target: THREE.Vector3, clock: number) {

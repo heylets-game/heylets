@@ -5,11 +5,11 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAudioScene } from "./audio/useAudioScene";
-import { hexDistance, type HexPos } from "@gantt-quest/core";
-import { GATHER_SPOTS, GATHER_SPOT_IDS, HARBOR_APOTHECARY, HARBOR_LAPIDARY, HARBOR_BOARD, HARBOR_BUILDINGS, footing, HARBOR_CAVE, HARBOR_WAYGATE, HARBOR_CHEST, HARBOR_GALLEY, HARBOR_LIGHTHOUSE, HARBOR_SMITHY, HARBOR_GATHER, HARBOR_NAME, HARBOR_PLOTS, HARBOR_PLOT_FACING, HARBOR_PUB, HARBOR_RING, HARBOR_SHOP, HARBOR_SPAWN, HARBOR_WORKS, PLOT_PRICE, RESOURCE_KINDS, SHACK_COST, binFill, binNeeds, builtProjects, BOOK_TITLE, fishSpotAt, harborDoor, seaEdge, tileAt, waterSpotAt, type FishSpot, FISH_SPOTS, generateHarbor, projectById, projectProgress, harborPoi, hutTier, poiAt, salesman, gardenBeds, gardenCorner, gardenLooks, plotAt, gardenSpotAt, GARDEN_SPOTS, HARBOR_WELL, HARBOR_WELL_AT, bedProgress, nextReady, readyCount, growText, type GardenBed, type GatherSpot, type Resources } from "@gantt-quest/world";
+import { hexDistance, hexNeighbors, type HexPos } from "@gantt-quest/core";
+import { GATHER_SPOTS, GATHER_SPOT_IDS, HARBOR_APOTHECARY, HARBOR_LAPIDARY, HARBOR_BOARD, HARBOR_BUILDINGS, footing, HARBOR_CAVE, HARBOR_WAYGATE, HARBOR_CHEST, HARBOR_GALLEY, HARBOR_LIGHTHOUSE, HARBOR_SMITHY, HARBOR_GATHER, HARBOR_NAME, HARBOR_PLOTS, HARBOR_PLOT_FACING, HARBOR_PUB, HARBOR_RING, HARBOR_SHOP, HARBOR_SPAWN, HARBOR_WORKS, PLOT_PRICE, RESOURCE_KINDS, SHACK_COST, binFill, binNeeds, builtProjects, BOOK_TITLE, fishSpotAt, harborDoor, seaEdge, tileAt, waterSpotAt, type FishSpot, FISH_SPOTS, generateHarbor, projectById, projectProgress, harborPoi, hutTier, poiAt, salesman, gardenBeds, gardenCorner, gardenLooks, plotAt, gardenSpotAt, GARDEN_SPOTS, HARBOR_WELL, HARBOR_WELL_AT, bedProgress, nextReady, readyCount, growText, type GardenBed, type GatherSpot, type Resources, regular as regularOf, regularTalk, type RegularId } from "@gantt-quest/world";
 import type { Poi } from "@gantt-quest/world";
 import { MusterPanel, useMuster } from "./atlas/Muster";
-import { api, type Me } from "./api";
+import { api, type Me, type RegularsView } from "./api";
 import { CatchPanel } from "./CatchPanel";
 import { ChatInput } from "./ChatInput";
 import { AccountPanel } from "./Account";
@@ -32,7 +32,7 @@ import { InventoryScreen } from "./InventoryScreen";
 import { ShopScreen } from "./ShopScreen";
 import { TileAction } from "./TileAction";
 import { Trading } from "./TradePanel";
-import { WorldRenderer, type RenderState } from "./render/WorldRenderer";
+import { WorldRenderer, type RenderHero, type RenderState } from "./render/WorldRenderer";
 import { useHarbor } from "./useHarbor";
 import { useOwnLook } from "./ownLook";
 import { useSalesman } from "./salesmanClock";
@@ -40,6 +40,10 @@ import { WorksPanel } from "./works/WorksPanel";
 import { TownChest, readChestAhead } from "./chest/TownChest";
 import { label } from "./labels";
 import { xpEvents } from "./xpEvents";
+import { RegularPanel } from "./RegularPanel";
+import { useConversation } from "./useConversation";
+import { regularHero, regularOn, regularUnit, useRegularsAbout } from "./useRegularsAbout";
+import "./pub.css";
 
 const same = (a: HexPos, b: HexPos) => a.q === b.q && a.r === b.r;
 /**
@@ -140,6 +144,14 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
    * getting there. The door's hex. Any other click, on the ground or on another place, drops it.
    */
   const [want, setWant] = useState<HexPos | null>(null);
+  /** One of the pub's regulars, out and about, just clicked: a word with them once you are beside them. */
+  const [wantRegular, setWantRegular] = useState<RegularId | null>(null);
+  /** The regular you are talking to, and whether their job's panel is open. */
+  const [chatWith, setChatWith] = useState<RegularId | null>(null);
+  const [jobOpen, setJobOpen] = useState(false);
+  /** Where this player stands with each regular, from the server: read as you walk up to one. */
+  const [regs, setRegs] = useState<RegularsView | null>(null);
+  const loadRegs = () => void api.regulars().then(setRegs, () => undefined);
   /** The place whose model the pointer is on, by its id: `hover` alone cannot tell a roof from the ground at its door. */
   const [hoverPlace, setHoverPlace] = useState<string | null>(null);
   const [account, setAccount] = useState(false);
@@ -170,6 +182,11 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
   const send = useRef(harbor.send);
   send.current = harbor.send;
   const base = useMemo(generateHarbor, []);
+  // The day's regulars, out in the town by day (packages/world/src/wander.ts). Whoever you are walking up to or
+  // talking to waits for you.
+  const about = useRegularsAbout(renderer, me.crew?.id, "harbor", wantRegular ?? chatWith, !resting);
+  const aboutRef = useRef(about);
+  aboutRef.current = about;
   /** Your gathering outings left today, drawn as lightning bolts on your plate. Read on the way in and after anything that spends or restores them. */
   const [stamina, setStamina] = useState<{ left: number; max: number } | null>(null);
   const { board, players, you } = harbor;
@@ -234,7 +251,10 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
       code: "harbor",
       you,
       map: { ...base, pois },
-      heroes: players.map((p) => ({ id: p.id, classId: p.classId, pos: p.pos, label: p.name, outfit: p.id === you ? ownOutfit : p.outfit, asleep: !!p.bedroll && same(p.bedroll, p.pos), rod: p.fishing ? (p.gilded ? "gilded" : true) : false, boat: tileAt(base, p.pos)?.biome === "water" ? p.vessel ?? "barrel" : undefined, level: p.level, xp: p.xp })),
+      heroes: [
+        ...players.map((p): RenderHero => ({ id: p.id, classId: p.classId, pos: p.pos, label: p.name, outfit: p.id === you ? ownOutfit : p.outfit, asleep: !!p.bedroll && same(p.bedroll, p.pos), rod: p.fishing ? (p.gilded ? "gilded" : true) : false, boat: tileAt(base, p.pos)?.biome === "water" ? p.vessel ?? "barrel" : undefined, level: p.level, xp: p.xp })),
+        ...about.map(regularHero),
+      ],
       freeRoam: true,
       homeYaw: HARBOR_VIEW_YAW,
       // Bedrolls laid out by whoever is resting.
@@ -242,7 +262,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
       stamina: stamina ?? undefined,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [base, board, players, you, stamina, ownOutfit, clock]);
+  }, [base, board, players, you, stamina, ownOutfit, clock, about]);
   const latest = useRef(scene);
   latest.current = scene;
   const heroSheet = useHeroSheet();
@@ -252,6 +272,10 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     // door and the going in: nothing more to press on arriving (see `want`). A click anywhere else is only a walk.
     const r = new WorldRenderer(mount.current!, {
       onHexClick: (to, place) => {
+        // One of the regulars, out and about: walk up beside them, and a word with them there.
+        const who = regularOn(aboutRef.current, to);
+        if (who) return walkUp.current(who.id, who.pos);
+        setWantRegular(null);
         const aimed = latest.current ? placeUnder(latest.current.map.pois, to, place) : undefined;
         // A garden is drawn in a corner of its hut's doorstep, but tended from a spot of its own beside it.
         const at = aimed?.kind === "garden" ? GARDEN_SPOTS[plotAt(aimed.pos)] : aimed?.pos;
@@ -284,6 +308,9 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     setTradeWith(null);
     setGardenOf(null);
     setWellOpen(false);
+    setWantRegular(null);
+    talk.close();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resting]);
   // And brought back on stepping out of it, fading in over the building's last picture (render/handover.ts).
   useEffect(() => {
@@ -300,6 +327,58 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
   // Dev-only handle for driving the Harbor from the console or a test script.
   if (import.meta.env.DEV) (window as unknown as { __harbor: unknown }).__harbor = { harbor, view: renderer.current };
   const self = players.find((p) => p.id === you);
+
+  /** A word with a regular out and about, up close (useConversation). Their job's panel opens from it. */
+  const talk = useConversation({
+    world: renderer,
+    you,
+    at: self?.pos ?? null,
+    onOpen: (what) => what === "errand" && setJobOpen(true),
+    panelOpen: jobOpen,
+    closePanels: () => setJobOpen(false),
+  });
+  // The conversation over: they are on their way again.
+  const talking = !!talk.active;
+  useEffect(() => {
+    if (talking) return;
+    setChatWith(null);
+    setJobOpen(false);
+  }, [talking]);
+  /** Walk up beside a regular (they wait), or, beside them already, talk. */
+  const walkUp = useRef((_id: RegularId, _at: HexPos) => {});
+  walkUp.current = (id, at) => {
+    if (!self || talk.active) return;
+    setWant(null);
+    loadRegs();
+    if (hexDistance(self.pos, at) <= 1 && !same(self.pos, at)) return chat(id);
+    // The open ground beside them nearest you.
+    const beside = hexNeighbors(at, base.grid).filter((n) => {
+      const t = tileAt(base, n);
+      return !!t && t.biome !== "water" && t.biome !== "rampart" && !t.built && !t.blocker;
+    }).sort((a, b) => hexDistance(self.pos, a) - hexDistance(self.pos, b));
+    if (!beside[0]) return;
+    setWantRegular(id);
+    send.current({ type: "move", to: beside[0] });
+  };
+  const chat = (id: RegularId) => {
+    const who = regularOf(id);
+    if (!who) return;
+    setWantRegular(null);
+    setChatWith(id);
+    talk.begin(regularTalk(who, regularUnit(id)));
+  };
+  // Beside the regular you walked up to: the conversation starts (its camera waits for you to stop).
+  const wanted = wantRegular ? about.find((r) => r.id === wantRegular) : undefined;
+  const besideWanted = !!self && !!wanted && hexDistance(self.pos, wanted.pos) <= 1;
+  useEffect(() => {
+    if (besideWanted && wantRegular) chat(wantRegular);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [besideWanted, wantRegular]);
+  // Gone indoors (dusk) before you reached them: nobody to talk to.
+  useEffect(() => {
+    if (wantRegular && !wanted) setWantRegular(null);
+  }, [wantRegular, wanted]);
+
   const plotIndex = self ? HARBOR_PLOTS.findIndex((p) => same(p, self.pos)) : -1;
   const hutOwner = plotIndex >= 0 ? board.members.find((m) => m.plot === plotIndex) : undefined;
   const myPlot = board.members.find((m) => m.id === you)?.plot ?? null;
@@ -334,7 +413,10 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
   const visitor = visitHere ? salesman(visitHere.salesmanId) : undefined;
   /** A release with notes this player has not read: the board wears a "!". An older server sends no seenRelease, and then there is none. */
   const unseen = me.seenRelease !== undefined && hasUnseen(me.seenRelease);
-  const tip = !hoverPoi ? null
+  const hoverRegular = hover ? regularOn(about, hover) : undefined;
+  const hoverWho = hoverRegular ? regularOf(hoverRegular.id) : undefined;
+  const tip = hoverWho ? `${hoverWho.name}, ${hoverWho.trade}. Click to walk up and talk.`
+    : !hoverPoi ? null
     : hoverPoi.kind === "cave" ? "The Haunted Caverns: go down and fight what lurks in the dark"
     : hoverPoi.kind === "board" ? (unseen ? "Notice board: news of what has changed. Something new is pinned up!" : "Notice board: news of what has changed")
     : hoverPoi.kind === "shop" ? "Market stall: gear, and furniture for your hut"
@@ -659,7 +741,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     : null;
   hereNow.current = here;
   // Anything laid over the Harbor takes the floating button away.
-  const panelOpen = sheet || book || shop || notices || !!gather || fishmonger || works || account || !!tradeWith || !!gardenOf;
+  const panelOpen = sheet || book || shop || notices || !!gather || fishmonger || works || account || !!tradeWith || !!gardenOf || talking;
   // Over your own garden, how its next bed is coming on; over a crewmate's near you, a drop while it wants water.
   const gardenMarks: GardenMarkInfo[] = [];
   for (const m of board.members) {
@@ -727,7 +809,14 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
 
       {/* Put away while a gathering outing (fishing, felling, the quarry) has the view: nothing on it is any use
           there, and the game's own controls drop to the bottom of the screen (--hud-h goes with it). */}
-      {!(gather && me.character) && <HudBar
+      {talk.node}
+      {jobOpen && chatWith && regs && (() => {
+        const view = regs.regulars.find((v) => v.regular === chatWith);
+        return view ? <RegularPanel key={chatWith} view={view} handedIn={regs.handedIn} cap={regs.cap} reload={async () => loadRegs()} refresh={refreshAll} onClose={() => setJobOpen(false)} /> : null;
+      })()}
+
+      {/* (Put away while talking to a regular too: the conversation has the screen.) */}
+      {!(gather && me.character) && !talking && <HudBar
         me={me}
         place={here && !here.quiet ? here.title : undefined}
         rest={onWater ? undefined : {

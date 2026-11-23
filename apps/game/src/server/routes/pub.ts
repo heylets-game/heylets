@@ -2,7 +2,7 @@
 // traveling salesman, the regulars and their errands, and a word with the
 // barkeep.
 
-import { PUB_BARKEEP, PUB_DEALER, PUB_MAX_TALK, PUB_MENU, dueIn, nextSalesmanVisit, salesman, salesmanVisitAt } from "@gantt-quest/world";
+import { PUB_BARKEEP, PUB_DEALER, PUB_MAX_TALK, PUB_MENU, TALK_PER_DAY, dueIn, nextSalesmanVisit, salesman, salesmanVisitAt } from "@gantt-quest/world";
 import { RELEASES } from "../../releases";
 import { barkeepReply } from "../ai";
 import { crewFor, getCharacter,orderAtPub, refreshHut } from "../db";
@@ -11,6 +11,7 @@ import { announceXp } from "../harbor-xp";
 import { enterPub } from "../pub-room";
 import { pubLeaderboard } from "../pub-scores";
 import { buyFromSalesman, getSalesman } from "../salesman";
+import { spendTalk, talkLeft } from "../talk";
 import type { GameApp } from "./shared";
 
 /** What the barkeep knows about traveling salesmen: who is in, or who is due next. */
@@ -91,6 +92,9 @@ export function pubRoutes(app: GameApp): void {
     return c.json({ error: "Accept, hand in, trade or drop." }, 400);
   });
 
+  // How many questions the player may still ask today (each is a call to the model).
+  app.get("/api/pub/talk", async (c) => c.json({ left: await talkLeft(c.env.DB, c.get("player").id), cap: TALK_PER_DAY }));
+
   // A word with the barkeep. He only talks: nothing he says changes anything.
   app.post("/api/pub/talk", async (c) => {
     const player = c.get("player");
@@ -99,6 +103,9 @@ export function pubRoutes(app: GameApp): void {
     if (!text) return c.json({ error: "Say something first." }, 400);
     const [character, crew] = await Promise.all([getCharacter(c.env.DB, player.id), crewFor(c.env.DB, player.id)]);
     if (character?.status !== "active" || !crew) return c.json({ error: "The pub is for crews." }, 409);
+    // Counted before the model is asked, so a question past the day's limit is never sent.
+    const left = await spendTalk(c.env.DB, player.id);
+    if (left === null) return c.json({ error: `That is all the talk for today: ${TALK_PER_DAY} questions a day.`, left: 0 }, 429);
     // Everyone in the pub sees the exchange over the two heads; the conversation itself stays in the asker's panel.
     const room = c.env.PUB_ROOM.get(c.env.PUB_ROOM.idFromName(crew.id));
     const bubble = (id: string, line: string) => room.fetch("https://pub/bubble", { method: "POST", body: JSON.stringify({ id, text: line }) }).then(() => {}, () => {});
@@ -114,6 +121,6 @@ export function pubRoutes(app: GameApp): void {
     ];
     const say = await barkeepReply(c.env, { hero: character.name, crew: crew.name, text, facts });
     c.executionCtx.waitUntil(bubble(PUB_BARKEEP.id, say));
-    return c.json({ say });
+    return c.json({ say, left });
   });
 }

@@ -58,7 +58,7 @@ const BARKEEP_SCHEMA = {
 export async function barkeepReply(env: Env, input: BarkeepInput): Promise<string> {
   if (isMock(env)) return mockBarkeep(input);
   const system = [
-    `You are Old Tam, the barkeep of the pub in a small harbor where a ship's crew called "${input.crew}" lives between voyages to nearby islands.`,
+    `You are Old Tam, the barkeep of the pub in a small harbor where a ship's crew called "${input.crew}" lives between trips out onto the maps beyond the Harbor.`,
     "You are dry, friendly and brief. You have kept this bar for thirty years and have opinions about the sea.",
     "Reply in one or two short sentences, in character, in plain words. No stage directions, no lists, no quotation marks.",
     "You can talk, give your opinion, and repeat what you know. You cannot give, sell, discount or promise anything, change any price, or do anything for the customer: meals are ordered from the board beside you, at the prices shown.",
@@ -67,7 +67,12 @@ export async function barkeepReply(env: Env, input: BarkeepInput): Promise<strin
     ...input.facts.map((f) => `- ${f}`),
   ].join("\n");
   const user = `${input.hero} leans on the bar and says: """${input.text}"""`;
-  const out = (await runJson(env, [{ role: "system", content: system }, { role: "user", content: user }], BARKEEP_SCHEMA, 120)) as { say?: unknown } | string | null;
+  const out = await runJson(env, [{ role: "system", content: system }, { role: "user", content: user }], BARKEEP_SCHEMA, 120);
+  return cleanSay(out) || mockBarkeep(input);
+}
+
+/** The line in a `{ say }` reply (an object, or the same as JSON text), on one line and not too long; "" if there is none. */
+export function cleanSay(out: unknown): string {
   let say: unknown = null;
   if (typeof out === "string") {
     try {
@@ -75,13 +80,12 @@ export async function barkeepReply(env: Env, input: BarkeepInput): Promise<strin
     } catch {
       say = null;
     }
-  } else say = out?.say;
-  const text = typeof say === "string" ? say.replace(/\s+/g, " ").trim().slice(0, 320) : "";
-  return text || mockBarkeep(input);
+  } else if (out && typeof out === "object") say = (out as { say?: unknown }).say;
+  return typeof say === "string" ? say.replace(/\s+/g, " ").trim().slice(0, 320) : "";
 }
 
 /** Scripted stand-in for the model, and the fallback when it fails. */
-function mockBarkeep(input: BarkeepInput): string {
+export function mockBarkeep(input: BarkeepInput): string {
   const said = input.text.toLowerCase();
   if (/\b(menu|drink|ale|rum|food|stew|pie|eat|hungry|thirsty)\b/.test(said)) return "It is all on the board. The stew is mostly fish, and the pie comes with stories whether you want them or not.";
   if (/\b(dice|game|bet|gamble)\b/.test(said)) return "Table is by the hearth side. Bid what you can see, call what you cannot believe, and do not blame me after.";

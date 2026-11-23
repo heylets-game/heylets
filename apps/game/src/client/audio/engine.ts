@@ -33,6 +33,8 @@ export interface PlayOptions {
   gainDb?: number;
   /** Extra seconds before it sounds, on top of the event's own delay. */
   delay?: number;
+  /** Semitones up (or down) for this play, on top of the event's own pitch: a speaker's voice. */
+  semitones?: number;
   /**
    * Called once the take is chosen and scheduled, for anything that must move in time with it (lightning
    * with its thunder). Not called when nothing plays: no files, sound not started yet, or a cooldown.
@@ -349,7 +351,7 @@ export class AudioEngine {
     this.takes.set(name, picker);
     const key = files[picker.next(files.length, ev.order)];
     const when = now + (ev.delay ?? 0) + (opts.delay ?? 0);
-    const rate = 2 ** (inRange(ev.pitch) / 12);
+    const rate = 2 ** ((inRange(ev.pitch) + (opts.semitones ?? 0)) / 12);
 
     const start = (buffer: AudioBuffer, at: number) => {
       this.voice(name, ev, buffer, at, gain, rate, placed);

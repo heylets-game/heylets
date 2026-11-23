@@ -52,3 +52,6 @@ export * from "./stonecraft";
 export * from "./lapidary";
 export * from "./garden";
 export * from "./well";
+export * from "./talk";
+export * from "./gameclock";
+export * from "./wander";

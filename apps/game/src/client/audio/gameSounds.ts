@@ -43,6 +43,10 @@ export const sounds = {
   yourTurn() {
     audio.play(soundName.yourTurn());
   },
+  /** A letter of someone's words typed out, in their voice: semitones up or down. */
+  blip(voice: number) {
+    audio.play(soundName.blip(), { semitones: voice });
+  },
   /** A moment of a fight on the tiles: the dice, initiative, a shove, a throw. */
   zone(what: ZoneSound, at?: At) {
     audio.play(soundName.zone(what), { at });

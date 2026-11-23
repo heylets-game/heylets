@@ -8,9 +8,7 @@
 .pub-menu li { display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid var(--line); padding: 6px 8px; }
 .pub-menu li > .grow { flex: 1; min-width: 0; }
 .pub-menu button { flex: none; min-width: 64px; }
-.pub-talk { max-height: 150px; overflow-y: auto; border: 1px solid var(--line); padding: 6px 8px; margin-bottom: 6px; display: flex; flex-direction: column; gap: 4px; }
 .pub-bar .row { display: flex; gap: 6px; }
-.pub-bar .row input { flex: 1; min-width: 0; }
 
 @media (max-width: 760px) {
   .pub-bar { width: calc(70vw / var(--ui-z, 1)); max-height: calc(55vh / var(--ui-z, 1)); font-size: 12px; }
