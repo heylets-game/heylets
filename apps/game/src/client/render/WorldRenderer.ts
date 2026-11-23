@@ -3523,8 +3523,10 @@ export class WorldRenderer {
       g.position.set(at.x + behind.x, at.y, at.z + behind.z);
       g.rotation.y = yaw;
       g.scale.setScalar(scale);
-      // A building bigger than its hex is pointed at as a whole: anywhere on it means its door.
-      if (scale > 1) g.userData.door = poi.pos;
+      // A building bigger than its hex is pointed at as a whole: anywhere on it means its door. So is a hut's herb
+      // garden once its hut stands (it lies across the corner of the doorstep, and pointing at it means the garden,
+      // not the hut nor the ground under it).
+      if (scale > 1 || (poi.kind === "garden" && poi.beds)) g.userData.door = poi.pos;
       g.traverse((o) => {
         // A glow is light, not a solid: it neither casts nor takes a shadow.
         if (o instanceof THREE.Mesh) o.castShadow = o.receiveShadow = !o.userData.glow && !o.userData.ink;
