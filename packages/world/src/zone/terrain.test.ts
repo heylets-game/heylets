@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 import { GRID, at, fails, flatBoard, has, must, standEnemy, standHero, unit } from "../test/zoneBoard";
-import { hexDistance, posKey, type HexPos } from "@gantt-quest/core";
+import { hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/core";
 import { ENEMIES } from "../content";
 import type { Biome, Tile } from "../map";
 import { makeRng } from "../rng";
@@ -15,11 +15,12 @@ import { abilityArea, checkAbility, checkCommon, edgeDc, leavesReach, moveLeft, 
 import { strikeReaches } from "./ai";
 import { attackContext, type Ctx } from "./engine";
 import { ALERT_RANGE } from "./gen";
-import { HEX_DIRS, HEX_ROOM, HIGH_REACH, MAX_ELEV, elevOf, heldAgainst, isDead, ladderBetween, pitAt, reachFrom, roomAt, sees, stepCost, strikes, unitsAt, zoneReach } from "./geometry";
+import { HEX_DIRS, HEX_ROOM, HIGH_REACH, MAX_ELEV, elevOf, heldAgainst, isDead, ladderBetween, pitAt, reachFrom, roomAt, sees, stepCost, strikes, unitsAt, solid, zoneReach } from "./geometry";
 import { ACTION_AP, AP_MAX, AP_TURN, SUMMON_AP_TURN, COMMON_ACTIONS, ENEMY_KIT, ENEMY_MOVE_AP, JUMP_DOWN, JUMP_UP, enemyMove, enemyStrikes, tacticOf } from "./kit";
 import { mod, proficiency, rollShown } from "./rules";
 import { SITE_IDS, siteInside, siteOpen } from "./sites";
 import { HEAR_RANGE, stepZone } from "./zone";
+import { pickBellGoer } from "./bell";
 import type { Rolled, Unit, ZoneAction, ZoneEffect, ZoneEvent, ZoneState } from "./types";
 
 // ---------- helpers ----------
@@ -1414,36 +1415,108 @@ describe("the enemy uses the ground", () => {
   });
 });
 
-// ---------- a fight in the open rouses the place ----------
+// ---------- the alarm bell rouses the place ----------
 
-describe("a fight in the open rouses the place", () => {
-  /** Ann and a bandit beside her at an open-air site; two more bands far off; and a Great Bear with its own, further still. */
+describe("the alarm bell rouses the place", () => {
+  /** Ann and a bandit beside her at an open-air site, and an alarm bell by the bandit; two more bands far off; and a Great Bear with its own, further still. */
   function place(edit: Edit = () => {}, gone: HexPos[] = [], site = "keep") {
     const state = board(edit, gone);
     state.scene = { site, backdrop: "mist" };
-    hero(state, "ann", "qa_paladin", at(1, 6));
+    // The enemy plays: it is the bandit that rings the bell.
+    state.aiOff = false;
+    // Enough to stand a few rounds of the whole place on her.
+    Object.assign(hero(state, "ann", "qa_paladin", at(1, 6)), { hp: 5000, maxHp: 5000 });
     const first = enemy(state, "bandit", at(2, 6), "g1", 200);
-    const second = [enemy(state, "bandit", at(6, 3), "g2", 200), enemy(state, "archer", at(7, 3), "g2", 200)];
+    // Beside the bell and not in reach of Ann: it is the one that goes for it.
+    const mate = enemy(state, "bandit", at(3, 6), "g1", 200);
+    const second = [enemy(state, "bandit", at(8, 1), "g2", 200), enemy(state, "archer", at(9, 1), "g2", 200)];
     const third = enemy(state, "bandit", at(14, 10), "g3", 200);
+    state.map.pois.push({ id: "bell", kind: "bell", pos: at(4, 6), hidden: false, cleared: false, usedBy: [], enemies: [] });
     const den = [enemy(state, "great_bear", at(14, 1), "g4", 200), enemy(state, "wolf", at(15, 1), "g4", 200)];
-    return { state, first: first.id, second: second.map((u) => u.id), third: third.id, den: den.map((u) => u.id) };
+    return { state, first: first.id, mate: mate.id, second: second.map((u) => u.id), third: third.id, den: den.map((u) => u.id) };
   }
 
-  it("every band that can get to the fight is in it from the first round, told as one crowd", () => {
+  /** A fight, played on until the bell is rung by the bandit beside it (a fight alone rouses nobody). */
+  function rung(state: ZoneState, events: ZoneEvent[] = []): ZoneState {
+    let now = must(state, { type: "dev", by: "ann", dev: { op: "start_fight" } }, events);
+    for (let i = 0; i < 40 && now.encounter && got(events, "bell").length === 0; i++) now = must(now, { type: "timeout" }, events);
+    return now;
+  }
+
+  it("a fight alone rouses nobody: only the band that was met is in it", () => {
+    const made = place();
+    made.state.map.pois = made.state.map.pois.filter((p) => p.kind !== "bell");
+    const events: ZoneEvent[] = [];
+    let state = must(made.state, { type: "dev", by: "ann", dev: { op: "start_fight" } }, events);
+    while (state.encounter!.round < 3) state = must(state, { type: "timeout" }, events);
+    expect(got(events, "roused")).toEqual([]);
+    expect(state.groups).toMatchObject({ g1: { alerted: true }, g2: { alerted: false }, g3: { alerted: false }, g4: { alerted: false } });
+  });
+
+  it("nobody goes for the bell in the first round; from then on the enemy side rolls once a round, and only one at a time goes", () => {
+    const made = place();
+    let state = must(made.state, { type: "dev", by: "ann", dev: { op: "start_fight" } });
+    const goers = new Set<string>();
+    while (state.encounter && state.encounter.round <= 8 && !state.map.pois.find((p) => p.id === "bell")!.cleared) {
+      const enc = state.encounter;
+      if (enc.round === 1) expect(enc.bell?.goer ?? null).toBeNull();
+      if (enc.bell?.goer) goers.add(enc.bell.goer);
+      // Rolled at most once a round, and never in the first.
+      expect(enc.bell?.rolled ?? 0).toBeLessThanOrEqual(enc.round);
+      expect(enc.bell?.rolled ?? 0).not.toBe(1);
+      state = must(state, { type: "timeout" });
+    }
+    // By the fourth round the roll is certain, and the one that went rang it: one enemy, not several.
+    expect(state.map.pois.find((p) => p.id === "bell")!.cleared).toBe(true);
+    expect(goers.size).toBe(1);
+  });
+
+  it("the pick is the enemy nearest the bell, unless some are not beside a hero: then the nearest of those; and it is told", () => {
+    const pick = (edit: (state: ZoneState, made: ReturnType<typeof place>) => void) => {
+      const made = place();
+      const state = must(made.state, { type: "dev", by: "ann", dev: { op: "start_fight" } });
+      edit(state, made);
+      // Round 4: the roll is certain; only the first band is in the fight.
+      state.encounter!.round = 4;
+      state.encounter!.bell = { goer: null, rolled: 0 };
+      state.encounter!.order = ["ann", made.first, made.mate];
+      const ctx = { state, rng: makeRng(1), events: [] as ZoneEvent[], effects: [] };
+      pickBellGoer(ctx);
+      return { made, goer: state.encounter!.bell!.goer, events: ctx.events };
+    };
+    // One beside Ann and one not: the one not beside her, though both are close to the bell.
+    const free = pick((state, { first, mate }) => {
+      unit(state, first).pos = at(2, 6);
+      unit(state, mate).pos = at(3, 7);
+    });
+    expect(free.goer).toBe(free.made.mate);
+    expect(free.events).toEqual([{ t: "bell_goer", id: free.made.mate }]);
+    // Both beside her: the nearer to the bell.
+    const held = pick((state, { first, mate }) => {
+      const beside = hexNeighbors(at(1, 6), state.map.grid).filter((p) => !solid(state.map.tiles.find((t) => t.q === p.q && t.r === p.r)));
+      const bell = state.map.pois.find((p) => p.kind === "bell")!.pos;
+      beside.sort((a, b) => hexDistance(a, bell) - hexDistance(b, bell));
+      unit(state, first).pos = beside[0];
+      unit(state, mate).pos = beside[beside.length - 1];
+    });
+    expect(held.goer).toBe(held.made.first);
+  });
+
+  it("an enemy beside the bell rings it, for 4 AP, not in the first round, and every band that can get to the fight is in it, told as one crowd", () => {
     const made = place();
     const events: ZoneEvent[] = [];
-    const state = must(made.state, { type: "dev", by: "ann", dev: { op: "start_fight" } }, events);
+    const state = rung(made.state, events);
+    const bells = got(events, "bell");
+    expect(bells).toHaveLength(1);
+    expect([made.first, made.mate]).toContain(bells[0].id);
+    expect(state.map.pois.find((p) => p.id === "bell")!.cleared).toBe(true);
     const roused = got(events, "roused");
     expect(roused).toHaveLength(1);
     expect([...roused[0].groups].sort()).toEqual(["g2", "g3"]);
     expect([...roused[0].units].sort()).toEqual([...made.second, made.third].sort());
-    expect([...state.encounter!.order].sort()).toEqual(["ann", made.first, ...made.second, made.third].sort());
+    expect([...state.encounter!.order].sort()).toEqual(["ann", made.first, made.mate, ...made.second, made.third].sort());
     expect(state.groups).toMatchObject({ g1: { alerted: true }, g2: { alerted: true }, g3: { alerted: true } });
-    // Each rolled for their place; none is announced one by one, and nothing was "heard".
-    expect(rolls(events, "Initiative").map((r) => r.id).sort()).toEqual(["ann", made.first, ...made.second, made.third].sort());
     expect(got(events, "fight_join")).toEqual([]);
-    expect(got(events, "noise")).toEqual([]);
-    expect(state.encounter!.round).toBe(1);
   });
 
   it("whoever stands in the way does not make it no way: a band comes though the one gap between it and the fight is held, by a hero or by its own", () => {
@@ -1460,7 +1533,7 @@ describe("a fight in the open rouses the place", () => {
       expect(west(zoneReach(made.state, third, 400)), holder).toBe(holder === "enemy");
       expect(west(zoneReach({ ...made.state, units: [] }, third, 400)), holder).toBe(true);
       const events: ZoneEvent[] = [];
-      const state = must(made.state, { type: "dev", by: "ann", dev: { op: "start_fight" } }, events);
+      const state = rung(made.state, events);
       expect(got(events, "roused").flatMap((e) => e.groups), holder).toContain("g3");
       expect(state.encounter!.order, holder).toContain(made.third);
       expect(state.groups.g3.alerted, holder).toBe(true);
@@ -1468,18 +1541,19 @@ describe("a fight in the open rouses the place", () => {
     // With no gap at all, it is the ground that says no, and it stays.
     const shut = place(on(Array.from({ length: GRID.rows }, (_, row) => at(10, row)), { biome: "rock" }));
     shut.state.units = shut.state.units.filter((u) => !shut.den.includes(u.id));
-    const stayed = must(shut.state, { type: "dev", by: "ann", dev: { op: "start_fight" } });
+    const stayed = rung(shut.state);
     expect(stayed.encounter!.order).not.toContain(shut.third);
     expect(stayed.groups.g3.alerted).toBe(false);
   });
 
   it("a band with a boss in it keeps its den, until the fight is near enough to hear", () => {
     const made = place();
-    let state = must(made.state, { type: "dev", by: "ann", dev: { op: "start_fight" } });
+    let state = rung(made.state);
     while (state.encounter!.round < 4) state = must(state, { type: "timeout" });
     for (const id of made.den) expect(state.encounter!.order).not.toContain(id);
     expect(state.groups.g4.alerted).toBe(false);
-    // Someone in the fight comes within earshot of the den: at the next round they are in it.
+    // Someone in the fight comes within earshot of the den (and stays there: the enemy stands still): at the next round they are in it.
+    state.aiOff = true;
     unit(state, made.third).pos = at(14 - HEAR_RANGE, 1);
     const round = state.encounter!.round;
     const events: ZoneEvent[] = [];
@@ -1488,26 +1562,19 @@ describe("a fight in the open rouses the place", () => {
     for (const id of made.den) expect(state.encounter!.order).toContain(id);
   });
 
-  it("a band with no way to the fight stays where it is, and comes once there is one", () => {
+  it("a band with no way to the fight stays where it is", () => {
     // The third band stands on ground cut off from the rest by a gap two hexes wide.
     const cut = [...Array.from({ length: 12 }, (_, row) => at(11, row)), ...Array.from({ length: 12 }, (_, row) => at(12, row))];
     const made = place(undefined, cut);
     unit(made.state, made.den[0]).hp = 0;
     made.state.units = made.state.units.filter((u) => !made.den.includes(u.id));
     const events: ZoneEvent[] = [];
-    let state = must(made.state, { type: "dev", by: "ann", dev: { op: "start_fight" } }, events);
+    let state = rung(made.state, events);
     expect(got(events, "roused").map((e) => e.groups)).toEqual([["g2"]]);
     expect(state.encounter!.order).not.toContain(made.third);
     while (state.encounter!.round < 3) state = must(state, { type: "timeout" }, events);
+    // The bell is rung once: a bridge laid over the gap afterward does not bring them.
     expect(state.groups.g3.alerted).toBe(false);
-    // A bridge is laid over the gap: at the next round they come. (As a new array of tiles: a state's tiles are shared
-    // from step to step, and what is reckoned from an array is kept with it, so one is never changed where it lies.)
-    state.map.tiles = [...state.map.tiles, ...[11, 12].map((col) => ({ q: at(col, 10).q, r: at(col, 10).r, biome: "plains" as Biome, h: 0.3, elev: 0 }))];
-    const round = state.encounter!.round;
-    const after: ZoneEvent[] = [];
-    while (state.encounter!.round === round) state = must(state, { type: "timeout" }, after);
-    expect(got(after, "roused").map((e) => e.groups)).toEqual([["g3"]]);
-    expect(state.encounter!.order).toContain(made.third);
   });
 
   it("with no site (a cave, a sea cave) nothing is roused: only those near enough to hear come", () => {
@@ -1516,7 +1583,7 @@ describe("a fight in the open rouses the place", () => {
     const events: ZoneEvent[] = [];
     const state = must(made.state, { type: "dev", by: "ann", dev: { op: "start_fight" } }, events);
     expect(got(events, "roused")).toEqual([]);
-    expect([...state.encounter!.order].sort()).toEqual(["ann", made.first].sort());
+    expect([...state.encounter!.order].sort()).toEqual(["ann", made.first, made.mate].sort());
   });
 
   it("under a roof or under ground (a citadel, a crypt, a cavern, a hollow) nothing is roused either: walls keep the noise in, and only those near enough to hear come", () => {
@@ -1528,7 +1595,7 @@ describe("a fight in the open rouses the place", () => {
       // The one band met, and nobody else: not the two bands with a clear way to the fight, which the open air would have brought.
       expect(got(events, "roused"), site).toEqual([]);
       expect(got(events, "alert"), site).toEqual([{ t: "alert", group: "g1", by: "ann" }]);
-      expect([...state.encounter!.order].sort(), site).toEqual(["ann", made.first].sort());
+      expect([...state.encounter!.order].sort(), site).toEqual(["ann", made.first, made.mate].sort());
       expect(state.groups, site).toMatchObject({ g1: { alerted: true }, g2: { alerted: false }, g3: { alerted: false }, g4: { alerted: false } });
       // Nor at any later round, while they are out of earshot.
       while (state.encounter!.round < 4) state = must(state, { type: "timeout" }, events);
@@ -1536,7 +1603,7 @@ describe("a fight in the open rouses the place", () => {
       expect(got(events, "noise"), site).toEqual([]);
       expect(state.groups, site).toMatchObject({ g2: { alerted: false }, g3: { alerted: false }, g4: { alerted: false } });
       // Someone in the fight comes within earshot of the second band: at the next round it is in it, heard and not roused, and still alone.
-      unit(state, made.first).pos = at(6 - HEAR_RANGE, 3);
+      unit(state, made.first).pos = at(8 - HEAR_RANGE, 1);
       const round = state.encounter!.round;
       const after: ZoneEvent[] = [];
       while (state.encounter!.round === round) state = must(state, { type: "timeout" }, after);
@@ -1550,7 +1617,7 @@ describe("a fight in the open rouses the place", () => {
   it("only a place out under the sky is roused: a scene that is no site at all is not", () => {
     for (const site of SITE_IDS.filter(siteOpen)) {
       const events: ZoneEvent[] = [];
-      must(place(undefined, [], site).state, { type: "dev", by: "ann", dev: { op: "start_fight" } }, events);
+      rung(place(undefined, [], site).state, events);
       expect(got(events, "roused").map((e) => [...e.groups].sort()), site).toEqual([["g2", "g3"]]);
     }
     const events: ZoneEvent[] = [];

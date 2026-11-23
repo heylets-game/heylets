@@ -162,6 +162,27 @@ export const crate: PlaceModel = (poi, kit) => {
   if (!poi.cleared) g.userData.door = poi.pos;
 };
 
+/** The alarm bell: a brass bell hung from a timber frame. Once rung it hangs askew, and nobody will ring it again. */
+export const bell: PlaceModel = (poi, kit) => {
+  const { g, add, lambert } = kit;
+  const wood = lambert("#5a4128");
+  const brass = lambert("#c9a23c");
+  // Two posts and a crossbeam over them.
+  for (const x of [-0.34, 0.34]) add(new THREE.BoxGeometry(0.12, 1.25, 0.12), wood, x, 0.62, 0, 0);
+  add(new THREE.BoxGeometry(0.9, 0.12, 0.14), wood, 0, 1.25, 0, 0);
+  // The bell, hung from the beam by its crown; a clapper under it.
+  const hung = new THREE.Group();
+  hung.position.set(0, 1.19, 0);
+  hung.rotation.z = poi.cleared ? 0.5 : 0;
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.3, 0.42, 14), brass);
+  body.position.y = -0.3;
+  const clapper = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), lambert("#3a3226"));
+  clapper.position.y = -0.55;
+  hung.add(body, clapper);
+  g.add(hung);
+  g.userData.door = poi.pos;
+};
+
 /** Glowing mushrooms. */
 export const glowcap: PlaceModel = (poi, kit) => {
   const { g } = kit;

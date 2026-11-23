@@ -27,6 +27,7 @@ import type { HeroSheet } from "../hero";
 import { addStats, maxFocusFor, maxHpFor } from "../progression";
 import { makeRng, seedFromString } from "../rng";
 import { enemyTurn } from "./ai";
+import { pickBellGoer, placeBell } from "./bell";
 import { abilityArea, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, doCommon, drinkItem, moveLeft, resolveAbility, throwItem, walk } from "./combat";
 import { UNTIMED, burnOf, has, heal, regrow, removeCondition, tick, unseen, type Ctx } from "./engine";
 import { ALERT_RANGE, JOIN_RANGE, freeHexNear, generateZone } from "./gen";
@@ -102,6 +103,7 @@ export function createZone(code: string, seed: string, options: ZoneOptions): Zo
     group.kinds.forEach((kind, i) => state.units.push(enemyUnit(state, kind, group.posts[i], id)));
   }
   ensureMouth(state);
+  if (!options.delve && open(state)) placeBell(state);
   return state;
 }
 
@@ -326,7 +328,6 @@ function engage(ctx: Ctx, groups: string[], by: Unit, quiet = false): void {
     if (!starting && !quiet) ctx.events.push({ t: "fight_join", id: u.id });
   }
   pullIn(ctx);
-  if (starting) rouse(ctx);
 }
 
 /** How far a band will come to a fight it was roused to, in movement: further than any map is across, short of for ever. */
@@ -336,13 +337,13 @@ const ROUSE_REACH = 400;
 const open = (state: ZoneState) => !!state.scene && siteOpen(state.scene.site);
 
 /**
- * A fight in the open rouses the whole place: every band that has noticed nobody is in it from now on, and comes.
+ * The alarm bell (bell.ts), rung by an enemy, rouses the whole place: every band that has noticed nobody is in it from now on, and comes.
  * Two kinds stay where they are, because coming would make no sense: a band with no way to the fight on foot (shut
  * in behind a locked door, or on ground nothing joins to it), and a band with a boss in it, which keeps its den and
  * waits (it still comes if the fight is near enough to hear: reinforce). "A way" is a matter of the ground alone:
  * whoever is standing in a doorway or on a bridge just now does not make it no way. Under a roof, or under ground, nothing is
- * roused: walls keep the noise in, and only those near enough to hear come. Called when a fight starts and as each
- * round begins, so a band let out by an opened door comes then.
+ * roused: walls keep the noise in, and only those near enough to hear come. Called when the bell is rung, and by nothing else:
+ * a fight no longer rouses the place of itself.
  */
 function rouse(ctx: Ctx): void {
   const { state } = ctx;
@@ -386,7 +387,6 @@ function reinforce(ctx: Ctx): void {
   const { state } = ctx;
   const enc = state.encounter;
   if (!enc) return;
-  rouse(ctx);
   const fighters = state.units.filter((u) => enc.order.includes(u.id) && !u.down);
   const hero = fighters.find((u) => u.side === "hero");
   if (!hero) return;
@@ -665,6 +665,8 @@ function advance(ctx: Ctx): void {
         tickLights(ctx);
         // The noise carries: whoever is near enough to hear the fight comes to it.
         reinforce(ctx);
+        // Perhaps one of them is sent to ring the alarm bell.
+        pickBellGoer(ctx);
       }
       // One back in after fleeing on their turn this round waits for the next.
       const waiting = (u: Unit | undefined) => !u || u.down || !!enc.waits?.includes(u.id);
@@ -690,7 +692,8 @@ function advance(ctx: Ctx): void {
     if (settle(ctx)) return;
     if (ready.length === 0) continue;
     if (next[0].side === "enemy") {
-      enemyTurn(ctx, next[0], enc.budgets[next[0].id]);
+      // The bell, rung: the whole place is roused.
+      if (enemyTurn(ctx, next[0], enc.budgets[next[0].id])) rouse(ctx);
       enc.done = [next[0].id];
       continue;
     }

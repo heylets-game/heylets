@@ -72,7 +72,7 @@ function stepSeen(state: ZoneState, action: ZoneAction, events: ZoneEvent[]): { 
 }
 
 describe("where everyone is", () => {
-  it("is told by an event whenever it changes: a fight in the open, every band roused, played for rounds", () => {
+  it("is told by an event whenever it changes: a fight in the open, bells rung and bands roused, played for rounds", () => {
     let roused = 0;
     let walks = 0;
     for (const site of ["keep", "wilds", "camp"] as const) {

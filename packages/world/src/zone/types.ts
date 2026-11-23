@@ -199,6 +199,8 @@ export interface Encounter {
    * blow, flask or help for anyone in it until they are back.
    */
   fled?: string[];
+  /** The alarm bell (bell.ts): which enemy is going to ring it, and the last round the enemy side rolled for one to. */
+  bell?: { goer: string | null; rolled: number };
   /**
    * Heroes who have had their turn this round and fled on it: should they come back into the fight before the
    * round is out, they wait for the next one. Cleared as each round begins.
@@ -541,6 +543,10 @@ export type ZoneEvent =
   | { t: "door"; id: string; poi: string; how: "key" | "forced" | "held" }
   /** The crash of a forced door is heard by a band, which comes running. */
   | { t: "noise"; group: string }
+  /** An enemy is picked to go and ring the alarm bell (bell.ts pickBellGoer); it is marked to the players. */
+  | { t: "bell_goer"; id: string }
+  /** An enemy rings the alarm bell (bell.ts): the rest of the place is roused next. */
+  | { t: "bell"; poi: string; id: string }
   /** A fight in the open rouses the rest of the place: these bands, and everyone in them, are in it and on their way. */
   | { t: "roused"; groups: string[]; units: string[] }
   /** A cluster of glowing mushrooms is picked; what it gave follows as `spoils`. */

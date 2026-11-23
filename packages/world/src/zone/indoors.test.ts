@@ -259,7 +259,7 @@ describe("a fight under a roof or under ground", () => {
     expect(stayed).toBeGreaterThan(came);
   });
 
-  it("out under the sky the same start rouses the place: every other band that is not a boss's own", () => {
+  it("out under the sky the same start rouses nobody either: only the alarm bell does (terrain.test.ts)", () => {
     for (let seed = 0; seed < 3; seed++) {
       let state = createZone("IN", `out-${seed}`, zoneOptions({ size: "medium", biome: "meadow", groups: 4, elevation: 2, obstacles: 1, clear: 4, party: 2, site: "keep" }));
       expect(siteOpen(state.scene!.site)).toBe(true);
@@ -267,8 +267,8 @@ describe("a fight under a roof or under ground", () => {
       state = must(state, { type: "join", hero: standInHero("qa_paladin", "ann", 3)! });
       const events: ZoneEvent[] = [];
       state = must(state, { type: "dev", by: "ann", dev: { op: "start_fight" } }, events);
-      expect(got(events, "roused"), `seed ${seed}`).toHaveLength(1);
-      expect(alerted(state), `seed ${seed}`).toEqual(Object.keys(state.groups).sort());
+      expect(got(events, "roused"), `seed ${seed}`).toEqual([]);
+      expect(alerted(state).length, `seed ${seed}`).toBeLessThan(Object.keys(state.groups).length);
     }
   });
 

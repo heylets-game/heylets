@@ -30,6 +30,7 @@
 // only if it can get no blow in on them this turn.
 
 import { hexDistance, posKey, type HexPos } from "@gantt-quest/core";
+import { BELL_AP, goesForBell, liveBell, ringBell, somethingToRouse } from "./bell";
 import { apForMove, checkCommon, doCommon, enemyAct, leavesReach, shiftInto, shoveDest, walk, walkAp } from "./combat";
 import { attackContext, defenceOf, has, saveBonus, unseen, type Ctx } from "./engine";
 import { HIGH_REACH, blast, close, elevOf, flies, heldAgainst, inFight, pathIn, reachFrom, sameHex, seesFor, stepCost, strikes, zoneReach, type Reached } from "./geometry";
@@ -141,7 +142,17 @@ interface Plan {
  * in reach, it goes toward where there would be (approach). Either way no more than ENEMY_MOVE_AP of its AP go on
  * movement in the turn (Budget.walk, which walkAp reckons with). What AP it has left over it keeps for its next turn.
  */
-export function enemyTurn(ctx: Ctx, enemy: Unit, budget: Budget): void {
+export function enemyTurn(ctx: Ctx, enemy: Unit, budget: Budget): boolean {
+  const rang = { done: false };
+  play(ctx, enemy, budget, rang);
+  return rang.done;
+}
+
+/**
+ * The alarm bell, if there is one to ring and a band left to rouse: an enemy beside it with the AP rings it before
+ * anything else (bell.ts), and the one that is going for it (goesForBell) walks to it instead of fighting, breaking off if it must.
+ */
+function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): void {
   const { state } = ctx;
   if (state.aiOff) return;
   const blows = enemyStrikes(enemy.kind, enemy.level, state.options.threat, modsOf(state.options).edge);
@@ -311,6 +322,40 @@ export function enemyTurn(ctx: Ctx, enemy: Unit, budget: Budget): void {
     }
     return null;
   };
+
+  /** Toward the bell as far as this turn's movement goes, if the ground gives a way to it. */
+  const toBell = (): boolean => {
+    const bell = liveBell(state);
+    if (!bell || !somethingToRouse(state)) return false;
+    const movement = budget.move + walkAp(budget) * budget.stride;
+    const next = (r: Reached) => r.stop && hexDistance(r.pos, bell.pos) <= 1;
+    const reach = zoneReach(state, enemy, APPROACH_LOOKS[APPROACH_LOOKS.length - 1], undefined, undefined, next);
+    let goal: Reached | undefined;
+    for (const r of reach.values()) if (next(r) && (!goal || r.cost < goal.cost)) goal = r;
+    if (!goal) return false;
+    const walked = along(pathIn(reach, goal.pos) ?? [], movement);
+    if (walked.path.length === 0) return false;
+    walk(ctx, enemy, walked.path, budget);
+    return true;
+  };
+
+  // The bell, if it is this one's to ring (picked at the start of a round: bell.ts pickBellGoer): beside it with the AP, it rings it, and that is the whole turn;
+  // else it goes toward it. With no way to it over the ground, it lets another go and plays on.
+  if (!has(enemy, "prone") && goesForBell(state, enemy)) {
+    const bell = liveBell(state)!;
+    if (ringBell(ctx, enemy, budget)) {
+      rang.done = true;
+      return;
+    }
+    if (toBell()) {
+      if (!enemy.down && !has(enemy, "prone") && ringBell(ctx, enemy, budget)) rang.done = true;
+      return;
+    }
+    // Beside it, short of the AP: it waits there, and keeps what it has for the next turn.
+    if (hexDistance(enemy.pos, bell.pos) <= 1) return;
+    // No way to it over the ground: it lets another go.
+    state.encounter!.bell!.goer = null;
+  }
 
   // Someone with their back to a drop, right where it stands: over they go, before anything else.
   // One shove a turn: a hero who catches the edge is not shoved at it again and again.

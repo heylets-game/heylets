@@ -281,6 +281,7 @@ function dwell(ev: ZoneEvent, many: boolean, next: ZoneEvent | undefined, carrie
     case "blinked": return 450;
     case "seen": return 200;
     case "fight_start": return 1300;
+    case "bell": return 900;
     case "roused": return 600;
     case "fight_end": return 700;
     case "fled": return 420;
@@ -1465,8 +1466,14 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         say(`${name(ev.id)} picks the glowing mushrooms.`);
       } else if (ev.t === "door") {
         say(ev.how === "key" ? `${name(ev.id)} unlocks the door.` : ev.how === "forced" ? `${name(ev.id)} forces the door: it gives way with a crash.` : `${name(ev.id)} throws a shoulder at the door: it holds.`);
+      } else if (ev.t === "bell_goer") {
+        say(`${name(ev.id)} makes for the alarm bell! Stop it before it rings.`, "bad");
+      } else if (ev.t === "bell") {
+        const bell = draft.pois.find((p) => p.id === ev.poi);
+        if (bell) bell.cleared = true;
+        say(`${name(ev.id)} rings the alarm bell!`, "bad");
       } else if (ev.t === "roused") {
-        // A fight in the open: the rest of the place has heard it and is on its way.
+        // The bell has rung: the rest of the place has heard it and is on its way.
         say(`The alarm is up. The whole place is roused: ${ev.units.length} more ${ev.units.length === 1 ? "is" : "are"} coming.`, "bad");
       } else if (ev.t === "noise") {
         say(next.options.biome === "caves" ? "The noise carries through the tunnels. Something is coming." : "The fight is heard. More of them are coming.", "bad");
@@ -1726,7 +1733,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       // One lost to a pit is not drawn at all.
       units: [
         ...(state.loot ?? []).filter((s) => s.kind === "body" && s.unit && !picture.units.some((u) => u.id === s.id)).map((s) => ({ id: s.id, kind: s.unit!, pos: s.pos, name: s.name, down: true })),
-        ...picture.units.filter((u) => u.side === "enemy" && !u.lost && !state.dark?.includes(u.id)).map((u) => ({ id: u.id, kind: u.kind, pos: u.pos, name: u.name, hp: inFight(u.id) || u.hp < u.maxHp ? u.hp / u.maxHp : undefined, down: u.down, prone: u.conditions.some((c) => c.kind === "prone"), active: u.id === spot, hostile: inFight(u.id), effects: badgesOf(u) })),
+        ...picture.units.filter((u) => u.side === "enemy" && !u.lost && !state.dark?.includes(u.id)).map((u) => ({ id: u.id, kind: u.kind, pos: u.pos, name: u.name, hp: inFight(u.id) || u.hp < u.maxHp ? u.hp / u.maxHp : undefined, down: u.down, prone: u.conditions.some((c) => c.kind === "prone"), active: u.id === spot, hostile: inFight(u.id), effects: [...badgesOf(u), ...(state.encounter?.bell?.goer === u.id && !state.map.pois.some((p) => p.kind === "bell" && p.cleared) ? [{ kind: "bell", color: "#ffd34e", rounds: 0 }] : [])] })),
       ],
       // Lit tiles are a turn's movement; walking freely, nothing is lit.
       freeRoam: !fighting,

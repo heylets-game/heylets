@@ -106,7 +106,7 @@ export function tileCost(t: Tile): number {
  * crew member's hut. `board` and `shop` are its notice board and market stall, and `dealer` is where one stands to
  * deal with whoever keeps a shop, or with the pub's dealer. `door` is the way out of a hut's room.
  */
-export type PoiKind = "waygate" | "cave" | "landing" | "lair" | "shrine" | "cache" | "camp" | "plot" | "board" | "shop" | "ring" | "dice" | "door" | "works" | "pub" | "counter" | "shoals" | "crew" | "tide" | "trader" | "rocks" | "wreck" | "lot" | "site" | "pickup" | "fishing" | "felling" | "quarry" | "apothecary" | "smithy" | "galley" | "lighthouse" | "gate" | "dealer" | "crate" | "glowcap" | "lapidary" | "townchest" | "garden" | "well" | "finishes";
+export type PoiKind = "waygate" | "cave" | "landing" | "lair" | "shrine" | "cache" | "camp" | "plot" | "board" | "shop" | "ring" | "dice" | "door" | "works" | "pub" | "counter" | "shoals" | "crew" | "tide" | "trader" | "rocks" | "wreck" | "lot" | "site" | "pickup" | "fishing" | "felling" | "quarry" | "apothecary" | "smithy" | "galley" | "lighthouse" | "gate" | "dealer" | "crate" | "glowcap" | "lapidary" | "townchest" | "garden" | "well" | "finishes" | "bell";
 
 export interface Poi {
   id: string;
