@@ -406,10 +406,15 @@ const DRAW: Record<DecorKind, (k: Kit, d: HarborDecor) => void> = {
       s.box(TIMBER_DARK, 0.1, 1.5, 0.1, x, 0.06, 0);
       s.box(TIMBER, 0.07, 0.4, 0.07, x * 0.82, 1.2, 0, 0, 0, x > 0 ? 0.7 : -0.7);
     }
-    s.cyl(TIMBER, 0.07, 0.07, 1.1, 0, 1.12, 0, 8, 0, 0, Math.PI / 2);
-    s.cyl(ROPE, 0.085, 0.085, 0.34, 0.06, 1.1, 0, 8, 0, 0, Math.PI / 2);
-    s.box(IRON, 0.03, 0.26, 0.03, 0.72, 1.02, 0);
-    s.box(IRON, 0.16, 0.03, 0.03, 0.78, 1.0, 0);
+    // The windlass: an axle laid across between the posts and through them, the rope wound round its middle, and a
+    // crank on its end outside the right-hand post. (A cylinder stands on its base before it is laid over, so each
+    // is set half its length lower than the height its middle is at.)
+    const AXLE = 1.27;
+    s.cyl(TIMBER, 0.045, 0.045, 1.34, 0, AXLE - 0.67, 0, 8, 0, 0, Math.PI / 2);
+    s.cyl(ROPE, 0.085, 0.085, 0.34, 0.06, AXLE - 0.17, 0, 8, 0, 0, Math.PI / 2);
+    for (const x of [-0.125, 0.245]) s.cyl(TIMBER_DARK, 0.1, 0.1, 0.03, x, AXLE - 0.015, 0, 10, 0, 0, Math.PI / 2);
+    s.box(IRON, 0.025, 0.18, 0.025, 0.68, AXLE - 0.17, 0);
+    s.cyl(TIMBER_DARK, 0.022, 0.022, 0.11, 0.735, AXLE - 0.17 - 0.055, 0, 6, 0, 0, Math.PI / 2);
     // (The coil of rope on the windlass lies with its middle at 1.27, 0.085 round: the rope leaves from under it.)
     k.swings.push({ at: s.at(0.06, 1.19, 0) });
     // The roof: two pitches of shingles and a ridge.
@@ -833,10 +838,16 @@ export function buildTownDressing(map: WorldMap, place: (p: HexPos) => Place): T
     // wall's top 0.5, the rope leaves the windlass at 1.19).
     p.cyl(ROPE, 0.012, 0.012, 0.54, 0, -0.54, 0, 5);
     p.shape(new THREE.TorusGeometry(0.1, 0.011, 4, 10, Math.PI), IRON, 0, -0.64, 0);
-    p.cyl(TIMBER_PALE, 0.11, 0.09, 0.18, 0, -0.82, 0, 8);
-    p.cyl("#2b4a5a", 0.1, 0.1, 0.012, 0, -0.655, 0, 8);
-    p.cyl(IRON, 0.113, 0.106, 0.025, 0, -0.68, 0, 8);
-    p.cyl(IRON, 0.098, 0.094, 0.022, 0, -0.8, 0, 8);
+    // Open at the top: a ring of staves round a bottom, two iron hoops about them, and water inside a little
+    // way down, so it reads as a bucket and not a drum.
+    const STAVES = 11;
+    for (let i = 0; i < STAVES; i++) {
+      const a = (i / STAVES) * Math.PI * 2;
+      p.box(i % 3 === 0 ? TIMBER : TIMBER_PALE, 0.062, 0.18, 0.018, Math.cos(a) * 0.098, -0.82, Math.sin(a) * 0.098, -a + Math.PI / 2);
+    }
+    p.cyl(TIMBER, 0.095, 0.095, 0.015, 0, -0.82, 0, 10);
+    p.cyl("#2b4a5a", 0.088, 0.088, 0.01, 0, -0.71, 0, 10);
+    for (const y of [-0.67, -0.79]) p.shape(new THREE.TorusGeometry(0.109, 0.007, 4, 14), IRON, 0, y, 0, 0, Math.PI / 2);
     return p.mesh(floatMat).geometry;
   })();
   const swings = kit.swings.map((sw, i) => {
