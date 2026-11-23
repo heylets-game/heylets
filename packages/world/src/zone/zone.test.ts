@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { GRID, at, fails, flatBoard, has, must, standEnemy as enemy, standHero, unit } from "../test/zoneBoard";
 import { STARTING_STATS, hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/core";
+import { BEHAVIOURS } from "./behaviours";
 import { ENEMY_ABILITIES } from "./enemyabilities";
 import { ABILITIES, EFFECT_TICK, ENEMIES, HERO_CLASSES, SUNDERED_DEFENCE, WEAPONS, abilitiesFor } from "../content";
 import { CLIMES, type Tile } from "../map";
@@ -163,6 +164,8 @@ describe("the kit", () => {
       expect(a.id, id).toBe(id);
       expect(a.name.length, id).toBeGreaterThan(0);
       expect(abilityStrikes([id], 1)).toHaveLength(1);
+      // Judged by a behaviour there is.
+      expect(BEHAVIOURS[abilityStrikes([id], 1)[0].behaviour], id).toBeDefined();
     }
   });
 

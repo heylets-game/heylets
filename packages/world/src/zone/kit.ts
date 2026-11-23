@@ -6,6 +6,7 @@
 
 import type { StatKey, Stats } from "@gantt-quest/core";
 import { ABILITIES, EFFECT_INFO, ENEMIES, SUNDERED_DEFENCE, type AbilityDef, type EffectKind } from "../content";
+import type { BehaviourId } from "./behaviours";
 import { ENEMY_ABILITIES, type EnemyAbilityDef } from "./enemyabilities";
 import { modsOf } from "./mods";
 import { diceFor, type Dice } from "./rules";
@@ -723,6 +724,8 @@ export interface EnemyStrike {
   bonus: number;
   perfect?: EnemyAbilityDef["perfect"];
   weight: number;
+  /** Which behaviour weighs it up (behaviours.ts BEHAVIOURS). */
+  behaviour: BehaviourId;
   /** Action Points it takes, and the turns it is not ready for after. */
   cost: number;
   cooldown: number;
@@ -757,6 +760,7 @@ export function abilityStrikes(ids: readonly string[], level: number, threat?: n
         bonus: a.toHit + Math.floor((Math.max(1, level) - 1) / 4) + edge,
         perfect: a.perfect,
         weight: a.weight,
+        behaviour: (a.behaviour ?? (burst ? "burst" : "strike")) as BehaviourId,
         cost: a.cost ?? ACTION_AP,
         cooldown: a.cooldown ?? 0,
         kit: { surface: a.surface, push: a.push, chills: a.chills },

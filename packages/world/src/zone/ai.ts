@@ -30,12 +30,13 @@
 // only if it can get no blow in on them this turn.
 
 import { hexDistance, posKey, type HexPos } from "@gantt-quest/core";
+import { behaviourOf } from "./behaviours";
 import { BELL_AP, goesForBell, liveBell, ringBell, somethingToRouse } from "./bell";
 import { apForMove, checkCommon, doCommon, enemyAct, leavesReach, shiftInto, shoveDest, walk, walkAp } from "./combat";
-import { attackContext, defenceOf, has, saveBonus, unseen, type Ctx } from "./engine";
-import { HIGH_REACH, blast, close, elevOf, flies, heldAgainst, inFight, pathIn, reachFrom, sameHex, seesFor, stepCost, strikes, zoneReach, type Reached } from "./geometry";
-import { AP_MAX, COMMON_ACTIONS, ENEMY_BURST, ENEMY_KIT, ITEM_AP, enemyShove, jumpRange, unitStrikes, type EnemyStrike } from "./kit";
-import { diceAverage, hitChance } from "./rules";
+import { has, saveBonus, unseen, type Ctx } from "./engine";
+import { blast, close, elevOf, flies, heldAgainst, inFight, pathIn, sameHex, stepCost, strikes, zoneReach, type Reached } from "./geometry";
+import { AP_MAX, COMMON_ACTIONS, ENEMY_KIT, ITEM_AP, enemyShove, jumpRange, unitStrikes, type EnemyStrike } from "./kit";
+import { hitChance } from "./rules";
 import { HARMFUL } from "./surfaces";
 import type { Budget, Unit, ZoneState } from "./types";
 
@@ -45,43 +46,22 @@ interface Option {
   worth: number;
 }
 
-/** Whether an attack of an enemy's reaches from `pos` to a hero: a blow by hand, by the rules of reach (strikes); a shot, by its range (further from above) and a clear line. */
-export function strikeReaches(state: ZoneState, enemy: Unit, pos: HexPos, attack: EnemyStrike, hero: Unit): boolean {
-  if (attack.range === 1) return strikes(state.map, pos, hero.pos);
-  // The lie of the land is looked up only where it could settle it: height adds up to HIGH_REACH to a range and takes nothing from it.
-  const far = hexDistance(pos, hero.pos);
-  if (far > attack.range + HIGH_REACH) return false;
-  return (far <= attack.range || far <= reachFrom(state.map, pos, hero.pos, attack.range)) && seesFor(state, enemy.side, pos, hero.pos);
-}
+export { strikeReaches } from "./behaviours";
 
-/** The best attack an enemy could make standing on `pos`, and what it is worth, or null if it has none from there. */
+/**
+ * The best ability an enemy could use standing on `pos`, on whom, and what it is worth, or null if it has none to use
+ * from there. Each ability's behaviour (behaviours.ts) says what it is worth; the one the enemy favours (its
+ * `weight`) gets the benefit of a close call.
+ */
 function bestAttack(state: ZoneState, enemy: Unit, pos: HexPos, blows: EnemyStrike[], heroes: Unit[]): Option | null {
-  const there = { ...enemy, pos };
   const heaviest = Math.max(...blows.map((s) => s.weight));
+  const look = { state, enemy };
   let best: Option | null = null;
-  const consider = (attack: EnemyStrike, target: Unit | null, worth: number) => {
-    // An enemy's habits still count: the attack it favours gets the benefit of a close call.
-    const scored = worth * (0.75 + (0.25 * attack.weight) / heaviest);
-    if (!best || scored > best.worth) best = { attack, target, worth: scored };
-  };
   for (const attack of blows) {
-    const average = diceAverage(attack.dice);
-    if (attack.burst) {
-      const caught = heroes.filter((h) => hexDistance(pos, h.pos) <= ENEMY_BURST && seesFor(state, enemy.side, pos, h.pos));
-      // About half save for half: three quarters of the damage, to each one caught.
-      if (caught.length > 0) consider(attack, null, caught.length * average * 0.75);
-      continue;
-    }
-    for (const hero of heroes) {
-      if (!strikeReaches(state, enemy, pos, attack, hero)) continue;
-      const c = attackContext(state, there, hero, { melee: attack.range === 1 });
-      let worth = hitChance(attack.bonus + c.mods, defenceOf(hero, state), c.adv) * average * (has(hero, "guarded") ? 0.5 : 1);
-      // Go for the weak, finish the dying, and rise to a taunt.
-      worth *= 1 + 0.5 * (1 - hero.hp / hero.maxHp);
-      if (average >= hero.hp) worth += 3;
-      if (has(hero, "taunting")) worth *= 3;
-      consider(attack, hero, worth);
-    }
+    const use = behaviourOf(attack).value(look, pos, attack, heroes);
+    if (!use) continue;
+    const scored = use.worth * (0.75 + (0.25 * attack.weight) / heaviest);
+    if (!best || scored > best.worth) best = { attack, target: use.target, worth: scored };
   }
   return best;
 }
@@ -292,7 +272,7 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
       const key = posKey(pos);
       let can = blowAt.get(key);
       if (can === undefined) {
-        can = blows.some((a) => targets.some((h) => (a.burst ? hexDistance(pos, h.pos) <= ENEMY_BURST && seesFor(state, enemy.side, pos, h.pos) : strikeReaches(state, enemy, pos, a, h))));
+        can = blows.some((a) => behaviourOf(a).reaches({ state, enemy }, pos, a, targets));
         blowAt.set(key, can);
       }
       return can;

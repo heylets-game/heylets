@@ -32,6 +32,11 @@ export interface EnemyAbilityDef {
   push?: boolean;
   /** Freezes water under the target. */
   chills?: boolean;
+  /**
+   * How an enemy weighs up using it (behaviours.ts): `strike` for one target, `burst` for everyone round. When not
+   * said, it follows the shape.
+   */
+  behaviour?: string;
   /** How much its user favours it, beside its other abilities: the favourite wins a close call. */
   weight: number;
 }
