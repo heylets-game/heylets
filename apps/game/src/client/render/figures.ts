@@ -4357,6 +4357,14 @@ function lowHat(head: Part, look: Look) {
       head.ball(look.accent, 0.55, 0, 5.5, f.z, 0);
       return;
     }
+    case "watchcap": {
+      // A fisherman's knit cap: snug over the hair and standing a little proud of the crown, its foot turned up
+      // into a thick cuff round the brow.
+      const c = look.hatColor ?? look.accent;
+      head.loft(c, fitted([[4.6, 3.86, 3.56, -0.05], [5.6, 3.8, 3.52, -0.06], [6.8, 3.3, 3.05, -0.1], [7.7, 2.5, 2.3, -0.12], [8.2, 1.3, 1.2, -0.12], [8.35, 0.3, 0.3, -0.12]]), 10);
+      head.loft(tone(c, -0.08), fitted([[3.85, 4.02, 3.72, -0.02], [4.3, 4.14, 3.84, -0.03], [5.25, 4.1, 3.8, -0.05], [5.6, 3.92, 3.62, -0.06]]), 10);
+      return;
+    }
     case "kerchief": {
       // Tied close over the hair, knotted at the back with two tails.
       const c = look.hatColor ?? look.accent;
@@ -5180,6 +5188,11 @@ function drawHat(head: Part, look: Look) {
     head.box(tone(c, -0.08), 7.2, 1.2, 6.6, 0, 5, -0.1);
     head.ball(c, 1.4, 0.8, 8.4, 0);
     head.box(look.accent, 1.1, 1.1, 0.6, 0, 5.8, 3.6);
+  } else if (hat === "watchcap") {
+    const c = look.hatColor ?? look.accent;
+    head.box(c, 7, 2.6, 6.5, 0, 6.2, -0.1);
+    head.box(c, 5.6, 0.9, 5.2, 0, 7.9, -0.1);
+    head.box(tone(c, -0.08), 7.5, 1.3, 7, 0, 4.7, -0.1);
   } else if (hat === "kerchief") {
     const c = look.hatColor ?? look.accent;
     head.box(c, 7, 1.9, 6.5, 0, 5.5, -0.1);

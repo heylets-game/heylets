@@ -2,7 +2,7 @@
 // hero class, NPC or enemy kind. Pure data with no three.js or DOM, so the
 // Worker can import it to validate admin palette overrides.
 
-export const HATS = ["helm", "wizard", "hood", "horns", "leaves", "feather", "tricorn", "circlet", "brim", "turban", "kerchief", "greathelm", "diver", "coral", "lamphelm", "none"] as const;
+export const HATS = ["helm", "wizard", "hood", "horns", "leaves", "feather", "tricorn", "circlet", "brim", "turban", "kerchief", "watchcap", "greathelm", "diver", "coral", "lamphelm", "none"] as const;
 export type Hat = (typeof HATS)[number];
 export const LOOK_WEAPONS = ["sword", "staff", "daggers", "club", "bow", "lute", "orb", "lantern", "scroll", "pack", "basket", "axe_shield", "grimoire", "smith_hammer", "paddle", "cleaver", "dop", "cutlass", "pager_axe", "blunderbuss", "coral_staff", "mace", "maul", "root_staff", "none"] as const;
 export type Weapon = (typeof LOOK_WEAPONS)[number];
@@ -99,8 +99,10 @@ export const LOOKS: Record<string, Look> = {
   // face, a long sea-dark coat edged in tarnished gold, a red sash, barnacles on the shoulders, and a dark,
   // clasped grimoire.
   data_warlock: { skin: "#a3aca4", hair: "#2a2f2c", body: "#1f2e2b", legs: "#1a1f1e", accent: "#b06cff", hat: "tricorn", hatColor: "#1d2624", weapon: "grimoire", coat: true, coatTrim: "#a8863a", sash: "#6b2230", bandana: "#6b2230", glowEyes: "#c48bff", glowOnCast: true, mask: "#2c3a39", boots: "#1d1f1f", barnacles: true },
-  // Traveling salesmen (packages/world/src/salesman.ts): each one easy to tell from the crew at a glance.
-  salesman_curio: { skin: "#f1d3b8", hair: "#1f1a24", body: "#5b2f63", legs: "#2a1838", accent: "#e0b12e", hat: "brim", hatColor: "#2a1f2e", weapon: "lantern", coat: true, coatTrim: "#c9a24a", vest: "#3a1f42", straps: "#4a2a3a", boots: "#2a1f2e" },
+  // Traveling salesmen (packages/world/src/salesman.ts): each one easy to tell from the crew at a glance, and each
+  // dressed for the sea. The curio seller came in on a trading ship: a plum kerchief, a shirt striped in plum, a gold
+  // sash and a lantern to show her wares by.
+  salesman_curio: { skin: "#f1d3b8", hair: "#1f1a24", body: "#e8dfcc", legs: "#2a1838", accent: "#e0b12e", hat: "kerchief", hatColor: "#5b2f63", weapon: "lantern", stripes: "#5b2f63", sash: "#c9a24a", straps: "#4a2a3a", boots: "#2a1f2e" },
   salesman_plans: { skin: "#d9a67c", hair: "#9a9aa2", body: "#e3dccb", legs: "#24323a", accent: "#e8dcc0", hat: "kerchief", hatColor: "#3f6fa8", knotSide: true, weapon: "scroll", vest: "#2f5f73", straps: "#5a3d26", boots: "#3a2c22" },
   salesman_far: { skin: "#b07a52", hair: "#2a1c14", body: "#c96a2a", legs: "#4a2f1e", accent: "#2f8c8a", hat: "turban", hatColor: "#f2e6c8", weapon: "pack", coat: true, coatTrim: "#2f8c8a", sash: "#2f8c8a", boots: "#4a2f1e" },
   salesman_herbs: { skin: "#e3c2a2", hair: "#ececec", body: "#5a6b3a", legs: "#3e4a2a", accent: "#a6d06a", hat: "hood", weapon: "basket", coat: true, coatTrim: "#3a4a2a", sash: "#3d6b2e", teeth: "#a6d06a" },
@@ -113,8 +115,9 @@ export const LOOKS: Record<string, Look> = {
   regular_wen: { skin: "#c9a27c", hair: "#5a3d22", body: "#d8cfb4", legs: "#4a3a26", accent: "#e8dcc0", hat: "none", weapon: "club", bandana: "#5a3d22", sleeveless: true, apron: "#8a6440", boots: "#3a2c22" },
   regular_moss: { skin: "#f1c9a5", hair: "#ececec", body: "#3f6fa8", legs: "#2d357a", accent: "#f2d675", hat: "brim", hatColor: "#d1a83c", weapon: "lantern", coat: true, coatColor: "#d1a83c", coatTrim: "#a8862a", mustache: "bushy", boots: "#2a2420" },
   regular_dacey: { skin: "#b07a52", hair: "#1a1424", body: "#3a3030", legs: "#1f1f1f", accent: "#b9433d", hat: "none", weapon: "pack", bandana: "#b9433d", coat: true, coatColor: "#20242b", coatTrim: "#141820", straps: "#3a2a1c", boots: "#141414" },
-  // The dealer by the pillar in the pub (packages/world/src/pub.ts): a broker in a long coat with a scroll of terms.
-  dealer: { skin: "#e3b48c", hair: "#3a2a20", body: "#e3dccb", legs: "#2a2228", accent: "#e0b12e", hat: "brim", hatColor: "#2a2228", weapon: "scroll", coat: true, coatColor: "#6b1f2a", coatTrim: "#c9a24a", vest: "#3a1418", boots: "#1f1a1c" },
+  // The dealer by the pillar in the pub (packages/world/src/pub.ts): an old first mate who finds work for others now,
+  // in a red knit cap, a striped shirt under a plain navy pea coat, a grey mustache, and his scroll of terms.
+  dealer: { skin: "#e3b48c", hair: "#8a8a90", body: "#e8dfcc", legs: "#2a3040", accent: "#c9a24a", hat: "watchcap", hatColor: "#9a3a2c", weapon: "scroll", coat: true, coatColor: "#26324a", coatTrim: "#1a2233", stripes: "#26324a", mustache: "bushy", boots: "#2a2220" },
   // The keepers of the smithy and the apothecary (packages/world/src/keepers.ts): the smith bare-armed in a leather apron
   // with her forging hammer, a red kerchief knotted at the side keeping her hair out of the fire; the apothecary in a long green coat and hood
   // (a hood, not a wide hat, so the brim does not hide his stirring), with the paddle he stirs his cauldron with.
