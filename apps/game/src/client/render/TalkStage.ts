@@ -51,6 +51,8 @@ export class TalkStage implements WorldMinigame {
   private hero = new THREE.Vector3();
   private them = new THREE.Vector3();
   /** How far right of the middle of the screen to keep them (a share of its width), and how far it has got: clear of a panel down the left. */
+  /** Who is left out of the shot for standing in the way of it, as a list for comparing. */
+  private inWay = "";
   private asideGoal = 0;
   private aside = 0;
 
@@ -83,7 +85,17 @@ export class TalkStage implements WorldMinigame {
       if (this.leaving && this.inT <= 0) setTimeout(() => this.finish(), 0);
       this.aside += (this.asideGoal - this.aside) * (this.still ? 1 : 1 - Math.exp(-dt * 5));
     }
-    return { ...this.shot(aspect), blend: smoother(this.inT) };
+    const shot = this.shot(aspect);
+    // Anyone who wanders into the shot, between the eye and their face, is left out of it while they are in the way.
+    if (this.settled && !this.leaving) {
+      const inWay = this.world.unitsBetween(shot.eye, shot.look, 0.75, [this.you, this.npc]);
+      const key = inWay.join(",");
+      if (key !== this.inWay) {
+        this.inWay = key;
+        this.world.setStageHidden(inWay);
+      }
+    }
+    return { ...shot, blend: smoother(this.inT) };
   }
 
   /** Where the eye is and what it looks at: their face, from just behind your hero and off to one shoulder. */
@@ -109,11 +121,10 @@ export class TalkStage implements WorldMinigame {
     // Narrower the further back, so their head is the same size on the screen however far apart the two stand.
     const fov = THREE.MathUtils.clamp(2 * Math.atan((Math.tan(15 * DEG) * NEAR) / reach) / DEG, 20, 34);
     if (Math.abs(this.aside) > 0.001) {
-      // Slid sideways, eye and all, so they stand that far right of the middle: the view's half width there, times two, times the share.
+      // The view turned (the eye stays put, so your hero keeps to their shoulder of it) until they stand that far
+      // right of the middle: looking that much of the view's width, at their distance, to their left.
       const across = 2 * reach * Math.tan((fov * DEG) / 2) * aspect * this.aside;
-      const left = new THREE.Vector3(-Math.cos(bearing), 0, Math.sin(bearing)).multiplyScalar(across);
-      eye.add(left);
-      look.add(left);
+      look.add(new THREE.Vector3(-Math.cos(bearing), 0, Math.sin(bearing)).multiplyScalar(across));
     }
     return { eye, look, fov };
   }
@@ -161,6 +172,9 @@ export class TalkStage implements WorldMinigame {
   leave() {
     if (this.leaving) return;
     this.leaving = true;
+    // Seen again as the view swings back out.
+    if (this.inWay) this.world.setStageHidden([]);
+    this.inWay = "";
     this.world.setTalking(this.npc, false);
     // Never started (your hero had not stopped yet): nothing to swing back from.
     if (!this.settled) setTimeout(() => this.finish(), 0);

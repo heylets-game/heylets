@@ -225,6 +225,8 @@ export interface RenderHero {
   torch?: boolean;
   /** Conditions on them, badged over their head. */
   effects?: Badge[];
+  /** How fast they walk, as a share of a hero's pace: a townsperson out for a stroll walks slower. */
+  pace?: number;
 }
 
 /** The first word of a name, for a plate: "Ewan Driftwood" is "Ewan". */
@@ -535,6 +537,8 @@ const noise = (q: number, r: number, salt: number) => {
 };
 
 interface Unit {
+  /** How fast it walks, as a share of a hero's pace (see RenderHero.pace). */
+  pace?: number;
   /** Knocked across the ground (a shove): moved this many times faster than a walk, without steps, until it arrives. */
   rush?: number;
   /** Going into a pit (see sink): until the render clock passes this, nothing else lays it out or clears it away. */
@@ -659,6 +663,8 @@ const MAX_STUCK_ARROWS = 6;
 
 interface Want {
   kind: string;
+  /** How fast it walks, as a share of a hero's pace (see RenderHero.pace). */
+  pace?: number;
   /** The conditions on it, shown as a row of badges over its head until each wears off. */
   effects?: Badge[];
   /** Draw the unit wearing this instead of its kind's stock look. */
@@ -2003,6 +2009,26 @@ export class WorldRenderer {
   /** Where a unit stands in the world (its feet, where it is going to stand once a walk is done), or null if it is not here. */
   unitSpot(id: string): THREE.Vector3 | null {
     return this.units.get(id)?.goal.clone() ?? null;
+  }
+
+  /**
+   * The units standing in the way of a view from one point to another (within `radius` of the line between them,
+   * on the ground, and not right at either end), but those in `except`: for a close view to leave out.
+   */
+  unitsBetween(from: THREE.Vector3, to: THREE.Vector3, radius: number, except: string[]): string[] {
+    const dx = to.x - from.x;
+    const dz = to.z - from.z;
+    const len2 = dx * dx + dz * dz;
+    if (len2 < 1e-6) return [];
+    const out: string[] = [];
+    for (const [id, unit] of this.units) {
+      if (except.includes(id)) continue;
+      const p = unit.root.position;
+      const t = ((p.x - from.x) * dx + (p.z - from.z) * dz) / len2;
+      if (t < 0.02 || t > 0.92) continue;
+      if (Math.hypot(from.x + dx * t - p.x, from.z + dz * t - p.z) < radius) out.push(id);
+    }
+    return out;
   }
 
   /** A unit speaking, or done: a townsperson's mouth moves while it speaks. Never with reduced motion asked for. */
@@ -4201,7 +4227,7 @@ export class WorldRenderer {
       // A plate shows a first name only: full names run long over a crowd.
       const full = h.label ?? (plate ? h.name : undefined);
       const label = plate && full ? firstName(full) : full;
-      want.set(h.id, { kind: h.classId, outfit: h.outfit, pos, size: 1.5, label, plate: label ? plate : undefined, stack: i, ring: colorOf(h.id), through: colorOf(h.id), pulse: !!h.active, asleep: h.asleep, rod: h.rod, boat: h.boat, down: h.down, falls: true, prone: h.prone, effects: h.effects, seat: seat?.top, unseen: h.unseen });
+      want.set(h.id, { kind: h.classId, pace: h.pace, outfit: h.outfit, pos, size: 1.5, label, plate: label ? plate : undefined, stack: i, ring: colorOf(h.id), through: colorOf(h.id), pulse: !!h.active, asleep: h.asleep, rod: h.rod, boat: h.boat, down: h.down, falls: true, prone: h.prone, effects: h.effects, seat: seat?.top, unseen: h.unseen });
     }
     // A zone's enemies: beside whoever else is on their hex. The fallen lie in the middle of theirs.
     for (const u of state.units ?? []) {
@@ -4263,6 +4289,7 @@ export class WorldRenderer {
         this.units.set(id, unit);
       }
       unit.goal.copy(w.pos);
+      unit.pace = w.pace;
       unit.seated = w.seat !== undefined;
       if (w.seat !== undefined) unit.seatTop = w.seat;
       if (w.asleep && !unit.asleep) unit.nextZ = this.clock + 0.4;
@@ -5374,7 +5401,7 @@ export class WorldRenderer {
           if (acted) this.pending.push({ at: Math.max(this.clock, land - LEAP.thud), run: () => sounds.zone("jump", spot) });
         }
         const leap = unit.leap;
-        const step = 4.2 * (unit.rush ?? 1) * dt;
+        const step = 4.2 * (unit.rush ?? unit.pace ?? 1) * dt;
         if (leap) {
           const k = (this.clock - leap.at) / leap.air;
           if (k >= 1) {
