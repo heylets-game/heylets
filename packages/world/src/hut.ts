@@ -4,7 +4,7 @@
 // furnishings catalogue and hut sizes.
 // Rules that act on a hut (room layout, placement, crafting) build on it.
 
-export const RESOURCE_KINDS = ["wood", "stone", "iron", "copper", "fur", "bone", "herbs", "mushrooms", "slime", "gem"] as const;
+export const RESOURCE_KINDS = ["wood", "stone", "iron", "copper", "fur", "bone", "herbs", "mushrooms", "slime", "gem", "seeds", "bonemeal"] as const;
 export type ResourceKind = (typeof RESOURCE_KINDS)[number];
 export type Resources = Partial<Record<ResourceKind, number>>;
 
@@ -19,6 +19,8 @@ export const RESOURCE_LABEL: Record<ResourceKind, string> = {
   mushrooms: "Mushrooms",
   slime: "Slime",
   gem: "Gems",
+  seeds: "Herb Seeds",
+  bonemeal: "Bonemeal",
 };
 
 /** True if `have` covers every amount in `cost`. */

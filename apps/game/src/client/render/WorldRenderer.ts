@@ -49,6 +49,7 @@ import { LAMP_TABLES, TableLamps } from "./tableLamps";
 import { LID_OPEN, chestMouth, crateMiddle, restingLid, sharedShape } from "./caveProps";
 import { PLACE_MODELS } from "./places";
 import { placeKit } from "./places/kit";
+import { bedsSig } from "./places/garden";
 import { SQRT3, UP, hexToWorld, placeOf, yawOf } from "./places/placing";
 import { nearWater, openEar, sounds } from "../audio/gameSounds";
 import type { AttackStyle, Fighter } from "../audio/names";
@@ -2695,7 +2696,8 @@ export class WorldRenderer {
       // Nothing grows or lies about where a place stands, under a building, or in a thicket or a boulder heap.
       // The Harbor's gaps of rubble have their boulders from the woods, not the ambience's hill rocks.
       // (Grass does grow round the foot of a lone oak.)
-      (t) => poiKeys.has(key(t)) || !!t.built || !!t.prop || (!!t.blocker && t.blocker !== "oak" && !state.far) || (this.sodden && t.biome === "hills"),
+      // Nor on a lawn kept short (round a hut's door, where its garden is).
+      (t) => poiKeys.has(key(t)) || !!t.built || !!t.prop || t.grass === "short" || (!!t.blocker && t.blocker !== "oak" && !state.far) || (this.sodden && t.biome === "hills"),
       (t) => ({ ...hexToWorld(t), y: tileTop(t) }),
       !!state.far,
     );
@@ -3056,6 +3058,18 @@ export class WorldRenderer {
     const v = this.standAt(pos);
     v.y += lift;
     v.project(this.camera);
+    if (v.z < -1 || v.z > 1) return null;
+    return { x: ((v.x + 1) / 2) * this.container.clientWidth, y: ((1 - v.y) / 2) * this.container.clientHeight, on: Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1 };
+  }
+
+  /** The pointer's look over the canvas, for a minigame: a hand over something to press, or the usual arrow (""). */
+  setCursor(cursor: "" | "pointer") {
+    this.renderer.domElement.style.cursor = cursor;
+  }
+
+  /** Where a point in the world is on the screen, in container pixels (`on`: inside the view). Null when it is behind the camera. */
+  screenOfPoint(p: THREE.Vector3): { x: number; y: number; on: boolean } | null {
+    const v = p.clone().project(this.camera);
     if (v.z < -1 || v.z > 1) return null;
     return { x: ((v.x + 1) / 2) * this.container.clientWidth, y: ((1 - v.y) / 2) * this.container.clientHeight, on: Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1 };
   }
@@ -3431,7 +3445,7 @@ export class WorldRenderer {
   // ---------- points of interest ----------
 
   private buildPois(state: RenderState) {
-    const sig = state.map.pois.map((p) => `${p.id}:${p.cleared}:${p.tier ?? ""}:${p.fill ?? ""}:${p.hp ?? ""}`).join("|");
+    const sig = state.map.pois.map((p) => `${p.id}:${p.cleared}:${p.tier ?? ""}:${p.fill ?? ""}:${p.hp ?? ""}:${bedsSig(p.beds)}`).join("|");
     if (sig === this.poiSig) return;
     this.poiSig = sig;
     // The old models' shapes are to go with them: the renderer holds a shape's buffers until told it is done with.

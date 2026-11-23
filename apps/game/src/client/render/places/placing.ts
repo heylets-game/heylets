@@ -37,6 +37,9 @@ export const PLACE: Partial<Record<Poi["kind"], { scale: number; back: number; t
   smithy: { scale: 2, back: 1.7 },
   galley: { scale: 2, back: 1.7 },
   plot: { scale: 1.7, back: 1.4 },
+  // A hut's herb garden is laid out in a corner of its doorstep (its facing is that corner): a hex's corner is a
+  // hex's side long from its middle.
+  garden: { scale: 1, back: 1 },
   lot: { scale: 2, back: 1.6 },
   site: { scale: 2, back: 1.6 },
   fishing: { scale: 1.6, back: 0.8 },

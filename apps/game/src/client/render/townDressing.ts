@@ -124,6 +124,8 @@ interface Kit {
   fires: { at: THREE.Vector3; size: number }[];
   /** Pieces that hang in the air and bob: where each rests, and what it is. */
   floats: { at: THREE.Vector3; kind: "capital" | "drum"; turn: number; scale: number }[];
+  /** Buckets hung on a rope (the well's): where the rope is made fast, which they swing from in the breeze. */
+  swings: { at: THREE.Vector3 }[];
 }
 
 /** A ship's lantern on a bracket: glass that glows, caged in iron, under a cap. Its middle at (x, y, z). */
@@ -361,36 +363,6 @@ const DRAW: Record<DecorKind, (k: Kit, d: HarborDecor) => void> = {
     }
     for (const side of [-1, 1]) s.cyl(TIMBER_DARK, 0.04, 0.05, 1.5, side * 0.866, -0.85, 0.5, 6);
   },
-  garden(k, d) {
-    // A hut's own patch of garden: a bed of turned earth with rows of greens and a few flowers, a short run of
-    // pickets along two sides of it, and something left out (a pail, a spade stuck in the ground).
-    const s = k.solid;
-    const n = (i: number) => hash(d.at.q * 5 + i, d.at.r * 3, 90);
-    s.box("#4a3a28", 0.62, 0.05, 0.44, 0, 0, 0);
-    const bloom = ["#e8c14a", "#d6583f", "#e9e3cf", "#b06fd0", "#e58a9c"];
-    for (let row = 0; row < 3; row++) {
-      for (let i = 0; i < 5; i++) {
-        const x = -0.24 + i * 0.12, z = -0.14 + row * 0.14;
-        const h = 0.07 + n(row * 5 + i) * 0.09;
-        s.cone(row === 1 ? "#5f9a45" : "#4f8a3f", 0.045, h, x, 0.05, z, 4, i);
-        if (row === 2 && n(40 + i) < 0.6) s.blob(bloom[Math.floor(n(50 + i) * 4.99)], 0.03, 0.03, 0.03, x, 0.07 + h, z);
-      }
-    }
-    for (let i = 0; i < 6; i++) {
-      s.box(i % 2 ? TIMBER_PALE : "#a98a5e", 0.05, 0.3 + n(60 + i) * 0.04, 0.02, -0.3 + i * 0.12, 0, -0.26);
-      s.cone(TIMBER_PALE, 0.03, 0.04, -0.3 + i * 0.12, 0.3, -0.26, 4, Math.PI / 4);
-    }
-    s.box(TIMBER, 0.68, 0.025, 0.02, 0, 0.17, -0.275);
-    for (let i = 0; i < 4; i++) s.box(i % 2 ? "#a98a5e" : TIMBER_PALE, 0.02, 0.3, 0.05, -0.35, 0, -0.2 + i * 0.12);
-    s.box(TIMBER, 0.02, 0.025, 0.44, -0.365, 0.17, -0.02);
-    if (n(70) < 0.5) {
-      s.cyl(TIMBER_PALE, 0.07, 0.055, 0.12, 0.4, 0, 0.14, 8);
-      s.cyl(IRON, 0.072, 0.07, 0.02, 0.4, 0.08, 0.14, 8);
-    } else {
-      s.box(TIMBER_DARK, 0.02, 0.42, 0.02, 0.4, 0.04, 0.1, 0, 0.12);
-      s.box(IRON, 0.08, 0.1, 0.012, 0.4, 0, 0.09, 0, 0.12);
-    }
-  },
   rack(k) {
     // A rack of split fish drying in the wind.
     const s = k.solid;
@@ -418,7 +390,8 @@ const DRAW: Record<DecorKind, (k: Kit, d: HarborDecor) => void> = {
   },
   well(k) {
     // The town well: a round wall of dressed stone, dark water in it, and over it a little shingled roof on two
-    // posts with the windlass between them, its rope down to a bucket on the rim. A lantern hangs under the eaves.
+    // posts with the windlass between them, its rope down to a bucket hanging in the well (drawn apart, below, so it
+    // can swing in the breeze). A lantern hangs under the eaves.
     const s = k.solid;
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * Math.PI * 2;
@@ -433,20 +406,23 @@ const DRAW: Record<DecorKind, (k: Kit, d: HarborDecor) => void> = {
       s.box(TIMBER_DARK, 0.1, 1.5, 0.1, x, 0.06, 0);
       s.box(TIMBER, 0.07, 0.4, 0.07, x * 0.82, 1.2, 0, 0, 0, x > 0 ? 0.7 : -0.7);
     }
-    s.cyl(TIMBER, 0.07, 0.07, 1.1, 0, 1.12, 0, 8, 0, 0, Math.PI / 2);
-    s.cyl(ROPE, 0.085, 0.085, 0.34, 0.06, 1.1, 0, 8, 0, 0, Math.PI / 2);
-    s.box(IRON, 0.03, 0.26, 0.03, 0.72, 1.02, 0);
-    s.box(IRON, 0.16, 0.03, 0.03, 0.78, 1.0, 0);
-    s.box(ROPE, 0.02, 0.5, 0.02, 0.12, 0.68, 0.3, 0, 0.56);
+    // The windlass: an axle laid across between the posts and through them, the rope wound round its middle, and a
+    // crank on its end outside the right-hand post. (A cylinder stands on its base before it is laid over, so each
+    // is set half its length lower than the height its middle is at.)
+    const AXLE = 1.27;
+    s.cyl(TIMBER, 0.045, 0.045, 1.34, 0, AXLE - 0.67, 0, 8, 0, 0, Math.PI / 2);
+    s.cyl(ROPE, 0.085, 0.085, 0.34, 0.06, AXLE - 0.17, 0, 8, 0, 0, Math.PI / 2);
+    for (const x of [-0.125, 0.245]) s.cyl(TIMBER_DARK, 0.1, 0.1, 0.03, x, AXLE - 0.015, 0, 10, 0, 0, Math.PI / 2);
+    s.box(IRON, 0.025, 0.18, 0.025, 0.68, AXLE - 0.17, 0);
+    s.cyl(TIMBER_DARK, 0.022, 0.022, 0.11, 0.735, AXLE - 0.17 - 0.055, 0, 6, 0, 0, Math.PI / 2);
+    // (The coil of rope on the windlass lies with its middle at 1.27, 0.085 round: the rope leaves from under it.)
+    k.swings.push({ at: s.at(0.06, 1.19, 0) });
     // The roof: two pitches of shingles and a ridge.
     for (const side of [1, -1]) {
       for (let course = 0; course < 3; course++) s.box(course % 2 ? "#7a4a36" : "#8a5540", 1.56 - course * 0.03, 0.04, 0.24, 0, 1.92 - course * 0.13, side * (0.1 + course * 0.2), 0, side * 0.6);
     }
     s.box("#5c3626", 1.6, 0.05, 0.08, 0, 1.97, 0);
     s.box(TIMBER_DARK, 1.36, 0.07, 0.07, 0, 1.52, 0);
-    // The bucket on the rim, banded.
-    s.cyl(TIMBER_PALE, 0.11, 0.09, 0.18, 0.18, 0.5, 0.56, 8);
-    s.cyl(IRON, 0.112, 0.105, 0.025, 0.18, 0.62, 0.56, 8);
     lantern(k, -0.3, 1.4, 0.1, 1.1);
     s.box(IRON, 0.014, 0.1, 0.014, -0.3, 1.5, 0.1);
   },
@@ -653,7 +629,7 @@ function spotOf(d: HarborDecor, place: (p: HexPos) => Place): Place & { turn: nu
  */
 export function buildTownDressing(map: WorldMap, place: (p: HexPos) => Place): TownDressing {
   const group = new THREE.Group();
-  const kit: Kit = { solid: new Paint(), warm: new Paint(), cool: new Paint(), glows: [], fires: [], floats: [] };
+  const kit: Kit = { solid: new Paint(), warm: new Paint(), cool: new Paint(), glows: [], fires: [], floats: [], swings: [] };
   const spots: { x: number; z: number }[] = [];
   const key = (p: HexPos) => `${p.q},${p.r}`;
   const next = (p: HexPos, side: number): HexPos => ({ q: p.q + HARBOR_SIDES[side].q, r: p.r + HARBOR_SIDES[side].r });
@@ -853,6 +829,36 @@ export function buildTownDressing(map: WorldMap, place: (p: HexPos) => Place): T
       return p.mesh(floatMat).geometry;
     })(),
   };
+  // ---- the well's bucket, on its rope down from the windlass into the shaft: a mesh of its own, to swing ----
+  const bucketShape = (() => {
+    const p = new Paint();
+    // The rope, from the windlass down to the handle; the handle arched over the bucket; the bucket, banded in
+    // iron, with water in it.
+    // It hangs in the shaft clear of the water, its rim just showing over the wall (the water is 0.34 up, the
+    // wall's top 0.5, the rope leaves the windlass at 1.19).
+    p.cyl(ROPE, 0.012, 0.012, 0.54, 0, -0.54, 0, 5);
+    p.shape(new THREE.TorusGeometry(0.1, 0.011, 4, 10, Math.PI), IRON, 0, -0.64, 0);
+    // Open at the top: a ring of staves round a bottom, two iron hoops about them, and water inside a little
+    // way down, so it reads as a bucket and not a drum.
+    const STAVES = 11;
+    for (let i = 0; i < STAVES; i++) {
+      const a = (i / STAVES) * Math.PI * 2;
+      p.box(i % 3 === 0 ? TIMBER : TIMBER_PALE, 0.062, 0.18, 0.018, Math.cos(a) * 0.098, -0.82, Math.sin(a) * 0.098, -a + Math.PI / 2);
+    }
+    p.cyl(TIMBER, 0.095, 0.095, 0.015, 0, -0.82, 0, 10);
+    p.cyl("#2b4a5a", 0.088, 0.088, 0.01, 0, -0.71, 0, 10);
+    for (const y of [-0.67, -0.79]) p.shape(new THREE.TorusGeometry(0.109, 0.007, 4, 14), IRON, 0, y, 0, 0, Math.PI / 2);
+    return p.mesh(floatMat).geometry;
+  })();
+  const swings = kit.swings.map((sw, i) => {
+    const mesh = new THREE.Mesh(bucketShape, floatMat);
+    mesh.castShadow = true;
+    const pivot = new THREE.Group();
+    pivot.position.copy(sw.at);
+    pivot.add(mesh);
+    group.add(pivot);
+    return { pivot, phase: i * 2.1 + 0.4 };
+  });
   const floats = kit.floats.map((f, i) => {
     const mesh = new THREE.Mesh(shapes[f.kind], floatMat);
     mesh.position.copy(f.at);
@@ -893,6 +899,8 @@ export function buildTownDressing(map: WorldMap, place: (p: HexPos) => Place): T
         f.mesh.position.y = f.at.y + Math.sin(t * 0.7 + f.phase) * 0.07;
         f.mesh.rotation.set(Math.sin(t * 0.4 + f.phase) * 0.07, f.turn + t * (f.kind === "drum" ? 0.16 : 0.06), Math.sin(t * 0.33 + f.phase * 2) * 0.07);
       }
+      // The well's bucket sways on its rope, and turns a little this way and that.
+      for (const w of swings) w.pivot.rotation.set(Math.sin(t * 0.9 + w.phase) * 0.05, Math.sin(t * 0.37 + w.phase) * 0.35, Math.sin(t * 0.71 + w.phase * 1.3) * 0.045);
       motes?.tick(t);
       // The boats ride the swell: up and down a hand's breadth, rolling and nodding a little, each in her own time.
       for (const b of boats) {
@@ -909,6 +917,7 @@ export function buildTownDressing(map: WorldMap, place: (p: HexPos) => Place): T
       });
       shapes.capital.dispose();
       shapes.drum.dispose();
+      bucketShape.dispose();
       motes?.dispose();
       group.clear();
     },
@@ -924,7 +933,7 @@ export function buildTownDressing(map: WorldMap, place: (p: HexPos) => Place): T
  * to the model, and the lights in it.
  */
 export function grandCaveFront(face: number): { group: THREE.Group; glows: BuildingGlow[] } {
-  const kit: Kit = { solid: new Paint(), warm: new Paint(), cool: new Paint(), glows: [], fires: [], floats: [] };
+  const kit: Kit = { solid: new Paint(), warm: new Paint(), cool: new Paint(), glows: [], fires: [], floats: [], swings: [] };
   const s = kit.solid;
   const ROCK = "#3d4048";
   const ROCK_PALE = "#565a63";

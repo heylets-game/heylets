@@ -2,7 +2,7 @@
 // in its Harbor is shown (who is in it and where, its works, the maps it has
 // open).
 
-import { atlasNodeById, type HarborBoard } from "@gantt-quest/world";
+import { atlasNodeById, type GardenBed, type HarborBoard } from "@gantt-quest/world";
 import { crewWorks } from "../projects";
 import { crewPresence } from "../zones";
 import { parseBin } from "./plots";
@@ -70,6 +70,8 @@ export async function leaveCrew(db: D1Database, playerId: string): Promise<void>
   await db.batch([
     db.prepare("DELETE FROM crew_members WHERE player_id = ?").bind(playerId),
     db.prepare("UPDATE huts SET plot = NULL WHERE player_id = ?").bind(playerId),
+    // The garden was by the hut's door on that plot: it goes with it.
+    db.prepare("DELETE FROM garden_beds WHERE player_id = ?").bind(playerId),
   ]);
 }
 
@@ -79,7 +81,7 @@ const OPEN_MAP_MS = 12 * 60 * 60_000;
 /** What everyone in a Harbor is told about its crew: who is in it and where, its works and the maps it has open. */
 export async function harborBoard(db: D1Database, crewId: string): Promise<HarborBoard> {
   // None of these needs another's answer, so they are all asked for together.
-  const [works, members, zoneOf, open] = await Promise.all([
+  const [works, members, zoneOf, open, gardens] = await Promise.all([
     crewWorks(db, crewId),
     db
       .prepare(
@@ -98,10 +100,26 @@ export async function harborBoard(db: D1Database, crewId: string): Promise<Harbo
       .prepare("SELECT code, node FROM zones WHERE kind = 'atlas' AND crew_id = ?1 AND status != 'cleared' AND updated_at > ?2 ORDER BY updated_at DESC LIMIT 6")
       .bind(crewId, now() - OPEN_MAP_MS)
       .all<{ code: string; node: string | null }>(),
+    // What is growing in each member's herb garden, by their hut's door.
+    db
+      .prepare("SELECT g.player_id, g.bed, g.planted_at, g.ready_at, g.watered_by, g.fed_by FROM garden_beds g JOIN crew_members m ON m.player_id = g.player_id WHERE m.crew_id = ? ORDER BY g.bed")
+      .bind(crewId)
+      .all<{ player_id: string; bed: number; planted_at: number; ready_at: number; watered_by: string | null; fed_by: string | null }>(),
   ]);
+  const gardenOf = new Map<string, GardenBed[]>();
+  for (const g of gardens.results) {
+    const bed: GardenBed = { bed: g.bed, plantedAt: g.planted_at, readyAt: g.ready_at, ...(g.watered_by ? { wateredBy: g.watered_by } : {}), ...(g.fed_by ? { fedBy: g.fed_by } : {}) };
+    gardenOf.set(g.player_id, [...(gardenOf.get(g.player_id) ?? []), bed]);
+  }
 
   // Members whose shack is not up yet carry what is in its bin, so the site can be drawn filling up.
-  const roster = members.results.map(({ bin, ...m }) => ({ ...m, ...(m.plot !== null && bin !== null ? { bin: parseBin(bin) } : {}), ...(zoneOf.has(m.id) ? { zone: zoneOf.get(m.id) } : {}) }));
+  // Members whose shack stands carry what grows in their garden (an empty list for a bare one).
+  const roster = members.results.map(({ bin, ...m }) => ({
+    ...m,
+    ...(m.plot !== null && bin !== null ? { bin: parseBin(bin) } : {}),
+    ...(m.plot !== null && bin === null ? { garden: gardenOf.get(m.id) ?? [] } : {}),
+    ...(zoneOf.has(m.id) ? { zone: zoneOf.get(m.id) } : {}),
+  }));
   const maps = open.results.map((z) => ({ code: z.code, node: z.node ?? "", place: (z.node ? atlasNodeById(crewId, z.node)?.name : null) ?? "a landfall" }));
   return { members: roster, works,...(maps.length > 0 ? { maps } : {}) };
 }
