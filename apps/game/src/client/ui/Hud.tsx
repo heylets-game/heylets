@@ -190,14 +190,18 @@ export function HudBar({ me, place, children, hp, meter, pips = [], chips, slots
 
   // How much of the bottom of the screen the bar takes (its rack and the pips over it, not the "here" strip), as
   // --hud-h on the page: whatever a view floats over the bottom (a minigame's controls) sits clear above it.
+  // --hud-all-h is the same with the "here" strip counted in: what must clear that as well (the talk, on a phone).
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = root.current;
     if (!el) return;
     const measure = () => {
-      const tops = [...el.children].filter((k) => !k.classList.contains("hud-here")).map((k) => k.getBoundingClientRect().top);
+      const shown = [...el.children].filter((k) => k.getBoundingClientRect().height > 0);
+      const tops = shown.filter((k) => !k.classList.contains("hud-here")).map((k) => k.getBoundingClientRect().top);
       if (tops.length === 0) return;
+      const all = shown.map((k) => k.getBoundingClientRect().top);
       document.documentElement.style.setProperty("--hud-h", `${Math.max(0, Math.round(innerHeight - Math.min(...tops)))}px`);
+      document.documentElement.style.setProperty("--hud-all-h", `${Math.max(0, Math.round(innerHeight - Math.min(...all)))}px`);
     };
     measure();
     const watch = new ResizeObserver(measure);
@@ -207,6 +211,7 @@ export function HudBar({ me, place, children, hp, meter, pips = [], chips, slots
       watch.disconnect();
       removeEventListener("resize", measure);
       document.documentElement.style.removeProperty("--hud-h");
+      document.documentElement.style.removeProperty("--hud-all-h");
     };
   }, [c === null]);
 

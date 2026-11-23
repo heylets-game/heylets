@@ -117,6 +117,14 @@
 .atlas-corner { position: absolute; top: 44px; right: 56px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; pointer-events: auto; }
 .atlas-reckoning.bad { color: #ffb3a8; }
 
+/* A short screen (a phone on its side): the panel of the place picked does not follow it about, where it would
+   run under the buttons in the corner and off the bottom, but keeps to the left edge, as tall as the screen
+   allows, and scrolls. What a stone carries stands out to its right. */
+@media (max-height: 520px) and (min-width: 761px) {
+  .atlas-panel-at { transform: translate(8px, 8px) !important; }
+  .atlas-panel { max-height: calc(100dvh / var(--ui-z, 1) - 16px); overflow-y: auto; overscroll-behavior: contain; }
+  .atlas-panel-at.left .atlas-stone-card { left: calc(100% + 8px); right: auto; }
+}
 /* A narrow screen: the title to one side, and what a stone carries under the panel, not beside it. */
 @media (max-width: 760px) {
   .atlas-close { right: 8px; }

@@ -118,6 +118,16 @@
 .bag-card { position: absolute; z-index: 7; right: calc(100% + 50px); top: 30px; width: 300px; max-height: calc(100% - 60px); overflow-y: auto; padding: 10px 12px; pointer-events: none; }
 .mat-detail { display: flex; flex-direction: column; gap: 8px; }
 .mat-detail p { margin: 0; }
+/* The bag's worn gear and pack, under its top row. Where the bag has less height than these need (a short
+   window, a phone on its side) the pack's own grid shrinks first, and then this scrolls. */
+.bag-body { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; overflow: hidden auto; overscroll-behavior: contain; }
+/* A short screen (a phone on its side): the bag takes the full height, over the bottom bar, and the whole pack
+   scrolls up from under what is worn. */
+@media (max-height: 520px) {
+  .run:has(> .hud) .overlay.bag-overlay, .overlay.bag-overlay { padding-top: 34px; padding-bottom: 10px; }
+  .overlay .bag.panel { padding: 18px 10px 10px; }
+  .bag-body > .pack-wrap { flex: none; max-height: none; }
+}
 @media (max-width: 760px) {
   .overlay.bag-overlay { padding: 34px 14px 14px; }
   /* Its squares (--u, set by InventoryScreen) shrink until the pack fits across the screen. */
