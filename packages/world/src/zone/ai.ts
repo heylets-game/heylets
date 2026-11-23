@@ -40,7 +40,7 @@ import { BELL_AP, goesForBell, liveBell, ringBell, somethingToRouse } from "./be
 import { apForMove, checkCommon, doCommon, enemyAct, leavesReach, shiftInto, shoveDest, walk, walkAp } from "./combat";
 import { has, saveBonus, unseen, type Ctx } from "./engine";
 import { blast, close, elevOf, flies, heldAgainst, inFight, pathIn, sameHex, stepCost, strikes, zoneReach, type Reached } from "./geometry";
-import { AP_MAX, COMMON_ACTIONS, ENEMY_KIT, ITEM_AP, enemyShove, jumpRange, mindOf, unitStrikes, type EnemyStrike, type Mind } from "./kit";
+import { AP_MAX, COMMON_ACTIONS, ENEMY_KIT, enemyShove, jumpRange, mindOf, unitStrikes, type EnemyStrike, type Mind } from "./kit";
 import { hitChance } from "./rules";
 import { HARMFUL } from "./surfaces";
 import type { Budget, Unit, ZoneState } from "./types";
@@ -56,10 +56,9 @@ export { strikeReaches } from "./behaviours";
 /**
  * The best ability an enemy could use standing on `pos`, on whom, and what it is worth, or null if it has none to use
  * from there. Each ability's behaviour (behaviours.ts) says what it is worth; the one the enemy favours (its
- * `weight`) gets the benefit of a close call.
+ * `weight`, against the `heaviest` of all it has) gets the benefit of a close call.
  */
-function bestAttack(state: ZoneState, enemy: Unit, pos: HexPos, blows: EnemyStrike[], heroes: Unit[]): Option | null {
-  const heaviest = Math.max(...blows.map((s) => s.weight));
+function bestAttack(state: ZoneState, enemy: Unit, pos: HexPos, blows: EnemyStrike[], heroes: Unit[], heaviest = Math.max(...blows.map((s) => s.weight))): Option | null {
   const look = { state, enemy, mind: mindOf(enemy.kind) };
   let best: Option | null = null;
   for (const attack of blows) {
@@ -184,12 +183,20 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
    */
   const chooseAmong = (targets: Unit[], strike: boolean): Plan | null => {
     const nearest = (pos: HexPos) => Math.min(...targets.map((h) => hexDistance(pos, h.pos)));
-    const movement = budget.move + walkAp(budget, strike ? ITEM_AP.attack : 0) * budget.stride;
+    // How far it can walk and still have `keep` AP left: each ability keeps back its own cost (and a jump's, to leap first).
+    const reach = (keep: number) => budget.move + walkAp(budget, keep) * budget.stride;
+    const usable = strike ? t.blows.filter((b) => b.cost <= budget.ap) : [];
+    const heaviest = Math.max(...t.blows.map((b) => b.weight));
+    const room = new Map(usable.map((b) => [b.cost, reach(b.cost)]));
+    const movement = strike ? Math.max(0, ...room.values()) : reach(0);
+    /** The abilities it could still use after a walk costing `walked`, with `extra` AP spent besides (a jump). */
+    const fitting = (walked: number, extra: number): EnemyStrike[] =>
+      usable.filter((b) => b.cost + extra <= budget.ap && (extra ? reach(b.cost + extra) : room.get(b.cost)!) >= walked);
     // Two looks at the ground: one that will not set foot in fire or poison, and one that will.
     const clean = zoneReach(state, enemy, movement, air || harmful.size === 0 ? undefined : harmful);
     const any = air || harmful.size === 0 ? clean : zoneReach(state, enemy, movement);
-    /** What ending on `pos` is worth, come to by `path` at `cost`. */
-    const weigh = (pos: HexPos, path: HexPos[], cost: number): { score: number; attacks: boolean } => {
+    /** What ending on `pos` is worth, come to by `path` at `cost` (`walked` of it on foot, and `extra` AP besides). */
+    const weigh = (pos: HexPos, path: HexPos[], cost: number, walked = cost, extra = 0): { score: number; attacks: boolean } => {
       let score = -cost * 0.05;
       // The ground on the way, and where it would end up standing.
       if (!air) score -= mind.caution * (4 * path.filter((p) => harmful.has(posKey(p))).length + (harmful.has(posKey(pos)) ? 2 : 0));
@@ -203,7 +210,7 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
         }
         score -= mind.caution * 3 * drawn.size;
       }
-      const option = strike ? bestAttack(state, enemy, pos, t.blows, targets) : null;
+      const option = strike ? bestAttack(state, enemy, pos, fitting(walked, extra), targets, heaviest) : null;
       if (option) {
         score += option.worth;
         // Two on one: a blow lands better with a friend already at the target's side.
@@ -225,8 +232,9 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
       if (!best || w.score > best.score) best = { path, ...w };
     }
     // No blow to be had on foot: is there a ledge to leap that would give one? (A Jump, and the AP it takes.)
-    if (best && !best.attacks && strike && !air && budget.ap >= ITEM_AP.attack + jumpAp) {
-      const afoot = budget.move + walkAp(budget, ITEM_AP.attack + jumpAp) * budget.stride;
+    const leapable = usable.filter((b) => b.cost + jumpAp <= budget.ap);
+    if (best && !best.attacks && strike && !air && leapable.length > 0) {
+      const afoot = Math.max(...leapable.map((b) => reach(b.cost + jumpAp)));
       const range = jumpRange(0);
       for (const reached of clean.values()) {
         if (!reached.stop || reached.cost > afoot) continue;
@@ -236,7 +244,7 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
         for (const land of blast(state.map, reached.pos, range)) {
           if (clean.has(posKey(land)) || checkCommon(state, from, "jump", { at: land }, budget)) continue;
           path ??= pathIn(clean, reached.pos) ?? [];
-          const w = weigh(land, path, reached.cost + 2);
+          const w = weigh(land, path, reached.cost + 2, reached.cost, jumpAp);
           if (w.attacks && w.score - 0.5 > best.score) best = { path, score: w.score - 0.5, attacks: true, leap: land };
         }
       }
@@ -423,7 +431,9 @@ const fightStep: TurnStep = {
     for (let attacks = 0; attacks <= AP_MAX; attacks++) {
       if (t.out()) return "end";
       if (t.look().length === 0) return "end";
-      const plan = budget.ap >= ITEM_AP.attack ? t.choose(true) : null;
+      // The cheapest thing it has to use: with less AP than that, there is no blow to plan for.
+      const cheapest = Math.min(...t.blows.map((b) => b.cost));
+      const plan = budget.ap >= cheapest ? t.choose(true) : null;
       if (!plan?.attacks) {
         // Nothing it can reach and still strike: before any blow, it goes toward where it could (at the one who taunted it, if
         // there is a way to them); after one, it waits. With no way over the ground to anyone, it at least gets as near as it can.
@@ -452,11 +462,12 @@ const fightStep: TurnStep = {
       }
       // Someone it has come up beside may have their back to a drop.
       if (!t.shoved) t.shoved = tryShove(ctx, enemy, budget, t.look());
-      if (t.out() || budget.ap < ITEM_AP.attack) return "end";
+      if (t.out() || budget.ap < Math.min(...t.blows.map((b) => b.cost))) return "end";
       // It may not have got where it meant to: look again from where it stands.
       const still = t.look();
       const affordable = t.blows.filter((b) => b.cost <= budget.ap);
-      const option = (t.goaded ? bestAttack(state, enemy, enemy.pos, affordable, [t.goaded]) : null) ?? (still.length > 0 ? bestAttack(state, enemy, enemy.pos, affordable, still) : null);
+      const heaviest = Math.max(...t.blows.map((b) => b.weight));
+      const option = (t.goaded ? bestAttack(state, enemy, enemy.pos, affordable, [t.goaded], heaviest) : null) ?? (still.length > 0 ? bestAttack(state, enemy, enemy.pos, affordable, still, heaviest) : null);
       if (!option) return "end";
       budget.ap -= option.attack.cost;
       if (option.attack.cooldown > 0) {

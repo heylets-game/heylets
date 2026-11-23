@@ -13,6 +13,7 @@ import type { Biome, Tile } from "../map";
 import { makeRng } from "../rng";
 import { abilityArea, checkAbility, checkCommon, edgeDc, leavesReach, moveLeft, push, shiftInto, shoveDest } from "./combat";
 import { strikeReaches } from "./ai";
+import { ENEMY_ABILITIES } from "./enemyabilities";
 import { attackContext, type Ctx } from "./engine";
 import { ALERT_RANGE } from "./gen";
 import { HEX_DIRS, HEX_ROOM, HIGH_REACH, MAX_ELEV, elevOf, heldAgainst, isDead, ladderBetween, pitAt, reachFrom, roomAt, sees, stepCost, strikes, unitsAt, solid, zoneReach } from "./geometry";
@@ -1413,7 +1414,57 @@ describe("the enemy uses the ground", () => {
     expect(did(events, foe)).toContain("attack");
     expect(elevOf(after.map, unit(after, foe).pos)).toBe(3);
   });
+
+  // ---- an enemy's abilities cost their own AP ----
+  /** A bandit carrying only `ability`; Ann a short walk off, and Bo, all but down, a longer one. */
+  function place(ability: string) {
+    const state = board();
+    state.aiOff = false;
+    const ann = hero(state, "ann", "qa_paladin", at(5, 6));
+    ann.hp = ann.maxHp = 300;
+    const bo = hero(state, "bo", "qa_paladin", at(2, 1));
+    bo.hp = 1;
+    const foe = enemy(state, "bandit", at(2, 6), "g1", 200);
+    foe.abilities = [ability];
+    return { state, foe: foe.id };
+  }
+  const own = { id: "test_haymaker", name: "Haymaker", damage: 6, toHit: 3, weight: 1 };
+
+  it("plans its walk round what the ability it means to use costs: with a 3 AP blow it walks only as far as leaves 3", () => {
+    ENEMY_ABILITIES.test_haymaker = { ...own, cost: 3 };
+    try {
+      const { state, foe } = place("test_haymaker");
+      const bandit = unit(state, foe);
+      // Ann is a stride off (1 AP of walking); Bo two (2 AP), which would leave only 2.
+      expect(hexDistance(bandit.pos, at(5, 6)) - 1).toBeLessThanOrEqual(enemyMove("bandit"));
+      expect(hexDistance(bandit.pos, at(2, 1)) - 1).toBeGreaterThan(enemyMove("bandit"));
+      for (let seed = 1; seed <= 6; seed++) {
+        // (Two turns of the heroes': with two of them, the enemy's first may come after both.)
+        const { events } = play(state, seed, 2);
+        const used = got(events, "used").filter((e) => e.id === foe);
+        // Bo, all but down, is the better blow, but it could not be paid for after the walk: it goes for Ann.
+        expect(used[0]?.target, `seed ${seed}`).toBe("ann");
+      }
+    } finally {
+      delete ENEMY_ABILITIES.test_haymaker;
+    }
+  });
+
+  it("uses a cheap one as often as its AP allow", () => {
+    ENEMY_ABILITIES.test_haymaker = { ...own, cost: 1 };
+    try {
+      const { state, foe } = place("test_haymaker");
+      // Beside Ann already, and nobody else about: four AP, four blows.
+      unit(state, foe).pos = at(4, 6);
+      state.units = state.units.filter((u) => u.id !== "bo");
+      const { events } = play(state, 1);
+      expect(got(events, "used").filter((e) => e.id === foe && e.target === "ann").length).toBe(AP_TURN);
+    } finally {
+      delete ENEMY_ABILITIES.test_haymaker;
+    }
+  });
 });
+
 
 // ---------- the alarm bell rouses the place ----------
 
