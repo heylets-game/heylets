@@ -103,6 +103,8 @@
 .pack-item.lifted > * { opacity: 0.2; }
 .pack-item.spilt { box-shadow: inset 0 0 0 1px var(--bad); }
 .bag.holding .pack-item, .bag.holding .pack-item:hover { pointer-events: none; }
+/* Pressed with a finger, a thing is picked up and carried: not scrolled past, selected as text, or offered to be saved. */
+.pack-item, .doll-slot, .town-place { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .pack-target { position: absolute; pointer-events: none; z-index: 2; }
 .pack-target.ok { background: rgba(127, 227, 166, 0.28); box-shadow: inset 0 0 0 2px var(--good); }
 .pack-target.swap { background: rgba(242, 193, 78, 0.28); box-shadow: inset 0 0 0 2px var(--gold); }
@@ -118,7 +120,8 @@
 .mat-detail p { margin: 0; }
 @media (max-width: 760px) {
   .overlay.bag-overlay { padding: 34px 14px 14px; }
-  .overlay .bag.panel { --u: 27px; padding: 18px 8px 10px; }
+  /* Its squares (--u, set by InventoryScreen) shrink until the pack fits across the screen. */
+  .overlay .bag.panel { padding: 18px 8px 10px; }
   .bag-card { position: fixed; right: 14px; left: 14px; top: auto; bottom: 14px; width: auto; max-height: 45%; z-index: 6; }
 }
 
