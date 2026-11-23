@@ -1,7 +1,7 @@
 // The living parts of the map: a slow day and night with a moving sun and
 // shadows, varied rocks on the hills, low-poly grass (tufts, meadows of
 // thick grass, tall grass that parts as you wade through it, and dry patches of
-// dead grass and burnt ground) leaning in the wind, and two flat, pixel-art touches that move — wave crests on the water
+// dead grass and burnt ground) leaning in the wind, and two flat touches that move — ripples on the water
 // and wisps drifting through the air.
 //
 // Everything here is decoration. Nothing reads or changes game state, and the
@@ -413,45 +413,45 @@ function onPath(bits: number, dx: number, dz: number, margin: number): boolean {
 }
 
 /**
- * Two scallops of a cut-out wave: a white crest over a lighter blue body. Drawn smoothly at eight times the
- * strip's old 24 by 6, so its outline stays clean however near the camera comes.
+ * One ripple, seen from above: a thin line of white foam bowed a little toward the way it travels (the top of the
+ * picture), and a shorter, paler line trailing behind it. Each line is drawn out to points at its ends. Drawn
+ * smoothly and large, so its outline stays clean however near the camera comes.
  */
-const waveTexture = () => {
-  const k = 8;
+const crestTexture = () => {
+  const w = 256;
+  const h = 64;
   const canvas = document.createElement("canvas");
-  canvas.width = 24 * k;
-  canvas.height = 6 * k;
+  canvas.width = w;
+  canvas.height = h;
   const ctx = canvas.getContext("2d")!;
-  /** The top of the wave at x: a rounded hump either side of the middle, meeting the next in a trough. */
-  const top = (x: number) => {
-    const u = ((x / k) % 12 - 6) / 6;
-    return k * (4 - 3.6 * Math.sqrt(Math.max(0, 1 - u * u)));
+  /** One line, from u0 to u1 of the way along, its middle `back` down from the top and `thick` across at most. */
+  const line = (u0: number, u1: number, back: number, thick: number, colour: string) => {
+    const path = new Path2D();
+    const at = (x: number) => {
+      const u = (x / w - u0) / (u1 - u0);
+      return { y: h * (back - 0.1 * Math.sin(Math.PI * u)), t: (h * thick * Math.pow(Math.sin(Math.PI * u), 0.6)) / 2 };
+    };
+    const x0 = Math.round(u0 * w);
+    const x1 = Math.round(u1 * w);
+    for (let x = x0; x <= x1; x++) (x === x0 ? path.moveTo : path.lineTo).call(path, x, at(x).y - at(x).t);
+    for (let x = x1; x >= x0; x--) path.lineTo(x, at(x).y + at(x).t);
+    path.closePath();
+    ctx.fillStyle = colour;
+    ctx.fill(path);
   };
-  const outline = new Path2D();
-  outline.moveTo(0, canvas.height);
-  for (let x = 0; x <= canvas.width; x++) outline.lineTo(x, top(x));
-  outline.lineTo(canvas.width, canvas.height);
-  outline.closePath();
-  ctx.fillStyle = "#4f95e4";
-  ctx.fill(outline);
-  ctx.save();
-  ctx.clip(outline);
-  ctx.beginPath();
-  for (let x = 0; x <= canvas.width; x++) (x === 0 ? ctx.moveTo : ctx.lineTo).call(ctx, x, top(x));
-  ctx.strokeStyle = "#f2f9ff";
-  ctx.lineWidth = 2.6 * k;
-  ctx.lineJoin = "round";
-  ctx.stroke();
-  ctx.restore();
+  line(0, 1, 0.34, 0.2, "#eef7ff");
+  line(0.2, 0.85, 0.72, 0.15, "#8dbcec");
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
   return tex;
 };
 
-/** Width of a wave strip: short enough that two rows fit inside a hex at any angle. */
-const WAVE_WIDTH = 1.3;
-/** How far each row sits from the middle of its hex. */
-const WAVE_ROW = 0.3;
+/** Ripples on each water hex. */
+const CRESTS_PER_HEX = 3;
+/** How far a ripple slides along itself while it lasts. */
+const CREST_DRIFT = 0.16;
+
 /** World units covered by one repeat of the illustrated ground (cobbles, boards): about one hex across. */
 const GROUND_SPAN = 1.76;
 
@@ -627,11 +627,20 @@ interface FieldPatch {
   tone: number;
 }
 interface Crest {
-  /** Centre of the water hex it belongs to. */
+  /** Where it sits on the water, halfway through its life. */
   x: number;
   y: number;
   z: number;
+  /** How far it is turned from lying straight across the view. */
+  lean: number;
+  /** Which way it drifts along its length: 1 or -1. */
+  way: number;
+  /** Its length and width at its fullest. */
+  long: number;
+  wide: number;
+  /** Where it is in its life at clock 0, and how many lives it has a second. */
   phase: number;
+  rate: number;
 }
 interface Wisp {
   offset: number;
@@ -819,6 +828,15 @@ export class Ambience {
   /** The grass, one mesh for each shape of tuft. */
   private grass: THREE.InstancedMesh[] = [];
   private tufts: Tuft[] = [];
+  /**
+   * A patch of ground kept clear of grass for now (a hut's garden, while it is being tended up close): tufts and
+   * whole patches of grass standing within `r` of it are not drawn, nor the grass along the paths.
+   */
+  private clearing: { x: number; z: number; r: number } | null = null;
+  /** The whole patches of grass (meadows, dry patches, tall grass): each instance's place, to hide one and put it back. */
+  private fieldSpots: { mesh: THREE.InstancedMesh; x: number; z: number; m: THREE.Matrix4 }[][] = [];
+  /** The grass along the paths' edges: one mesh, hidden whole while there is a clearing. */
+  private fringe: THREE.Object3D | null = null;
   private waves: THREE.InstancedMesh[] = [];
   private crests: Crest[] = [];
   private wisps: Wisp[] = [];
@@ -920,8 +938,31 @@ export class Ambience {
    * seen from high up: its hills are heaped with more and smaller stones, and no grass is laid (a blade of it
    * would stand as tall as a tree there).
    */
+  /**
+   * Keep the grass off a patch of ground for now (null: let it grow back): every tuft and whole patch of grass
+   * within `r` of (x, z), and the grass along the paths. For a garden being tended up close, which grass would stand
+   * in front of and grow up through.
+   */
+  setClearing(clearing: { x: number; z: number; r: number } | null) {
+    this.clearing = clearing;
+    const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    // A patch covers its whole hex: it goes if any of it is within reach.
+    const reach = (clearing?.r ?? 0) + 0.9;
+    for (const spots of this.fieldSpots) {
+      for (let i = 0; i < spots.length; i++) {
+        const f = spots[i];
+        const gone = !!clearing && (f.x - clearing.x) ** 2 + (f.z - clearing.z) ** 2 < reach * reach;
+        f.mesh.setMatrixAt(i, gone ? zero : f.m);
+      }
+      if (spots[0]) spots[0].mesh.instanceMatrix.needsUpdate = true;
+    }
+    if (this.fringe) this.fringe.visible = !clearing;
+  }
+
   build(tiles: Tile[], skip: (t: Tile) => boolean, place: (t: Tile) => { x: number; y: number; z: number }, small = false) {
     this.clear();
+    this.fieldSpots = [];
+    this.fringe = null;
 
     // ---- rocks: one to three per hill, in three shapes and a few greys ----
     const shapes = [
@@ -960,7 +1001,25 @@ export class Ambience {
 
       if (t.biome === "water") {
         // (A pool in the ashlands is lava: no wave breaks on it.)
-        if (t.clime !== "ash") crests.push({ x: p.x, y: p.y - 0.13, z: p.z, phase: p.x * 0.35 + n(21) * 1.5 });
+        // Ripples spread round the hex, each turned a little its own way.
+        if (t.clime !== "ash") {
+          const turn = n(20) * Math.PI * 2;
+          for (let i = 0; i < CRESTS_PER_HEX; i++) {
+            const a = turn + (i / CRESTS_PER_HEX) * Math.PI * 2 + (n(22 + i) - 0.5) * 0.8;
+            const out = 0.15 + n(26 + i) * 0.18;
+            crests.push({
+              x: p.x + Math.cos(a) * out,
+              y: p.y + 0.006,
+              z: p.z + Math.sin(a) * out,
+              lean: (n(30 + i) - 0.5) * 0.5,
+              way: i % 2 ? 1 : -1,
+              long: 0.48 + n(34 + i) * 0.22,
+              wide: 0.17 + n(38 + i) * 0.04,
+              phase: n(42 + i),
+              rate: 1 / (3.5 + n(46 + i) * 3),
+            });
+          }
+        }
         continue;
       }
       if (skip(t)) continue;
@@ -1100,22 +1159,18 @@ export class Ambience {
       this.group.add(snow);
     }
 
-    // ---- waves: two rows of upright paper cut-outs on each water hex ----
-    // Each strip is short enough to stay inside its own hex however the view is turned.
-    // The scallops scroll along it, the back row one way and the front row the other.
+    // ---- ripples: lines of foam lying on the water, always across the view ----
     this.crests = crests;
-    this.waves = [0, 1].map(() => {
-      const strip = new THREE.PlaneGeometry(WAVE_WIDTH, WAVE_WIDTH * (6 / 24) * 1.25);
-      strip.translate(0, WAVE_WIDTH * (6 / 24) * 0.625, 0);
-      const map = waveTexture();
-      map.wrapS = THREE.RepeatWrapping;
-      map.repeat.x = 0.8;
-      const mesh = new THREE.InstancedMesh(strip, new THREE.MeshBasicMaterial({ map, alphaTest: 0.5, side: THREE.DoubleSide }), Math.max(1, crests.length));
+    {
+      const sliver = new THREE.PlaneGeometry(1, 1);
+      sliver.rotateX(-Math.PI / 2);
+      const material = new THREE.MeshBasicMaterial({ map: crestTexture(), alphaTest: 0.5, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
+      const mesh = new THREE.InstancedMesh(sliver, material, Math.max(1, crests.length));
       mesh.count = crests.length;
       mesh.frustumCulled = false;
       this.group.add(mesh);
-      return mesh;
-    });
+      this.waves = [mesh];
+    }
 
     this.bounds = { minX, maxX, minZ, maxZ };
 
@@ -1312,8 +1367,14 @@ export class Ambience {
         mesh.frustumCulled = false;
         mesh.receiveShadow = true;
         this.group.add(mesh);
+        this.fieldSpots.push(list.map((m, i) => {
+          const mat = new THREE.Matrix4();
+          mesh.getMatrixAt(i, mat);
+          return { mesh, x: m.x, z: m.z, m: mat };
+        }));
       }
     };
+    this.fieldSpots = [];
     fields(meadows, MEADOW_KINDS, meadowGeometry, MEADOW_H, drab);
     fields(drys, DRY_KINDS, dryGeometry, DRY_H, new THREE.Color(1, 1, 1));
     fields(talls, TALL_KINDS, tallGeometry, TALL_H, drab);
@@ -1480,6 +1541,7 @@ export class Ambience {
       mesh.frustumCulled = false;
       mesh.receiveShadow = true;
       this.group.add(mesh);
+      this.fringe = mesh;
     }
 
     // ---- puddles: standing water on the mud and in the dips of the street ----
@@ -1717,36 +1779,43 @@ export class Ambience {
           -sin * w, WIND_DIR.z * lean * h, cos * w, t.z,
           0, 0, 0, 1,
         );
+        // In a clearing (a garden being tended up close), not drawn at all.
+        const c = this.clearing;
+        if (c && (t.x - c.x) ** 2 + (t.z - c.z) ** 2 < c.r * c.r) this.m.makeScale(0, 0, 0);
         this.grass[t.kind!].setMatrixAt(t.index!, this.m);
       }
       for (const mesh of this.grass) mesh.instanceMatrix.needsUpdate = true;
     }
 
-    const cos = Math.cos(yaw);
-    const sin = Math.sin(yaw);
-    this.waves.forEach((mesh, row) => {
-      // The fancy water makes its own waves; the paper crests would sit oddly on it.
+    for (const mesh of this.waves) {
+      // The fancy water makes its own waves; the ripples would sit oddly on it.
       mesh.visible = !this.smoothSea;
-      // Front row (toward the camera) is row 1.
-      const off = row ? WAVE_ROW : -WAVE_ROW;
-      // Put away, the crests are not set out: they are, afresh, in the frame they are shown again.
+      // Put away, the ripples are not set out: they are, afresh, in the frame they are shown again.
       if (mesh.visible) {
         this.crests.forEach((c, i) => {
-          const bob = motion * Math.sin(clock * 1.8 + c.phase * 2 + row * 1.6) * 0.03;
+          // Each one gathers, slides a little way along itself, and thins away; then it comes again. Held still,
+          // each is shown at its fullest.
+          const life = motion ? (clock * c.rate + c.phase) % 1 : 0.5;
+          const full = Math.pow(Math.sin(Math.PI * life), 0.7);
+          const drift = motion * (life - 0.5) * CREST_DRIFT * c.way;
+          const long = c.long * (0.35 + 0.65 * full) * (full > 0.02 ? 1 : 0);
+          const wide = c.wide * full;
+          // Its length runs across the view; the picture's top edge is the far side.
+          const a = yaw + c.lean;
+          const ca = Math.cos(a);
+          const sa = Math.sin(a);
           this.m.set(
-            cos, 0, sin, c.x + sin * off,
-            0, 1, 0, c.y + bob - (row ? 0.03 : 0),
-            -sin, 0, cos, c.z + cos * off,
+            ca * long, 0, sa * wide, c.x + ca * drift,
+            0, 1, 0, c.y,
+            -sa * long, 0, ca * wide, c.z - sa * drift,
             0, 0, 0, 1,
           );
           mesh.setMatrixAt(i, this.m);
         });
         mesh.instanceMatrix.needsUpdate = true;
       }
-      const material = mesh.material as THREE.MeshBasicMaterial;
-      material.color.copy(this.flatTint);
-      material.map!.offset.x = motion * clock * (row ? 0.11 : -0.08) + row * 0.25;
-    });
+      (mesh.material as THREE.MeshBasicMaterial).color.copy(this.flatTint);
+    }
 
     if (this.wispRibbon) {
       const pos = this.wispRibbon.geometry.getAttribute("position") as THREE.BufferAttribute;
@@ -2471,7 +2540,7 @@ export class Ambience {
   get raining(): number {
     return this.outdoors ? this.rainfall : 0;
   }
-  /** Set while the fancy water is on: the paper wave crests are put away. */
+  /** Set while the fancy water is on: the ripples are put away. */
   smoothSea = false;
   /** The sun's or moon's light, colour and strength together, for glints on the water. Fills and returns `out`. */
   sunGlint(out: THREE.Color): THREE.Color {
@@ -2564,7 +2633,7 @@ export class Ambience {
       this.hemi.color.lerp(SLATE, 0.45 * c);
       this.background.lerp(SLATE, 0.8 * c).multiplyScalar(1 - c * (0.25 - 0.2 * daylight));
     }
-    // Unlit cut-outs (grass, wave crests) are tinted by hand to match.
+    // Unlit cut-outs (grass, ripples) are tinted by hand to match.
     this.flatTint.set("#56669c").lerp(WHITE, daylight).lerp(DUSK, glow * 0.2);
     if (this.cloud > 0) this.flatTint.lerp(SLATE, 0.35 * this.cloud).multiplyScalar(1 - 0.18 * this.cloud);
   }

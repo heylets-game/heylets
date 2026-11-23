@@ -613,6 +613,11 @@
 @keyframes loot-in { from { opacity: 0; translate: 16px -50%; } }
 /* The bag is 12 squares of 51 and its frame wide, 22px in from the right: the loot stands just clear of it. */
 .run:has(.bag-overlay) .fight-loot.panel { right: calc(22px + 51px * 12 + 46px + 20px); z-index: 51; }
+/* Too narrow for both side by side (a phone): the loot lies over the top of the bag, over what is worn, and the
+   pack's squares below it are still there to drag things down onto. */
+@media (max-width: 1000px) {
+  .run:has(.bag-overlay) .fight-loot.panel { right: auto; left: 50%; top: 12px; translate: -50% 0; animation: none; }
+}
 .fight-loot .win-plate { max-width: calc(100% + 30px); overflow: hidden; text-overflow: ellipsis; }
 /* The bag's own close button, held to its corner here whatever order the stylesheets load in. */
 .fight-loot .bag-close { position: absolute; top: -6px; right: -6px; width: 30px; height: 30px; padding: 0; font-size: 20px; line-height: 1; z-index: 5; }
@@ -647,7 +652,7 @@
 .loot-card .detail p, .loot-card .mat-detail p { margin: 0; }
 .loot-card .loot-how { color: var(--f-brass-hi); font-size: 12px; }
 /* The sea bag while loot is dragged over it: it is where the loot goes. */
-.bag.panel.loot-over { outline: 3px solid var(--good, #86d86c); outline-offset: 4px; box-shadow: 0 0 0 9px rgba(134, 216, 108, 0.16), 0 9px 0 16px rgba(0, 0, 0, 0.45); }
+.bag.panel.loot-over, .bag.panel[data-drag-over] { outline: 3px solid var(--good, #86d86c); outline-offset: 4px; box-shadow: 0 0 0 9px rgba(134, 216, 108, 0.16), 0 9px 0 16px rgba(0, 0, 0, 0.45); }
 
 /* ==========================================================================
    A phone held upright: the turn bar is two rows (whose turn and End Turn

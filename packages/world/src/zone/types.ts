@@ -26,7 +26,7 @@ export type Side = "hero" | "enemy";
  * and the Warden's: Taunted, on an enemy (it must go for the Warden who taunted it, if it can);
  * and the Warlock's (drowning.ts), all on an enemy: Drowning (stacks, `amount`), the Curse of Drowning, the Black Spot and Red Sky at Morning.
  */
-export type Condition = EffectKind | "poisoned" | "wet" | "beacon" | "mending" | "bolstered" | "invisible" | "contraband" | "regenerating" | "rejuvenating" | "rallied" | "coral_armor" | ShantyKind | "inspired" | "guiding_light" | "north_star" | "charted" | "taunted" | "drowning" | "drowning_curse" | "black_spot" | "red_sky" | "tailwind";
+export type Condition = EffectKind | "poisoned" | "wet" | "beacon" | "mending" | "bolstered" | "invisible" | "contraband" | "regenerating" | "rejuvenating" | "rallied" | "coral_armor" | ShantyKind | "inspired" | "guiding_light" | "north_star" | "charted" | "taunted" | "drowning" | "drowning_curse" | "black_spot" | "red_sky" | "tailwind" | "lucky";
 
 /** The shanties a Bard sings (song.ts): a condition on the Bard, reaching everyone of theirs nearby. */
 export type ShantyKind = "lively_shanty" | "dour_shanty" | "windgod_shanty";
@@ -372,6 +372,8 @@ export interface ZoneHero {
   classAbilities?: string[];
   /** What they carry to drink or throw, out of their own pack. A stand-in has no pack and is given the starting kit. */
   items?: Partial<Record<Throwable, number>>;
+  /** Lucky rolls they bring with them: coins tossed in the town well (well.ts), each one attack roll with advantage. */
+  luck?: number;
 }
 
 export type CommonAction = "disengage" | "help" | "shove" | "jump" | "flee" | "join";
@@ -498,6 +500,8 @@ export type ZoneEvent =
   /** Weather made over some hexes, or (`kind` null) cleared from them. */
   | { t: "weather"; kind: WeatherKind | null; hexes: HexPos[]; by: string }
   | { t: "skip"; id: string; kind: Condition }
+  /** One lying Prone gets up as its turn begins (for an AP), before it does anything else. */
+  | { t: "stood"; id: string }
   /** Drowning: it failed to hold its breath, and loses 2 of its AP this turn. */
   | { t: "choked"; id: string }
   | { t: "down"; id: string }

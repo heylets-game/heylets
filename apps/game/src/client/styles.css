@@ -283,6 +283,23 @@ input:focus, button:focus-visible, select:focus { outline: 2px solid var(--accen
   .inv-head { padding-right: 68px; }
 }
 body { touch-action: manipulation; overscroll-behavior: none; }
+/* A game, not a page: holding a button or dragging across the screen never selects text or offers to save an image.
+   What is typed stays selectable, and so does a code a player copies (mark it .selectable), and the admin pages. */
+body { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+input, textarea, [contenteditable], .selectable, .admin { user-select: text; -webkit-user-select: text; -webkit-touch-callout: default; }
+/* A thing dragged (dragDrop.ts): its icon rides with the pointer, its own place is dimmed, and whatever will take it
+   lights up under it. */
+.drag-ghost {
+  position: fixed; z-index: 10000; pointer-events: none; display: grid; place-items: center;
+  transform: translate(-50%, -50%) scale(1.1); border-radius: 8px;
+  background: rgba(16, 20, 28, 0.6); outline: 2px solid var(--gold); box-shadow: 0 8px 18px rgba(0, 0, 0, 0.5);
+}
+.drag-ghost img { image-rendering: pixelated; }
+[data-drag-lifted] { opacity: 0.4; }
+body.drag-carrying, body.drag-carrying * { cursor: grabbing !important; }
+[data-drop][data-drag-over] { outline: 2px solid var(--good); outline-offset: 2px; }
+/* A code is picked up whole with one tap or click, not a word at a time. */
+.selectable.code { user-select: all; -webkit-user-select: all; }
 
 /* A minimized panel shows only its title and tools. */
 .panel-title { display: block; width: calc(100% - 48px); text-align: left; background: none; border: none; padding: 0 0 4px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-size: 12px; }
@@ -451,6 +468,17 @@ button.nudge { border-color: var(--gold); color: var(--gold); }
    units, so the stylesheets write them as calc(40vw / var(--ui-z, 1)). */
 .run { --ui-z: var(--ui-zoom, 1); zoom: var(--ui-z); }
 .run > .stage { zoom: calc(1 / var(--ui-z)); }
+
+/* ---------- Hold to confirm (render/WorldRenderer.ts armHold) ---------- */
+/* A ring round a finger held on the map in a fight, filling until the press counts as a tap. */
+.hold-ring { position: absolute; left: 0; top: 0; width: 76px; height: 76px; margin: -38px 0 0 -38px; pointer-events: none; opacity: 0; z-index: 2; }
+.hold-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
+.hold-ring circle { fill: none; stroke-width: 4; }
+.hold-ring .track { stroke: rgba(10, 8, 24, 0.55); }
+.hold-ring .fill { stroke: var(--accent); stroke-dasharray: 1; stroke-dashoffset: 1; filter: drop-shadow(0 0 3px rgba(92, 225, 230, 0.6)); }
+.hold-ring.on { opacity: 1; }
+.hold-ring.on .fill { animation: hold-fill var(--hold-ms, 400ms) linear forwards; }
+@keyframes hold-fill { to { stroke-dashoffset: 0; } }
 
 /* ---------- Options menu ---------- */
 .options { position: relative; display: inline-flex; flex: none; }

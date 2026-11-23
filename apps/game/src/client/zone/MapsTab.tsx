@@ -143,7 +143,7 @@ export function MapsTab() {
 
       {dev.open && send && (
         <>
-          <p><strong>Map {dev.open.code}</strong> <span className="muted">is on screen.</span></p>
+          <p><strong>Map <span className="selectable code">{dev.open.code}</span></strong> <span className="muted">is on screen.</span></p>
           <div className="dev-row">
             <button className="small" onClick={() => send({ op: "heal" })}>Heal and restock everyone</button>
             <button className="small" onClick={() => send({ op: "start_fight" })}>Start a fight here</button>

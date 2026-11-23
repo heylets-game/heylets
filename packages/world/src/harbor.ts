@@ -13,6 +13,7 @@ import type { ItemDef } from "./gear";
 import type { Stats } from "@gantt-quest/core";
 import type { HarborWorks } from "./projects";
 import type { Muster } from "./muster";
+import type { GardenBed } from "./garden";
 import { findPath, tileAt, type Biome, type Poi, type PoiKind, type Tile, type WorldMap } from "./map";
 
 /** What the crew's home port is called, wherever its name is shown. */
@@ -118,6 +119,20 @@ export const HARBOR_PLOTS: HexPos[] = [
 ];
 /** Which way each hut plot faces (see `footing`), so its hut fronts the path it stands on. */
 export const HARBOR_PLOT_FACING: number[] = [5, 3, 3, 5, 2, 0, 4, 2, 3, 2, 3, 0];
+/**
+ * Where a hero stands to tend each plot's herb garden (garden.ts): the hex beside it, on the far side of the
+ * garden's corner of the doorstep from the door, so the garden is a place of its own and the doorstep means only
+ * the hut. Grass where there is some; else the road that runs past.
+ */
+export const HARBOR_GARDEN_SPOTS: HexPos[] = [
+  { q: 20, r: 16 }, { q: 23, r: 15 }, { q: 21, r: 16 }, { q: 22, r: 14 }, { q: 24, r: 12 }, { q: 24, r: 15 },
+  { q: 22, r: 19 }, { q: 24, r: 17 }, { q: 27, r: 15 }, { q: 26, r: 11 }, { q: 29, r: 14 }, { q: 27, r: 13 },
+];
+/** The town well, on the green: a round wall of stone under a little roof, filling its hex (a piece of the town's dressing, not a building). */
+export const HARBOR_WELL_AT = at(16, 13);
+const WELL_AT = HARBOR_WELL_AT;
+/** Where a hero stands to draw water from the well (and fill a watering can): the hex down and to the left of it. */
+export const HARBOR_WELL: HexPos = { q: WELL_AT.q - 1, r: WELL_AT.r + 1 };
 /** The plank bridge from the east end of the High Street over to the housing island, the town's end first. */
 export const HARBOR_BRIDGE: HexPos[] = [at(24, 16), at(25, 16), at(26, 16)];
 /** The middle of the housing island, and how far out its shore lies, in hex widths. */
@@ -320,7 +335,7 @@ export const HARBOR_BOATS: { at: HexPos; turn: number }[] = [
  */
 export type DecorKind =
   | "lamp" | "pillar" | "pillar_broken" | "stump" | "brazier" | "planter" | "bench" | "crates" | "barrels" | "nets" | "bollard"
-  | "banner" | "milestone" | "rack" | "cairn" | "railpost" | "garden" | "mast" | "well" | "statue" | "crane";
+  | "banner" | "milestone" | "rack" | "cairn" | "railpost" | "mast" | "well" | "statue" | "crane";
 export interface HarborDecor {
   kind: DecorKind;
   at: HexPos;
@@ -346,7 +361,7 @@ export const HARBOR_DECOR: HarborDecor[] = [
   { kind: "milestone", at: at(5, 16), corner: 3 }, { kind: "milestone", at: at(22, 16), corner: 3 },
   { kind: "barrels", at: at(21, 12), corner: 2 },
   // The green: the town well, and one bench.
-  { kind: "well", at: at(16, 13) },
+  { kind: "well", at: WELL_AT },
   { kind: "bench", at: at(12, 20), corner: 0 },
   // The quay: the crane on its mole with one lot of cargo waiting by it, mooring posts along the water, the
   // harbour's signal mast at the foot of the middle pier, and the fishers' drying rack by their shack. Nothing else.
@@ -365,11 +380,10 @@ export const HARBOR_DECOR: HarborDecor[] = [
   // The bridge: a post with a rope rail at every point of its planking on both sides, and a lamp at each end.
   ...HARBOR_BRIDGE.flatMap((p): HarborDecor[] => [{ kind: "railpost", at: p, corner: 0 }, { kind: "railpost", at: p, corner: 3 }]),
   ...lamps([23, 16, 0], [27, 16, 3]),
-  // The housing island: a lamp where its paths meet, a bench on the green in the middle, and by every hut's door a
-  // patch of garden of its own behind a few pickets.
+  // The housing island: a lamp where its paths meet, and a bench on the green in the middle. (By every hut's door
+  // there is a patch of garden of its own behind a few pickets: that is a place, the hut's herb garden, garden.ts.)
   ...lamps([29, 15, 0]),
   { kind: "bench", at: at(31, 15), corner: 0 },
-  ...HARBOR_PLOTS.map((p, i): HarborDecor => ({ kind: "garden", at: p, corner: (HARBOR_PLOT_FACING[i] + 4) % 6, turn: 2 })),
 ];
 /** The hexes the big pieces of the town's dressing stand on: nobody walks through them. */
 export const HARBOR_FIXTURES: HexPos[] = HARBOR_DECOR.filter((d) => d.corner === undefined && FIXTURE_KINDS.has(d.kind)).map((d) => d.at);
@@ -493,7 +507,7 @@ export function generateHarbor(): WorldMap {
       if (t) t.built = true;
     }
   }
-  // The piers: planking from each pier head back to the shore.
+    // The piers: planking from each pier head back to the shore.
   for (const head of HARBOR_PIERS) {
     let p = head;
     for (let i = 0; i < 6 && tileAt(map, p)?.biome === "water"; i++) {
@@ -530,6 +544,7 @@ export function generateHarbor(): WorldMap {
     harborPoi("lapidary", "lapidary", HARBOR_LAPIDARY),
     harborPoi("townchest", "townchest", HARBOR_CHEST),
     harborPoi("waygate", "waygate", HARBOR_WAYGATE),
+    harborPoi("well", "well", HARBOR_WELL),
     harborPoi("fishing", "fishing", HARBOR_GATHER.fishing),
     harborPoi("felling", "felling", HARBOR_GATHER.felling),
     harborPoi("quarry", "quarry", HARBOR_GATHER.quarry),
@@ -613,18 +628,41 @@ function layPaths(map: WorldMap) {
 export const HARBOR_MAX_PATH = 60;
 
 /**
- * A walkable route between two Harbor hexes, or null. Every step costs the same here; the rampart cannot be
- * crossed, nor a building walked through, nor the water crossed without a boat. A barrel keeps to water beside
- * the land; a rowboat goes anywhere on it. Neither goes onto the rocks or the wreck.
+ * What each step of a walk costs, so a route keeps to the streets and lanes where it can: a road (a cobbled
+ * street, a dirt lane, the planking of a pier or the bridge) is the cheapest ground, and open grass, shore and
+ * woods cost twice as much, so a walk goes a little out of its way to keep to a road. Putting out from land onto
+ * the water costs as much as fifteen steps of road, so a hero with a boat walks round by the bridge rather than
+ * paddle across, and takes to the water only to go somewhere on it or where the walk round is far longer. Once
+ * afloat, rowing on is as cheap as a road.
+ */
+const ROAD_STEP = 2;
+const ROUGH_STEP = 4;
+const LAUNCH_STEP = 30;
+const onRoad = (t: Tile) => t.biome === "cobble" || t.biome === "dock" || !!t.path;
+
+/**
+ * A walkable route between two Harbor hexes, or null: the cheapest by the costs above, so it follows a road
+ * where there is one. The rampart cannot be crossed, nor a building walked through, nor the water crossed
+ * without a boat. A barrel keeps to water beside the land; a rowboat goes anywhere on it. Neither goes onto the
+ * rocks or the wreck. If keeping to the roads would make a walk longer than one request may be, it goes the
+ * shortest way instead.
  */
 export function harborPath(map: WorldMap, from: HexPos, to: HexPos, vessel: Vessel | null = null): HexPos[] | null {
-  const route = findPath(map, from, to, HARBOR_MAX_PATH, (t) => {
-    if (t.biome === "rampart" || t.built || t.blocker) return Infinity;
-    if (t.biome !== "water") return 1;
-    if (!vessel || HAZARDS.has(`${t.q},${t.r}`)) return Infinity;
-    return vessel === "rowboat" || coastal(map, t) ? 1 : Infinity;
+  const open = (t: Tile) => {
+    if (t.biome === "rampart" || t.built || t.blocker) return false;
+    if (t.biome !== "water") return true;
+    if (!vessel || HAZARDS.has(`${t.q},${t.r}`)) return false;
+    return vessel === "rowboat" || coastal(map, t);
+  };
+  const route = findPath(map, from, to, Infinity, (t, left) => {
+    if (!open(t)) return Infinity;
+    if (t.biome === "water") return left.biome === "water" ? ROAD_STEP : LAUNCH_STEP;
+    return onRoad(t) ? ROAD_STEP : ROUGH_STEP;
   });
-  return route && route.path.length > 0 ? route.path : null;
+  if (!route || route.path.length === 0) return null;
+  if (route.path.length <= HARBOR_MAX_PATH) return route.path;
+  const shortest = findPath(map, from, to, HARBOR_MAX_PATH, (t) => (open(t) ? 1 : Infinity));
+  return shortest && shortest.path.length > 0 ? shortest.path : null;
 }
 
 /** The rocks and the wreck stand in the water: no boat goes onto them. */
@@ -718,6 +756,8 @@ export interface HarborMember {
   bin?: Resources;
   /** Out on a zone right now: which one, and whether they are in a fight there (nobody can teleport into one). */
   zone?: { code: string; fighting: boolean };
+  /** What is growing in the herb garden by their hut's door, a bed at a time (empty beds left out). Absent until the shack stands. */
+  garden?: GardenBed[];
 }
 
 /** A map the crew has open out through the waygate: its code, the atlas node it was made for, and what the place is called. */
@@ -768,12 +808,14 @@ export type HarborServerMessage =
   /** The crew's muster as it now stands (muster.ts): someone is setting out and asks who is coming. Null: there is none any more. */
   | { type: "muster"; muster: Muster | null }
   | LookMessage
+  | EmoteMessage
   | XpMessage;
 
 export type HarborClientMessage =
   | { type: "move"; to: HexPos }
   | { type: "say"; text: string }
   | LookRequest
+  | EmoteRequest
   /** "I changed my gear or level": the server re-reads the sender's character and tells everyone. */
   | { type: "refresh" }
   /** "I have just rested here": lay the sender's bedroll out where they stand, for everyone to see. */
@@ -801,6 +843,28 @@ export const lookYaw = (step: number) => (step / LOOK_STEPS) * Math.PI * 2;
 /** A look as a client sent it, if it is one: a whole step in range. */
 export function validLook(look: unknown): number | null {
   return typeof look === "number" && Number.isInteger(look) && look >= 0 && look < LOOK_STEPS ? look : null;
+}
+
+/**
+ * Emotes: a hero waves, cheers, bows, dabs, flosses, dances, does the running man or breakdances where they stand, for everyone in the same place to see. Only for
+ * show, like a look: relayed to everyone there (the one emoting too) and never kept, at most one per EMOTE_MIN_MS.
+ * In the Harbor, a hut, the pub and on a map, in a fight too (free, taking no turn), though not while down.
+ */
+export const EMOTES = ["wave", "cheer", "bow", "dab", "floss", "dance", "runningman", "breakdance"] as const;
+export type Emote = (typeof EMOTES)[number];
+export const EMOTE_MIN_MS = 800;
+/** "I am waving" (or cheering, bowing, dancing). */
+export type EmoteRequest = { type: "emote"; emote: Emote };
+/** "They are waving". Sent to everyone in the place, whoever asked too. */
+export type EmoteMessage = { type: "emoted"; id: string; emote: Emote };
+/** An emote as a client sent it, if it is one. */
+export function validEmote(emote: unknown): Emote | null {
+  return (EMOTES as readonly unknown[]).includes(emote) ? (emote as Emote) : null;
+}
+/** The emote a line typed into chat asks for (`/wave`, `/cheer`, `/bow`, `/dab`, `/floss`, `/dance`, `/runningman`, `/breakdance`), or null for a line to say. */
+export function emoteTyped(text: string): Emote | null {
+  const m = /^\/(\w+)$/.exec(text.trim().toLowerCase());
+  return m ? validEmote(m[1]) : null;
 }
 
 /** How often a hero may ask to be put back where they arrive (Harbor, hut or pub), per connection. */

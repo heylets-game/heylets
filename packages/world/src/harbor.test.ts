@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HARBOR_APOTHECARY, HARBOR_LAPIDARY, HARBOR_BOATS, HARBOR_BRIDGE, HARBOR_BUILDINGS, HARBOR_CAVE, HARBOR_CAVE_STEPS, HARBOR_CHEST, HARBOR_COURT, HARBOR_DECOR, HARBOR_FIXTURES, HARBOR_FORECOURT, HARBOR_GALLEY, HARBOR_MAX_PATH, HARBOR_GATE, HARBOR_GATHER, HARBOR_HEART_AT, HARBOR_HOME_ROADS, HARBOR_LIGHTHOUSE, HARBOR_MOLE, HARBOR_PUB, HARBOR_WAYGATE, HARBOR_WRECK, HARBOR_SMITHY, HARBOR_GRID, HARBOR_BOARD, HARBOR_PIERS, HARBOR_PLOTS, HARBOR_RING, HARBOR_SHOP, HARBOR_SPAWN, HARBOR_SQUARE, HARBOR_WORKS, HARBOR_OAK, HARBOR_ROADS, HARBOR_SIDES, findPath, footing, frontOf, generateHarbor, roadHexes, harborDoor, harborPath, tileAt } from "./index";
+import { EMOTES, emoteTyped, validEmote, HARBOR_APOTHECARY, HARBOR_LAPIDARY, HARBOR_BOATS, HARBOR_BRIDGE, HARBOR_BUILDINGS, HARBOR_CAVE, HARBOR_CAVE_STEPS, HARBOR_CHEST, HARBOR_COURT, HARBOR_DECOR, HARBOR_FIXTURES, HARBOR_FORECOURT, HARBOR_GALLEY, HARBOR_MAX_PATH, HARBOR_GATE, HARBOR_GATHER, HARBOR_HEART_AT, HARBOR_HOME_ROADS, HARBOR_LIGHTHOUSE, HARBOR_MOLE, HARBOR_PUB, HARBOR_WAYGATE, HARBOR_WRECK, HARBOR_SMITHY, HARBOR_GRID, HARBOR_BOARD, HARBOR_PIERS, HARBOR_PLOTS, HARBOR_RING, HARBOR_SHOP, HARBOR_SPAWN, HARBOR_SQUARE, HARBOR_WORKS, HARBOR_OAK, HARBOR_ROADS, HARBOR_SIDES, findPath, footing, frontOf, generateHarbor, roadHexes, harborDoor, harborPath, tileAt } from "./index";
 
 type Hex = { q: number; r: number };
 const key = (p: Hex) => `${p.q},${p.r}`;
@@ -310,6 +310,18 @@ describe("harbor map", () => {
     expect(copse.length).toBeGreaterThanOrEqual(2);
     for (const t of copse) expect(t.r, key(t)).toBeLessThanOrEqual(felling.r);
     expect(dist(felling, HARBOR_SMITHY)).toBeLessThanOrEqual(5);
+  });
+
+  it("keeps a walk to the streets and lanes where there is one", () => {
+    const road = (p: Hex) => tileAt(map, p)!.biome === "cobble" || tileAt(map, p)!.biome === "dock" || !!tileAt(map, p)!.path;
+    // From the square to any door or pier, no more than a couple of steps off a road on the way.
+    for (const to of [...doors, ...HARBOR_PIERS]) {
+      const walk = harborPath(map, HARBOR_SPAWN, to);
+      if (!walk) continue;
+      expect(walk.slice(0, -1).filter((p) => !road(p)).length, key(to)).toBeLessThanOrEqual(2);
+    }
+    // The quarry is up its own track, though cutting across the grass would be shorter.
+    expect(harborPath(map, HARBOR_SPAWN, HARBOR_GATHER.quarry)!.slice(0, -1).every(road)).toBe(true);
   });
 
   it("keeps every walk within what one request may ask for, and the daily places a short walk from the gate", () => {
@@ -715,5 +727,26 @@ describe("harbor map", () => {
     const walk = harborPath(map, HARBOR_SPAWN, HARBOR_GATHER.quarry)!;
     expect(walk.at(-1)).toEqual(HARBOR_GATHER.quarry);
     for (const p of lane.slice(0, -1)) expect(tileAt(map, p)!.path || tileAt(map, p)!.biome === "cobble", key(p)).toBeTruthy();
+  });
+});
+
+describe("emotes", () => {
+  it("knows its emotes and nothing else", () => {
+    for (const e of EMOTES) expect(validEmote(e)).toBe(e);
+    expect(validEmote("moonwalk")).toBeNull();
+    expect(validEmote(undefined)).toBeNull();
+    expect(validEmote(["wave"])).toBeNull();
+  });
+
+  it("reads an emote typed into chat", () => {
+    expect(emoteTyped("/wave")).toBe("wave");
+    expect(emoteTyped("  /DANCE ")).toBe("dance");
+    expect(emoteTyped("/breakdance")).toBe("breakdance");
+    expect(emoteTyped("/runningman")).toBe("runningman");
+    expect(emoteTyped("/dab")).toBe("dab");
+    expect(emoteTyped("/floss")).toBe("floss");
+    expect(emoteTyped("/bow please")).toBeNull();
+    expect(emoteTyped("wave")).toBeNull();
+    expect(emoteTyped("/shrug")).toBeNull();
   });
 });

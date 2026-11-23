@@ -15,7 +15,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { ConvexGeometry } from "three/examples/jsm/geometries/ConvexGeometry.js";
-import { APPEARANCE_OPTIONS, GARB_PREFIX, HAIR_COLORS, SKIN_TONES, INK_COLORS, INK_LEVELS, INK_REGIONS, RARITY_COLOR, WEAPONS, WEAPON_ICON, appearanceK, decodeInk, inkColorOf, inkLevelOf, wearsLanternHelm, type Appearance, type Ink, type InkRegion, type InkView, type Outfit, type Slot } from "@gantt-quest/world";
+import { APPEARANCE_OPTIONS, GARB_PREFIX, HAIR_COLORS, SKIN_TONES, INK_COLORS, INK_LEVELS, INK_REGIONS, RARITY_COLOR, WEAPONS, WEAPON_ICON, appearanceK, decodeInk, inkColorOf, inkLevelOf, wearsLanternHelm, type Appearance, type Emote, type Ink, type InkRegion, type InkView, type Outfit, type Slot } from "@gantt-quest/world";
 import type { Look } from "./looks";
 import { torchFlame } from "./torchFlame";
 import { buildLowPoly, disposeLowPoly, type Dangle, type Spin } from "./gearModels";
@@ -1399,7 +1399,7 @@ const GET_UP_HIPS = -1;
  * `n` counts the figure's actions, so two flinches in a row need not be the same.
  */
 interface Act {
-  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump";
+  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
   t: number;
   n: number;
   /** A jump's seconds off the ground (see JUMP). */
@@ -1938,6 +1938,73 @@ const TAUNT = {
   crouch: [[0, 0], [0.32, 0.22], [0.85, 0.2], [1.2, 0]] as Keys,
 };
 /**
+ * Emotes (see EMOTES), only for show: nothing in hand is put down. A wave is the free hand (the left) raised beside
+ * the head and rocked from side to side. A cheer is both fists thrown up, with four or five hops. A bow is the right hand
+ * brought to the chest, the left swept back, and a bend at the waist. A dance is a jig: a hop from foot to foot,
+ * the knees lifted in turn and the arms pumping, on a `beat` per second; it stops early if the dancer walks off.
+ * `up` (and `down` for the bow) is how far into the pose it is, 0 to 1.
+ */
+const WAVE = { over: 1.9, up: [[0, 0], [0.3, 1], [1.55, 1], [1.9, 0]] as Keys };
+const CHEER = { over: 3.4, up: [[0, 0], [0.2, 1], [3.1, 1], [3.4, 0]] as Keys };
+const BOW = { over: 1.8, down: [[0, 0], [0.45, 1], [1.15, 1], [1.8, 0]] as Keys };
+const DANCE = { over: 5, beat: 2.4, up: [[0, 0], [0.25, 1], [4.7, 1], [5, 0]] as Keys };
+/**
+ * A breakdance: a backspin. Down onto the back (`down`), the knees tucked up to the chest and hugged there, spun
+ * flat on the floor about the middle of the body `turns` times from `spin[0]` to `spin[1]` seconds (whole turns, so
+ * it ends facing the way it went down). Out of the spin it rolls onto its left side (`side`) and holds a last pose:
+ * propped on the left elbow with the head resting on that fist, the right arm thrown up to the sky; then up again.
+ */
+const BREAK = {
+  over: 8,
+  spin: [0.65, 4.35],
+  turns: 6,
+  down: [[0, 0], [0.55, 1], [7.4, 1], [8, 0]] as Keys,
+  tuck: [[0, 0], [0.4, 0.4], [0.7, 1], [4.3, 1], [4.9, 0]] as Keys,
+  side: [[0, 0], [4.35, 0], [5, 1], [7.3, 1], [8, 0]] as Keys,
+};
+/**
+ * The running man: running on the spot. Each leg in turn has its knee driven up high, steps down well out in front,
+ * and is then dragged back along the floor to behind the body while the other knee comes up; the legs are half a
+ * step apart. `thigh` and `shin` are one leg's swing (forward is below 0) and knee bend, keyed to how far through its
+ * own step it is, 0 to 1; `push` is how far the arms are driven down, keyed the same way. `beat` is whole steps
+ * (both legs) a second.
+ */
+const RUNNING = {
+  over: 5,
+  beat: 0.95,
+  up: [[0, 0], [0.3, 1], [4.7, 1], [5, 0]] as Keys,
+  thigh: [[0, 0.75], [0.22, -1.65], [0.36, -0.8], [1, 0.75]] as Keys,
+  shin: [[0, 0.35], [0.1, 1.5], [0.22, 2.1], [0.36, 0.05], [0.7, 0.1], [1, 0.35]] as Keys,
+  push: [[0, 0], [0.2, 1], [0.36, 0.15], [0.5, 0]] as Keys,
+};
+/**
+ * The breakdance's last pose, in the torso's frame: how far the head end is raised off the floor (radians), how much
+ * higher the hips lie on the side than on the back, where the left fist is (under the cheek), which way its elbow
+ * points (to the floor, a little forward), and where the right arm reaches to (straight up) from its shoulder.
+ */
+const BREAK_LIFT = 0.45;
+const BREAK_HIP = 0.6;
+const BREAK_FIST = new THREE.Vector3(2.2, 7.2, 1.6);
+const BREAK_ELBOW = new THREE.Vector3(1, -0.6, 0.5);
+const BREAK_SKY = new THREE.Vector3(-8, 1.5, 0.5);
+/** The point of the body a backspin turns about, in the figure's own frame (about the hips): where it lies when on its back. */
+const SPIN_AT = new THREE.Vector3(0, 6, 0);
+const spinning = { at: new THREE.Vector3(), q: new THREE.Quaternion(), up: new THREE.Vector3(0, 1, 0), roll: new THREE.Quaternion() };
+/**
+ * The dab: snapped into it and held a moment. The right arm flung straight up and out to the side, the left bent
+ * across below the chin with its elbow raised, and the head turned down toward the crook of it. `up` is how far into it.
+ */
+const DAB = { over: 1.6, up: [[0, 0], [0.16, 1], [1.3, 1], [1.6, 0]] as Keys };
+/**
+ * The floss: on each beat both straight arms go to one side, one swung across the body and the other out to its own
+ * side, and the hips thrust the other way over planted feet; then they change over to the other side. The arms cross
+ * in front of the body for one swing (each arm once), then behind it for the next, and so on. `beat` is whole
+ * swings (there and back) a second. An arm's way from out at its side (`side`) to across the front (`across`) comes
+ * forward (`front`) before it reaches the body, so it never passes through it. All in the torso's frame.
+ */
+const FLOSS = { over: 4.5, beat: 1.3, side: 8.5, across: 2.6, front: 4.4, hips: 1.5, up: [[0, 0], [0.25, 1], [4.2, 1], [4.5, 0]] as Keys };
+const EMOTE_OVER: Record<Emote, number> = { wave: WAVE.over, cheer: CHEER.over, bow: BOW.over, dab: DAB.over, floss: FLOSS.over, dance: DANCE.over, runningman: RUNNING.over, breakdance: BREAK.over };
+/**
  * A jump from one tile to another. The figure only makes the shapes of it; whoever jumps it carries it through
  * the air (see WorldRenderer.leapUnit). A crouch with the arms drawn back (`coil`), and at `spring` the legs
  * straighten and the feet leave the ground, the body tipping forward all the while (`lean`, and `wind` for the arms). Off it, the arms are thrown forward and up (`arms`, -1 back to 1 up),
@@ -1976,7 +2043,7 @@ const RECORDER_LENGTH = 6.4;
 const HAMMER = { hit: 0.4, over: 0.86, up: [[0, 0.25], [0.3, 1], [0.4, 0], [0.48, 0.18], [0.86, 0.25]] as Keys };
 const STIR = { over: 30, turns: 25 };
 /** How long each kind of action lasts. */
-const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land };
+const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
 /** When each kind of blow lands. */
 const ACT_HIT = { strike: SWING.hit, stab: THRUST.hit, pounce: POUNCE.hit, heavy: SWEEP.hit, twin: TWIN.hit };
 /**
@@ -2563,6 +2630,216 @@ function biped(top: THREE.Group, parts: Part[], elbow = ELBOW) {
       if (levels.length === 0) reach(armL.joint, foreL.joint, -elbow, elbow - fist, sweep.grip.addScaledVector(sweep.dir, -2.6), sweep.poleL, w);
       return;
     }
+    if (act.kind === "wave") {
+      // The free hand (the left) up beside the head, the elbow out and down, rocked from side to side.
+      const up = along(WAVE.up, t);
+      const rock = Math.sin(t * 11) * up;
+      sweep.grip.copy(armL.joint.position).add(sweep.side.set(2.4 + 0.9 * rock, 4.6, 0.9));
+      sweep.lead.set(1, -0.7, 0.1);
+      reach(armL.joint, foreL.joint, -elbow, elbow - fist, sweep.grip, sweep.lead, up);
+      head.joint.rotation.y -= 0.12 * up;
+      top.rotation.z -= 0.05 * up;
+      return;
+    }
+    if (act.kind === "cheer") {
+      // Both fists flung up in a V, clear of the head, shaken, and a hop or two on bent knees.
+      const up = along(CHEER.up, t);
+      const hop = Math.max(0, Math.sin((t - 0.2) * 9)) * up;
+      const shake = 0.5 * Math.sin(t * 14) * up;
+      sweep.lead.set(1, 0, -0.4);
+      sweep.grip.copy(armL.joint.position).add(sweep.side.set(4.2, 8 + shake, 1.2));
+      reach(armL.joint, foreL.joint, -elbow, elbow - fist, sweep.grip, sweep.lead, up);
+      sweep.lead.set(-1, 0, -0.4);
+      sweep.grip.copy(armR.joint.position).add(sweep.side.set(-4.2, 8 - shake, 1.2));
+      reach(armR.joint, foreR.joint, -elbow, elbow - fist, sweep.grip, sweep.lead, up);
+      // Whatever each hand holds stands straight up beside the head, as it would in the torso at rest, not swung
+      // over with the arm into the face: the hold undoes the arm's turn.
+      for (const [arm, fore, held] of [[armL, foreL, heldL], [armR, foreR, heldR]] as const) {
+        sweep.hold.copy(arm.joint.quaternion).multiply(fore.joint.quaternion).invert();
+        held.joint.quaternion.slerp(sweep.hold, up);
+      }
+      head.joint.rotation.x -= 0.25 * up;
+      knees(0.18 * up * (1 - hop));
+      top.position.y += 0.9 * hop;
+      return;
+    }
+    if (act.kind === "dab") {
+      const up = along(DAB.up, t);
+      bow(0.18 * up, 0.25 * up);
+      // The right arm straight up and out, reaching well past where it can go so it is held straight.
+      sweep.grip.copy(armR.joint.position).add(sweep.side.set(-8, 6, 2.5));
+      sweep.lead.set(0, -1, -0.3);
+      reach(armR.joint, foreR.joint, -elbow, elbow - fist, sweep.grip, sweep.lead, up);
+      // The left fist across before the chin to the far side, below the brim (the head is too big for an arm across
+      // the face), the elbow up and out.
+      sweep.grip.set(-2.6, 5.4, 4);
+      sweep.lead.set(1, 0.7, 0);
+      reach(armL.joint, foreL.joint, -elbow, elbow - fist, sweep.grip, sweep.lead, up);
+      // The head tipped a little down and turned toward the crook of the left arm, not into it.
+      head.joint.rotation.x += 0.15 * up;
+      head.joint.rotation.y += 0.35 * up;
+      head.joint.rotation.z -= 0.12 * up;
+      // What the flung hand holds points straight on out along the arm's line, past the fist (the line from the
+      // shoulder to where the arm reaches); what the other holds stays upright.
+      sweep.dir.set(-8, 6, 2.5).normalize();
+      sweep.want.setFromUnitVectors(scratch.up, sweep.dir);
+      sweep.hold.copy(armR.joint.quaternion).multiply(foreR.joint.quaternion).invert().multiply(sweep.want);
+      heldR.joint.quaternion.slerp(sweep.hold, up);
+      sweep.hold.copy(armL.joint.quaternion).multiply(foreL.joint.quaternion).invert();
+      heldL.joint.quaternion.slerp(sweep.hold, up);
+      return;
+    }
+    if (act.kind === "bow") {
+      // The right hand to the chest, the left swept back, and a bend at the waist with the head down.
+      const down = along(BOW.down, t);
+      bow(0.5 * down, 0);
+      head.joint.rotation.x += 0.25 * down;
+      sweep.grip.set(0.4, 6.4, 3.1);
+      sweep.lead.set(-1, -0.6, 0);
+      reach(armR.joint, foreR.joint, -elbow, elbow - fist, sweep.grip, sweep.lead, down);
+      armL.joint.rotation.x += 0.6 * down;
+      armL.joint.rotation.z += 0.2 * down;
+      return;
+    }
+    if (act.kind === "breakdance") {
+      // Laid back onto the floor as the lying pose is (the front up, the head toward -z), and spun about the middle
+      // of the body round the upright: the spin is turned first, about the world's up, over the lie.
+      const down = along(BREAK.down, t);
+      const tuck = along(BREAK.tuck, t);
+      const side = along(BREAK.side, t);
+      const k = Math.min(1, Math.max(0, (t - BREAK.spin[0]) / (BREAK.spin[1] - BREAK.spin[0])));
+      // On the side the head end is raised off the floor, propped up on the elbow.
+      top.rotation.x -= HALF_PI * down - BREAK_LIFT * side;
+      top.quaternion.premultiply(spinning.q.setFromAxisAngle(spinning.up, k * BREAK.turns * Math.PI * 2));
+      // Rolled a quarter turn about its own length onto the left side (the left, +x, to the floor).
+      top.quaternion.multiply(spinning.roll.setFromAxisAngle(spinning.up, HALF_PI * side));
+      // Kept where it spins: the middle of the body comes down from where it stands to just off the floor.
+      spinning.at.copy(SPIN_AT).applyQuaternion(top.quaternion);
+      top.position.set(-spinning.at.x, SPIN_AT.y - (3.4 - BREAK_HIP * side) * down - spinning.at.y, -spinning.at.z);
+      // Tucked: the knees drawn right up to the chest, the shins folded under, the arms wrapped round the knees and
+      // the head tipped forward.
+      for (const thigh of [thighL, thighR]) thigh.joint.rotation.x -= 2.1 * tuck;
+      for (const shin of [shinL, shinR]) shin.joint.rotation.x += 2.3 * tuck;
+      armL.joint.rotation.x -= 1.1 * tuck;
+      armR.joint.rotation.x -= 1.1 * tuck;
+      armL.joint.rotation.z -= 0.25 * tuck;
+      armR.joint.rotation.z += 0.25 * tuck;
+      foreL.joint.rotation.x -= 1.3 * tuck;
+      foreR.joint.rotation.x -= 1.3 * tuck;
+      head.joint.rotation.x += 0.45 * tuck;
+      if (side > 0) {
+        // The last pose. The legs out long and a little bent, the top (right) knee drawn forward over the other.
+        thighL.joint.rotation.x -= 0.2 * side;
+        shinL.joint.rotation.x += 0.3 * side;
+        thighR.joint.rotation.x -= 0.75 * side;
+        shinR.joint.rotation.x += 0.9 * side;
+        // The left elbow on the floor below the shoulder, the fist up under the cheek; the head laid on it.
+        sweep.grip.copy(BREAK_FIST);
+        reach(armL.joint, foreL.joint, -elbow, elbow - fist, sweep.grip, sweep.lead.copy(BREAK_ELBOW), side);
+        head.joint.rotation.z -= 0.3 * side;
+        // The right arm flung straight up to the sky (the torso's -x, now that it lies on its left side), and what
+        // it holds pointed on out along it.
+        sweep.grip.copy(armR.joint.position).add(BREAK_SKY);
+        reach(armR.joint, foreR.joint, -elbow, elbow - fist, sweep.grip, sweep.lead.set(0, 0, -1), side);
+        sweep.dir.copy(BREAK_SKY).normalize();
+        sweep.want.setFromUnitVectors(scratch.up, sweep.dir);
+        sweep.hold.copy(armR.joint.quaternion).multiply(foreR.joint.quaternion).invert().multiply(sweep.want);
+        heldR.joint.quaternion.slerp(sweep.hold, side);
+        sweep.hold.copy(armL.joint.quaternion).multiply(foreL.joint.quaternion).invert();
+        heldL.joint.quaternion.slerp(sweep.hold, side);
+      }
+      return;
+    }
+    if (act.kind === "runningman") {
+      const up = along(RUNNING.up, t);
+      const step = t * RUNNING.beat;
+      const legs = [
+        { thigh: thighL, shin: shinL, foot: footL, u: step % 1 },
+        { thigh: thighR, shin: shinR, foot: footR, u: (step + 0.5) % 1 },
+      ];
+      // How far each foot reaches below the hips; the hips come down to whichever is planted (the longer), so a foot
+      // stays on the floor however the legs are split.
+      let reachDown = 0;
+      let push = 0;
+      for (const leg of legs) {
+        const a = along(RUNNING.thigh, leg.u) * up;
+        const b = along(RUNNING.shin, leg.u) * up;
+        leg.thigh.joint.rotation.x += a;
+        leg.shin.joint.rotation.x += b;
+        // The foot kept flat to the floor.
+        leg.foot.joint.rotation.x -= a + b;
+        reachDown = Math.max(reachDown, shank * (Math.cos(a) + Math.cos(a + b)));
+        push = Math.max(push, along(RUNNING.push, leg.u));
+      }
+      top.position.y -= (2 * shank - reachDown);
+      bow(-0.06 * up, 0);
+      // Both arms driven down together as each knee comes up, elbows bent and fists ahead, then brought back up.
+      push *= up;
+      for (const [arm, fore] of [[armL, foreL], [armR, foreR]] as const) {
+        arm.joint.rotation.x -= (1.0 - 0.75 * push) * up;
+        fore.joint.rotation.x -= (1.5 - 0.6 * push) * up;
+      }
+      // Whatever is held stays upright, not swung round with the pumping arms.
+      for (const [arm, fore, held] of [[armL, foreL, heldL], [armR, foreR, heldR]] as const) {
+        sweep.hold.copy(arm.joint.quaternion).multiply(fore.joint.quaternion).invert();
+        held.joint.quaternion.slerp(sweep.hold, up);
+      }
+      return;
+    }
+    if (act.kind === "floss") {
+      const up = along(FLOSS.up, t);
+      // Which side the arms are on, -1 (the right) to 1 (the left), snapped to each end rather than swung evenly.
+      const ph = t * FLOSS.beat * Math.PI * 2;
+      const wave = Math.sin(ph);
+      const to = Math.sign(wave) * Math.abs(wave) ** 0.55;
+      // Each arm: `u` 0 out at its own side, 1 across the body to the other side. The right arm crosses when the
+      // arms go left (at a quarter of each swing), the left arm when they go right (at three quarters). Each arm's
+      // crossings take turns in front of the body and behind it, so the arms go round the front once (right, then
+      // left) and then round the back. Which way an arm crosses changes only while it is out at its own side.
+      for (const [arm, fore, own, u, from] of [[armR, foreR, -1, (1 + to) / 2, -HALF_PI], [armL, foreL, 1, (1 - to) / 2, HALF_PI]] as const) {
+        const n = Math.floor((ph - from) / (Math.PI * 2));
+        const way = n > 0 && n % 2 === 1 ? -1 : 1;
+        const across = Math.min(1, Math.max(0, u / 0.4));
+        sweep.grip.set(own * (FLOSS.side - (FLOSS.side + FLOSS.across) * u), -0.6 - 0.6 * u, -0.6 * way + way * (FLOSS.front + 0.6) * across * across * (3 - 2 * across));
+        reach(arm.joint, fore.joint, -elbow, elbow - fist, sweep.grip, own < 0 ? sweep.poleR : sweep.poleL, up);
+      }
+      // The hips thrust out the other way on each beat over feet that stay where they are: the legs slant to carry
+      // the hips across (and the hips sink by what that costs), the feet stay flat, and the body leans back from
+      // the waist so the shoulders stay over the feet. The bend is in the middle; nothing slides.
+      const dx = -FLOSS.hips * to * up;
+      const slant = Math.asin(Math.max(-1, Math.min(1, dx / (2 * shank))));
+      top.position.x += dx;
+      top.position.y -= 2 * shank * (1 - Math.cos(slant));
+      for (const thigh of [thighL, thighR]) thigh.joint.rotation.z -= slant;
+      for (const foot of [footL, footR]) foot.joint.rotation.z += slant;
+      torso.joint.rotation.z += (1.3 * dx) / 6;
+      head.joint.rotation.z -= (0.5 * dx) / 6;
+      for (const [arm, fore, held] of [[armL, foreL, heldL], [armR, foreR, heldR]] as const) {
+        sweep.hold.copy(arm.joint.quaternion).multiply(fore.joint.quaternion).invert();
+        held.joint.quaternion.slerp(sweep.hold, up);
+      }
+      return;
+    }
+    if (act.kind === "dance") {
+      // A jig: hopping from foot to foot, each knee lifted in turn, the arms pumping and the body swaying with it.
+      const up = along(DANCE.up, t);
+      const ph = t * DANCE.beat * Math.PI * 2;
+      const side = Math.sin(ph);
+      const hop = Math.abs(Math.sin(ph)) * up;
+      thighL.joint.rotation.x -= Math.max(0, side) * 1.1 * up;
+      shinL.joint.rotation.x += Math.max(0, side) * 1.5 * up;
+      thighR.joint.rotation.x -= Math.max(0, -side) * 1.1 * up;
+      shinR.joint.rotation.x += Math.max(0, -side) * 1.5 * up;
+      top.position.y += 0.7 * hop;
+      top.rotation.z += 0.12 * side * up;
+      top.rotation.y += 0.25 * Math.sin(ph / 2) * up;
+      head.joint.rotation.z -= 0.1 * side * up;
+      armL.joint.rotation.z += (1.1 + 0.6 * side) * up;
+      armR.joint.rotation.z -= (1.1 - 0.6 * side) * up;
+      foreL.joint.rotation.x -= 0.6 * up;
+      foreR.joint.rotation.x -= 0.6 * up;
+      return;
+    }
     if (act.kind === "taunt") {
       // Drawn back for breath, then thrown forward: the chest out, the arms flung wide and up, the head back, the
       // knees planted; held with a shake of the fists, and let go.
@@ -2825,7 +3102,8 @@ function biped(top: THREE.Group, parts: Part[], elbow = ELBOW) {
   const pose = (a: Anim) => {
     // The waist and the ankles are straight unless a blow bends them (see blow).
     torso.joint.rotation.set(0, 0, 0);
-    footL.joint.rotation.x = footR.joint.rotation.x = 0;
+    footL.joint.rotation.set(0, 0, 0);
+    footR.joint.rotation.set(0, 0, 0);
     // Set whole every frame: a blow or a shot adds to these, or turns them outright, and must leave nothing behind.
     head.joint.rotation.set(0, 0, 0);
     heldR.joint.position.set(0, fist - elbow, 0);
@@ -7544,6 +7822,11 @@ export interface Figure {
    * minute, and returns 0. A creature does nothing and returns 0.
    */
   work(how: "hammer" | "stir"): number;
+  /**
+   * Wave, cheer, bow, dance or breakdance where it stands (see EMOTES). A dance or a breakdance stops when the figure walks off; anything else
+   * asked of it (a blow, a jump) takes over at once. A creature does nothing.
+   */
+  emote(emote: Emote): void;
   /** Take a blow: the figure flinches from it. */
   hit(): void;
   /**
@@ -7715,6 +7998,8 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
     if (asked) [action, asked] = [{ kind: asked, at: p.time, n: ++actions, air: asked === "jump" ? airtime : 0 }, null];
     const since = action ? p.time - action.at : 0;
     if (action && (since < 0 || since >= lasts(action.kind) + action.air)) action = null;
+    // Walking off ends a dance (or any emote) at once.
+    if (action && p.walking && action.kind in EMOTE_OVER) action = null;
     const want = p.walking ? Math.sin(p.stride * 3.6) : 0;
     swing += (want - swing) * Math.min(1, dt * 20);
     const rowing = p.rowing !== undefined && !!rig.hands && !p.lying;
@@ -7861,6 +8146,9 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
       if (!rig.acts) return 0;
       asked = "taunt";
       return TAUNT.roar;
+    },
+    emote(emote) {
+      if (rig.acts) asked = emote;
     },
     hit() {
       asked = "hit";

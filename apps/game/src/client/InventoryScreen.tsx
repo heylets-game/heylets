@@ -58,7 +58,7 @@
 // where it goes. While a fight is on the gear worn stays as it is; the pack
 // can still be looked through.
 
-import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { CatchPanel } from "./CatchPanel";
 import { LogbookButton } from "./Logbook";
 import {
@@ -121,6 +121,7 @@ import { DollChart, type ChartSlot } from "./ui/DollChart";
 import { SplitPrompt, StackIcon, stackName, toStacks, type Stack } from "./ui/Slots";
 import { ITEM_ICON, STONE_ICON } from "./zone/actionIcons";
 import { uiZoom } from "./uiScale";
+import { useDropTarget } from "./dragDrop";
 import { ownLook } from "./ownLook";
 import { withLook } from "./render/sprites";
 import { wornAhead, type WearChange } from "./wearAhead";
@@ -156,6 +157,34 @@ const TO_COME = [
 const DOLL_ROWS = 8.7;
 /** Every slot's place, for the chart behind them to be drawn round. */
 const CHART_SLOTS: ChartSlot[] = [...Object.values(DOLL), ...TO_COME];
+
+/**
+ * How much room a narrow screen (a phone) leaves round the pack, in CSS pixels: the overlay's padding, the bag's,
+ * and the pack's frame (slots.css). The bag's squares shrink until twelve of them fit across what is left.
+ */
+const NARROW_SIDES = 2 * 14 + 2 * 8 + 2 * 4;
+/** A screen no taller than this is short (slots.css says the same): the bag fills its height and scrolls. */
+const SHORT_H = 520;
+/** What a short screen's bag needs above what is worn, in CSS pixels: the overlay's padding, the bag's, and its top row. */
+const SHORT_CHROME = 34 + 10 + 18 + 10 + 44 + 10;
+/** The smallest a square of the bag is drawn, however narrow the screen. */
+const MIN_U = 20;
+/**
+ * On a touchscreen a thing dragged rides this far above the fingertip (in CSS pixels, beyond half its own height),
+ * so the finger does not hide it or the outline of where it will go.
+ */
+const FINGER_LIFT = 30;
+/** How far a press has to travel before it is a drag and not a tap: a fingertip wobbles more than a mouse. */
+const DRAG_START = { mouse: 6, touch: 10 };
+
+/** The square of a grid (a PackGrid's element) under a point on the screen, or null off it. */
+function gridCell(grid: HTMLElement, x: number, y: number): Spot | null {
+  const r = grid.getBoundingClientRect();
+  const rows = Number(grid.dataset.rows);
+  const cx = Math.floor(((x - r.left) / r.width) * PACK_COLS);
+  const cy = Math.floor(((y - r.top) / r.height) * rows);
+  return cx >= 0 && cx < PACK_COLS && cy >= 0 && cy < rows ? { x: cx, y: cy } : null;
+}
 
 const shapeOf = (s: Stack): Shape => ({ key: s.key, ...(s.t === "gear" ? itemSize(s.item) : { w: 1, h: 1 }) });
 /** The biggest a square icon can be drawn in a footprint, on squares `u` pixels wide. */
@@ -280,8 +309,8 @@ interface Props {
    */
   torch?: { hand: "main" | "off"; rounds: number; stow?(): void; why?: string };
   /**
-   * On a map: something dragged out of a loot window (zone/LootPanel.tsx, a "text/gq-loot" drag carrying its index
-   * there, and "text/gq-loot-uid" its own number where it has one) was dropped anywhere on the bag. The server
+   * On a map: something dragged out of a loot window (zone/LootPanel.tsx, a "loot" drag in dragDrop.ts carrying its
+   * index there, and its own number where it has one) was dropped anywhere on the bag. The server
    * decides where in the pack it lands.
    */
   onLootDrop?: (index: number, uid?: number) => void;
@@ -320,23 +349,27 @@ function PackGrid({ zone, name, u, rows, baseRows, stacks, decor = [], spots, he
   pickedDecor?: number | null;
 }) {
   const grid = useRef<HTMLDivElement>(null);
+  // A finger is followed by the screen itself (a touch goes on being sent to the thing first pressed, wherever it moves).
   const move = (e: ReactPointerEvent) => {
-    const r = grid.current?.getBoundingClientRect();
-    if (!r) return;
-    const x = Math.floor(((e.clientX - r.left) / r.width) * PACK_COLS);
-    const y = Math.floor(((e.clientY - r.top) / r.height) * rows);
-    onCell(x >= 0 && x < PACK_COLS && y >= 0 && y < rows ? { x, y } : null);
+    if (e.pointerType !== "touch" && grid.current) onCell(gridCell(grid.current, e.clientX, e.clientY));
   };
   return (
     <div
       ref={grid}
       className="pack-grid-2"
       data-zone={zone}
+      data-rows={rows}
       role="group"
       aria-label={name}
       style={{ height: rows * u, "--spill": `${baseRows * u}px` } as CSSProperties}
       onPointerMove={move}
-      onPointerLeave={() => { onCell(null); onHover(null); }}
+      // A tap has no move before it: the square it lands on is where the thing in hand is set down.
+      onPointerDown={(e) => e.pointerType === "touch" && grid.current && onCell(gridCell(grid.current, e.clientX, e.clientY))}
+      onPointerLeave={(e) => {
+        // A finger leaves as it lifts, before the tap's click: the square it tapped has to outlast that.
+        if (e.pointerType !== "touch") onCell(null);
+        onHover(null);
+      }}
       onClick={(e) => held && onSetDown(e)}
     >
       {stacks.map((s) => {
@@ -410,30 +443,14 @@ function EyeGlyph({ shut }: { shut: boolean }) {
 }
 
 export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = false, chest = null, trade = null, town = null, usable, gearLocked, stones, torch, onLootDrop }: Props) {
-  /** Loot is being dragged over the bag: it is lit as the place to drop it. */
-  const [lootOver, setLootOver] = useState(false);
-  const lootDrop = onLootDrop && {
-    onDragOver: (e: ReactDragEvent) => {
-      if (!e.dataTransfer.types.includes("text/gq-loot")) return;
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-      if (!lootOver) setLootOver(true);
-    },
-    onDragLeave: (e: ReactDragEvent) => {
-      if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setLootOver(false);
-    },
-    onDrop: (e: ReactDragEvent) => {
-      setLootOver(false);
-      const raw = e.dataTransfer.getData("text/gq-loot");
-      if (raw === "") return;
-      e.preventDefault();
-      const index = Number(raw);
+  /** Loot dragged from a body or chest is dropped on the bag: it is taken. The bag lights up while it is over it. */
+  const lootDrop = useDropTarget(
+    (thing) => thing.kind === "loot" && !!onLootDrop,
+    (thing) => {
       // The thing's own number, as it was when the drag began: the list may have moved under it since.
-      const own = e.dataTransfer.getData("text/gq-loot-uid");
-      const uid = own === "" ? undefined : Number(own);
-      if (Number.isInteger(index) && index >= 0) onLootDrop(index, uid !== undefined && Number.isInteger(uid) ? uid : undefined);
+      if (thing.kind === "loot") onLootDrop?.(thing.index, thing.uid);
     },
-  };
+  );
   /** The atlas's slot as it is now, for the handlers that outlive a render. */
   const stoneSlot = useRef(stones);
   stoneSlot.current = stones;
@@ -486,6 +503,10 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
     addEventListener("resize", on);
     return () => removeEventListener("resize", on);
   }, []);
+  /** The bag's squares: full size, or on a phone as big as still lets the pack's twelve fit across the screen. */
+  // On a short screen (a phone on its side, slots.css) they shrink too, until what is worn fits in the height
+  // with the bag's top row above it; the pack is scrolled to under it.
+  const bu = Math.max(MIN_U, Math.min(U, Math.floor((viewW - NARROW_SIDES) / PACK_COLS), viewH <= SHORT_H ? Math.floor((viewH - SHORT_CHROME) / DOLL_ROWS) : U));
 
   // What the hero has with them, with the changes of gear still on their way already made.
   const items = useMemo(() => wornAhead(me.inventory, wearing).map(toOwned), [me.inventory, wearing]);
@@ -566,7 +587,7 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
   const chestUsed = chestShapes.reduce((n, s) => n + s.w * s.h, 0);
   const chestFree = Math.max(0, chestTotal - chestUsed);
   /** A chest's squares: the pack's size where the view is wide enough for both, smaller where it is not. */
-  const wideU = Math.max(30, Math.min(U, Math.floor((viewW - 44 - BAG_W - CHEST_GAP - 16 - 46) / CHEST_COLS)));
+  const wideU = Math.min(bu, Math.max(30, Math.min(U, Math.floor((viewW - 44 - BAG_W - CHEST_GAP - 16 - 46) / CHEST_COLS))));
   /** The trade table is two grids tall, so its squares also shrink to the height there is above the bottom bar. */
   const CU = trade ? Math.max(28, Math.min(wideU, Math.floor((viewH - 188 - 290) / (TRADE_ROWS * 2)))) : wideU;
 
@@ -700,27 +721,42 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
 
   // What is in hand follows the pointer. Escape puts it back, or closes the chest, or the bag.
   useEffect(() => {
+    /** Where a thing dragged is: on the pointer, or, dragged by a finger, held up above it where it can be seen. */
+    const aimAt = (e: PointerEvent, s: Stack): Point =>
+      e.pointerType !== "touch" ? e : { clientX: e.clientX, clientY: e.clientY - ((shapeOf(s).h * bu) / 2 + FINGER_LIFT) * uiZoom() };
+    /** The square under a finger, found here: a touch goes on being sent to the thing it first pressed, so no grid hears it move. */
+    const touchCell = (at: Point) => {
+      const grid = document.elementFromPoint(at.clientX, at.clientY)?.closest<HTMLElement>(".pack-grid-2");
+      const zone = grid?.dataset.zone;
+      const spot = grid && (zone === "pack" || zone === "chest") ? gridCell(grid, at.clientX, at.clientY) : null;
+      setCell((was) => (!spot ? null : was && was.zone === zone && was.x === spot.x && was.y === spot.y ? was : { ...spot, zone: zone as Zone }));
+    };
     const move = (e: PointerEvent) => {
       const p = press.current;
       // A press that has travelled a little is a drag: the thing comes up off the grid.
-      if (p && !p.dragging && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 6) {
+      if (p && !p.dragging && Math.hypot(e.clientX - p.x, e.clientY - p.y) > DRAG_START[e.pointerType === "touch" ? "touch" : "mouse"]) {
         p.dragging = true;
-        lift(p.stack, p.from, e);
+        lift(p.stack, p.from, aimAt(e, p.stack));
       }
+      const carried = p?.dragging ? p.stack : held?.stack;
+      if (!carried) return;
+      const at = p?.dragging ? aimAt(e, carried) : e;
+      if (e.pointerType === "touch") touchCell(at);
       if (!float.current) return;
       const z = uiZoom();
-      float.current.style.left = `${e.clientX / z}px`;
-      float.current.style.top = `${e.clientY / z}px`;
+      float.current.style.left = `${at.clientX / z}px`;
+      float.current.style.top = `${at.clientY / z}px`;
     };
     const up = (e: PointerEvent) => {
       const p = press.current;
       press.current = null;
       if (!p?.dragging) return;
       // Let go over a grid or a slot and it is set down there; anywhere else and it goes back.
-      const under = document.elementFromPoint(e.clientX, e.clientY);
+      const at = aimAt(e, p.stack);
+      const under = document.elementFromPoint(at.clientX, at.clientY);
       const slot = under?.closest<HTMLElement>(".doll-slot")?.dataset.slot as Slot | undefined;
       if (slot) drop.current.onSlot(slot);
-      else if (under?.closest(".pack-grid-2")) drop.current.onGrid(e);
+      else if (under?.closest(".pack-grid-2")) drop.current.onGrid(at);
       else if (under?.closest("[data-town-drop]")) drop.current.onTown();
       else {
         // A lodestone let go over the slot of a place on the atlas goes into it.
@@ -761,7 +797,7 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
       removeEventListener("keydown", key);
       removeEventListener("click", click, { capture: true });
     };
-  }, [held, onClose, catchOpen, chest]);
+  }, [held, onClose, catchOpen, chest, bu]);
   // A thing in hand that is no longer where it was lifted from (sold, stowed, traded away, its chest shut) is let go of.
   useEffect(() => {
     if (!held) return;
@@ -934,7 +970,7 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
     // The slot the thing in hand belongs in lights up; one it cannot be worn in at all is marked.
     const fits = inHand?.slot === slot;
     const cannot = fits && !!equipProblem(inHand!, c.class_id, c.level);
-    const style: CSSProperties = { left: at.x * U, top: at.y * U, width: at.w * U, height: at.h * U, ...(item ? ({ borderColor: RARITY_COLOR[item.rarity], "--tint": RARITY_COLOR[item.rarity] } as CSSProperties) : {}) };
+    const style: CSSProperties = { left: at.x * bu, top: at.y * bu, width: at.w * bu, height: at.h * bu, ...(item ? ({ borderColor: RARITY_COLOR[item.rarity], "--tint": RARITY_COLOR[item.rarity] } as CSSProperties) : {}) };
     // A lit torch held in this hand, on a map: what is worn here is put away (or set aside) while it is.
     const lit = torch && TORCH_SLOT[torch.hand] === slot ? torch : null;
     const aside = !item ? "" : slot === "main_hand" ? ` Your ${item.name} is put away while you hold it.` : ` Your ${item.name} is set aside while you hold it.`;
@@ -960,7 +996,7 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
           }
         }}
       >
-        {item ? <Icon name={item.icon} color={RARITY_COLOR[item.rarity]} size={iconPx(at.w, at.h)} /> : <Icon name={SLOT_ICON[slot]} color="#4a4336" size={iconPx(at.w, Math.min(at.h, at.w))} silhouette />}
+        {item ? <Icon name={item.icon} color={RARITY_COLOR[item.rarity]} size={iconPx(at.w, at.h, bu)} /> : <Icon name={SLOT_ICON[slot]} color="#4a4336" size={iconPx(at.w, Math.min(at.h, at.w), bu)} silhouette />}
         {!item && <span className="slot-name">{SLOT_LABEL[slot]}</span>}
         {item && item.power > 0 && <span className="badge br">+{item.power}</span>}
       </button>
@@ -968,13 +1004,13 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
       {lit && (
         <button
           className="doll-torch"
-          style={{ left: at.x * U, top: at.y * U, width: at.w * U }}
+          style={{ left: at.x * bu, top: at.y * bu, width: at.w * bu }}
           aria-label={`Put away the lit torch in your ${lit.hand} hand`}
           aria-disabled={!lit.stow}
           title={`Lit torch, in your ${lit.hand} hand: ${lit.rounds} round${lit.rounds === 1 ? "" : "s"} of light left.${aside} ${lit.stow ? `Click to put it out and stow it in your pack${item ? `, and take up your ${item.name} again` : ""}.` : (lit.why ?? "You cannot put it away now.")}`}
           onClick={() => lit.stow?.()}
         >
-          <Icon name={ITEM_ICON.torch.name} color={ITEM_ICON.torch.color} size={iconPx(1, 1)} />
+          <Icon name={ITEM_ICON.torch.name} color={ITEM_ICON.torch.color} size={iconPx(1, 1, bu)} />
           <span className="doll-torch-text"><strong>Lit torch</strong>{lit.rounds} left</span>
         </button>
       )}
@@ -982,7 +1018,7 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
       {item && canHide(slot) && (
         <button
           className="gear-eye"
-          style={{ left: (at.x + at.w) * U, top: at.y * U }}
+          style={{ left: (at.x + at.w) * bu, top: at.y * bu }}
           aria-pressed={!!item.hidden}
           aria-label={item.hidden ? `Show ${item.name}` : `Hide ${item.name}`}
           title={item.hidden ? "Hidden: still worn and counted, but not shown on your hero. Click to show it." : "Hide it on your hero (it still counts)"}
@@ -1236,7 +1272,7 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
         </div>
       )}
 
-      <div className={`bag panel window ${held ? "holding" : ""} ${lootOver ? "loot-over" : ""}`} role="dialog" aria-label="Sea bag" style={{ "--u": `${U}px` } as CSSProperties} onContextMenu={putBack} {...lootDrop}>
+      <div className={`bag panel window ${held ? "holding" : ""}`} role="dialog" aria-label="Sea bag" style={{ "--u": `${bu}px` } as CSSProperties} onContextMenu={putBack} {...lootDrop}>
         <span className="win-plate">Sea Bag</span>
         {/* The close button, and the way into the logbook beside it. */}
         <div className="bag-top">
@@ -1245,19 +1281,21 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
         </div>
         {(error ?? (trade ? null : refused)) && <div className="banner error">{error ?? refused}</div>}
 
-        <div className={`bag-doll ${gearLocked ? "locked" : ""}`} style={{ height: DOLL_ROWS * U }}>
-          <DollChart slots={CHART_SLOTS} unit={U} focus={{ x: DOLL.body.x + DOLL.body.w / 2, y: DOLL.body.y + DOLL.body.h / 2 }} pad={{ x: 3, y: 8 }} />
+        {/* What is worn and what is carried: on a short screen (a phone on its side) this scrolls, the bag's top staying put. */}
+        <div className="bag-body">
+        <div className={`bag-doll ${gearLocked ? "locked" : ""}`} style={{ height: DOLL_ROWS * bu }}>
+          <DollChart slots={CHART_SLOTS} unit={bu} focus={{ x: DOLL.body.x + DOLL.body.w / 2, y: DOLL.body.y + DOLL.body.h / 2 }} pad={{ x: 3, y: 8 }} />
           {SLOTS.map(slotCell)}
           {TO_COME.map((t) => (
             <span
               key={t.id}
               className={`doll-slot empty to-come ${t.id}`}
-              style={{ left: t.x * U, top: t.y * U, width: t.w * U, height: t.h * U }}
+              style={{ left: t.x * bu, top: t.y * bu, width: t.w * bu, height: t.h * bu }}
               title={`${t.label}: nothing to wear here yet`}
               // Set down here, a thing just goes back where it was.
               onClick={() => held && setHeld(null)}
             >
-              {t.icon && <Icon name={t.icon} color="#4a4336" size={iconPx(1, 1)} silhouette />}
+              {t.icon && <Icon name={t.icon} color="#4a4336" size={iconPx(1, 1, bu)} silhouette />}
               <span className="slot-name">{t.label}</span>
             </span>
           ))}
@@ -1315,7 +1353,7 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
           <PackGrid
             zone="pack"
             name="Your pack"
-            u={U}
+            u={bu}
             rows={layout.rows}
             baseRows={PACK_ROWS}
             stacks={stacks}
@@ -1354,6 +1392,7 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
           <button className="small" title="Pack everything tight, biggest first" onClick={() => tidy("pack")}>Tidy</button>
           {!onIsland && <button className="small" onClick={() => setCatchOpen(true)} title="The icebox and the trophy chest">Your catch</button>}
         </footer>
+        </div>
 
         {/* The card stands out to the bag's left. With a chest open there, it lies over the gear instead, clear of both grids (unless it is the gear being looked at). */}
         {shown && !held && !split && hover && (
@@ -1372,8 +1411,8 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
       {held && (
         <div ref={float} className="held-float" aria-hidden>
           {held.stack.t === "gear"
-            ? <Icon name={held.stack.item.icon} color={RARITY_COLOR[held.stack.item.rarity]} size={iconPx(heldShape!.w, heldShape!.h)} />
-            : <StackIcon stack={held.stack} size={iconPx(1, 1)} />}
+            ? <Icon name={held.stack.item.icon} color={RARITY_COLOR[held.stack.item.rarity]} size={iconPx(heldShape!.w, heldShape!.h, bu)} />
+            : <StackIcon stack={held.stack} size={iconPx(1, 1, bu)} />}
         </div>
       )}
       {split && (

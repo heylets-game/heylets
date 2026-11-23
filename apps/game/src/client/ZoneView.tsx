@@ -25,7 +25,8 @@
 // against it: a walk the server cut short or refused is cut back, and what
 // was already shown is not played twice. Nothing with dice in it is guessed.
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { holdTap } from "./holdTap";
 import { hexDistance, posKey, type HexPos } from "@gantt-quest/core";
 import {
   ABILITIES,
@@ -132,6 +133,7 @@ import { TacticsLayer, type Overlay } from "./render/TacticsLayer";
 import { spriteDataUrl } from "./render/sprites";
 import { WorldRenderer, hexToWorld, tileTop, type RenderState } from "./render/WorldRenderer";
 import { HudBar, type HudSlot } from "./ui/Hud";
+import { EmoteWheel } from "./EmoteWheel";
 import { useZone, type ZoneSend } from "./useZone";
 import { Icon } from "./items";
 import { label } from "./labels";
@@ -203,7 +205,7 @@ const LEAVING_WAIT_MS = 6000;
 const AHEAD_WAIT_MS = 6000;
 
 /** The things that are done, as against what comes of them: each starts a new run of results. */
-const CAUSES = new Set<ZoneEvent["t"]>(["used", "moved", "jumped", "blinked", "shoved", "reaction", "turn", "round", "fight_start", "fight_end"]);
+const CAUSES = new Set<ZoneEvent["t"]>(["stood", "used", "moved", "jumped", "blinked", "shoved", "reaction", "turn", "round", "fight_start", "fight_end"]);
 
 /**
  * Which events land on several at once, and which is the last of its run. What comes of one thing done
@@ -268,6 +270,8 @@ function dwell(ev: ZoneEvent, many: boolean, next: ZoneEvent | undefined, carrie
     case "condition": return many ? 50 : 150;
     case "down": return many ? 130 : 320;
     case "skip": case "choked": return 320;
+    // Up off the ground: what it does next waits till it is on its feet.
+    case "stood": return 450;
     case "surface": return many ? 80 : 240;
     case "up": case "fight_join": case "round": return 240;
     case "burst": case "reaction": return 300;
@@ -605,7 +609,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       const view = renderer.current;
       /** The unit makes its gesture (a cast, or a bow drawn), and `go`, what leaves its hand, runs as the gesture ends: at once with no view to draw it. */
       const cast = (id: string, name: string, x: number, z: number, go: () => void, thrown = false) => (view ? view.cast(id, name, x, z, go, thrown) : go());
-      if ((ev.t === "moved" || ev.t === "used" || ev.t === "jumped" || ev.t === "blinked") && next.encounter?.order.includes(ev.id)) {
+      if ((ev.t === "stood" || ev.t === "moved" || ev.t === "used" || ev.t === "jumped" || ev.t === "blinked") && next.encounter?.order.includes(ev.id)) {
         // An enemy's turn has no event of its own: it begins with the first thing that enemy does. So the pace of
         // turns is kept here: a beat after the last thing the one before it did, its turn is announced, and a beat
         // more before it acts. (Not for one marching in from afar, and not for a hero, whose player sets the pace.)
@@ -1338,6 +1342,12 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           };
         }
         say(ev.t === "down" ? `${name(ev.id)} is down.` : `${name(ev.id)} is back up.`);
+      } else if (ev.t === "stood") {
+        // Up off the ground before it does anything else: the picture has it on its feet from here.
+        const u = find(ev.id);
+        if (u) u.conditions = u.conditions.filter((c) => c.kind !== "prone");
+        later(() => view?.floatOver(ev.id, "Gets up", CONDITION_INFO.prone.color));
+        say(`${name(ev.id)} gets up.`);
       } else if (ev.t === "skip") {
         say(`${name(ev.id)} is ${CONDITION_INFO[ev.kind].name} and loses the turn.`);
       } else if (ev.t === "choked") {
@@ -1365,7 +1375,6 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         const mid = fighters.length > 0 ? { q: fighters.reduce((n, u) => n + u.pos.q, 0) / fighters.length, r: fighters.reduce((n, u) => n + u.pos.r, 0) / fighters.length } : null;
         const centre = mid ? fighters.reduce((best, u) => (Math.hypot(u.pos.q - mid.q, u.pos.r - mid.r) < Math.hypot(best.pos.q - mid.q, best.pos.r - mid.r) ? u : best)).pos : null;
         later(() => {
-          sounds.stinger("battle_start");
           sounds.zone("initiative");
           announce("fight", "Combat", "Roll for initiative");
           logAdd({ k: "head", text: "Combat begins" });
@@ -1379,7 +1388,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         if (ev.ids.some(yours)) {
           const mine = next.units.find((u) => ev.ids.includes(u.id) && yours(u.id));
           later(() => {
-            sounds.yourTurn();
+            sounds.zone("turn.yours");
             announce("yours", "Your turn", mine && mine.id !== next.you ? mine.name : undefined);
             logAdd({ k: "turn", name: mine?.name ?? "You", side: "hero" });
             setSpot(null);
@@ -1737,6 +1746,11 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   useEffect(() => {
     if (known) renderer.current?.setCombat(fighting, code);
   }, [known, fighting, code]);
+  // Hold to confirm (Options, on a touch screen): in a fight, a tap on the map only shows the hex until it is held.
+  const holdOn = useSyncExternalStore(holdTap.subscribe, holdTap.get);
+  useEffect(() => {
+    renderer.current?.setHoldToTap(fighting && holdOn);
+  }, [fighting, holdOn]);
 
   // ---------- what a pick reaches, and what it would cover ----------
 
@@ -2441,6 +2455,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   // What can be done right here, as buttons: over the rack out of a fight, over the turn bar in one.
   const quick = (
     <>
+        {!fighting && !act.down && <EmoteWheel onEmote={zone.emote} />}
         {fighting && myTurn && joinable(asState(state), act).map((s) => (
           <button key={`join:${s.bard.id}`} className="small" style={{ fontSize: 12, padding: "1px 7px", color: CONDITION_INFO[s.song.kind].color, borderColor: CONDITION_INFO[s.song.kind].color }} disabled={!canPay(commonCost("join", act.kind))} title={joinTip(s.bard.name, s.song.kind, !!act.summon)} onClick={() => common("join", { target: s.bard.id })}>
             ♪ Join song
@@ -2801,6 +2816,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         }}
         // While the trade table is open it has the bag beside it already.
         onBag={() => !tradeWith && setBag((open) => !open)}
+        // In a fight the emote wheel hangs off the side of the hotbar (out of one it is with the quick buttons).
+        emote={fighting && !act.down ? <EmoteWheel onEmote={zone.emote} tab /> : undefined}
         menu={<OptionsMenu title={state.options.name ?? `Map ${code}`} subtitle={<>{state.options.biome} · {state.options.size}{state.options.tier ? ` · ${state.options.tier} ${state.options.tier === 1 ? "ring" : "rings"} out` : ""}</>} actions={[caves
           ? {
               label: "Leave the cave",

@@ -17,6 +17,8 @@ import type { HeldStone } from "../server/lodestones";
 import type { ChestView } from "../server/townchest";
 import type { ApothecaryView, GalleyView, HaggleResult, KeeperWare, SmithyView } from "../server/workshops";
 import type { ErrandPaid, RegularsView } from "../server/errands";
+import type { GardenView } from "../server/garden";
+import type { WellView } from "../server/well";
 
 export type { Chart, ChartNode, ChestView, HeldStone };
 export type { ApothecaryView, SmithyView, GalleyView, ErrandPaid, RegularsView, HaggleResult, KeeperWare };
@@ -262,6 +264,22 @@ export const api = {
   answerMuster: (answer: MusterAnswer) => request<{ muster: Muster }>("/api/atlas/muster/answer", { answer }),
   /** The crew's town chest: its tabs and what is in each. Every call below gives the chest back as it now is. */
   chest: () => request<ChestView>("/api/chest"),
+  /** A hut's herb garden, yours or a crewmate's, and what you hold to tend it with. */
+  garden: (owner: string) => request<GardenView>(`/api/garden/${encodeURIComponent(owner)}`),
+  gardenPlant: (bed: number, sow: "seeds" | "herbs") => request<{ ok: true }>("/api/garden/plant", { bed, with: sow }),
+  gardenWater: (owner: string, bed: number) => request<{ ok: true }>("/api/garden/water", { owner, bed }),
+  gardenFeed: (owner: string, bed: number) => request<{ ok: true }>("/api/garden/feed", { owner, bed }),
+  gardenPick: () => request<{ herbs: number; beds: number; xp?: XpResult }>("/api/garden/pick", {}),
+  grindBone: (qty: number) => request<{ bonemeal: number }>("/api/garden/grind", { qty }),
+  /** Your watering can: how many waterings are in it (null: you have none). */
+  can: () => request<{ water: number | null }>("/api/can"),
+  /** The town well: the can, the water skins, the day's coins and the luck held. */
+  well: () => request<WellView>("/api/well"),
+  wellSkin: () => request<{ skins: number }>("/api/well/skin", {}),
+  wellCoin: () => request<{ gift: "gem" | "xp" | null; luck: number; tossed: number; xp?: XpResult }>("/api/well/coin", {}),
+  fillCan: () => request<{ water: number }>("/api/can/fill", {}),
+  buyCan: () => request<{ ok: true }>("/api/shop/can", {}),
+  buySeeds: (qty: number) => request<{ seeds: number; gold: number }>("/api/shop/seeds", { qty }),
   /** Put a piece of gear from your pack into a tab of the chest, or take one (by its id in the chest) out into your pack. */
   chestStow: (tab: number, item: number) => request<ChestView>("/api/chest/stow", { tab, item }),
   chestUnstow: (item: number) => request<ChestView>("/api/chest/unstow", { item }),

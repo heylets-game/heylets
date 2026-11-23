@@ -16,7 +16,7 @@ import "./camera.css";
 import { PINCH_PAN_SLACK, followIconSvg, readFollow, writeFollow } from "./cameraFollow";
 import type { HexPos } from "@gantt-quest/core";
 import { hexDistance } from "@gantt-quest/core";
-import { lookStep, lookYaw, BASE_HEIGHT, HARBOR_HEART_AT, BIG_REACH, ENEMIES, HEX_DIRS, SEATS, tileCost, WALL_FACE_HALF, WALL_ITEM_BOTTOM, WALL_ITEM_TOP, hexAt, xpProgress, reachable, tileAt, wallFace, wallFaces, type Biome, type Clime, type Outfit, type Poi, type Tile, type WorldMap } from "@gantt-quest/world";
+import { lookStep, lookYaw, BASE_HEIGHT, HARBOR_HEART_AT, BIG_REACH, ENEMIES, HEX_DIRS, SEATS, tileCost, WALL_FACE_HALF, WALL_ITEM_BOTTOM, WALL_ITEM_TOP, hexAt, xpProgress, reachable, tileAt, wallFace, wallFaces, type Biome, type Clime, type Emote, type Outfit, type Poi, type Tile, type WorldMap } from "@gantt-quest/world";
 import { fancy, fancyGrass } from "./fancy";
 import { NightLife } from "./nightlife";
 import { Storm } from "./storm";
@@ -31,6 +31,7 @@ import { HIDES, hidingMaterial } from "./silhouette";
 import { BOAT_SCALE, OARLOCKS, ROWER_SEAT, aimOar, rowboatModel, shipOar } from "./rowboat";
 import { Rise } from "./rise";
 import { gaze } from "../gaze";
+import { emotes } from "../emotes";
 import { NIGHT, VEIL_CLEAR_S, Veil } from "./veil";
 import { HOLD_MS, notShowing, nowShowing, takeOver, type Carried } from "./handover";
 import { placeLoading, placeReady, placesLoading } from "./preload";
@@ -48,6 +49,7 @@ import { LAMP_TABLES, TableLamps } from "./tableLamps";
 import { LID_OPEN, chestMouth, crateMiddle, restingLid, sharedShape } from "./caveProps";
 import { PLACE_MODELS } from "./places";
 import { placeKit } from "./places/kit";
+import { bedsSig } from "./places/garden";
 import { SQRT3, UP, hexToWorld, placeOf, yawOf } from "./places/placing";
 import { nearWater, openEar, sounds } from "../audio/gameSounds";
 import type { AttackStyle, Fighter } from "../audio/names";
@@ -328,6 +330,8 @@ const FAR_ZOOM = 40;
 const FAR_FINE = 2.6;
 /** Below 1 makes a pinch zoom less than the fingers move. */
 const PINCH_DAMPING = 0.55;
+/** With hold-to-confirm on (setHoldToTap), how long a finger stays still on a hex for that to count as a tap. */
+const TAP_HOLD_MS = 400;
 /** The angle equal to `to` (mod a full turn) that is closest to `from`, so easing takes the short way round. */
 function nearestTurn(from: number, to: number): number {
   const full = Math.PI * 2;
@@ -837,6 +841,7 @@ export class WorldRenderer {
   /** Which way everyone else's hero is looking (a turn about y), as their players' pointers have it; gone once they walk. */
   private looks = new Map<string, number>();
   private unhearLooks: (() => void) | null = null;
+  private unhearEmotes: (() => void) | null = null;
   /** The last look of your own hero's that was sent, and when: only a change is sent, and not too often. */
   private lookSent = -1;
   private lookSentAt = 0;
@@ -1109,6 +1114,16 @@ export class WorldRenderer {
    */
   private panFrom: { x: number; y: number } | null = null;
   private pointer = { x: 0, y: 0, downX: 0, downY: 0, down: false, dragged: false, dirty: false, inside: false };
+  /** Whether a finger's tap on the map must be held to count (setHoldToTap). */
+  private holdToTap = false;
+  /**
+   * What the press now down will do on letting go: "tap" acts as ever; "hold" (a finger, with hold-to-confirm on)
+   * only shows the hex unless it is held long enough, when it acts there and then and becomes "held".
+   */
+  private press: "tap" | "hold" | "held" = "tap";
+  private holdTimer = 0;
+  /** The ring that fills round a held finger. */
+  private holdRing: HTMLDivElement;
   /** Called every frame before drawing, after the camera is placed, by things a view has added to the scene (see addTicker). */
   private tickers = new Set<(dt: number, camera: THREE.PerspectiveCamera, clock: number) => void>();
 
@@ -1129,6 +1144,7 @@ export class WorldRenderer {
     this.renderer.localClippingEnabled = true;
     if (!this.opts.backdrop) {
       this.unhearLooks = gaze.onLooked((id, step) => this.looks.set(id, lookYaw(step)));
+      this.unhearEmotes = emotes.onEmoted((id, emote) => this.emote(id, emote));
       this.veil = new Veil();
       this.rise = new Rise();
     }
@@ -1214,6 +1230,11 @@ export class WorldRenderer {
     // And the combat view's, under them: there only on a battle map (see setCombat).
     this.rotateButtons.appendChild(cutawayButton(this.combat));
     container.appendChild(this.rotateButtons);
+    this.holdRing = document.createElement("div");
+    this.holdRing.className = "hold-ring";
+    this.holdRing.style.setProperty("--hold-ms", `${TAP_HOLD_MS}ms`);
+    this.holdRing.innerHTML = '<svg viewBox="0 0 40 40" aria-hidden="true"><circle class="track" cx="20" cy="20" r="17"/><circle class="fill" cx="20" cy="20" r="17" pathLength="1"/></svg>';
+    container.appendChild(this.holdRing);
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(container);
     // Name plates, speech bubbles and health bars sit on their own layer, so the finishing pass can leave them alone.
@@ -1380,6 +1401,7 @@ export class WorldRenderer {
     cancelAnimationFrame(this.raf);
     this.veil?.dispose();
     this.unhearLooks?.();
+    this.unhearEmotes?.();
     this.ear.close();
     this.resizeObserver.disconnect();
     this.coverObserver?.disconnect();
@@ -1395,6 +1417,8 @@ export class WorldRenderer {
     removeEventListener("keyup", this.onKeyUp);
     removeEventListener("blur", this.onBlur);
     this.rotateButtons.remove();
+    this.cancelHold();
+    this.holdRing.remove();
     this.unwatchFancy();
     this.unwatchGrass();
     this.nightLife.dispose();
@@ -1944,6 +1968,12 @@ export class WorldRenderer {
     const unit = this.units.get(actorId);
     if (unit && !unit.lying) unit.figure.taunt();
     sounds.attack(name, "melee", this.fighter(actorId), this.spot(actorId));
+  }
+
+  /** An emote (see EMOTES), where the unit stands. Not from one lying down; a dance stops when it walks. */
+  emote(unitId: string, emote: Emote) {
+    const unit = this.units.get(unitId);
+    if (unit && !unit.lying) unit.figure.emote(emote);
   }
 
   /** A guard put up: the unit braces behind its shield, or what it has in hand. */
@@ -3031,6 +3061,33 @@ export class WorldRenderer {
     return { x: ((v.x + 1) / 2) * this.container.clientWidth, y: ((1 - v.y) / 2) * this.container.clientHeight, on: Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1 };
   }
 
+  /** Keep the grass off the ground round a point for now (a garden tended up close), or (null) let it grow back. */
+  clearGrass(at: { x: number; z: number } | null, r = 2.2) {
+    this.ambience.setClearing(at ? { x: at.x, z: at.z, r } : null);
+  }
+
+  /** At the town well: lower the bucket into the water and wind it back up. */
+  wellDraw() {
+    this.townDressing?.drawWater();
+  }
+
+  /** At the town well: a coin tossed in, and what the well gives back for it. */
+  wellCoin(gift: "gem" | "xp" | null) {
+    this.townDressing?.tossCoin(gift);
+  }
+
+  /** The pointer's look over the canvas, for a minigame: a hand over something to press, or the usual arrow (""). */
+  setCursor(cursor: "" | "pointer") {
+    this.renderer.domElement.style.cursor = cursor;
+  }
+
+  /** Where a point in the world is on the screen, in container pixels (`on`: inside the view). Null when it is behind the camera. */
+  screenOfPoint(p: THREE.Vector3): { x: number; y: number; on: boolean } | null {
+    const v = p.clone().project(this.camera);
+    if (v.z < -1 || v.z > 1) return null;
+    return { x: ((v.x + 1) / 2) * this.container.clientWidth, y: ((1 - v.y) / 2) * this.container.clientHeight, on: Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1 };
+  }
+
   screenAbove(pos: HexPos, lift = 1.8): { x: number; y: number } | null {
     if (!this.state) return null;
     const v = this.standAt(pos);
@@ -3144,6 +3201,8 @@ export class WorldRenderer {
     });
     for (const h of m.hidden) h.obj.visible = h.was;
     if (m.felled) this.woods?.restore();
+    // Any grass a game kept off the ground (a garden's) grows back.
+    this.ambience.setClearing(null);
     const mine = this.state?.you ? this.units.get(this.state.you) : undefined;
     if (mine) for (const obj of [mine.root, mine.label, mine.ring]) if (obj) obj.visible = true;
     for (const id of this.stageHidden) this.showUnit(id);
@@ -3402,7 +3461,7 @@ export class WorldRenderer {
   // ---------- points of interest ----------
 
   private buildPois(state: RenderState) {
-    const sig = state.map.pois.map((p) => `${p.id}:${p.cleared}:${p.tier ?? ""}:${p.fill ?? ""}:${p.hp ?? ""}`).join("|");
+    const sig = state.map.pois.map((p) => `${p.id}:${p.cleared}:${p.tier ?? ""}:${p.fill ?? ""}:${p.hp ?? ""}:${bedsSig(p.beds)}`).join("|");
     if (sig === this.poiSig) return;
     this.poiSig = sig;
     // The old models' shapes are to go with them: the renderer holds a shape's buffers until told it is done with.
@@ -3464,8 +3523,10 @@ export class WorldRenderer {
       g.position.set(at.x + behind.x, at.y, at.z + behind.z);
       g.rotation.y = yaw;
       g.scale.setScalar(scale);
-      // A building bigger than its hex is pointed at as a whole: anywhere on it means its door.
-      if (scale > 1) g.userData.door = poi.pos;
+      // A building bigger than its hex is pointed at as a whole: anywhere on it means its door. So is a hut's herb
+      // garden once its hut stands (it lies across the corner of the doorstep, and pointing at it means the garden,
+      // not the hut nor the ground under it).
+      if (scale > 1 || (poi.kind === "garden" && poi.beds)) g.userData.door = poi.pos;
       g.traverse((o) => {
         // A glow is light, not a solid: it neither casts nor takes a shadow.
         if (o instanceof THREE.Mesh) o.castShadow = o.receiveShadow = !o.userData.glow && !o.userData.ink;
@@ -4506,8 +4567,11 @@ export class WorldRenderer {
       this.pointer.dragged = false;
       this.pointer.downX = this.pointer.x = e.clientX;
       this.pointer.downY = this.pointer.y = e.clientY;
+      this.press = this.holdToTap && e.pointerType === "touch" && !this.rotating ? "hold" : "tap";
+      if (this.press === "hold") this.armHold(e.clientX, e.clientY);
     } else if (this.touches.size === 2) {
       // A second finger: this is a pinch, never a tap.
+      this.cancelHold();
       this.pointer.dragged = true;
       this.rotating = false;
       this.pinch = { ...this.pinchState(), zoom: this.userDist };
@@ -4699,7 +4763,10 @@ export class WorldRenderer {
     this.pointer.y = e.clientY;
     this.pointer.inside = true;
     if (this.pointer.down) {
-      if (Math.hypot(e.clientX - this.pointer.downX, e.clientY - this.pointer.downY) > 6) this.pointer.dragged = true;
+      if (Math.hypot(e.clientX - this.pointer.downX, e.clientY - this.pointer.downY) > 6) {
+        this.pointer.dragged = true;
+        this.cancelHold();
+      }
       if (this.pointer.dragged) {
         if (this.rotating) {
           this.turn(-dx * 0.008);
@@ -4735,7 +4802,62 @@ export class WorldRenderer {
     // A right-click, or a Shift/Alt click, is the start of a turn, not an order to walk.
     const wasClick = this.pointer.down && !this.pointer.dragged && !this.rotating && e.type === "pointerup";
     this.pointer.down = false;
-    if (!wasClick) return;
+    const press = this.press;
+    this.press = "tap";
+    this.cancelHold();
+    // Held long enough, it has already acted; let go too soon, it only showed the hex (see armHold).
+    if (!wasClick || press !== "tap") return;
+    this.tap();
+  };
+
+  /**
+   * With hold-to-confirm on, a finger has come down on the map: the hex under it shows (its path, its highlight)
+   * and a ring fills round the finger. Still there and unmoved when it is full, the press is a tap on that hex.
+   */
+  private armHold(x: number, y: number) {
+    this.cancelHold();
+    this.setHovered(this.pick());
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const ring = this.holdRing;
+    ring.style.left = `${x - rect.left}px`;
+    ring.style.top = `${y - rect.top}px`;
+    // Off and on again, with a layout between, so the fill starts over from empty.
+    ring.classList.remove("on");
+    void ring.offsetWidth;
+    ring.classList.add("on");
+    this.holdTimer = window.setTimeout(() => {
+      this.holdTimer = 0;
+      ring.classList.remove("on");
+      if (this.press !== "hold" || !this.pointer.down || this.pointer.dragged || this.touches.size !== 1) return;
+      this.press = "held";
+      try {
+        navigator.vibrate?.(12);
+      } catch {
+        // No buzz on this device; the ring said enough.
+      }
+      this.tap();
+    }, TAP_HOLD_MS);
+  }
+
+  private cancelHold() {
+    if (this.holdTimer) clearTimeout(this.holdTimer);
+    this.holdTimer = 0;
+    this.holdRing?.classList.remove("on");
+  }
+
+  /**
+   * In a fight on a touch screen, whether a tap on the map must be held a moment to act (the player's choice, see
+   * holdTap.ts): a quick tap only shows the hex, so a finger can drag the view about without walking anyone off.
+   */
+  setHoldToTap(on: boolean) {
+    if (on === this.holdToTap) return;
+    this.holdToTap = on;
+    if (!on && this.press === "hold") this.press = "tap";
+    if (!on) this.cancelHold();
+  }
+
+  /** A tap (or click) on the map, where the pointer is: placing what is carried, a prop, or a hex. */
+  private tap() {
     if (this.state?.holding && this.callbacks.onPlace) {
       const target = this.aim();
       if (target) this.callbacks.onPlace(target);
@@ -4747,10 +4869,11 @@ export class WorldRenderer {
     }
     const pos = this.pick();
     if (pos) this.callbacks.onHexClick(pos, this.pickedPlace ?? undefined, this.pickedUnit ?? undefined);
-  };
+  }
 
-  private onPointerLeave = () => {
-    if (this.touches.size > 0) return;
+  private onPointerLeave = (e: PointerEvent) => {
+    // A lifted finger leaves the canvas too; with hold-to-confirm, the hex it showed stays shown until the next.
+    if (this.touches.size > 0 || (this.holdToTap && e.pointerType === "touch")) return;
     this.pointer.inside = false;
     this.setHovered(null);
     this.setHoveredPlace(null);

@@ -135,7 +135,8 @@ interface Props extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
 }
 
-const isPhone = () => typeof matchMedia === "function" && matchMedia("(max-width: 760px)").matches;
+/** A phone, held either way: narrow, or (on its side) short. The stylesheets say the same. */
+const isPhone = () => typeof matchMedia === "function" && matchMedia("(max-width: 760px), (max-height: 520px)").matches;
 
 function loadFolded(id: string, foldOnPhone: boolean, startFolded = false): boolean {
   try {

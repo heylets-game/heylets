@@ -14,6 +14,7 @@ import {
 } from "@gantt-quest/core";
 import { makeRng, seedFromString } from "./rng";
 import type { ResourceKind } from "./hut";
+import type { BedLook } from "./garden";
 
 /**
  * `dock`, `cobble`, `mud` and `rampart` belong to the Harbor: the wooden pier
@@ -105,7 +106,7 @@ export function tileCost(t: Tile): number {
  * crew member's hut. `board` and `shop` are its notice board and market stall, and `dealer` is where one stands to
  * deal with whoever keeps a shop, or with the pub's dealer. `door` is the way out of a hut's room.
  */
-export type PoiKind = "waygate" | "cave" | "landing" | "lair" | "shrine" | "cache" | "camp" | "plot" | "board" | "shop" | "ring" | "dice" | "door" | "works" | "pub" | "counter" | "shoals" | "crew" | "tide" | "trader" | "rocks" | "wreck" | "lot" | "site" | "pickup" | "fishing" | "felling" | "quarry" | "apothecary" | "smithy" | "galley" | "lighthouse" | "gate" | "dealer" | "crate" | "glowcap" | "lapidary" | "townchest";
+export type PoiKind = "waygate" | "cave" | "landing" | "lair" | "shrine" | "cache" | "camp" | "plot" | "board" | "shop" | "ring" | "dice" | "door" | "works" | "pub" | "counter" | "shoals" | "crew" | "tide" | "trader" | "rocks" | "wreck" | "lot" | "site" | "pickup" | "fishing" | "felling" | "quarry" | "apothecary" | "smithy" | "galley" | "lighthouse" | "gate" | "dealer" | "crate" | "glowcap" | "lapidary" | "townchest" | "garden" | "well";
 
 export interface Poi {
   id: string;
@@ -130,6 +131,8 @@ export interface Poi {
   find?: ResourceKind;
   /** For a bought plot whose shack is not up yet: how full its resource bin is, 0 to 1. */
   fill?: number;
+  /** For a hut's herb garden: each bed as it looks now. Absent on a garden nobody tends (a plot with no hut standing). */
+  beds?: BedLook[];
   /** For a chest in the caverns: an old chest, a strongbox behind a locked door, or the hoard in the deepest chamber. */
   loot?: ChestLoot;
   /** For a chest in the caverns: the id of the band that guards it. It cannot be opened while they stand. */
@@ -175,7 +178,8 @@ export function poiAt(map: WorldMap, pos: HexPos): Poi | undefined {
 
 // ---------- pathfinding ----------
 
-type CostFn = (tile: Tile) => number;
+/** The cost of stepping onto `tile`, from `from` (the hex the step leaves). */
+type CostFn = (tile: Tile, from: Tile) => number;
 const terrainCost: CostFn = tileCost;
 
 interface Reached {
@@ -185,7 +189,7 @@ interface Reached {
 }
 
 /**
- * Dijkstra from `from`. The cost of a step is the cost of the tile entered.
+ * Dijkstra from `from`. The cost of a step is what `costFn` asks for the tile entered (given the one left).
  * Returns every hex reachable within `budget`.
  */
 export function reachable(
@@ -204,10 +208,11 @@ export function reachable(
     const cur = frontier.splice(best, 1)[0];
     const curKey = posKey(cur.pos);
     if (out.get(curKey)!.cost < cur.cost) continue;
+    const left = tileAt(map, cur.pos);
     for (const n of hexNeighbors(cur.pos, map.grid)) {
       const tile = tileAt(map, n);
       if (!tile) continue;
-      const step = costFn(tile);
+      const step = left ? costFn(tile, left) : costFn(tile, tile);
       if (!Number.isFinite(step)) continue;
       const cost = cur.cost + step;
       if (cost > budget) continue;

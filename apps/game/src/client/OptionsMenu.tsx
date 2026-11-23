@@ -13,8 +13,9 @@ import { FADERS, FADER_LABELS } from "./audio/mixer";
 import { resetPanels } from "./DragPanel";
 import { PixelIcon } from "./PixelIcon";
 import { fancy, fancyGrass } from "./render/fancy";
+import { holdTap, touchScreen } from "./holdTap";
 import { units } from "./units";
-import { GEAR, GRASS, RULER, SPARKLE, SPEAKER_OFF, SPEAKER_ON } from "./ui/menuIcons";
+import { GEAR, GRASS, HOLD, RULER, SPARKLE, SPEAKER_OFF, SPEAKER_ON } from "./ui/menuIcons";
 import { UI_SCALE_MAX, UI_SCALE_MIN, UI_SCALE_STEP, getUiScale, onUiScaleChange, setUiScale, uiZoom } from "./uiScale";
 
 export interface ResetPosition {
@@ -72,6 +73,7 @@ export function OptionsMenu({ reset, resetBlocked, title = "The Harbor of Heylet
   const fancyOn = useSyncExternalStore(fancy.subscribe, fancy.get);
   const grassOn = useSyncExternalStore(fancyGrass.subscribe, fancyGrass.get);
   const measures = useSyncExternalStore(units.subscribe, units.get);
+  const holdOn = useSyncExternalStore(holdTap.subscribe, holdTap.get);
   const [scale, setScale] = useState(getUiScale);
   const [zoom, setZoom] = useState(uiZoom);
   const gear = useRef<HTMLButtonElement>(null);
@@ -95,7 +97,7 @@ export function OptionsMenu({ reset, resetBlocked, title = "The Harbor of Heylet
         e.stopPropagation();
         setOpen(false);
         gear.current?.focus();
-      } else if (!document.querySelector(".overlay, .look-dialog-backdrop") && !(e.target as HTMLElement | null)?.closest?.("input, textarea, select")) {
+      } else if (!document.querySelector(".overlay, .look-dialog-backdrop, .emote-veil") && !(e.target as HTMLElement | null)?.closest?.("input, textarea, select")) {
         setOpen(true);
       }
     };
@@ -233,6 +235,19 @@ export function OptionsMenu({ reset, resetBlocked, title = "The Harbor of Heylet
                   <span className="grow">Measures</span>
                   <span className="options-switch on" aria-hidden>{measures === "imperial" ? "Imperial" : "Metric"}</span>
                 </button>
+                {touchScreen() && (
+                  <button
+                    className="options-sound"
+                    role="switch"
+                    aria-checked={holdOn}
+                    title="In a fight, a quick tap on the map only shows where it would take you; hold your finger there a moment to move or act. Drag the map about without walking off by mistake."
+                    onClick={() => holdTap.set(!holdOn)}
+                  >
+                    <PixelIcon rows={HOLD} size={18} />
+                    <span className="grow">Hold to confirm in fights</span>
+                    <span className={`options-switch ${holdOn ? "on" : ""}`} aria-hidden>{holdOn ? "On" : "Off"}</span>
+                  </button>
+                )}
                 <button className="menu-action" onClick={resetPanels}>Reset UI windows</button>
               </section>
             </div>

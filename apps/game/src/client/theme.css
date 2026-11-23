@@ -342,6 +342,9 @@ input::placeholder { color: #a5765a; }
 /* The strip between the gear and the pack: the hero's name, and what the gear adds up to. */
 .bag-strip { display: flex; align-items: center; gap: 14px; min-height: 30px; padding: 0 4px; }
 .bag-who { font-family: var(--font-head); font-size: 17px; font-weight: normal; letter-spacing: 0.04em; color: var(--brass-hi); }
+/* Kept to one line, so the pack below does not jump when a thing is picked up and its name and buttons take the strip. */
+.bag-who { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bag-strip > button { flex: none; white-space: nowrap; }
 .bag-stat { display: inline-flex; align-items: center; gap: 5px; font-weight: bold; font-variant-numeric: tabular-nums; }
 .bag .doll-slot.to-come { opacity: 0.6; }
 .bag .doll-slot .slot-name { color: var(--muted); }

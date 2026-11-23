@@ -521,6 +521,7 @@ export const SAVE_STAT: Record<Condition, StatKey> = {
   black_spot: "int_stat",
   red_sky: "int_stat",
   tailwind: "agi",
+  lucky: "dex",
 };
 
 const info = (kind: EffectKind, blurb: string) => ({ name: EFFECT_INFO[kind].name, color: EFFECT_INFO[kind].color, blurb });
@@ -553,6 +554,8 @@ export const CONDITION_INFO: Record<Condition, { name: string; blurb: string; co
   dour_shanty: { name: "Dour Shanty", blurb: `Singing: allies within reach get +${SHANTY.dour.defence} Defence. Each who joins widens it a hex and adds +${SHANTY.dour.perJoin} Defence until the Bard's next turn.`, color: "#6f8fff" },
   windgod_shanty: { name: "Wind-god's Shanty", blurb: `Singing: allies within reach move ${SHANTY.windgod.move} further for each AP of movement and cannot be Slowed. Each who joins widens it a hex and adds ${SHANTY.windgod.perJoin} more for each AP until the Bard's next turn.`, color: "#3fe0c5" },
   inspired: { name: "Inspired", blurb: "Its next roll to hit has advantage.", color: "#ffe08a" },
+  // Its rounds are the lucky rolls left: they do not run down with the turns, only with the rolls.
+  lucky: { name: "Lucky", blurb: "A coin in the town well: each of its next rolls to hit, one for each coin, has advantage.", color: "#f6d365" },
   guiding_light: { name: "Guiding Light", blurb: "Lit up by a star: every attack against it has advantage.", color: "#fff3a8" },
   north_star: { name: "North Star", blurb: "Every blow it lands sets the target Burning, one stack more if the blow would have set it Burning anyway.", color: "#ffd166" },
   taunted: { name: "Taunted", blurb: "Goaded: it must go for the one who taunted it, if it can reach them.", color: "#ff5a3c" },

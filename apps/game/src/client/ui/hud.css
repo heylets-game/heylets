@@ -108,6 +108,9 @@
 @keyframes hud-tab-news { 50% { color: #fff; } }
 @media (prefers-reduced-motion: reduce) { .hud .hud-tab.news { animation: none; } }
 .hud-tab .pixel-glyph { width: calc(var(--p) * 3.6); height: auto; }
+/* The emote wheel's button fills its tab, as the cog does. */
+.hud-tab.emote .emote-button { width: 100%; height: 100%; min-width: 0; padding: 0; background: none; border: none; box-shadow: none; border-radius: 0; color: #fbe6c8; }
+.hud-tab.emote .emote-button:hover:not(:disabled) { background: rgba(255, 236, 190, 0.3); }
 /* The menu's cog fills its tab. */
 .hud-tab.cog .options { display: grid; width: 100%; height: 100%; }
 .hud-tab.cog .hud-btn { width: 100%; height: 100%; padding: 0; background: none; border: none; box-shadow: none; border-radius: 0; color: #fbe6c8; }
@@ -145,7 +148,8 @@
   .hud-left { bottom: calc(336px + var(--chat-tall, 110px)); }
 }
 
-@media (max-width: 760px) {
+/* A phone, held either way: narrow, or (on its side) short. */
+@media (max-width: 760px), (max-height: 520px) {
   .hud { bottom: 8px; max-width: calc(100% - 12px); }
   /* The whole rack is drawn smaller: two screen pixels to one of its own, or less where even that is too wide
      (244 is RACK.w in rackArt.ts, with a 16px margin). */
@@ -163,6 +167,19 @@
   .crew-cards .roster { gap: 4px; }
   .crew-cards .roster li.cm { padding: 2px 6px 2px 4px; }
   .run:has(.bag-overlay) .camera-rotate { display: none; }
+  /* The talk sits just above the bar and the strip over it, wherever their top is (--hud-all-h, measured in
+     Hud.tsx), and never taller than the room left above that. */
+  .run:has(> .hud) .harbor-chat, .run:has(> .hud) .chat { bottom: calc(var(--hud-all-h, 150px) / var(--ui-z, 1) + 6px); }
+  .run:has(> .hud) .chat.panel:not(.folded) .chat-lines { max-height: max(40px, calc((100dvh - var(--hud-all-h, 150px)) / var(--ui-z, 1) - 120px)); }
+  .hud-left { bottom: calc(var(--hud-all-h, 150px) / var(--ui-z, 1) + 48px); }
+}
+@media (max-height: 520px) and (min-width: 761px) {
+  /* A phone on its side: the talk stands beside the column down the left (the docks, the crew), not over it. */
+  .run:has(> .hud) .harbor-chat, .run:has(> .hud) .chat { left: calc(min(330px, calc(40vw / var(--ui-z, 1))) + 16px); }
+}
+@media (max-width: 760px) {
+  /* Opened across a phone held upright, the talk stops short of the camera's buttons down the right edge. */
+  .run:has(> .hud):has(.camera-rotate) .harbor-chat:not(.folded), .run:has(> .hud):has(.camera-rotate) .chat:not(.folded) { left: 6px; right: 62px; width: auto; }
 }
 
 /* ---------- The game menu ---------- */
