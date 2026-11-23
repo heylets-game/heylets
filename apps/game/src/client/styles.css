@@ -287,6 +287,17 @@ body { touch-action: manipulation; overscroll-behavior: none; }
    What is typed stays selectable, and so does a code a player copies (mark it .selectable), and the admin pages. */
 body { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 input, textarea, [contenteditable], .selectable, .admin { user-select: text; -webkit-user-select: text; -webkit-touch-callout: default; }
+/* A thing dragged (dragDrop.ts): its icon rides with the pointer, its own place is dimmed, and whatever will take it
+   lights up under it. */
+.drag-ghost {
+  position: fixed; z-index: 10000; pointer-events: none; display: grid; place-items: center;
+  transform: translate(-50%, -50%) scale(1.1); border-radius: 8px;
+  background: rgba(16, 20, 28, 0.6); outline: 2px solid var(--gold); box-shadow: 0 8px 18px rgba(0, 0, 0, 0.5);
+}
+.drag-ghost img { image-rendering: pixelated; }
+[data-drag-lifted] { opacity: 0.4; }
+body.drag-carrying, body.drag-carrying * { cursor: grabbing !important; }
+[data-drop][data-drag-over] { outline: 2px solid var(--good); outline-offset: 2px; }
 /* A code is picked up whole with one tap or click, not a word at a time. */
 .selectable.code { user-select: all; -webkit-user-select: all; }
 

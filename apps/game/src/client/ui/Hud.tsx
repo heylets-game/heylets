@@ -36,7 +36,8 @@
 // I (or B) opens and closes the bag and L opens the logbook, unless you are
 // typing. The bag's button does the same: press it again to put the bag away.
 
-import { Children, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type ReactNode } from "react";
+import { Children, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { dragSource, useDropTarget } from "../dragDrop";
 import { ABILITIES, COMMON_ACTIONS, ITEM_AP, RARITY_COLOR, THROWABLES, abilitiesFor, classAbilitiesOf, commonCost, loadoutOf, maxHpFor, parseAbilityLoadout, tacticOf, withClassAbilities, xpToNext, type CommonAction, type Throwable } from "@gantt-quest/world";
 import type { Me } from "../api";
 import { Icon, ItemDetail, toOwned } from "../items";
@@ -225,6 +226,22 @@ export function HudBar({ me, place, children, hp, meter, pips = [], chips, slots
     return () => removeEventListener("keydown", onKey);
   }, [onBag, onBook, bagBlocked]);
 
+  // Dragging one slot of the bar onto another swaps them; the torch dragged onto a hand lights one there.
+  // What the slots hold is only known further down, so the targets read it from here when something is dropped.
+  const rack = useRef<{ shown: (HudSlot | null)[]; move(from: number, to: number): void; light?: (hand: "main" | "off") => void }>({ shown: [], move: () => {} });
+  const slotDrop = useDropTarget(
+    (thing, el) => thing.kind === "slot" && Number(el.dataset.rack) !== thing.index,
+    (thing, el) => thing.kind === "slot" && rack.current.move(thing.index, Number(el.dataset.rack)),
+  );
+  const handDrop = useDropTarget(
+    (thing) => thing.kind === "slot" && rack.current.shown[thing.index]?.id === "it:torch" && !!rack.current.light,
+    (thing, el) => rack.current.light?.(el.dataset.hand === "off" ? "off" : "main"),
+  );
+  /** A slot as something to drag: pressing it also hides its tip. */
+  const slotDrag = (i: number) => {
+    const d = dragSource({ kind: "slot", index: i }, { onLift: () => setTip(null) });
+    return { ...d, onPointerDown: (e: ReactPointerEvent<HTMLElement>) => (setTip(null), d.onPointerDown?.(e)) };
+  };
   if (!c) return <div className="hud" ref={root}><div className="hud-rack"><span className="hud-caps">{children}{menu}</span></div></div>;
 
   /** One slot of the bar as it is shown out of a fight: what it is and what it costs, with nothing to press. */
@@ -276,12 +293,8 @@ export function HudBar({ me, place, children, hp, meter, pips = [], chips, slots
           key={slot}
           className="hud-slot hand"
           style={well(at)}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => {
-            e.preventDefault();
-            const from = Number(e.dataTransfer.getData("text/gq-slot"));
-            if (Number.isInteger(from) && shown[from]?.id === "it:torch") torch.light?.(hand);
-          }}
+          data-hand={hand}
+          {...handDrop}
           {...hover(at + 7, <>{card}<Tip name="A torch" line={hint} more={`${torch.carried} carried.`} /></>)}
         >
           {worn && <Icon name={worn.icon} color={RARITY_COLOR[worn.rarity]} size={40} />}
@@ -300,6 +313,8 @@ export function HudBar({ me, place, children, hp, meter, pips = [], chips, slots
     setLayout(next);
     saveBar(c.class_id, next);
   });
+
+  rack.current = { shown, move: moveShown, light: torch?.light };
 
   const bonus = loadoutOf(worn).bonus;
   const stats = { str: c.str + (bonus.str ?? 0), int_stat: c.int_stat + (bonus.int_stat ?? 0), vit: c.vit + (bonus.vit ?? 0), agi: c.agi + (bonus.agi ?? 0), dex: c.dex + (bonus.dex ?? 0) };
@@ -382,12 +397,8 @@ export function HudBar({ me, place, children, hp, meter, pips = [], chips, slots
           const keys = `${lower ? "Shift " : ""}${digit}`;
           // Any slot can be dropped on, and asked to hold something else.
           const arrange = {
-            onDragOver: (e: DragEvent) => e.preventDefault(),
-            onDrop: (e: DragEvent) => {
-              e.preventDefault();
-              const from = Number(e.dataTransfer.getData("text/gq-slot"));
-              if (Number.isInteger(from) && from !== i) moveShown(from, i);
-            },
+            "data-rack": i,
+            ...slotDrop,
             onContextMenu: (e: MouseEvent) => {
               e.preventDefault();
               onSlotMenu?.(i);
@@ -404,15 +415,10 @@ export function HudBar({ me, place, children, hp, meter, pips = [], chips, slots
               aria-label={s.name}
               aria-pressed={!!s.picked}
               aria-disabled={!s.run || !!s.spent}
-              draggable
-              onDragStart={(e) => {
-                e.dataTransfer.setData("text/gq-slot", String(i));
-                e.dataTransfer.effectAllowed = "move";
-                setTip(null);
-              }}
               onClick={() => !s.spent && s.run?.()}
               {...arrange}
               {...hover(RACK.mid[col] + 7, <Tip name={s.name} line={s.line} more={s.more} keys={keys} />)}
+              {...slotDrag(i)}
             >
               <Icon name={s.icon.name} color={s.icon.color} size={30} flat={s.icon.flat} />
               {s.wait ? <span className="hud-wait" aria-label={`${s.wait} turn${s.wait === 1 ? "" : "s"} to wait`}>{s.wait}</span> : s.count !== undefined && <span className="hud-count">{s.count}</span>}
