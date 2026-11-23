@@ -52,3 +52,4 @@ export * from "./stonecraft";
 export * from "./lapidary";
 export * from "./garden";
 export * from "./well";
+export * from "./talk";

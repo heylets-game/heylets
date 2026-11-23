@@ -28,7 +28,9 @@ export type SynthCombat =
   | "ignite" | "poison" | "splash" | "oil" | "ice"
   | "sick" | "soak"
   // A delve: a chest's lid creaking open, a crate taking a blow, and a crate breaking apart.
-  | "creak" | "knock" | "splinter";
+  | "creak" | "knock" | "splinter"
+  // Words typed out in a conversation, a short soft note a letter.
+  | "blip";
 
 /** The pub's game tables: the dice cup, dice on the felt, and the pot. */
 export type SynthTable = "shake" | "tumble" | "settle" | "hold" | "coins";
@@ -69,6 +71,7 @@ const COMBAT_LENGTH: Record<SynthCombat, number> = {
   ignite: 0.7, poison: 0.7, splash: 0.5, oil: 0.45, ice: 0.6,
   sick: 0.4, soak: 0.35,
   creak: 0.8, knock: 0.3, splinter: 0.9,
+  blip: 0.09,
 };
 
 /** Notes of a few bright chords, so heals and stings are not always the same three notes. */
@@ -290,6 +293,12 @@ function combat(r: Render, sound: SynthCombat) {
     case "defeat":
       // Down a minor third or two, slow.
       [392, 311, 262].forEach((f, i) => toneAt(r, t + i * 0.2, { type: "triangle", freq: f * wobble(r, 0.01), attack: 0.02, decay: i === 2 ? 0.7 : 0.22, gain: v * 0.45 }));
+      break;
+    case "blip":
+      // A letter of someone's words: a short rounded note with a breath of noise, never quite the same twice.
+      toneAt(r, t, { type: "triangle", freq: 520 * p, freqTo: 470 * p, attack: 0.004, decay: 0.05, gain: v * 0.32 });
+      toneAt(r, t, { type: "sine", freq: 1040 * p, attack: 0.004, decay: 0.03, gain: v * 0.08 });
+      noiseAt(r, t, { filter: "bandpass", freq: 1800 * p, q: 2, decay: 0.012, gain: v * 0.05 });
       break;
     case "your_turn":
       // Three notes up, the last one held: yours to play.

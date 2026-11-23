@@ -1,13 +1,14 @@
 // Inside the pub: a room bigger than any hut, drawn by the same renderer,
-// where the crew sees each other. Stand at the menu board to order a meal
-// or have a word with Old Tam; stand at the dice table to play. The
-// dealer, by the pillar at the end of the bar, has word of the regulars'
-// errands.
+// where the crew sees each other. Walk up to Old Tam at the menu board to
+// order a meal or have a word; stand at the dice table to play. The dealer,
+// by the pillar at the end of the bar, has word of the regulars' errands.
+// Walking up to any of the pub's people starts a conversation, up close
+// (useConversation), and what they deal in opens from it.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode, type RefObject, useLayoutEffect } from "react";
 import { useAudioScene } from "./audio/useAudioScene";
 import { hexDistance, hexNeighbors, type HexPos } from "@gantt-quest/core";
-import { PUB_BARKEEP, PUB_BARKEEP_POS, PUB_COUNTER, PUB_DEALER, PUB_DEALER_POS, PUB_DEALER_STAND, PUB_FITTINGS, PUB_GRID, PUB_LEADERBOARD, PUB_MAX_TALK, PUB_MENU, PUB_REGULAR_SPOTS, PUB_SALESMAN_POS, PUB_SEATS, PUB_TRADER, dueIn, gatherDay, poiAt, pubMountSpots, pubPath, pubRoom, PUB_MOUNT_SLOTS, regularsOn, salesman, outfitOf, type PubClientMessage, type RegularId, type XpMessage } from "@gantt-quest/world";
+import { PUB_BARKEEP, PUB_BARKEEP_POS, PUB_COUNTER, PUB_DEALER, PUB_DEALER_POS, PUB_DEALER_STAND, PUB_FITTINGS, PUB_GRID, PUB_LEADERBOARD, PUB_MENU, PUB_REGULAR_SPOTS, PUB_SALESMAN_POS, PUB_SEATS, PUB_TRADER, dueIn, gatherDay, poiAt, pubMountSpots, pubPath, pubRoom, PUB_MOUNT_SLOTS, regularsOn, salesman, outfitOf, barkeepTalk, dealerTalk, regularTalk, salesmanTalk, type PubClientMessage, type RegularId, type XpMessage } from "@gantt-quest/world";
 import { toOwned } from "./items";
 import { withLook } from "./render/sprites";
 import { CatchPanel } from "./CatchPanel";
@@ -40,6 +41,7 @@ import type { SeatLook, StageHost } from "./useTableStage";
 import { HeroSheet, useHeroSheet } from "./HeroSheet";
 import { blurb, label } from "./labels";
 import { xpEvents } from "./xpEvents";
+import { useConversation } from "./useConversation";
 import "./hut.css";
 import "./pub.css";
 
@@ -111,11 +113,6 @@ const TABLES: PubTable[] = [
 const BOARD_HEXES: HexPos[] = [PUB_LEADERBOARD.pos, { q: PUB_LEADERBOARD.pos.q, r: PUB_LEADERBOARD.pos.r - 1 }, { q: PUB_LEADERBOARD.pos.q + 1, r: PUB_LEADERBOARD.pos.r - 1 }, PUB_LEADERBOARD.stand];
 const onBoard = (pos: HexPos) => BOARD_HEXES.some((h) => same(h, pos));
 
-interface TalkLine {
-  who: string;
-  text: string;
-}
-
 /**
  * `resting`: the player is somewhere else, and the pub is kept, built but put away: not drawn, not connected, none
  * of its panels up. It is made that way with the game (App's Buildings), so that walking in is at once.
@@ -131,11 +128,10 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
   const [orderError, setOrderError] = useState<string | null>(null);
   /** Whether the last meal ordered gave back a gathering outing. Null until one is ordered. */
   const [rested, setRested] = useState<boolean | null>(null);
-  /** The conversation with the barkeep. Kept in this browser only. */
-  const [talk, setTalk] = useState<TalkLine[]>([]);
-  const [ask, setAsk] = useState("");
-  const [waiting, setWaiting] = useState(false);
-  const talkEnd = useRef<HTMLDivElement>(null);
+  /** The bar's panel (the board, Tam's fish and the crew's records) is open: asked for in a word with Tam. */
+  const [barOpen, setBarOpen] = useState(false);
+  /** The salesman's wares are open: asked for in a word with them. */
+  const [trading, setTrading] = useState(false);
 
   const visitor = useSalesman(me.crew?.id);
   const seller = visitor.here ? salesman(visitor.here.salesmanId) : undefined;
@@ -181,6 +177,12 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
   /** The dealer's panel is open. It opens once you are beside them if you clicked them, and closes when you walk away. */
   const [dealing, setDealing] = useState(false);
   const wantDeal = useRef(false);
+  /** Old Tam or his board was just clicked: a word with him once you are at the bar. */
+  const wantBar = useRef(false);
+  /** The salesman was just clicked: a word with them once you are at their table. */
+  const wantTrade = useRef(false);
+  /** The two in a conversation, if one is up: their bubbles are not hung (the box has their words). */
+  const talkingWith = useRef<string[]>([]);
   const castRef = useRef(cast);
   castRef.current = cast;
   /** The leaderboard on the wall is open. It opens once you are in front of it if you clicked it, and closes when you walk away. */
@@ -194,7 +196,8 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
       // Your own win: your sheet's level and XP are stale.
       if (m.id === pub.you) void refresh();
     },
-    (id, text) => renderer.current?.say(id, text),
+    // Not over the two talking while a conversation is up: the box has their words.
+    (id, text) => (talkingWith.current.includes(id) ? undefined : renderer.current?.say(id, text)),
     !resting,
   );
   const { you } = pub;
@@ -285,11 +288,15 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
         // Clicking the dealer (or the hex in front of them) walks you up, and opens their papers once there.
         wantDeal.current = same(to, PUB_DEALER_POS) || same(to, PUB_DEALER_STAND);
         if (wantDeal.current) return send.current({ type: "move", to: PUB_DEALER_STAND });
+        // Clicking Old Tam (or the menu board in front of him) walks you up to the bar, and a word with him once there.
+        wantBar.current = same(to, PUB_BARKEEP_POS) || same(to, PUB_COUNTER);
+        if (wantBar.current) return send.current({ type: "move", to: PUB_COUNTER });
         // Clicking the leaderboard (its wall, or the floor in front of it) walks you up to it, and opens it once there.
         wantBoard.current = false;
         if (onBoard(to)) return readBoard.current();
-        // Clicking the salesman walks you up to their table.
-        send.current({ type: "move", to: sellerHere.current && same(to, PUB_SALESMAN_POS) ? PUB_TRADER : to });
+        // Clicking the salesman walks you up to their table, and a word with them once there.
+        wantTrade.current = sellerHere.current && (same(to, PUB_SALESMAN_POS) || same(to, PUB_TRADER));
+        send.current({ type: "move", to: wantTrade.current ? PUB_TRADER : to });
       }, onHover: setHover }, { resting: born.current });
     renderer.current = r;
     if (latest.current) r.setState(latest.current);
@@ -324,11 +331,12 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
     if (!resting) return;
     renderer.current?.setResting(true);
     wantTalk.current = null;
-    wantDeal.current = wantBoard.current = false;
+    wantDeal.current = wantBoard.current = wantBar.current = wantTrade.current = false;
     setHover(null);
     setTalkTo(null);
     setStood(null);
-    for (const close of [setSellingFish, setRecords, setDealing, setReading, setBag, setBook]) close(false);
+    for (const close of [setSellingFish, setRecords, setDealing, setReading, setBag, setBook, setBarOpen, setTrading]) close(false);
+    talk.close();
     heroSheet.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resting]);
@@ -339,9 +347,6 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
   useEffect(() => {
     chatEnd.current?.scrollIntoView({ block: "end" });
   }, [pub.chat.length]);
-  useEffect(() => {
-    talkEnd.current?.scrollIntoView({ block: "end" });
-  }, [talk.length]);
 
   // Dev-only handle for driving the pub from the console or a test script.
   if (import.meta.env.DEV) (window as unknown as { __pub: unknown }).__pub = { pub };
@@ -351,6 +356,53 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
   const atTable = self ? TABLES.find((t) => same(self.pos, t.hex)) : undefined;
   const atGame = atTable?.game ?? null;
   const atDoor = !!self && same(self.pos, DOOR);
+  const atTrader = !!self && same(self.pos, PUB_TRADER);
+  const atDealer = !!self && same(self.pos, PUB_DEALER_STAND);
+
+  /** A word with one of the pub's people, up close. What they deal in opens from it. */
+  const talk = useConversation({
+    world: renderer,
+    you,
+    at: self?.pos ?? null,
+    onOpen: (what) => {
+      if (what === "board") setBarOpen(true);
+      else if (what === "fish") setSellingFish(true);
+      else if (what === "records") setRecords(true);
+      else if (what === "errands") setDealing(true);
+      else if (what === "trade") setTrading(true);
+      else if (what === "errand" && talkingRegular.current) setTalkTo(talkingRegular.current);
+    },
+    ask: api.pubTalk,
+    askLeft: api.pubTalkLeft,
+  });
+  /** The regular being talked to, for their errand. */
+  const talkingRegular = useRef<RegularId | null>(null);
+  talkingWith.current = talk.active && you ? [you, talk.active.unit] : [];
+  /** Start a word with one of them. */
+  const chat = (who: "barkeep" | "dealer" | "trader" | RegularId) => {
+    talkingRegular.current = null;
+    if (who === "barkeep") return talk.begin(barkeepTalk(word));
+    if (who === "dealer") return talk.begin(dealerTalk());
+    if (who === "trader") return seller && talk.begin(salesmanTalk(seller));
+    const r = castRef.current.find((c) => c.id === who);
+    if (!r) return;
+    talkingRegular.current = r.id;
+    talk.begin(regularTalk(r, regularUnit(r.id)));
+  };
+  const chatRef = useRef(chat);
+  chatRef.current = chat;
+  // Walking up to the bar: a word with Tam if you clicked him or the board. Walking away puts his panel away.
+  useEffect(() => {
+    if (!atCounter) return setBarOpen(false);
+    if (wantBar.current) chatRef.current("barkeep");
+    wantBar.current = false;
+  }, [atCounter]);
+  // The same at the salesman's table.
+  useEffect(() => {
+    if (!atTrader) return setTrading(false);
+    if (wantTrade.current) chatRef.current("trader");
+    wantTrade.current = false;
+  }, [atTrader]);
   // Sitting at a table: first person, until you stand up. Standing up walks you out to the floor beside it.
   const [stood, setStood] = useState<Game | null>(null);
   const seatedAt = atTable && stood !== atTable.game ? atTable : null;
@@ -365,16 +417,14 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
     away.sort((a, b) => b.r - a.r);
     if (away[0]) pub.send({ type: "move", to: away[0] });
   };
-  const atTrader = !!self && same(self.pos, PUB_TRADER);
-  const atDealer = !!self && same(self.pos, PUB_DEALER_STAND);
-  // Walking up to the dealer: a word of greeting, and their papers if you clicked them. Walking away puts them away.
+  // Walking up to the dealer: a word with him if you clicked him, else only a greeting. Walking away puts his papers away.
   useEffect(() => {
     if (!atDealer) {
       setDealing(false);
       return;
     }
-    renderer.current?.say(PUB_DEALER.id, PUB_DEALER.hello);
-    if (wantDeal.current) setDealing(true);
+    if (wantDeal.current) chatRef.current("dealer");
+    else renderer.current?.say(PUB_DEALER.id, PUB_DEALER.hello);
     wantDeal.current = false;
   }, [atDealer]);
   const atBoard = !!self && same(self.pos, PUB_LEADERBOARD.stand);
@@ -404,8 +454,9 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
       return;
     }
     const who = castRef.current.find((r) => r.id === nearId);
-    if (who) renderer.current?.say(regularUnit(who.id), who.hello);
-    if (wantTalk.current === nearId) setTalkTo(nearId);
+    // A word with them if you clicked them; passing by, only a greeting.
+    if (who && wantTalk.current === nearId) chatRef.current(who.id);
+    else if (who) renderer.current?.say(regularUnit(who.id), who.hello);
     wantTalk.current = null;
   }, [nearId]);
   const gold = me.character?.gold ?? 0;
@@ -415,13 +466,13 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
   const hoverPoi = hover ? poiAt(ROOM, hover) : undefined;
   const hoverTable = hoverPoi && TABLES.find((t) => t.game === hoverPoi.kind);
   const tip = hoverRegular ? `${hoverRegular.name}, ${hoverRegular.trade}. Click to walk up and talk.`
-    : hover && same(hover, PUB_BARKEEP_POS) ? `${PUB_BARKEEP.name}, the barkeep. Stand at the menu board to talk to him.`
+    : hover && same(hover, PUB_BARKEEP_POS) ? `${PUB_BARKEEP.name}, the barkeep. Click to walk up and talk: the board, fish, and the crew's records.`
     : hover && seller && same(hover, PUB_SALESMAN_POS) ? `${seller.name}, ${seller.trade}. Click to walk up and trade.`
     : hover && same(hover, PUB_DEALER_POS) ? `${PUB_DEALER.name}, ${PUB_DEALER.trade}. Click to walk up: word on the regulars' errands.`
     : hover && onBoard(hover) ? "The leaderboard: the crew's wins at the game tables. Click to walk up and read it."
     : !hoverPoi ? null
     : hoverTable ? hoverTable.tip
-    : hoverPoi.kind === "counter" ? "The menu board: order here, or have a word with the barkeep"
+    : hoverPoi.kind === "counter" ? "The menu board: click to walk up and have a word with the barkeep"
     : hoverPoi.kind === "dealer" ? `Where you stand to deal with ${PUB_DEALER.name}: word on the regulars' errands`
     : hoverPoi.kind === "trader" ? (seller ? `Trade with ${seller.name}, ${seller.trade}` : "The corner where traveling salesmen set up. Empty for now.")
     : hoverPoi.kind === "door" ? "The door back to the Harbor"
@@ -441,21 +492,6 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
       setBusy(false);
     }
   };
-  const speak = async () => {
-    const line = ask.trim();
-    if (!line || waiting) return;
-    setAsk("");
-    setWaiting(true);
-    setTalk((t) => [...t, { who: me.character?.name ?? "You", text: line }].slice(-20));
-    try {
-      const { say: reply } = await api.pubTalk(line);
-      setTalk((t) => [...t, { who: PUB_BARKEEP.name, text: reply }].slice(-20));
-    } catch {
-      setTalk((t) => [...t, { who: PUB_BARKEEP.name, text: "(He is busy with a barrel and does not hear you.)" }].slice(-20));
-    } finally {
-      setWaiting(false);
-    }
-  };
 
   // Put away: only the stage is kept, with the view built on it. (The stage is keyed, here and below, so it is the
   // same element either way and keeps its canvas.)
@@ -464,7 +500,9 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
     <div className={`run hut-view pub-view${seatedAt ? " seated" : ""}`}>
       <div key="stage" className="stage" ref={mount} />
 
-      {you && atCounter && (
+      {talk.node}
+
+      {you && atCounter && barOpen && (
         <DragPanel id="pub.bar" title="At the bar" className="story panel pub-bar">
           <h3>The board</h3>
           <p className="muted">A meal gives back one gathering outing, once a day. It gives nothing back if you have not been out gathering today, or have already eaten.</p>
@@ -492,23 +530,16 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
             <button className="small" onClick={() => setSellingFish(true)}>Sell him fish</button>
             <button className="small" onClick={() => setRecords(true)}>Crew records</button>
           </p>
-          <div className="pub-talk">
-            {talk.length === 0 && <div className="muted">He is wiping a mug that is already clean. Say something.</div>}
-            {talk.length === 0 && <div className="line npc"><strong>{PUB_BARKEEP.name}: </strong>{word}</div>}
-            {talk.map((l, i) => <div key={i} className={l.who === PUB_BARKEEP.name ? "line npc" : "line hero"}><strong>{l.who}: </strong>{l.text}</div>)}
-            {waiting && <div className="muted">He thinks about it…</div>}
-            <div ref={talkEnd} />
-          </div>
-          <div className="row">
-            <input value={ask} maxLength={PUB_MAX_TALK} placeholder={`Talk to ${PUB_BARKEEP.name}…`} onChange={(e) => setAsk(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void speak()} />
-            <button disabled={!ask.trim() || waiting} onClick={() => void speak()}>Say</button>
-          </div>
+          <p className="row">
+            <span className="grow" />
+            <button onClick={() => setBarOpen(false)}>Done</button>
+          </p>
         </DragPanel>
       )}
 
       {you && records && <RecordBoard you={you} onClose={() => (setRecords(false), loadWall())} />}
       {you && sellingFish && <CatchPanel buyer="tam" onGold={() => void refresh()} onClose={() => setSellingFish(false)} />}
-      {you && atTrader && seller && <SalesmanPanel me={me} refresh={refresh} />}
+      {you && atTrader && seller && trading && <SalesmanPanel me={me} refresh={refresh} />}
       {you && atBoard && reading && <PubLeaderboard you={you} version={dicePhase} onClose={() => setReading(false)} />}
       {you && atDealer && dealing && <DealerPanel onClose={() => setDealing(false)} />}
       {you && talking && regs && <RegularPanel key={talking.regular} view={talking} handedIn={regs.handedIn} cap={regs.cap} reload={loadRegs} refresh={refresh} onClose={() => setTalkTo(null)} />}
@@ -540,7 +571,7 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
 
       {/* Put away while seated at a game table: the table's own dock has the moves and the way to stand up, and it
           drops to the bottom of the screen (--hud-h goes with the bar). It comes back on standing up. */}
-      {!seatedAt && <HudBar
+      {!seatedAt && !talk.active && <HudBar
         me={me}
         place={
           <>
@@ -575,16 +606,20 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
           />
         }
       >
-        {near && !holdingDice && <button className="primary" disabled={!!talking} onClick={() => setTalkTo(near.id)}>Talk to {near.short}</button>}
-        {atDealer && !holdingDice && <button className="primary" disabled={dealing} onClick={() => setDealing(true)}>See errands</button>}
+        {near && !holdingDice && <button className="primary" disabled={!!talking} onClick={() => chat(near.id)}>Talk to {near.short}</button>}
+        {atDealer && !holdingDice && <button className="primary" disabled={dealing} onClick={() => chat("dealer")}>Talk to {PUB_DEALER.short}</button>}
+        {atCounter && !holdingDice && <button className="primary" disabled={barOpen} onClick={() => chat("barkeep")}>Talk to {PUB_BARKEEP.name}</button>}
+        {atTrader && seller && !holdingDice && <button className="primary" disabled={trading} onClick={() => chat("trader")}>Talk to {seller.name}</button>}
         {atBoard && !holdingDice && <button className="primary" disabled={reading} onClick={() => setReading(true)}>Read the board</button>}
         <button className={atDoor ? "primary" : ""} disabled={holdingDice} onClick={onLeave}>Leave</button>
       </HudBar>}
       {bag && me.character && <InventoryScreen me={me} refresh={refresh} onClose={() => setBag(false)} onLogbook={() => { setBag(false); setBook(true); }} />}
       {book && me.character && <Logbook me={me} refresh={refresh} onClose={() => setBook(false)} />}
       {atDoor && self && !holdingDice && <TileAction renderer={renderer} pos={self.pos} unitId={self.id} label="Leave" run={onLeave} />}
-      {near && self && !talking && !holdingDice && !atBoard && <TileAction renderer={renderer} pos={self.pos} unitId={self.id} label={`Talk to ${near.short}`} run={() => setTalkTo(near.id)} />}
-      {atDealer && self && !dealing && !holdingDice && <TileAction renderer={renderer} pos={self.pos} unitId={self.id} label="See errands" run={() => setDealing(true)} />}
+      {near && self && !talking && !holdingDice && !atBoard && !talk.active && <TileAction renderer={renderer} pos={self.pos} unitId={self.id} label={`Talk to ${near.short}`} run={() => chat(near.id)} />}
+      {atDealer && self && !dealing && !holdingDice && !talk.active && <TileAction renderer={renderer} pos={self.pos} unitId={self.id} label={`Talk to ${PUB_DEALER.short}`} run={() => chat("dealer")} />}
+      {atCounter && self && !barOpen && !sellingFish && !records && !holdingDice && !talk.active && <TileAction renderer={renderer} pos={self.pos} unitId={self.id} label={`Talk to ${PUB_BARKEEP.name}`} run={() => chat("barkeep")} />}
+      {atTrader && seller && self && !trading && !holdingDice && !talk.active && <TileAction renderer={renderer} pos={self.pos} unitId={self.id} label={`Talk to ${seller.name.split(" ")[0]}`} run={() => chat("trader")} />}
       {atBoard && self && !reading && !holdingDice && <TileAction renderer={renderer} pos={self.pos} unitId={self.id} label="Read the board" run={() => setReading(true)} />}
       </>}
 

@@ -62,6 +62,8 @@ export const soundName = {
   down: (f: Fighter) => [...voice(f, "down"), "down"],
   flee: (ok: boolean) => [ok ? "flee.ok" : "flee.fail", "flee"],
   yourTurn: () => ["turn.yours"],
+  /** A letter of someone's words typed out in a conversation. */
+  blip: () => ["ui.blip"],
   /** A moment of a fight on the tiles. */
   zone: (what: ZoneSound) => [`zone.${what}`],
   /** A surface laid on the ground, by its kind. */
@@ -123,7 +125,7 @@ export function soundNames(): Set<string> {
   for (const s of SURFACE_SOUNDS) add(soundName.surface(s));
   for (const c of ZONE_CONDITION_SOUNDS) add(soundName.effect(c));
   for (const t of ["poison", "fire"]) add(soundName.tick(t));
-  [soundName.crit(), soundName.healFailed(), soundName.flee(true), soundName.flee(false), soundName.yourTurn(), soundName.levelUp(), soundName.thunder()].forEach(add);
+  [soundName.crit(), soundName.healFailed(), soundName.flee(true), soundName.flee(false), soundName.yourTurn(), soundName.blip(), soundName.levelUp(), soundName.thunder()].forEach(add);
   add(["stinger.boss", "stinger.battle_start", "stinger.victory", "stinger.defeat"]);
   // On file from the old voyages, with nothing playing them yet: loot taken, gold paid and something picked up.
   add(["loot", ...RARITIES.map((r) => `loot.${r}`), "gold", "pickup", ...RESOURCE_KINDS.map((k) => `pickup.${k}`)]);

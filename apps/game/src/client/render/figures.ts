@@ -3330,8 +3330,24 @@ function lowHead(head: Part, look: Look, asleep: boolean, covered = false) {
   const earX = ringAt(rings, 3).rx * 0.97;
   lowEars(head, tone(skin, -0.05), (chosen ?? face)?.ears ?? "round", earX, covered);
   lowNose(head, tone(skin, -0.05), chosen?.nose ?? look.nose ?? face?.nose ?? "pointy", faceAt(rings, 2.3));
-  head.box(tone(skin, -0.25), 1, 0.24, 0.3, 0, mouthY, faceAt(rings, mouthY) + 0.03);
-  lowEyes(head, look.hair, chosen?.eyes ?? look.eyes ?? face?.eyes ?? "round", asleep, rings);
+  const eyes = chosen?.eyes ?? look.eyes ?? face?.eyes ?? "round";
+  if (talkFace && !asleep) {
+    // A townsperson's mouth and eyelids move as they talk to you: each is a part of its own on the head.
+    const mouth = new Part(head.joint, 0, mouthY, faceAt(rings, mouthY) + 0.03);
+    mouth.box(tone(skin, -0.25), 1, 0.24, 0.3);
+    extraParts.push(mouth);
+    mouths.push(mouth.joint);
+    const [rx, ry] = EYE_SIZE[eyes] ?? EYE_SIZE.round;
+    for (const s of [-1, 1]) {
+      const x = s * (eyes === "beady" ? 1.05 : 1.15);
+      const lid = new Part(head.joint, x, 3.05 + (eyes === "big" ? 0.05 : 0), faceZ(rings, x, 3.05) + 0.04);
+      lid.box(tone(skin, -0.08), rx * 2 + 0.18, ry * 2 + 0.16, 0.28);
+      lid.joint.visible = false;
+      extraParts.push(lid);
+      lids.push(lid.joint);
+    }
+  } else head.box(tone(skin, -0.25), 1, 0.24, 0.3, 0, mouthY, faceAt(rings, mouthY) + 0.03);
+  lowEyes(head, look.hair, eyes, asleep, rings);
   if (look.glowEyes && !asleep) {
     // Alight over the eyes the face has: a glow in each. For a look whose eyes light only with a spell, each is a
     // part of its own, swelled and shrunk as the spell is cast (see castEyes).
@@ -3644,6 +3660,13 @@ const coatHem = () => COAT_HEM * m.legs;
 const FOLD_OVERLAP = 0.7;
 /** Set by makeFigure for the figure being built: eyes that light only while a spell is cast (see Look.glowOnCast). */
 let castEyes: THREE.Object3D[] = [];
+/**
+ * Set by makeFigure for the figure being built: a townsperson, whose face can talk and blink. Its mouth is a part of
+ * its own (`mouths`), opened and shut as it speaks, and each eye has a lid (`lids`), shown for the blink of an eye.
+ */
+let talkFace = false;
+let mouths: THREE.Object3D[] = [];
+let lids: THREE.Object3D[] = [];
 /** The front of a long (wizard's) beard on the figure being built, if it has one: where an amulet goes. */
 let beardFront: { part: Part; at: Pt } | null = null;
 
@@ -3779,6 +3802,9 @@ function inlayPoints(rings: readonly Ring[], cx: number, cy: number, rx: number,
  * laid flat over it, so each shades as one colour rather than as a faceted ball. The brows are laid on the face
  * the same way, each over a dark band that is its outline.
  */
+/** How wide and tall (half of each) each kind of eye is drawn by lowEyes: what a lid has to cover. */
+const EYE_SIZE: Record<string, [number, number]> = { big: [0.55, 0.8], beady: [0.3, 0.3], narrow: [0.5, 0.24], round: [0.42, 0.62], sleepy: [0.42, 0.62], fierce: [0.42, 0.62] };
+
 function lowEyes(head: Part, hair: string, kind: string, asleep: boolean, rings: readonly Ring[]) {
   const y = 3.05;
   const fierce = kind === "fierce";
@@ -7761,6 +7787,8 @@ export interface FigurePose {
    * in). Whatever the hands held is put down meanwhile, so they can take the oars (see Figure.hands).
    */
   rowing?: number;
+  /** Speaking: a townsperson's mouth opens and shuts (only a townsperson's face has a mouth that moves; see lowHead). */
+  talking?: boolean;
 }
 
 /** How far below a seat's top a seated figure's origin goes, as a share of its size: its hips, less half a thigh. */
@@ -7822,6 +7850,8 @@ export interface Figure {
    * minute, and returns 0. A creature does nothing and returns 0.
    */
   work(how: "hammer" | "stir"): number;
+  /** Put down whatever it was in the middle of (a blow, a stir, an emote) and stand easy: to turn and talk to someone. */
+  rest(): void;
   /**
    * Wave, cheer, bow, dance or breakdance where it stands (see EMOTES). A dance or a breakdance stops when the figure walks off; anything else
    * asked of it (a blow, a jump) takes over at once. A creature does nothing.
@@ -7892,6 +7922,8 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
   bodyParts = [];
   beardFront = null;
   castEyes = [];
+  mouths = [];
+  lids = [];
   skirts = [];
   figureKind = kind;
   castPace = 1;
@@ -7903,6 +7935,7 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
   if (chosen) look = { ...look, skin: chosen.skin, hair: chosen.hair };
   face = !chosen && hasOwnFace(kind) ? faceFor(opts.face ?? kind, kind === "npc" || COLOURED_FOES.has(kind)) : null;
   if (face?.skin && face.hair) look = { ...look, skin: face.skin, hair: face.hair };
+  talkFace = lowPoly && !chosen && TOWNSFOLK.test(kind);
   const rig = rigFor(kind, top, look, outfit, !!opts.asleep);
   const fade = { value: 1 };
   const mats: Mats = {
@@ -7919,6 +7952,8 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
   const turners = spinners;
   const flashers = flickers;
   const spellEyes = castEyes;
+  const mouthParts = mouths;
+  const lidParts = lids;
   const hems = skirts;
   const pace = castPace;
   /** How long an action of this kind takes this figure. */
@@ -8087,6 +8122,17 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
         eye.scale.setScalar(Math.max(0.01, k));
       }
     }
+    if (lidParts.length > 0) {
+      // A blink every few seconds, on the figure's own beat, so a room of them never blinks together.
+      const every = 3 + (beat % 3);
+      const shut = !p.lying && (p.time + beat * 7) % every < 0.12;
+      for (const lid of lidParts) lid.visible = shut;
+    }
+    if (mouthParts.length > 0) {
+      // Talking: the mouth opens and shuts at the pace of speech, never quite in a rhythm.
+      const open = p.talking && !p.lying ? Math.max(0, Math.sin(p.time * 15) * 0.6 + Math.sin(p.time * 6.7 + beat) * 0.5) : 0;
+      for (const mouth of mouthParts) mouth.scale.y = 1 + open * 1.5;
+    }
   };
   update({ time: 0, stride: 0, walking: false, lean: 0, lying: false });
   last = -1;
@@ -8107,6 +8153,10 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
       if (!rig.acts) return 0;
       asked = how;
       return how === "hammer" ? HAMMER.hit : 0;
+    },
+    rest() {
+      asked = null;
+      action = null;
     },
     cast() {
       if (rig.acts && action?.kind === "cast" && !asked) {

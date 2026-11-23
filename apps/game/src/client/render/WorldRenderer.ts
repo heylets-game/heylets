@@ -786,8 +786,12 @@ interface Fx {
  */
 export interface WorldMinigame {
   frame(dt: number, now: number, aspect: number): { eye: THREE.Vector3; look: THREE.Vector3; blend: number; fov?: number };
-  /** True while the room should still draw your own hero: a game that waits for them to walk up before taking over. Left out, they are hidden from the start. */
-  ownHero?(): boolean;
+  /**
+   * True while the room should still draw your own hero: a game that waits for them to walk up before taking over.
+   * "figure": their figure only, without their tag and ring (a conversation, seen over their shoulder). Left out,
+   * they are hidden from the start.
+   */
+  ownHero?(): boolean | "figure";
   /** A press on the canvas, in normalized device coordinates, and the camera it was seen through. */
   press?(ndc: THREE.Vector2, camera: THREE.Camera): void;
   /** The pointer moved over the canvas, in normalized device coordinates. */
@@ -859,6 +863,12 @@ export class WorldRenderer {
   /** A game being played in the world, the group its things stand in, and how your own hero looked before it hid them. */
   /** Units a minigame is drawing for itself. */
   private stageHidden: string[] = [];
+  /** Units whose tag, ring and speech bubbles are not drawn for now (two in a conversation: the box has their words). */
+  private quiet = new Set<string>();
+  /** Units speaking now: their mouths move (see setTalking). */
+  private talking = new Set<string>();
+  /** Units turned to face someone (turnUnit), with the way they faced before. */
+  private turnedFrom = new Map<string, number>();
   private minigame: { game: WorldMinigame; group: THREE.Group; hidden: { obj: THREE.Object3D; was: boolean }[]; felled: boolean; sight?: THREE.Vector3 } | null = null;
   /** The trees on forest hexes and the boulder heaps on the hills; a minigame may clear some trees for room. */
   private woods: Woods | null = null;
@@ -1645,7 +1655,7 @@ export class WorldRenderer {
         this.dropBubble(id);
         continue;
       }
-      if (!unit) {
+      if (!unit || this.quiet.has(id)) {
         b.sprite.visible = false;
         continue;
       }
@@ -1961,6 +1971,61 @@ export class WorldRenderer {
     if (!unit || unit.lying || unit.path.length > 0) return 0;
     this.face(unit, at.x, at.z);
     return unit.figure.work(how);
+  }
+
+  /**
+   * Turn a unit to face a spot (someone it is talking to), easing round rather than snapping; null turns it back the
+   * way it faced before it was first turned. Not while it is walking or off its feet.
+   */
+  turnUnit(id: string, toward: { x: number; z: number } | null) {
+    const unit = this.units.get(id);
+    if (!unit) return;
+    if (!toward) {
+      const was = this.turnedFrom.get(id);
+      this.turnedFrom.delete(id);
+      if (was !== undefined && !unit.lying) unit.turnGoal = was;
+      if (was !== undefined && this.still) unit.turn = was;
+      return;
+    }
+    if (unit.lying || unit.path.length > 0) return;
+    const [dx, dz] = [toward.x - unit.goal.x, toward.z - unit.goal.z];
+    if (Math.hypot(dx, dz) < 0.05) return;
+    if (!this.turnedFrom.has(id)) this.turnedFrom.set(id, unit.turnGoal);
+    unit.turnGoal = Math.atan2(dx, dz);
+    if (this.still) unit.turn = unit.turnGoal;
+  }
+
+  /** Which way the usual view looks from: the camera's bearing about what it looks at (radians, as a unit's turn). */
+  viewBearing(): number {
+    return this.yaw;
+  }
+
+  /** Where a unit stands in the world (its feet, where it is going to stand once a walk is done), or null if it is not here. */
+  unitSpot(id: string): THREE.Vector3 | null {
+    return this.units.get(id)?.goal.clone() ?? null;
+  }
+
+  /** A unit speaking, or done: a townsperson's mouth moves while it speaks. Never with reduced motion asked for. */
+  setTalking(id: string, on: boolean) {
+    if (on && !this.still) this.talking.add(id);
+    else this.talking.delete(id);
+  }
+
+  /** A unit stops what it was at (a keeper's hammer, a stir), to talk. */
+  rest(id: string) {
+    this.units.get(id)?.figure.rest();
+  }
+
+  /** Units whose tag, ring and speech bubbles are not drawn (the pair in a conversation); the rest are drawn again. */
+  setQuiet(ids: string[]) {
+    for (const id of this.quiet) {
+      if (ids.includes(id)) continue;
+      const unit = this.units.get(id);
+      if (!unit) continue;
+      const mine = id === this.state?.you && !!this.minigame;
+      for (const obj of [unit.label, unit.ring]) if (obj && !mine) obj.visible = unit.root.visible;
+    }
+    this.quiet = new Set(ids);
   }
 
   /** A challenge bellowed (Taunt): the unit throws its arms wide and roars, and is heard. No weapon in it. */
@@ -3207,6 +3272,9 @@ export class WorldRenderer {
     if (mine) for (const obj of [mine.root, mine.label, mine.ring]) if (obj) obj.visible = true;
     for (const id of this.stageHidden) this.showUnit(id);
     this.stageHidden = [];
+    this.setQuiet([]);
+    this.talking.clear();
+    for (const id of [...this.turnedFrom.keys()]) this.turnUnit(id, null);
     for (const b of [this.followButton, ...this.turnButtons]) b.style.visibility = "";
     this.cover = { bottom: 0, right: 0 };
     if (this.camera.fov !== this.baseFov || this.coverShift) {
@@ -5161,7 +5229,8 @@ export class WorldRenderer {
       this.hideOwnHero();
       // Unless the game is still waiting for your hero to walk up: till then the room draws them as ever.
       const mine = this.state?.you ? this.units.get(this.state.you) : undefined;
-      if (mine && this.minigame.game.ownHero?.()) for (const obj of [mine.root, mine.label, mine.ring]) if (obj) obj.visible = true;
+      const own = this.minigame.game.ownHero?.();
+      if (mine && own) for (const obj of own === "figure" ? [mine.root] : [mine.root, mine.label, mine.ring]) if (obj) obj.visible = true;
     }
     // The combat view: now the camera is where it will draw from, the scenery's shaders are told how far on the
     // view is and what to keep clear (cutaway.ts), until this frame is drawn. Wisps and rain thin out with it.
@@ -5390,7 +5459,7 @@ export class WorldRenderer {
       if (unit.dying !== undefined && this.clock >= unit.dying) this.topple(id);
       const rowing = this.rowingPose(unit, p, dt);
       if (rowing === undefined) unit.oarPull = undefined;
-      unit.figure.update({ time: this.clock, stride: unit.stride, walking: unit.path.length > 0 && !unit.rush && !unit.leap, lean: unit.lean, lying: flat, rowing, sitting: unit.boatKind === "rowboat" && unit.boat?.visible ? 1 : unit.sit || undefined });
+      unit.figure.update({ time: this.clock, stride: unit.stride, walking: unit.path.length > 0 && !unit.rush && !unit.leap, lean: unit.lean, lying: flat, rowing, sitting: unit.boatKind === "rowboat" && unit.boat?.visible ? 1 : unit.sit || undefined, talking: this.talking.has(id) });
       const ground = p.y;
       unit.feet.set(p.x, ground, p.z);
       if (touched) this.touchdown(unit);
@@ -5425,7 +5494,9 @@ export class WorldRenderer {
         unit.label.position.set(p.x, ground + unit.label.userData.lift + perch, p.z);
         const tall = unit.label.userData.rows * labelRow;
         unit.label.scale.set(tall * unit.label.userData.aspect, tall, 1);
+        if (this.quiet.has(id)) unit.label.visible = false;
       }
+      if (unit.ring && this.quiet.has(id)) unit.ring.visible = false;
       if (unit.arrows) {
         for (const a of unit.arrows) {
           a.sprite.position.set(p.x + a.off.x, ground + a.off.y, p.z + a.off.z);
