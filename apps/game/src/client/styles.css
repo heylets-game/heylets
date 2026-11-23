@@ -283,6 +283,12 @@ input:focus, button:focus-visible, select:focus { outline: 2px solid var(--accen
   .inv-head { padding-right: 68px; }
 }
 body { touch-action: manipulation; overscroll-behavior: none; }
+/* A game, not a page: holding a button or dragging across the screen never selects text or offers to save an image.
+   What is typed stays selectable, and so does a code a player copies (mark it .selectable), and the admin pages. */
+body { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+input, textarea, [contenteditable], .selectable, .admin { user-select: text; -webkit-user-select: text; -webkit-touch-callout: default; }
+/* A code is picked up whole with one tap or click, not a word at a time. */
+.selectable.code { user-select: all; -webkit-user-select: all; }
 
 /* A minimized panel shows only its title and tools. */
 .panel-title { display: block; width: calc(100% - 48px); text-align: left; background: none; border: none; padding: 0 0 4px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-size: 12px; }
