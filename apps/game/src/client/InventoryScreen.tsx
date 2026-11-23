@@ -162,6 +162,10 @@ const CHART_SLOTS: ChartSlot[] = [...Object.values(DOLL), ...TO_COME];
  * and the pack's frame (slots.css). The bag's squares shrink until twelve of them fit across what is left.
  */
 const NARROW_SIDES = 2 * 14 + 2 * 8 + 2 * 4;
+/** A screen no taller than this is short (slots.css says the same): the bag fills its height and scrolls. */
+const SHORT_H = 520;
+/** What a short screen's bag needs above what is worn, in CSS pixels: the overlay's padding, the bag's, and its top row. */
+const SHORT_CHROME = 34 + 10 + 18 + 10 + 44 + 10;
 /** The smallest a square of the bag is drawn, however narrow the screen. */
 const MIN_U = 20;
 /**
@@ -515,7 +519,9 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
     return () => removeEventListener("resize", on);
   }, []);
   /** The bag's squares: full size, or on a phone as big as still lets the pack's twelve fit across the screen. */
-  const bu = Math.max(MIN_U, Math.min(U, Math.floor((viewW - NARROW_SIDES) / PACK_COLS)));
+  // On a short screen (a phone on its side, slots.css) they shrink too, until what is worn fits in the height
+  // with the bag's top row above it; the pack is scrolled to under it.
+  const bu = Math.max(MIN_U, Math.min(U, Math.floor((viewW - NARROW_SIDES) / PACK_COLS), viewH <= SHORT_H ? Math.floor((viewH - SHORT_CHROME) / DOLL_ROWS) : U));
 
   // What the hero has with them, with the changes of gear still on their way already made.
   const items = useMemo(() => wornAhead(me.inventory, wearing).map(toOwned), [me.inventory, wearing]);
@@ -1290,6 +1296,8 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
         </div>
         {(error ?? (trade ? null : refused)) && <div className="banner error">{error ?? refused}</div>}
 
+        {/* What is worn and what is carried: on a short screen (a phone on its side) this scrolls, the bag's top staying put. */}
+        <div className="bag-body">
         <div className={`bag-doll ${gearLocked ? "locked" : ""}`} style={{ height: DOLL_ROWS * bu }}>
           <DollChart slots={CHART_SLOTS} unit={bu} focus={{ x: DOLL.body.x + DOLL.body.w / 2, y: DOLL.body.y + DOLL.body.h / 2 }} pad={{ x: 3, y: 8 }} />
           {SLOTS.map(slotCell)}
@@ -1399,6 +1407,7 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
           <button className="small" title="Pack everything tight, biggest first" onClick={() => tidy("pack")}>Tidy</button>
           {!onIsland && <button className="small" onClick={() => setCatchOpen(true)} title="The icebox and the trophy chest">Your catch</button>}
         </footer>
+        </div>
 
         {/* The card stands out to the bag's left. With a chest open there, it lies over the gear instead, clear of both grids (unless it is the gear being looked at). */}
         {shown && !held && !split && hover && (
