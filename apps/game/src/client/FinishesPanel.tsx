@@ -12,6 +12,14 @@ import { GOLD_ICON, ThingIcon } from "./thingIcons";
 
 type View = Awaited<ReturnType<typeof api.finishes>>;
 
+/** When her table next changes, in words: "in 5 hours", "in 20 minutes". */
+function untilRestock(at: number): string {
+  const min = Math.max(1, Math.round((at - Date.now()) / 60_000));
+  if (min < 60) return `in ${min} minute${min === 1 ? "" : "s"}`;
+  const h = Math.round(min / 60);
+  return `in ${h} hour${h === 1 ? "" : "s"}`;
+}
+
 export const FINISH_TABS: { kind: FinishKind; label: string }[] = [
   { kind: "wall", label: "Wallpaper" },
   { kind: "floor", label: "Floors" },
@@ -47,7 +55,7 @@ export function FinishesPanel({ onClose, refresh }: { onClose(): void; refresh()
         <img className="regular-face" src={regularFace(DECORATOR.look)} alt="" />
         <div>
           <h3>{DECORATOR.name} <span className="muted">· {DECORATOR.trade}</span></h3>
-          <p className="salesman-says">“Buy it once and it's yours for good. Change your mind at home as often as you like.”</p>
+          <p className="salesman-says">“Buy it once and it's yours for good. I put out different patterns every day, so look again tomorrow.”</p>
         </div>
       </div>
       <div className="finish-tabs" role="tablist">
@@ -59,7 +67,7 @@ export function FinishesPanel({ onClose, refresh }: { onClose(): void; refresh()
       </div>
       {!view ? <p className="muted">Unrolling the samples…</p> : (
         <ul className={`finish-grid ${tab}`}>
-          {finishesOf(tab).map((f) => {
+          {finishesOf(tab).filter((f) => view.stock.includes(f.id)).map((f) => {
             const owned = view.owned.includes(f.id);
             const wearing = view.finish[tab] === f.id;
             const short = !owned && view.gold < f.price;
@@ -76,6 +84,7 @@ export function FinishesPanel({ onClose, refresh }: { onClose(): void; refresh()
           })}
         </ul>
       )}
+      {view && tab !== "roof" && <p className="muted small-note">Today's patterns: {view.stock.filter((id) => id.startsWith(`${tab}_`)).length} of {finishesOf(tab).length}. New ones {untilRestock(view.restock)}.</p>}
       {note && <p className={note.ok ? "good" : "bad"}>{note.text}</p>}
       {view && !view.hut && <p className="muted small-note">You have no hut standing yet. What you buy keeps until you do.</p>}
       <div className="row"><span className="spacer" /><button onClick={onClose}>Done</button></div>

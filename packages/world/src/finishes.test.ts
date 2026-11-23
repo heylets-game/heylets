@@ -3,6 +3,7 @@ import {
   BARE_FINISH,
   DECORATOR,
   FINISHES,
+  FINISH_STOCK,
   FINISHES_STALL,
   FINISH_KINDS,
   HARBOR_BUILDINGS,
@@ -12,6 +13,9 @@ import {
   cleanFinish,
   decoratorTalk,
   finishBuyProblem,
+  finishDay,
+  finishStock,
+  nextFinishDay,
   finishById,
   finishSetProblem,
   finishesOf,
@@ -59,13 +63,49 @@ describe("the finishes catalogue", () => {
 });
 
 describe("buying a finish", () => {
+  const all = FINISHES.map((f) => f.id);
   it("sells what is in the catalogue, once, to whoever can pay", () => {
     const roof = finishById("roof_plum")!;
-    expect(finishBuyProblem("roof_plum", [], roof.price)).toBeNull();
-    expect(finishBuyProblem("roof_plum", [], roof.price - 1)).toMatch(/gold/);
-    expect(finishBuyProblem("roof_plum", ["roof_plum"], 999)).toMatch(/already/);
-    expect(finishBuyProblem("roof_gold", [], 999)).toMatch(/doesn't sell/);
-    expect(finishBuyProblem(7, [], 999)).toMatch(/doesn't sell/);
+    expect(finishBuyProblem("roof_plum", [], roof.price, all)).toBeNull();
+    expect(finishBuyProblem("roof_plum", [], roof.price - 1, all)).toMatch(/gold/);
+    expect(finishBuyProblem("roof_plum", ["roof_plum"], 999, all)).toMatch(/already/);
+    expect(finishBuyProblem("roof_gold", [], 999, all)).toMatch(/doesn't sell/);
+    expect(finishBuyProblem(7, [], 999, all)).toMatch(/doesn't sell/);
+  });
+
+  it("sells only what Nell has out today", () => {
+    expect(finishBuyProblem("wall_shell", [], 999, ["roof_plum"])).toMatch(/out today/);
+    expect(finishBuyProblem("wall_shell", [], 999, ["wall_shell"])).toBeNull();
+  });
+});
+
+describe("Nell's table, day by day", () => {
+  const days = Array.from({ length: 60 }, (_, i) => finishDay(Date.UTC(2026, 10, 1) + i * 86_400_000));
+
+  it("has twice the wallpapers and floors she lays out on any one day, and every roof", () => {
+    expect(finishesOf("wall")).toHaveLength(16);
+    expect(finishesOf("floor")).toHaveLength(18);
+    expect(FINISH_STOCK).toEqual({ wall: 8, floor: 9, roof: finishesOf("roof").length });
+    for (const day of days) {
+      const stock = finishStock(day);
+      for (const kind of ["wall", "floor", "roof"] as const) expect(stock.filter((id) => finishById(id)!.kind === kind)).toHaveLength(FINISH_STOCK[kind]);
+    }
+  });
+
+  it("is the same all day for everyone, and changes from one day to the next", () => {
+    expect(finishStock("2026-11-23")).toEqual(finishStock("2026-11-23"));
+    expect(finishDay(Date.UTC(2026, 10, 23, 0, 0))).toBe(finishDay(Date.UTC(2026, 10, 23, 23, 59)));
+    for (let i = 1; i < days.length; i++) expect(finishStock(days[i])).not.toEqual(finishStock(days[i - 1]));
+  });
+
+  it("brings every pattern out within a few weeks", () => {
+    const seen = new Set(days.slice(0, 21).flatMap(finishStock));
+    expect([...seen].sort()).toEqual(FINISHES.map((f) => f.id).sort());
+  });
+
+  it("turns over at midnight UTC", () => {
+    expect(nextFinishDay(Date.UTC(2026, 10, 23, 15, 30))).toBe(Date.UTC(2026, 10, 24));
+    expect(nextFinishDay(Date.UTC(2026, 10, 30, 23, 59))).toBe(Date.UTC(2026, 11, 1));
   });
 });
 

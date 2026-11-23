@@ -4,7 +4,7 @@ import * as THREE from "three";
 import { pixelTexture, stamp, type BuildingGlow } from "../ambience";
 import { buildLapidary } from "../lapidary";
 import { foldByLook, warmPane, type PlaceModel } from "./kit";
-import { finishesOf } from "@gantt-quest/world";
+import { finishDay, finishStock, finishesOf } from "@gantt-quest/world";
 
 /** The pub's painted sign: a foaming tankard on an oxblood board with a gold edge. Made once and shared. */
 let pubSignTexture: THREE.CanvasTexture | null = null;
@@ -276,7 +276,7 @@ export const lapidary: PlaceModel = (_poi, kit) => {
  * Nell's stall, beside the market stall: a little open stall she stands in, behind a low counter with sample
  * squares of flooring and a paste pot on it; a rack behind her hung with lengths of her wallpapers; rolls of paper
  * standing in a basket at one end; a row of little painted roofs along the top of the rack, one for each colour she
- * sells; and a short sage-striped awning over the rack, not over her, so she is seen from above. The samples are in the catalogue's own colours.
+ * sells; and a short sage-striped awning over the rack, not over her, so she is seen from above. The samples are today's patterns, in their own colours.
  */
 export const finishes: PlaceModel = (_poi, kit) => {
   const { g, add, box, lambert } = kit;
@@ -284,8 +284,10 @@ export const finishes: PlaceModel = (_poi, kit) => {
   const plank = lambert("#a07a4c");
   const sage = lambert("#8fa478");
   const cream = lambert("#efe6cf");
-  const walls = finishesOf("wall");
-  const floors = finishesOf("floor");
+  // Her samples are what she has out today.
+  const today = new Set(finishStock(finishDay(Date.now())));
+  const walls = finishesOf("wall").filter((f) => today.has(f.id));
+  const floors = finishesOf("floor").filter((f) => today.has(f.id));
   const roofs = finishesOf("roof");
   // The platform she stands on.
   add(box(0.9, 0.04, 0.8), lambert("#6b5138"), 0, 0.02, 0);

@@ -1093,6 +1093,91 @@ function paper(ctx: CanvasRenderingContext2D, W: number, y0: number, y1: number,
         ctx.globalAlpha = 1;
       });
       break;
+    case "dots":
+      // Polka dots on a diamond lattice.
+      lattice(ctx, W, y0 + 10, y1, 32, 28, () => {
+        ctx.beginPath();
+        ctx.arc(0, 0, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      break;
+    case "harlequin":
+      // Diamonds of the ink colour and the ground in turn, each outlined in a fine darker line.
+      for (let row = 0; y0 + row * 24 < y1 + 48; row++) {
+        for (let col = -1; col * 32 < W + 32; col++) {
+          const cx = col * 32 + (row % 2 ? 16 : 0);
+          const cy = y0 + row * 24;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy - 24);
+          ctx.lineTo(cx + 16, cy);
+          ctx.lineTo(cx, cy + 24);
+          ctx.lineTo(cx - 16, cy);
+          ctx.closePath();
+          // Every other row inked: each diamond's four neighbours are the other colour.
+          ctx.globalAlpha = row % 2 ? 0.85 : 0.18;
+          ctx.fill();
+          ctx.globalAlpha = 0.3;
+          ctx.lineWidth = 1;
+          ctx.strokeStyle = shade(ink, -0.35);
+          ctx.stroke();
+        }
+      }
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = ink;
+      break;
+    case "waves":
+      // Rows of rolling waves, each with a curl of foam at its crest.
+      ctx.lineWidth = 2.4;
+      ctx.lineCap = "round";
+      for (let y = y0 + 14, row = 0; y < y1 + 10; y += 22, row++) {
+        ctx.globalAlpha = 0.75;
+        ctx.beginPath();
+        for (let x = 0; x <= W; x += 2) {
+          const t = ((x + (row % 2) * 16) / 32) * Math.PI * 2;
+          const py = y + Math.sin(t) * 4 + Math.sin(t * 2) * 1.2;
+          if (x === 0) ctx.moveTo(x, py);
+          else ctx.lineTo(x, py);
+        }
+        ctx.stroke();
+        ctx.globalAlpha = 0.45;
+        // Foam on each crest, where the wave is highest (sine at its lowest).
+        for (let x = 24 - (row % 2) * 16; x < W + 32; x += 32) {
+          ctx.beginPath();
+          ctx.arc(x, y - 7, 2.2, Math.PI, Math.PI * 2.2);
+          ctx.stroke();
+        }
+      }
+      ctx.globalAlpha = 1;
+      break;
+    case "anchors":
+      // A little anchor on a diamond lattice: a ring, a shank with its stock across, and two curved arms.
+      lattice(ctx, W, y0 + 22, y1, 64, 50, () => {
+        ctx.globalAlpha = 0.85;
+        ctx.lineWidth = 2;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.arc(0, -12, 3, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, -9);
+        ctx.lineTo(0, 11);
+        ctx.moveTo(-6, -5);
+        ctx.lineTo(6, -5);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(0, 2, 9, Math.PI * 0.15, Math.PI * 0.85);
+        ctx.stroke();
+        for (const sx of [-1, 1]) {
+          ctx.beginPath();
+          ctx.moveTo(sx * 8.6, 4.8);
+          ctx.lineTo(sx * 10.5, 2);
+          ctx.lineTo(sx * 6.5, 3.5);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      });
+      break;
   }
   // Paper ages: a faint mottle, and a little shadow under the beam.
   mottle(ctx, W, y0, y1, "90,70,40", 0.07, 1210, 10);
@@ -1281,6 +1366,88 @@ function herringbone(ctx: CanvasRenderingContext2D, look: FloorLook, salt: numbe
   }
 }
 
+/** Oak strips laid in little woven squares: each square two strips across, its neighbours two strips down. */
+function basketweave(ctx: CanvasRenderingContext2D, look: FloorLook, salt: number) {
+  ctx.fillStyle = look.gap;
+  ctx.fillRect(0, 0, SIZE, SIZE);
+  const sq = 32;
+  for (let r = 0; r < SIZE / sq; r++) {
+    for (let c = 0; c < SIZE / sq; c++) {
+      const across = (r + c) % 2 === 0;
+      for (let k = 0; k < 2; k++) {
+        const tone = look.tones[Math.floor(hash(r * 8 + c, k, salt) * look.tones.length)];
+        const [x, y, w, h] = across ? [c * sq + 1, r * sq + k * 16 + 1, sq - 2, 14] : [c * sq + k * 16 + 1, r * sq + 1, 14, sq - 2];
+        ctx.fillStyle = tone;
+        ctx.fillRect(x, y, w, h);
+        const g = across ? ctx.createLinearGradient(0, y, 0, y + h) : ctx.createLinearGradient(x, 0, x + w, 0);
+        g.addColorStop(0, "rgba(255,240,210,0.14)");
+        g.addColorStop(1, "rgba(40,20,0,0.16)");
+        ctx.fillStyle = g;
+        ctx.fillRect(x, y, w, h);
+        ctx.strokeStyle = shade(tone, -0.18);
+        ctx.globalAlpha = 0.3;
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        if (across) {
+          ctx.moveTo(x, y + h / 2 + (hash(r, c + k, salt + 1) - 0.5) * 4);
+          ctx.lineTo(x + w, y + h / 2 + (hash(c, r + k, salt + 2) - 0.5) * 4);
+        } else {
+          ctx.moveTo(x + w / 2 + (hash(r, c + k, salt + 1) - 0.5) * 4, y);
+          ctx.lineTo(x + w / 2 + (hash(c, r + k, salt + 2) - 0.5) * 4, y + h);
+        }
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+}
+
+/** Octagon tiles in grout, with a little square of the last tone set in where four of them meet. */
+function octagons(ctx: CanvasRenderingContext2D, look: FloorLook, salt: number) {
+  const [tile, dot] = [look.tones[0], look.tones[look.tones.length - 1]];
+  ctx.fillStyle = look.gap;
+  ctx.fillRect(0, 0, SIZE, SIZE);
+  const s = 32;
+  const cut = 9;
+  for (let r = 0; r < SIZE / s; r++) {
+    for (let c = 0; c < SIZE / s; c++) {
+      const [x, y] = [c * s + 1, r * s + 1];
+      const w = s - 2;
+      ctx.beginPath();
+      ctx.moveTo(x + cut, y);
+      ctx.lineTo(x + w - cut, y);
+      ctx.lineTo(x + w, y + cut);
+      ctx.lineTo(x + w, y + w - cut);
+      ctx.lineTo(x + w - cut, y + w);
+      ctx.lineTo(x + cut, y + w);
+      ctx.lineTo(x, y + w - cut);
+      ctx.lineTo(x, y + cut);
+      ctx.closePath();
+      ctx.fillStyle = tile;
+      ctx.fill();
+      const g = ctx.createRadialGradient(x + w * 0.35, y + w * 0.3, 1, x + w * 0.35, y + w * 0.3, w * 0.7);
+      g.addColorStop(0, `rgba(255,255,255,${0.06 + hash(r, c, salt) * 0.06})`);
+      g.addColorStop(1, "rgba(0,0,0,0.06)");
+      ctx.fillStyle = g;
+      ctx.fill();
+    }
+  }
+  // The little squares, turned on their corners, where four octagons meet (round the sheet's edges too).
+  ctx.fillStyle = dot;
+  for (let r = 0; r <= SIZE / s; r++) {
+    for (let c = 0; c <= SIZE / s; c++) {
+      const [cx, cy] = [c * s, r * s];
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - cut + 2);
+      ctx.lineTo(cx + cut - 2, cy);
+      ctx.lineTo(cx, cy + cut - 2);
+      ctx.lineTo(cx - cut + 2, cy);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+}
+
 /** Boards painted over in a lattice of diamonds, the paint worn through to the wood here and there. */
 function paintedDiamonds(ctx: CanvasRenderingContext2D, look: FloorLook, salt: number) {
   const [base, ink] = look.tones;
@@ -1325,6 +1492,8 @@ export function finishFloorTexture(id: string, look: FloorLook): THREE.CanvasTex
     else if (look.pattern === "tiles") tiles(ctx, look, salt);
     else if (look.pattern === "flags") slabs(ctx, look, salt);
     else if (look.pattern === "herringbone") herringbone(ctx, look, salt);
+    else if (look.pattern === "basketweave") basketweave(ctx, look, salt);
+    else if (look.pattern === "octagon") octagons(ctx, look, salt);
     else paintedDiamonds(ctx, look, salt);
   });
 }
