@@ -30,6 +30,11 @@ export class Stmt {
   exec() {
     const stmt = this.sql.prepare(this.text);
     if (/^\s*(SELECT|WITH)/i.test(this.text)) return { results: stmt.all(...(this.args as never[])) as Row[], meta: { changes: 0, last_row_id: 0 } };
+    // A write that hands back what it wrote, as D1 does: its rows, and as many changes as there are of them.
+    if (/\bRETURNING\b/i.test(this.text)) {
+      const rows = stmt.all(...(this.args as never[])) as Row[];
+      return { results: rows, meta: { changes: rows.length, last_row_id: 0 } };
+    }
     const res = stmt.run(...(this.args as never[]));
     return { results: [] as Row[], meta: { changes: Number(res.changes), last_row_id: Number(res.lastInsertRowid) } };
   }

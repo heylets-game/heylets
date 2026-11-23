@@ -1,9 +1,11 @@
 // Inside the smithy, the apothecary, the galley or the Lapidary: a small room
 // drawn by the same renderer as the pub and the huts, with the keeper at their
 // work (Greta hammering at her anvil, Ansel stirring his cauldron, Gorm
-// chopping at his block, Tilda holding a stone to her wheel), and still at it
-// while they deal with you. Walk up to them (or click them) to see what they
-// sell and do, and to haggle. The door at the front leads back to the Harbor.
+// chopping at his block, Tilda holding a stone to her wheel). Walk up to them
+// (or click them) and they put it down to talk to you, up close
+// (useConversation); ask to see what they sell and do, and they are back at it
+// while they deal with you and you haggle. The door at the front leads back to
+// the Harbor.
 //
 // Unlike the pub, nobody else is in here: the room is this player's own copy
 // and the walking is worked out in the browser (the rules are still
@@ -12,9 +14,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useLayoutEffect } from "react";
 import * as THREE from "three";
-import { hexNeighbors, type HexPos } from "@gantt-quest/core";
+import { type HexPos } from "@gantt-quest/core";
 import { useOwnLook } from "./ownLook";
-import { KEEPER_GRID, KEEPER_PLACES, keeperPath, keeperRoom, keeperWallPieces, outfitOf, type KeeperHouse } from "@gantt-quest/world";
+import { KEEPER_PLACES, keeperPath, keeperRoom, keeperTalk, keeperWallPieces, outfitOf, type KeeperHouse } from "@gantt-quest/world";
 import { api, type ApothecaryView, type GalleyView, type Me, type SmithyView } from "./api";
 import { useAudioScene } from "./audio/useAudioScene";
 import { InventoryScreen } from "./InventoryScreen";
@@ -29,6 +31,7 @@ import { TileAction } from "./TileAction";
 import { HudBar } from "./ui/Hud";
 import { ApothecaryKeeperPanel, GalleyKeeperPanel, SmithyKeeperPanel } from "./works/KeeperPanels";
 import { LapidaryKeeperPanel } from "./works/LapidaryPanel";
+import { useConversation } from "./useConversation";
 import "./hut.css";
 import "./pub.css";
 
@@ -125,7 +128,7 @@ export function KeeperView({ shop, me, refresh, onLeave, resting = false }: { sh
   useEffect(() => {
     const r = new WorldRenderer(mount.current!, {
       // Clicking the keeper walks you up to stand in front of them.
-      onHexClick: (to) => walk.current(same(to, place.keeperPos) ? place.stand : to),
+      onHexClick: (to) => (same(to, place.keeperPos) ? talkTo.current() : walk.current(to)),
       onHover: setHover,
     }, { resting: born.current });
     renderer.current = r;
@@ -152,8 +155,8 @@ export function KeeperView({ shop, me, refresh, onLeave, resting = false }: { sh
     const round = how === "stir" || how === "grind";
     const beat = round ? 29_000 : how === "chop" ? 1300 : 1150;
     const go = () => {
-      // Nobody is in to see or hear it: looked at again in a second.
-      if (away.current) return later(go, 1000);
+      // Nobody is in to see or hear it, or they have put it down to talk to you: looked at again in a second.
+      if (away.current || chatting.current) return later(go, 1000);
       const wait = r.work(keeper.id, round ? "stir" : "hammer", at);
       if (!round && wait > 0) {
         later(() => {
@@ -188,6 +191,9 @@ export function KeeperView({ shop, me, refresh, onLeave, resting = false }: { sh
     queueMicrotask(() => renderer.current?.playEvents([{ t: "moved", heroId: you, path: [] }]));
     setBag(false);
     setBook(false);
+    talk.close();
+    setShopOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resting, door, you]);
   // And brought back as they walk in, fading in over where they came from (render/handover.ts), with the shop
   // read again: what it sells and what your gear would cost to work may have changed.
@@ -199,30 +205,40 @@ export function KeeperView({ shop, me, refresh, onLeave, resting = false }: { sh
 
   const atDoor = same(pos, door);
   const atKeeper = same(pos, place.stand);
-  // Walking up to the keeper: a word of greeting.
+  const open = shop === "lapidary" || !!view?.built;
+  /** Their panel was asked for (from the conversation); stepping away puts it away. */
+  const [shopOpen, setShopOpen] = useState(false);
+  const talk = useConversation({ world: renderer, you, at: pos, onOpen: (what) => what === "shop" && setShopOpen(true), panelOpen: shopOpen, closePanels: () => setShopOpen(false) });
+  /** Talking: the keeper has put their work down. */
+  const chatting = useRef(false);
+  chatting.current = !!talk.active;
+  /** Walk up to the keeper, or, there already, talk. */
+  const talkTo = useRef(() => {});
+  talkTo.current = () => (same(posRef.current, place.stand) ? talk.begin(keeperTalk(shop)) : walk.current(place.stand));
+  // Walking up to the keeper: they turn to talk (or, with the shop not built, only a word of greeting). Walking away puts the panel away.
   useEffect(() => {
-    if (atKeeper) renderer.current?.say(keeper.id, keeper.hello);
-  }, [atKeeper, keeper]);
+    if (!atKeeper) return setShopOpen(false);
+    if (open) talk.begin(keeperTalk(shop));
+    else renderer.current?.say(keeper.id, keeper.hello);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [atKeeper, keeper, shop]);
   const say = useCallback((text: string) => renderer.current?.say(keeper.id, text), [keeper]);
   /** Dealing with the keeper: their panel is up, and the hotbar is put away so the list has the screen. */
-  const dealing = (shop === "lapidary" || !!view?.built) && atKeeper;
-  const panel = { reload, refresh, onSay: say, onDone: () => stepAway() };
+  const dealing = open && atKeeper && shopOpen;
+  // Done with the panel: back to talking to them (the camera never left).
+  const panel = { reload, refresh, onSay: say, onDone: () => setShopOpen(false) };
   // While dealing, the camera brings the keeper clear of the panel so you can watch them work: to the right of it
   // on a wide screen (the panel is on the left), above it on a phone (it is docked along the bottom). Stepping
   // away puts the camera back on the middle of the room.
   useEffect(() => {
     const r = renderer.current;
-    if (!r) return;
+    // (In a conversation the camera is the conversation's.)
+    if (!r || talk.active) return;
     const k = place.keeperPos;
     const phone = typeof matchMedia === "function" && matchMedia("(max-width: 760px)").matches;
     r.lookAt(dealing ? (phone ? { q: k.q - 2, r: k.r + 3 } : { q: k.q - 1, r: k.r }) : { q: k.q, r: k.r + 1 });
-  }, [dealing, place]);
-  /** Step back from the keeper onto the floor beside the counter, toward the room: the panel goes, the hotbar comes back. */
-  const stepAway = () => {
-    const away = hexNeighbors(place.stand, KEEPER_GRID).filter((n) => !same(n, place.keeperPos) && keeperPath(shop, room, place.stand, n));
-    away.sort((a, b) => b.r - a.r);
-    if (away[0]) walk.current(away[0]);
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dealing, place, !!talk.active]);
 
   const [bag, setBag] = useState(false);
   const [book, setBook] = useState(false);
@@ -233,7 +249,7 @@ export function KeeperView({ shop, me, refresh, onLeave, resting = false }: { sh
   };
 
   const tip = !hover ? null
-    : same(hover, place.keeperPos) ? `${keeper.name}, ${keeper.trade}. Click to walk up.`
+    : same(hover, place.keeperPos) ? `${keeper.name}, ${keeper.trade}. Click to walk up and talk.`
     : same(hover, place.stand) ? `Where you stand to deal with ${keeper.short}`
     : same(hover, door) ? "The door back to the Harbor"
     : null;
@@ -247,14 +263,16 @@ export function KeeperView({ shop, me, refresh, onLeave, resting = false }: { sh
       <div key="stage" className="stage" ref={mount} />
 
       {dealing && (shop === "lapidary"
-        ? <LapidaryKeeperPanel me={me} refresh={refresh} onSay={say} onDone={() => stepAway()} />
+        ? <LapidaryKeeperPanel me={me} refresh={refresh} onSay={say} onDone={panel.onDone} />
         : shop === "apothecary" ? <ApothecaryKeeperPanel view={view as ApothecaryView} setView={setView} {...panel} />
         : shop === "smithy" ? <SmithyKeeperPanel me={me} view={view as SmithyView} setView={setView} {...panel} />
         : <GalleyKeeperPanel onDone={panel.onDone} />)}
 
       {/* Put away while dealing with the keeper, as at the pub's game tables: the panel has the screen, and its own
           way back ("Step away"). It comes back as you step away. */}
-      {!dealing && <HudBar
+      {talk.node}
+
+      {!dealing && !talk.active && <HudBar
         me={me}
         place={
           atDoor ? <span>The door back to the Harbor.</span>
@@ -279,7 +297,7 @@ export function KeeperView({ shop, me, refresh, onLeave, resting = false }: { sh
           />
         }
       >
-        {!atKeeper && !refused && <button className="primary" onClick={() => walk.current(place.stand)}>Talk to {keeper.short}</button>}
+        {!refused && <button className="primary" onClick={() => talkTo.current()}>Talk to {keeper.short}</button>}
         <button className={atDoor ? "primary" : ""} onClick={onLeave}>Leave</button>
       </HudBar>}
       {bag && <InventoryScreen me={me} refresh={refresh} onClose={closeBag} onLogbook={() => { closeBag(); setBook(true); }} />}

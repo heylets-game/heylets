@@ -127,6 +127,8 @@ export const AUDIO: AudioManifest = {
 
     // ----- moments -----
     "turn.yours": { files: "sfx/ui/your_turn", fallback: built("your_turn"), gainDb: -4, cooldown: 1 },
+    // A letter of someone's words as a conversation types them out: pitched up or down for each speaker's voice.
+    "ui.blip": { files: "sfx/ui/blip_*", fallback: built("blip"), gainDb: -12, pitch: [-0.4, 0.4], maxVoices: 3 },
     level_up: { files: "sfx/ui/level_up", cooldown: 2 },
     loot: { files: "sfx/ui/loot", gainDb: -4 },
     gold: { files: "sfx/ui/gold", gainDb: -6, cooldown: 0.2 },
