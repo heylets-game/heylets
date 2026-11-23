@@ -43,13 +43,13 @@ function tone(hex: string, k: number): string {
 }
 
 /**
- * Tattoo ink: lit and shaded like the body (with the same floor of light), see-through by each vertex colour's
- * alpha, never hiding what is behind it from the depth test, and pulled a hair toward the eye over the skin.
+ * Tattoo ink: lit and shaded like the body (with the same floor of light and form shading), see-through by each
+ * vertex colour's alpha, never hiding what is behind it from the depth test, and pulled a hair toward the eye over the skin.
  */
 function inkMaterial(): THREE.MeshLambertMaterial {
   const m = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
   m.onBeforeCompile = (shader) => {
-    shader.fragmentShader = shader.fragmentShader.replace("#include <opaque_fragment>", "outgoingLight = max(outgoingLight, diffuseColor.rgb * 0.32);\n  #include <opaque_fragment>");
+    shader.fragmentShader = shader.fragmentShader.replace("#include <opaque_fragment>", FIGURE_LIGHT);
   };
   m.customProgramCacheKey = () => "gq-figure-ink";
   return m;
@@ -113,13 +113,41 @@ function roundNormals(g: THREE.BufferGeometry) {
   g.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
 }
 
-/** Lit like the furniture, but never darker than a third of its own colour: nobody vanishes at night. */
+/**
+ * Form shading, on top of the scene's own light: a soft key light from the viewer's upper left, so every figure
+ * has a lit side and a shaded side wherever it stands and whatever the hour, and a little darkening where its
+ * surface turns away toward its edges, so a head or a sleeve reads as round. The bright sky light outdoors fills
+ * a figure almost evenly on its own, and without outlines it would look cut from paper.
+ * `shade` is how much darker the side away from the key gets, `light` how much brighter the side toward it, `edge`
+ * how much darker its rim. A surface facing the viewer square on is left about as it was.
+ *
+ * The light is first held to full white: a pale shirt in the sun is lit well past it, and would come out the same
+ * flat white however it was shaded. The colour grade (post.ts) clips there anyway, so nothing else changes.
+ */
+const FORM = { shade: 0.24, light: 0.06, edge: 0.2 };
+const FORM_SHADING = /* glsl */ `
+{
+  outgoingLight = min( outgoingLight, vec3( 1.0 ) );
+  vec3 key = normalize( vec3( -0.5, 0.75, 0.45 ) );
+  float toward = clamp( dot( normal, key ) * 0.5 + 0.5, 0.0, 1.0 );
+  vec3 toEye = isOrthographic ? vec3( 0.0, 0.0, 1.0 ) : normalize( vViewPosition );
+  float facing = smoothstep( 0.0, 0.6, clamp( dot( normal, toEye ), 0.0, 1.0 ) );
+  outgoingLight *= mix( ${(1 - FORM.shade).toFixed(2)}, ${(1 + FORM.light).toFixed(2)}, toward ) * mix( ${(1 - FORM.edge).toFixed(2)}, 1.0, facing );
+}`;
+
+/**
+ * Never darker than a third of its own colour (nobody vanishes at night), then shaped by FORM_SHADING, which
+ * holds by night too, so a figure keeps its roundness in the dark.
+ */
+const FIGURE_LIGHT = `outgoingLight = max(outgoingLight, diffuseColor.rgb * 0.32);${FORM_SHADING}\n  #include <opaque_fragment>`;
+
+/** Lit like the furniture, with the figures' floor of light and form shading (see FIGURE_LIGHT). */
 function bodyMaterial(): THREE.MeshLambertMaterial {
   const m = new THREE.MeshLambertMaterial({ vertexColors: true });
   m.onBeforeCompile = (shader) => {
     shader.fragmentShader = shader.fragmentShader
       .replace("#include <normal_fragment_begin>", `#include <normal_fragment_begin>${SOFTEN}`)
-      .replace("#include <opaque_fragment>", "outgoingLight = max(outgoingLight, diffuseColor.rgb * 0.32);\n  #include <opaque_fragment>");
+      .replace("#include <opaque_fragment>", FIGURE_LIGHT);
   };
   m.customProgramCacheKey = () => "gq-figure-body";
   return m;
