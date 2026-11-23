@@ -35,7 +35,7 @@ import { BELL_AP, goesForBell, liveBell, ringBell, somethingToRouse } from "./be
 import { apForMove, checkCommon, doCommon, enemyAct, leavesReach, shiftInto, shoveDest, walk, walkAp } from "./combat";
 import { has, saveBonus, unseen, type Ctx } from "./engine";
 import { blast, close, elevOf, flies, heldAgainst, inFight, pathIn, sameHex, stepCost, strikes, zoneReach, type Reached } from "./geometry";
-import { AP_MAX, COMMON_ACTIONS, ENEMY_KIT, ITEM_AP, enemyShove, jumpRange, unitStrikes, type EnemyStrike } from "./kit";
+import { AP_MAX, COMMON_ACTIONS, ENEMY_KIT, ITEM_AP, enemyShove, jumpRange, mindOf, unitStrikes, type EnemyStrike } from "./kit";
 import { hitChance } from "./rules";
 import { HARMFUL } from "./surfaces";
 import type { Budget, Unit, ZoneState } from "./types";
@@ -55,7 +55,7 @@ export { strikeReaches } from "./behaviours";
  */
 function bestAttack(state: ZoneState, enemy: Unit, pos: HexPos, blows: EnemyStrike[], heroes: Unit[]): Option | null {
   const heaviest = Math.max(...blows.map((s) => s.weight));
-  const look = { state, enemy };
+  const look = { state, enemy, mind: mindOf(enemy.kind) };
   let best: Option | null = null;
   for (const attack of blows) {
     const use = behaviourOf(attack).value(look, pos, attack, heroes);
@@ -140,7 +140,7 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
   const standing = () => state.units.filter((u) => u.side === "hero" && !u.down && !unseen(u) && inFight(state, u.id));
   let heroes = standing();
   if (blows.length === 0 || heroes.length === 0) return;
-  const kit = ENEMY_KIT[enemy.kind] ?? {};
+  const mind = mindOf(enemy.kind);
   const air = flies(enemy);
   const harmful = new Set(Object.entries(state.surfaces).filter(([, s]) => HARMFUL.has(s.kind)).map(([key]) => key));
   // The other side's coral cuts as well as fire does.
@@ -162,7 +162,7 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
     const weigh = (pos: HexPos, path: HexPos[], cost: number): { score: number; attacks: boolean } => {
       let score = -cost * 0.05;
       // The ground on the way, and where it would end up standing.
-      if (!air) score -= 4 * path.filter((p) => harmful.has(posKey(p))).length + (harmful.has(posKey(pos)) ? 2 : 0);
+      if (!air) score -= mind.caution * (4 * path.filter((p) => harmful.has(posKey(p))).length + (harmful.has(posKey(pos)) ? 2 : 0));
       // Blows drawn by walking out of reach.
       if (!budget.disengaged) {
         const drawn = new Set<string>();
@@ -171,18 +171,16 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
           for (const h of heroes) if (leavesReach(state, h.pos, from, step) && !state.encounter?.reacted.includes(h.id) && !has(h, "stunned") && !has(h, "prone")) drawn.add(h.id);
           from = step;
         }
-        score -= 3 * drawn.size;
+        score -= mind.caution * 3 * drawn.size;
       }
       const option = strike ? bestAttack(state, enemy, pos, blows, targets) : null;
       if (option) {
         score += option.worth;
         // Two on one: a blow lands better with a friend already at the target's side.
-        if (option.target && state.units.some((u) => u.id !== enemy.id && u.side === "enemy" && !u.down && close(u.pos, option.target!.pos))) score += 1;
-        if (kit.ranged) {
-          // Those that shoot like room, do not like company, and like to look down on what they shoot at.
-          score += Math.min(nearest(pos), 4) * 0.4;
-          if (option.target) score += Math.min(3, Math.max(0, elevOf(state.map, pos) - elevOf(state.map, option.target.pos))) * 0.5;
-        }
+        if (option.target && state.units.some((u) => u.id !== enemy.id && u.side === "enemy" && !u.down && close(u.pos, option.target!.pos))) score += mind.flank;
+        // Room, and high ground over its target, as much as it cares for them (those that shoot do).
+        if (mind.spacing) score += Math.min(nearest(pos), 4) * mind.spacing;
+        if (mind.height && option.target) score += Math.min(3, Math.max(0, elevOf(state.map, pos) - elevOf(state.map, option.target.pos))) * mind.height;
       }
       // Nothing to hit from there: at least get closer.
       else score -= 50 + nearest(pos);
@@ -272,7 +270,7 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
       const key = posKey(pos);
       let can = blowAt.get(key);
       if (can === undefined) {
-        can = blows.some((a) => behaviourOf(a).reaches({ state, enemy }, pos, a, targets));
+        can = blows.some((a) => behaviourOf(a).reaches({ state, enemy, mind }, pos, a, targets));
         blowAt.set(key, can);
       }
       return can;

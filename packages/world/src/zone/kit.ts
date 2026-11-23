@@ -669,9 +669,34 @@ export const jumpRange = (strMod: number): number => Math.max(2, 2 + strMod);
 /** What an enemy's ability does besides its damage, when it lands. */
 export type EnemyAttackKit = Pick<EnemyAbilityDef, "surface" | "push" | "chills">;
 
+/**
+ * How an enemy likes to fight, whatever it carries: what the turn (ai.ts) and its abilities' behaviours
+ * (behaviours.ts) weigh, beside what an ability would do. Each kind's is DEFAULT_MIND with its own changes
+ * (EnemyKit `mind`).
+ */
+export interface Mind {
+  /** What each hex between it and the nearest hero is worth, up to 4 of them: room to shoot in. 0 does not care. */
+  spacing: number;
+  /** What each level it stands above its target is worth, up to 3: a shot looks down on what it is aimed at. */
+  height: number;
+  /** How much it minds harm on the way: fire and poison underfoot, and blows drawn by walking out of reach. 1 is the usual; 0 does not care. */
+  caution: number;
+  /** How much more a blow is worth at someone hurt: this share more against one who is all but down. */
+  hunter: number;
+  /** What it adds for a blow that would, on an average roll, finish someone. */
+  finisher: number;
+  /** What it adds for a blow at someone one of its own is already beside. */
+  flank: number;
+}
+
+export const DEFAULT_MIND: Mind = { spacing: 0, height: 0, caution: 1, hunter: 0.5, finisher: 3, flank: 1 };
+
+/** Those that shoot: they like room, and to look down on what they shoot at. */
+const SHOOTER: Partial<Mind> = { spacing: 0.4, height: 0.5 };
+
 export interface EnemyKit {
-  /** Keeps its distance and likes high ground. */
-  ranged?: boolean;
+  /** How it likes to fight, where that is not as DEFAULT_MIND says. */
+  mind?: Partial<Mind>;
   /** Ignores the ground: surfaces, rough going, water and cliffs. */
   fly?: boolean;
   /** Advantage on an attack when one of its own is next to the target. */
@@ -689,9 +714,9 @@ export const ENEMY_KIT: Record<string, EnemyKit> = {
   ogre: { shoves: true },
   // It rakes up close, and will throw a rock at whoever keeps away. (Its wounds closing is in zone.ts, at the start of its turn.)
   troll: { shoves: true },
-  cultist: { ranged: true },
+  cultist: { mind: SHOOTER },
   brute: { shoves: true },
-  archer: { ranged: true },
+  archer: { mind: SHOOTER },
   alpha: { pack: true },
   great_bear: { shoves: true },
   guardian: { shoves: true },
@@ -706,9 +731,17 @@ export const ENEMY_KIT: Record<string, EnemyKit> = {
   frost_wolf: { pack: true },
   ember_hound: { pack: true },
   snow_bear: { shoves: true },
-  wraith: { ranged: true },
-  witch: { ranged: true },
+  wraith: { mind: SHOOTER },
+  witch: { mind: SHOOTER },
 };
+
+const minds = new Map<string, Mind>();
+/** How an enemy of this kind likes to fight (worked out once a kind: it is asked of every hex an enemy looks at). */
+export function mindOf(kind: string): Mind {
+  let mind = minds.get(kind);
+  if (!mind) minds.set(kind, (mind = Object.freeze({ ...DEFAULT_MIND, ...ENEMY_KIT[kind]?.mind })));
+  return mind;
+}
 
 /** How far an attack on every hero reaches out from the enemy making it. */
 export const ENEMY_BURST = 2;

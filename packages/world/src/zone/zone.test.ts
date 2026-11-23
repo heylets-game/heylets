@@ -14,7 +14,7 @@ import { ALERT_RANGE, DEFAULT_ZONE_OPTIONS, JOIN_RANGE, generateZone, zoneOption
 import { HEX_ROOM, adjacent, blast, blockerAt, flies, isDead, seesFor, solid, stepCost, unitAt, zoneReach } from "./geometry";
 import { propOf } from "./props";
 import { SITE_IDS, backdropOf, siteInside, type SiteId } from "./sites";
-import { ACTION_AP, AP_MAX, AP_TURN, AQUEOUS, RALLY, SUMMON_AP_TURN, AURAS, CHART, COMMON_ACTIONS, BLOCK, BONUS_AP, BOLSTER, AGAINST_WAVES, ENDURE, STAND_STRONG, STURDY, ENEMY_BURST, ENEMY_HP_SCALE, ENEMY_KIT, ENEMY_MOVE_AP, EXPLORE_ROUND_MS, FLEE_RANGE, LIGHT_RADIUS, SHIELD_SET_ASIDE, TACTICS, TORCH_GROUND_ROUNDS, TORCH_HELD_ROUNDS, TORCH_ROUND_MS, abilityDice as abilityDiceFor, commonCost, enemyHp, abilityStrikes, enemyMove, enemyStrikes, tacticOf, unitStrikes } from "./kit";
+import { ACTION_AP, AP_MAX, AP_TURN, AQUEOUS, RALLY, SUMMON_AP_TURN, AURAS, CHART, COMMON_ACTIONS, BLOCK, BONUS_AP, BOLSTER, AGAINST_WAVES, ENDURE, STAND_STRONG, STURDY, ENEMY_BURST, ENEMY_HP_SCALE, ENEMY_KIT, ENEMY_MOVE_AP, EXPLORE_ROUND_MS, FLEE_RANGE, LIGHT_RADIUS, SHIELD_SET_ASIDE, TACTICS, TORCH_GROUND_ROUNDS, TORCH_HELD_ROUNDS, TORCH_ROUND_MS, abilityDice as abilityDiceFor, commonCost, enemyHp, DEFAULT_MIND, abilityStrikes, enemyMove, enemyStrikes, mindOf, tacticOf, unitStrikes } from "./kit";
 import { MAX_CATCHUP_ROUNDS } from "./clock";
 import { d20, diceAverage, diceFor, heroMove, hitChance } from "./rules";
 import { createZone, ensureMouth, loadZone, spentOut, standInHero, stepZone, zoneView } from "./zone";
@@ -157,6 +157,13 @@ describe("the kit", () => {
     // Saved before enemies carried their own: given their kind's on load.
     b.abilities = [];
     expect(loadZone(state).units.find((u) => u.id === b.id)!.abilities).toEqual(ENEMIES[b.kind].abilities);
+  });
+
+  it("gives each kind a mind: the usual one, with those that shoot liking room and high ground", () => {
+    for (const kind of Object.keys(ENEMIES)) expect(Object.keys(mindOf(kind)).sort(), kind).toEqual(Object.keys(DEFAULT_MIND).sort());
+    expect(mindOf("archer").spacing).toBeGreaterThan(0);
+    expect(mindOf("archer").height).toBeGreaterThan(0);
+    expect(mindOf("bandit")).toEqual(DEFAULT_MIND);
   });
 
   it("has every ability in the pool named, and none an enemy cannot use", () => {

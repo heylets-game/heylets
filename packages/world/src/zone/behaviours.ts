@@ -11,7 +11,7 @@
 import { hexDistance, type HexPos } from "@gantt-quest/core";
 import { attackContext, defenceOf, has } from "./engine";
 import { HIGH_REACH, reachFrom, seesFor, strikes } from "./geometry";
-import { ENEMY_BURST, type EnemyStrike } from "./kit";
+import { ENEMY_BURST, type EnemyStrike, type Mind } from "./kit";
 import { diceAverage, hitChance } from "./rules";
 import type { Unit, ZoneState } from "./types";
 
@@ -19,6 +19,8 @@ import type { Unit, ZoneState } from "./types";
 export interface Look {
   state: ZoneState;
   enemy: Unit;
+  /** How it likes to fight (kit.ts Mind). */
+  mind: Mind;
 }
 
 /** An ability used on someone (or on nobody in particular, for one that catches everyone round), and what that is worth. */
@@ -47,8 +49,8 @@ const caughtBy = (look: Look, pos: HexPos, targets: readonly Unit[]): Unit[] =>
   targets.filter((h) => hexDistance(pos, h.pos) <= ENEMY_BURST && seesFor(look.state, look.enemy.side, pos, h.pos));
 
 /**
- * One hero, hit or missed: the chance it lands times the damage it does. It goes for the weak, finishes the dying,
- * rises to a taunt, and thinks less of a blow at someone guarded.
+ * One hero, hit or missed: the chance it lands times the damage it does. It goes for the weak and finishes the dying
+ * (as much as its Mind says), rises to a taunt, and thinks less of a blow at someone guarded.
  */
 const strike: Behaviour = {
   reaches: (look, from, attack, targets) => targets.some((h) => strikeReaches(look.state, look.enemy, from, attack, h)),
@@ -61,8 +63,8 @@ const strike: Behaviour = {
       if (!strikeReaches(state, enemy, from, attack, hero)) continue;
       const c = attackContext(state, there, hero, { melee: attack.range === 1 });
       let worth = hitChance(attack.bonus + c.mods, defenceOf(hero, state), c.adv) * average * (has(hero, "guarded") ? 0.5 : 1);
-      worth *= 1 + 0.5 * (1 - hero.hp / hero.maxHp);
-      if (average >= hero.hp) worth += 3;
+      worth *= 1 + look.mind.hunter * (1 - hero.hp / hero.maxHp);
+      if (average >= hero.hp) worth += look.mind.finisher;
       if (has(hero, "taunting")) worth *= 3;
       if (!best || worth > best.worth) best = { attack, target: hero, worth };
     }
