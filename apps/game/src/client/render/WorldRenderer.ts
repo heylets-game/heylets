@@ -361,6 +361,8 @@ const FLOORED_S = 1.4;
 const turnBy = (from: number, to: number) => Math.atan2(Math.sin(to - from), Math.cos(to - from));
 /** The camera's usual tilt (about 47° above the horizon) and how far it may be tipped. */
 const DEFAULT_PITCH = Math.atan2(0.78, 0.72);
+/** A room is looked into from lower down than a map under the open sky (the player can still tip it either way). */
+const INDOOR_PITCH = 0.58;
 const MIN_PITCH = 0.42;
 const MAX_PITCH = 1.25;
 /** In a fight, with the combat view on, the camera looks down this much more steeply than the player has it (see `pitchWanted`). */
@@ -1543,6 +1545,8 @@ export class WorldRenderer {
       (this.scene.background as THREE.Color).set(state.indoors ? "#1d1a2b" : "#a9dcf7");
       // A room is framed whole: closer for a hut, further back for the pub.
       if (state.indoors) this.userDist = this.camDist = state.map.grid.cols > 10 ? 21 : 15;
+      // And from lower down than the open air is, so you look across the room at its far wall more than down on its floor.
+      if (state.indoors) this.userPitch = this.pitch = this.pitchGoal = INDOOR_PITCH;
       // A map of the world is looked at from a long way up, and by one unchanging light: it is there to be read.
       this.maxZoom = state.far ? FAR_MAX_ZOOM : MAX_ZOOM;
       if (state.far) this.userDist = this.camDist = FAR_ZOOM;
