@@ -119,7 +119,6 @@ function Screen({ me, refresh, zone, atlas, invite, hut, pub, keeper, admin, cat
     : catches && (me.isAdmin || me.devTools || import.meta.env.DEV) ? <Suspense fallback={null}><CatchGallery onLeave={leave} /></Suspense>
     : zone && ready ? <ZoneView key={zone} code={zone} me={me} refresh={refresh} onLeave={leave} />
     : atlas && ready && me.crew ? <AtlasView me={me} refresh={refresh} onLeave={leave} />
-    // (An old voyage link, #run/CODE, is no place any more: it falls through to the Harbor.)
     : null;
   // The town is the crew's: before there is a hero and a crew there are only the screens that make them. (An invite
   // to a different crew than your own takes you back to the gate to accept it.)

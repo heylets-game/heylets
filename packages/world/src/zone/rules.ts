@@ -33,7 +33,7 @@ export function heroDefence(stats: Stats, armor: number): number {
 
 /**
  * Dice that average about `amount`: one die up to 8, two beyond, and whatever is left over as a flat bonus.
- * 6 is 1d8+2; 12 is 2d8+3. The old fights' damage numbers are turned into dice with this.
+ * 6 is 1d8+2; 12 is 2d8+3.
  */
 export function diceFor(amount: number): Dice {
   const want = Math.max(1, amount);

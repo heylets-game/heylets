@@ -1,6 +1,4 @@
-// The pub's menu in D1: ordering a meal. (The `pub_buffs` table, which kept
-// what a hero had eaten and drunk for their next voyage, is no longer read
-// or written.)
+// The pub's menu in D1: ordering a meal.
 
 import { gatherDay, pubItem } from "@gantt-quest/world";
 

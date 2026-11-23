@@ -134,7 +134,7 @@ In dev builds the page exposes `window.__harbor` in the Harbor and `window.__gqZ
 ## Known gaps
 
 - Art is drawn in code: figures and props from simple shapes, icons as pixel art. Admins can recolour and swap icons from `#admin`.
-- A voyage is a trip to a place on the atlas. The island voyages the game began with are gone, and so is what only they used: boosts from pub fare, brews and hut furniture, the galley's larder, class traits, the dealer's contracts and the crew's weekly goal. Their tables are still in D1, unread. The galley and the lighthouse stand in the Harbor with nothing to do yet, and the sparring ring is shut.
+- The galley and the lighthouse stand in the Harbor with nothing to do yet, and the sparring ring is shut.
 - Trading is not held back while one of the two is in a fight on a map.
 - Balance on the maps has had no tuning pass: Action Points, band sizes and lodestone modifiers are first numbers.
 - The Harbor has twelve plots: a crew larger than that can't all own one.

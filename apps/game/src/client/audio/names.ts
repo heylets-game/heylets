@@ -127,7 +127,7 @@ export function soundNames(): Set<string> {
   for (const t of ["poison", "fire"]) add(soundName.tick(t));
   [soundName.crit(), soundName.healFailed(), soundName.flee(true), soundName.flee(false), soundName.yourTurn(), soundName.blip(), soundName.levelUp(), soundName.thunder()].forEach(add);
   add(["stinger.boss", "stinger.battle_start", "stinger.victory", "stinger.defeat"]);
-  // On file from the old voyages, with nothing playing them yet: loot taken, gold paid and something picked up.
+  // On file, with nothing playing them yet: loot taken, gold paid and something picked up.
   add(["loot", ...RARITIES.map((r) => `loot.${r}`), "gold", "pickup", ...RESOURCE_KINDS.map((k) => `pickup.${k}`)]);
   for (const g of ["perfect", "good", "miss"] as const) add(soundName.chop(g));
   add(soundName.fall("timber"));

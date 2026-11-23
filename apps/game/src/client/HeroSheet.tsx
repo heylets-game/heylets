@@ -274,7 +274,7 @@ export function HeroSheet({ id, you, onClose, logbook }: Props) {
           {abilities.length > 0 ? (
             <ul className="abilities">
               {abilities.map((a) => ABILITIES[a] && (
-                <li key={a}><strong>{label("ability", a)}</strong> <span className="muted">{ABILITIES[a].rolls} × {STAT_LABEL[ABILITIES[a].stat]} · {blurb("ability", a)}</span></li>
+                <li key={a}><strong>{label("ability", a)}</strong> <span className="muted">{STAT_LABEL[ABILITIES[a].stat]} · {blurb("ability", a)}</span></li>
               ))}
             </ul>
           ) : <p className="muted">No abilities.</p>}
