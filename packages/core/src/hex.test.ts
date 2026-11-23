@@ -36,6 +36,24 @@ describe("allHexesInGrid", () => {
   });
 });
 
+describe("a grid that starts left of and above 0,0", () => {
+  const SHIFTED: HexGrid = { cols: 9, rows: 11, col0: -4, row0: -2 };
+  it("holds the same shape of hexes, moved", () => {
+    const all = allHexesInGrid(SHIFTED);
+    expect(all).toHaveLength(6 * 9 + 5 * 8);
+    expect(new Set(all.map(posKey)).size).toBe(all.length);
+    expect(all.every((p) => inBounds(p, SHIFTED))).toBe(true);
+    // Row -2 is even and full: offset columns -4..4, so axial q -3..5. Row -1 is odd and a hex short.
+    expect(inBounds({ q: -3, r: -2 }, SHIFTED)).toBe(true);
+    expect(inBounds({ q: 5, r: -2 }, SHIFTED)).toBe(true);
+    expect(inBounds({ q: 6, r: -2 }, SHIFTED)).toBe(false);
+    expect(inBounds({ q: 4, r: -1 }, SHIFTED)).toBe(true);
+    expect(inBounds({ q: 5, r: -1 }, SHIFTED)).toBe(false);
+    expect(inBounds({ q: 0, r: -3 }, SHIFTED)).toBe(false);
+    expect(inBounds({ q: 0, r: 9 }, SHIFTED)).toBe(false);
+  });
+});
+
 describe("hexDistance", () => {
   it("same hex is distance 0", () => {
     expect(hexDistance({ q: 5, r: 3 }, { q: 5, r: 3 })).toBe(0);

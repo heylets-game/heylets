@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EMOTES, emoteTyped, validEmote, HARBOR_APOTHECARY, HARBOR_LAPIDARY, HARBOR_BOATS, HARBOR_BRIDGE, HARBOR_BUILDINGS, HARBOR_CAVE, HARBOR_CAVE_STEPS, HARBOR_CHEST, HARBOR_COURT, HARBOR_DECOR, HARBOR_FIXTURES, HARBOR_FORECOURT, HARBOR_GALLEY, HARBOR_MAX_PATH, HARBOR_GATE, HARBOR_GATHER, HARBOR_HEART_AT, HARBOR_HOME_ROADS, HARBOR_LIGHTHOUSE, HARBOR_MOLE, HARBOR_PUB, HARBOR_WAYGATE, HARBOR_WRECK, HARBOR_SMITHY, HARBOR_GRID, HARBOR_BOARD, HARBOR_PIERS, HARBOR_PLOTS, HARBOR_RING, HARBOR_SHOP, HARBOR_SPAWN, HARBOR_SQUARE, HARBOR_WORKS, HARBOR_OAK, HARBOR_ROADS, HARBOR_SIDES, findPath, footing, frontOf, generateHarbor, roadHexes, harborDoor, harborPath, tileAt } from "./index";
+import { EMOTES, emoteTyped, validEmote, HARBOR_APOTHECARY, HARBOR_LAPIDARY, HARBOR_BOATS, HARBOR_BRIDGE, HARBOR_BUILDINGS, HARBOR_CAVE, HARBOR_CAVE_STEPS, HARBOR_CHEST, HARBOR_COURT, HARBOR_DECOR, HARBOR_FIXTURES, HARBOR_FORECOURT, HARBOR_GALLEY, HARBOR_MAX_PATH, HARBOR_GATE, HARBOR_GATHER, HARBOR_HEART_AT, HARBOR_HOME_ROADS, HARBOR_LIGHTHOUSE, HARBOR_MOLE, HARBOR_PUB, HARBOR_WAYGATE, HARBOR_WRECK, HARBOR_SMITHY, HARBOR_GRID, HARBOR_SEA_REACH, HARBOR_BOARD, HARBOR_PIERS, HARBOR_PLOTS, HARBOR_RING, HARBOR_SHOP, HARBOR_SPAWN, HARBOR_SQUARE, HARBOR_WORKS, HARBOR_OAK, HARBOR_ROADS, HARBOR_SIDES, findPath, footing, frontOf, generateHarbor, roadHexes, harborDoor, harborPath, tileAt } from "./index";
 
 type Hex = { q: number; r: number };
 const key = (p: Hex) => `${p.q},${p.r}`;
@@ -357,12 +357,13 @@ describe("harbor map", () => {
   it("is a round island with a smaller one east of it: sea on every side of both, room for the town on one, and every hut plot scattered over the other across a bridge", () => {
     const land = map.tiles.filter((t) => t.biome !== "water" && t.biome !== "dock");
     const col = (t: Hex) => t.q + Math.floor(t.r / 2);
-    // No land on the map's border, so the sea goes all the way round.
+    // The grid leaves the sea's full reach on every side of the land, so its edge never cuts the sea short.
+    const row0 = HARBOR_GRID.row0 ?? 0, col0 = HARBOR_GRID.col0 ?? 0;
     for (const t of land) {
-      expect(t.r).toBeGreaterThan(0);
-      expect(t.r).toBeLessThan(HARBOR_GRID.rows - 1);
-      expect(col(t)).toBeGreaterThan(0);
-      expect(col(t)).toBeLessThan(HARBOR_GRID.cols - 2);
+      expect(t.r - HARBOR_SEA_REACH).toBeGreaterThanOrEqual(row0);
+      expect(t.r + HARBOR_SEA_REACH).toBeLessThan(row0 + HARBOR_GRID.rows);
+      expect(col(t) - HARBOR_SEA_REACH).toBeGreaterThanOrEqual(col0);
+      expect(col(t) + HARBOR_SEA_REACH).toBeLessThan(col0 + HARBOR_GRID.cols - 1);
     }
     // The town's island: about as wide as it is deep (a row is 0.866 of a column).
     const bridge = HARBOR_BRIDGE.map(col);
