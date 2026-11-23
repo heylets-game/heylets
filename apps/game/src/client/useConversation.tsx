@@ -1,12 +1,14 @@
 // A conversation with one of the townsfolk, as the pub and the shops have them: the camera swings in close
 // (render/TalkStage.ts), their words are typed out in a box along the bottom (Dialogue.tsx) in their voice, and
-// you pick a reply. A reply opens their panel (the camera stays close, framing the two of you beside it, and
+// you pick a reply. Someone who offers only one thing besides goodbye (a regular's job, a keeper's shop) is not
+// made to wait on a click for it: it is taken as soon as they have said their piece, and done with it, the
+// conversation is over. A reply opens their panel (the camera stays close, framing the two of you beside it, and
 // shutting the panel brings the replies back), has them say more, lets you ask them anything (where they can be
 // asked), or says goodbye. Escape, or walking off, ends it.
 
 import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { HexPos } from "@gantt-quest/core";
-import { PUB_MAX_TALK, pagesOf, type Conversation, type TalkChoice } from "@gantt-quest/world";
+import { PUB_MAX_TALK, loneChoice, pagesOf, type Conversation, type TalkChoice } from "@gantt-quest/world";
 import { sounds } from "./audio/gameSounds";
 import { Dialogue } from "./Dialogue";
 import { TalkStage } from "./render/TalkStage";
@@ -60,6 +62,11 @@ export function useConversation(host: ConversationHost): { active: Conversation 
 
   const text = pages[page] ?? "";
   const done = shown >= text.length;
+  /** The one thing they offer, if only one: taken without asking (`took`, once), and when it is done, so is the conversation. */
+  const lone = convo ? loneChoice(convo) : null;
+  const loneRef = useRef(lone);
+  loneRef.current = lone;
+  const took = useRef(false);
 
   /** Say these words next, a page at a time. */
   const speak = useCallback((words: string[]) => {
@@ -84,7 +91,11 @@ export function useConversation(host: ConversationHost): { active: Conversation 
     if (page < pages.length - 1) {
       setPage(page + 1);
       setShown(0);
-    } else setPhase("choosing");
+    } else if (lone && !took.current) {
+      took.current = true;
+      choose(lone);
+    } else if (lone) close();
+    else setPhase("choosing");
   };
 
   const begin = useCallback(
@@ -107,6 +118,7 @@ export function useConversation(host: ConversationHost): { active: Conversation 
       stage.current = s;
       from.current = at;
       setConvo(c);
+      took.current = false;
       setPages(c.greeting);
       setPage(0);
       setShown(0);
@@ -177,8 +189,12 @@ export function useConversation(host: ConversationHost): { active: Conversation 
   useEffect(() => {
     if (phase !== "panel") return;
     if (panelOpen) panelSeen.current = true;
-    else if (panelSeen.current) setPhase("choosing");
-  }, [phase, panelOpen]);
+    // (Someone with only that to offer has nothing more to say: it ends there.)
+    else if (panelSeen.current) {
+      if (loneRef.current) close();
+      else setPhase("choosing");
+    }
+  }, [phase, panelOpen, close]);
   // While it is up the camera frames the two of you in what it leaves clear (looked for again as it is moved or resized).
   useEffect(() => {
     if (phase !== "panel") return;
@@ -263,7 +279,7 @@ export function useConversation(host: ConversationHost): { active: Conversation 
 
   const node = convo && phase === "panel" ? (
     <button className="talk-back" onClick={() => latest.current.closePanels()}>
-      ◀ Back to {convo.name}
+      {lone ? "Done" : <>◀ Back to {convo.name}</>}
     </button>
   ) : convo && phase !== "arriving" && (
     <Dialogue

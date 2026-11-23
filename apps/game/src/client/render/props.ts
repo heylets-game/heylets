@@ -652,7 +652,9 @@ const MODELS: Record<string, (b: Builder) => void> = {
     for (const a of [0.4, 2.5, 4.6]) b.post("#26262b", 0.03, 0.035, 0.28, Math.sin(a) * 0.24, 0, Math.cos(a) * 0.24, 5);
     b.post("#2e2e35", 0.34, 0.22, 0.34, 0, 0.24, 0, 10);
     b.post("#26262b", 0.37, 0.37, 0.05, 0, 0.56, 0, 10);
-    b.glow("#7fd66a", new THREE.CylinderGeometry(0.32, 0.32, 0.02, 10), 0, 0.6, 0);
+    // The brew stands a hair proud of the rim's top (0.61): level with it, the two faces fight over the same depth
+    // and the surface flickers.
+    b.glow("#7fd66a", new THREE.CylinderGeometry(0.32, 0.32, 0.02, 10), 0, 0.616, 0);
     for (const [x, z, r] of [[-0.12, 0.06, 0.05], [0.1, -0.08, 0.04], [0.04, 0.14, 0.03]]) b.glow("#b6f2a0", new THREE.IcosahedronGeometry(r, 0), x, 0.62, z);
     // A small fire (not a room's great fire: the apothecary keeps his lamp out and his shop in pools of light), and
     // the brew gives off a green glow of its own.

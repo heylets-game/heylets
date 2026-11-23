@@ -1,7 +1,7 @@
 // Inside the pub: a room bigger than any hut, drawn by the same renderer,
 // where the crew sees each other. Walk up to Old Tam at the menu board to
 // order a meal or have a word; stand at the dice table to play. The dealer,
-// by the pillar at the end of the bar, has word of the regulars' errands.
+// by the pillar at the end of the bar, buys and sells materials and offers supply contracts.
 // Walking up to any of the pub's people starts a conversation, up close
 // (useConversation), and what they deal in opens from it.
 
@@ -16,7 +16,7 @@ import { RecordBoard } from "./CatchBook";
 import { ChatInput } from "./ChatInput";
 import { api, type Me, type PubWall, type RegularsView } from "./api";
 import { RegularPanel } from "./RegularPanel";
-import { DealerPanel } from "./board/DealerPanel";
+import { DealerPanel, type DealerTab } from "./board/DealerPanel";
 import { DiceTable } from "./DiceTable";
 import { ShoalsTable } from "./ShoalsTable";
 import { CrewTable } from "./CrewTable";
@@ -174,7 +174,7 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
   /** The regular just clicked: their panel opens once you are beside them. */
   const wantTalk = useRef<RegularId | null>(null);
   /** The dealer's panel is open. It opens once you are beside them if you clicked them, and closes when you walk away. */
-  const [dealing, setDealing] = useState(false);
+  const [dealing, setDealing] = useState<DealerTab | null>(null);
   const wantDeal = useRef(false);
   /** Old Tam or his board was just clicked: a word with him once you are at the bar. */
   const wantBar = useRef(false);
@@ -349,7 +349,8 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
     setHover(null);
     setTalkTo(null);
     setStood(null);
-    for (const close of [setSellingFish, setRecords, setDealing, setReading, setBag, setBook, setBarOpen, setTrading]) close(false);
+    for (const close of [setSellingFish, setRecords, setReading, setBag, setBook, setBarOpen, setTrading]) close(false);
+    setDealing(null);
     talk.close();
     heroSheet.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -382,15 +383,16 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
       if (what === "board") setBarOpen(true);
       else if (what === "fish") setSellingFish(true);
       else if (what === "records") setRecords(true);
-      else if (what === "errands") setDealing(true);
+      else if (what === "trade" || what === "contracts") setDealing(what);
       else if (what === "trade") setTrading(true);
       else if (what === "errand" && talkingRegular.current) setTalkTo(talkingRegular.current);
     },
     ask: api.pubTalk,
     askLeft: api.pubTalkLeft,
-    panelOpen: barOpen || sellingFish || records || dealing || !!talkTo || trading,
+    panelOpen: barOpen || sellingFish || records || !!dealing || !!talkTo || trading,
     closePanels: () => {
-      for (const shut of [setBarOpen, setSellingFish, setRecords, setDealing, setTrading]) shut(false);
+      for (const shut of [setBarOpen, setSellingFish, setRecords, setTrading]) shut(false);
+      setDealing(null);
       setTalkTo(null);
     },
   });
@@ -445,7 +447,7 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
   // Walking up to the dealer: a word with him if you clicked him, else only a greeting. Walking away puts his papers away.
   useEffect(() => {
     if (!atDealer) {
-      setDealing(false);
+      setDealing(null);
       return;
     }
     if (wantDeal.current) chatRef.current("dealer");
@@ -493,12 +495,12 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
   const tip = hoverRegular ? `${hoverRegular.name}, ${hoverRegular.trade}. Click to walk up and talk.`
     : hover && same(hover, PUB_BARKEEP_POS) ? `${PUB_BARKEEP.name}, the barkeep. Click to walk up and talk: the board, fish, and the crew's records.`
     : hover && seller && same(hover, PUB_SALESMAN_POS) ? `${seller.name}, ${seller.trade}. Click to walk up and trade.`
-    : hover && same(hover, PUB_DEALER_POS) ? `${PUB_DEALER.name}, ${PUB_DEALER.trade}. Click to walk up: word on the regulars' errands.`
+    : hover && same(hover, PUB_DEALER_POS) ? `${PUB_DEALER.name}, ${PUB_DEALER.trade}. Click to walk up: he buys and sells materials, and has supply contracts.`
     : hover && onBoard(hover) ? "The leaderboard: the crew's wins at the game tables. Click to walk up and read it."
     : !hoverPoi ? null
     : hoverTable ? hoverTable.tip
     : hoverPoi.kind === "counter" ? "The menu board: click to walk up and have a word with the barkeep"
-    : hoverPoi.kind === "dealer" ? `Where you stand to deal with ${PUB_DEALER.name}: word on the regulars' errands`
+    : hoverPoi.kind === "dealer" ? `Where you stand to deal with ${PUB_DEALER.name}: materials bought and sold, and supply contracts`
     : hoverPoi.kind === "trader" ? (seller ? `Trade with ${seller.name}, ${seller.trade}` : "The corner where traveling salesmen set up. Empty for now.")
     : hoverPoi.kind === "door" ? "The door back to the Harbor"
     : null;
@@ -566,7 +568,7 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
       {you && sellingFish && <CatchPanel buyer="tam" onGold={() => void refresh()} onClose={() => setSellingFish(false)} />}
       {you && atTrader && seller && trading && <SalesmanPanel me={me} refresh={refresh} />}
       {you && atBoard && reading && <PubLeaderboard you={you} version={dicePhase} onClose={() => setReading(false)} />}
-      {you && atDealer && dealing && <DealerPanel onClose={() => setDealing(false)} />}
+      {you && atDealer && dealing && <DealerPanel tab={dealing} refresh={refresh} onClose={() => setDealing(null)} />}
       {you && talking && regs && <RegularPanel key={talking.regular} view={talking} handedIn={regs.handedIn} cap={regs.cap} reload={loadRegs} refresh={refresh} onClose={() => setTalkTo(null)} />}
       {you && seatedAt && seatedAt.panel(pub, { you, gold, lastXp: pub.lastXp, looks, world: renderer, host: { hex: seatedAt.hex, hide: players.filter((p) => same(p.pos, seatedAt.hex)).map((p) => p.id), onStand: () => standFrom(seatedAt) } })}
       {you && seatedAt && (() => {
@@ -609,7 +611,7 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
               : atDealer ? <span>Beside {PUB_DEALER.name}, {PUB_DEALER.trade}.</span>
               : atTrader ? (seller ? <span>At {seller.name}'s table.</span> : <span className="muted">The corner is empty.{due && ` ${due.name} is due ${dueIn(visitor.next!.startsAt - visitor.now)}.`}</span>)
               : seller ? <span className="pub-visitor">{seller.name}, {seller.trade}, is in the corner by the far wall.</span>
-              : <span className="muted">Click a hex to walk. Order at the menu board; {PUB_DEALER.short}, by the pillar, knows the regulars' errands; the game tables are across the room, with their leaderboard on the back wall.</span>}
+              : <span className="muted">Click a hex to walk. Order at the menu board; {PUB_DEALER.short}, by the pillar, buys and sells materials; the game tables are across the room, with their leaderboard on the back wall.</span>}
           </>
         }
         chips={pub.status !== "open" && !pub.error ? <span className="hud-chip bad">connecting…</span> : undefined}
@@ -632,7 +634,7 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
         }
       >
         {near && !holdingDice && <button className="primary" disabled={!!talking} onClick={() => chat(near.id)}>Talk to {near.short}</button>}
-        {atDealer && !holdingDice && <button className="primary" disabled={dealing} onClick={() => chat("dealer")}>Talk to {PUB_DEALER.short}</button>}
+        {atDealer && !holdingDice && <button className="primary" disabled={!!dealing} onClick={() => chat("dealer")}>Talk to {PUB_DEALER.short}</button>}
         {atCounter && !holdingDice && <button className="primary" disabled={barOpen} onClick={() => chat("barkeep")}>Talk to {PUB_BARKEEP.name}</button>}
         {atTrader && seller && !holdingDice && <button className="primary" disabled={trading} onClick={() => chat("trader")}>Talk to {seller.name}</button>}
         {atBoard && !holdingDice && <button className="primary" disabled={reading} onClick={() => setReading(true)}>Read the board</button>}

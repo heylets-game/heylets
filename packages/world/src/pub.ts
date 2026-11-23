@@ -42,11 +42,19 @@ export const PUB_SALESMAN_POS: HexPos = at(10, 4);
 /** Where a customer stands to trade with the salesman. */
 export const PUB_TRADER: HexPos = at(9, 4);
 /**
- * The dealer: he has word of the regulars' errands (see regulars.ts). They
- * lean on the pillar at the end of the bar (the "pillar" fitting); a customer
- * walks up to the hex in front.
+ * The dealer: the Harbor's dealer in materials, who buys what is brought in, sells what is short, and offers supply
+ * contracts (see dealer.ts). He leans on the pillar at the end of the bar (the "pillar" fitting); a customer walks
+ * up to the hex in front.
  */
-export const PUB_DEALER = { id: "dealer", name: "Hollis Crane", short: "Hollis", trade: "the errand broker", look: "dealer", hello: "Work for the brave, pay for the lucky." } as const;
+export const PUB_DEALER = {
+  id: "dealer",
+  name: "Hollis Crane",
+  short: "Hollis",
+  trade: "the dealer in materials",
+  look: "dealer",
+  hello: "Wood, stone, iron, the lot. If it can be carried, I'll buy it, and if you're short, I'll sell it.",
+  line: "Prices move with the tide. Mine move a little faster.",
+} as const;
 export const PUB_DEALER_POS: HexPos = at(6, 2);
 /** Where a customer stands to deal with the dealer. */
 export const PUB_DEALER_STAND: HexPos = at(6, 3);

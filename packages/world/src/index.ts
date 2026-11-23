@@ -57,3 +57,4 @@ export * from "./gameclock";
 export * from "./wander";
 export * from "./fishingholes";
 export * from "./fishmonger";
+export * from "./dealer";
