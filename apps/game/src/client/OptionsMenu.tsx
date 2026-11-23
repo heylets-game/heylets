@@ -12,10 +12,10 @@ import { audio } from "./audio/engine";
 import { FADERS, FADER_LABELS } from "./audio/mixer";
 import { resetPanels } from "./DragPanel";
 import { PixelIcon } from "./PixelIcon";
-import { fancy, fancyGrass } from "./render/fancy";
+import { fancy, fancyGrass, outlines } from "./render/fancy";
 import { holdTap, touchScreen } from "./holdTap";
 import { units } from "./units";
-import { GEAR, GRASS, HOLD, RULER, SPARKLE, SPEAKER_OFF, SPEAKER_ON } from "./ui/menuIcons";
+import { GEAR, GRASS, HOLD, OUTLINED, RULER, SPARKLE, SPEAKER_OFF, SPEAKER_ON } from "./ui/menuIcons";
 import { UI_SCALE_MAX, UI_SCALE_MIN, UI_SCALE_STEP, getUiScale, onUiScaleChange, setUiScale, uiZoom } from "./uiScale";
 
 export interface ResetPosition {
@@ -72,6 +72,7 @@ export function OptionsMenu({ reset, resetBlocked, title = "The Harbor of Heylet
   const muted = mix.muted;
   const fancyOn = useSyncExternalStore(fancy.subscribe, fancy.get);
   const grassOn = useSyncExternalStore(fancyGrass.subscribe, fancyGrass.get);
+  const outlinesOn = useSyncExternalStore(outlines.subscribe, outlines.get);
   const measures = useSyncExternalStore(units.subscribe, units.get);
   const holdOn = useSyncExternalStore(holdTap.subscribe, holdTap.get);
   const [scale, setScale] = useState(getUiScale);
@@ -223,6 +224,17 @@ export function OptionsMenu({ reset, resetBlocked, title = "The Harbor of Heylet
                   <PixelIcon rows={GRASS} size={18} />
                   <span className="grow">Fancy grass</span>
                   <span className={`options-switch ${grassOn ? "on" : ""}`} aria-hidden>{grassOn ? "On" : "Off"}</span>
+                </button>
+                <button
+                  className="options-sound"
+                  role="switch"
+                  aria-checked={outlinesOn}
+                  title="A dark line round people, buildings and what spells throw, like ink round a drawing."
+                  onClick={() => outlines.set(!outlinesOn)}
+                >
+                  <PixelIcon rows={OUTLINED} size={18} />
+                  <span className="grow">Outlines</span>
+                  <span className={`options-switch ${outlinesOn ? "on" : ""}`} aria-hidden>{outlinesOn ? "On" : "Off"}</span>
                 </button>
                 <button
                   className="options-sound"

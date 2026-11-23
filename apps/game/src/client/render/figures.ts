@@ -15,6 +15,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { ConvexGeometry } from "three/examples/jsm/geometries/ConvexGeometry.js";
+import { inkLine } from "./fancy";
 import { APPEARANCE_OPTIONS, GARB_PREFIX, HAIR_COLORS, SKIN_TONES, INK_COLORS, INK_LEVELS, INK_REGIONS, RARITY_COLOR, WEAPONS, WEAPON_ICON, appearanceK, decodeInk, eyePatchOf, limbsOf, inkColorOf, inkLevelOf, wearsLanternHelm, type Appearance, type Emote, type Ink, type InkRegion, type InkView, type Outfit, type Slot } from "@gantt-quest/world";
 import type { Look } from "./looks";
 import { torchFlame } from "./torchFlame";
@@ -8132,7 +8133,7 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
   const fade = { value: 1 };
   const mats: Mats = {
     body: fadeable(bodyMaterial(), fade, "gq-figure-body"),
-    outline: fadeable(new THREE.MeshBasicMaterial({ color: OUTLINE, side: THREE.BackSide }), fade, "gq-figure-line"),
+    outline: inkLine(fadeable(new THREE.MeshBasicMaterial({ color: OUTLINE, side: THREE.BackSide }), fade, "gq-figure-line")),
     glow: fadeable(new THREE.MeshBasicMaterial({ vertexColors: true }), fade, "gq-figure-glow"),
     ink: fadeable(inkMaterial(), fade, "gq-figure-ink"),
   };

@@ -66,6 +66,20 @@ export const GRASS = [
   "############",
 ];
 
+/** A round shape inked round its edge: the "Outlines" setting. */
+export const OUTLINED = [
+  "...######...",
+  "..#......#..",
+  ".#........#.",
+  "#..........#",
+  "#..........#",
+  "#..........#",
+  "#..........#",
+  ".#........#.",
+  "..#......#..",
+  "...######...",
+];
+
 /** A spanner: the dev toolbox. */
 export const WRENCH = [
   "......###.",
