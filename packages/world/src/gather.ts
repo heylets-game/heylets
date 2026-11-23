@@ -26,6 +26,7 @@ import { TIMING, timingEase, timingGrade, type Motion, type TimingGrade } from "
 import { MINE_CHARGE_MS, landBlows, mineView, rockYield, seedMine, type Blow, type MineState, type MineView } from "./mine";
 import { sittingMaterials, sittingView, stepSitting, type Sitting, type SittingView } from "./sitting";
 import type { BaitId, FishSpot, Vessel } from "./fishing";
+import type { RodId } from "./fishfight";
 
 export type GatherSpot = "fishing" | "felling" | "quarry";
 export const GATHER_SPOT_IDS: GatherSpot[] = ["fishing", "felling", "quarry"];
@@ -154,7 +155,7 @@ export type GatherChoice =
    * are fishing: fishingholes.ts) are filled in by the server from where the hero really is; `bait` by the server
    * from what the hero has.
    */
-  | { t: "cast"; power: number; spot?: FishSpot; now?: number; vessel?: Vessel | null; at?: HexPos | null; crew?: string | null; bait?: BaitId | null }
+  | { t: "cast"; power: number; spot?: FishSpot; now?: number; vessel?: Vessel | null; at?: HexPos | null; crew?: string | null; bait?: BaitId | null; rod?: RodId | null }
   /** A sitting: set the hook, `at` ms after the cast as the client saw it. */
   | { t: "hook"; at: number; now?: number }
   /** A sitting: wind the line in (cutting it, if something is on). */

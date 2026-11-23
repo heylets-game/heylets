@@ -1,11 +1,12 @@
-// Bait from the fishmonger, against a real SQLite database with the game's migrations applied (d1.ts): buying it
-// for gold up to what a hero can carry, a worm or a shrimp eaten on every cast, and a lure lost only with the line.
+// Bait and rods from the fishmonger, against a real SQLite database with the game's migrations applied (d1.ts): buying
+// bait for gold up to what a hero can carry, a worm or a shrimp eaten on every cast, and a lure lost only with the
+// line; and buying a rod once, which is in the hero's hands from their next cast.
 
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { BAIT_SALE, HARBOR_FISH_SPOTS, type GatherChoice } from "@gantt-quest/world";
+import { BAIT_SALE, HARBOR_FISH_SPOTS, RODS, type GatherChoice } from "@gantt-quest/world";
 import type { HexPos } from "@gantt-quest/core";
-import { baitOf, buyBait } from "../src/server/bait";
+import { baitOf, buyBait, buyRod, ownedRod, rodsOf } from "../src/server/bait";
 import { startOuting, stepOuting, type Standing } from "../src/server/gather";
 import { addHero, openDb } from "./d1";
 
@@ -40,7 +41,7 @@ describe("buying bait", () => {
   it("takes the gold and gives a lot, and refuses past what a hero carries or can pay for", async () => {
     expect(await baitOf(db, "ann")).toEqual({});
     const r = await buyBait(db, "ann", "worms");
-    expect(r).toEqual({ bait: { worms: BAIT_SALE.worms.per }, gold: 100 - BAIT_SALE.worms.price });
+    expect(r).toEqual({ bait: { worms: BAIT_SALE.worms.per }, rods: [], gold: 100 - BAIT_SALE.worms.price });
     expect(gold()).toBe(100 - BAIT_SALE.worms.price);
 
     for (let i = 0; i < 2; i++) expect(typeof (await buyBait(db, "ann", "glow_lure"))).toBe("object");
@@ -53,6 +54,36 @@ describe("buying bait", () => {
     expect(await buyBait(db, "ann", "shrimp")).toMatch(/15 gold/);
     expect(await buyBait(db, "ann", "caviar")).toMatch(/doesn't sell/);
     expect(gold()).toBe(2);
+  });
+});
+
+describe("buying a rod", () => {
+  it("takes the gold once, refuses a second or a lesser one, and fishes with the best", async () => {
+    expect(await ownedRod(db, "ann")).toBe("cane");
+    expect(await buyRod(db, "ann", "greenheart")).toMatch(/150 gold/);
+    expect(await buyRod(db, "ann", "cane")).toMatch(/doesn't sell/);
+    sql.prepare("UPDATE characters SET gold = 1000 WHERE player_id = 'ann'").run();
+    const r = await buyRod(db, "ann", "greenheart");
+    expect(r).toMatchObject({ rods: ["greenheart"], gold: 1000 - RODS.greenheart.price });
+    expect(await buyRod(db, "ann", "greenheart")).toMatch(/already have/);
+    expect(gold()).toBe(1000 - RODS.greenheart.price);
+    await buyRod(db, "ann", "split_cane");
+    expect(await buyRod(db, "ann", "greenheart")).toMatch(/already/);
+    expect((await rodsOf(db, "ann")).sort()).toEqual(["greenheart", "split_cane"]);
+    expect(await ownedRod(db, "ann")).toBe("split_cane");
+    expect(gold()).toBe(1000 - RODS.greenheart.price - RODS.split_cane.price);
+  });
+
+  it("puts a rod bought partway through a sitting in the hero's hands from the next cast, whatever the client says", async () => {
+    await startOuting(db, "ann", "fishing", "west", where());
+    const first = await step({ t: "cast", power: 0.6, rod: "split_cane" });
+    expect(first.outing!.sitting!.ease.rod).toBeUndefined();
+    await step({ t: "reel" });
+    sql.prepare("UPDATE characters SET gold = 1000 WHERE player_id = 'ann'").run();
+    await buyRod(db, "ann", "greenheart");
+    at(clock + 1000);
+    const next = await step({ t: "cast", power: 0.6, rod: "split_cane" });
+    expect(next.outing!.sitting!.ease.rod).toBe("greenheart");
   });
 });
 

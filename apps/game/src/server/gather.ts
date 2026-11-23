@@ -50,7 +50,7 @@ import {
   type BaitCounts,
 } from "@gantt-quest/world";
 import type { HexPos } from "@gantt-quest/core";
-import { baitOf, spendBaitAfter } from "./bait";
+import { baitOf, ownedRod, spendBaitAfter } from "./bait";
 import { heroInitFor } from "./db";
 import { closeSitting, type SittingPaid } from "./fishing";
 import { ownedVessel } from "./fishmarket";
@@ -278,7 +278,7 @@ export async function stepOuting(db: D1Database, playerId: string, choice: unkno
   if (current.sitting && asked.t === "cast") {
     // A cast is made from where the hero really is, in the boat they really own, at whichever of the crew's holes
     // is there: none of it is taken from the client.
-    const vessel = await ownedVessel(db, playerId);
+    const [vessel, rod] = await Promise.all([ownedVessel(db, playerId), ownedRod(db, playerId)]);
     const from = where ? fishFrom(HARBOR, where.pos, vessel) : null;
     if (!from || !where) return NOT_AT_WATER;
     // The bait named goes on the hook only if the hero has some (bought from the fishmonger); it is taken below,
@@ -286,8 +286,8 @@ export async function stepOuting(db: D1Database, playerId: string, choice: unkno
     const bait = asked.bait == null ? null : isBaitId(asked.bait) ? asked.bait : undefined;
     if (bait === undefined) return "That is not bait.";
     if (bait && !((await baitOf(db, playerId))[bait] ?? 0)) return `You have no ${BAITS[bait].name.toLowerCase()} left. The fishmonger by the shack sells more.`;
-    asked = { ...asked, vessel, spot: from, at: where.pos, crew: where.crewId, bait };
-  } else if (asked.t === "cast") asked = { ...asked, vessel: null, at: null, crew: null, bait: null };
+    asked = { ...asked, vessel, spot: from, at: where.pos, crew: where.crewId, bait, rod };
+  } else if (asked.t === "cast") asked = { ...asked, vessel: null, at: null, crew: null, bait: null, rod: undefined };
   const step = stepGather(current, timed(current, asked, Date.now()));
   if (step.error) return step.error;
   const next = step.state;
