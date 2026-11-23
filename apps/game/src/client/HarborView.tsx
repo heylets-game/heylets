@@ -977,7 +977,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
       {chest && me.character && <TownChest me={me} refresh={refresh} onClose={() => setChest(false)} />}
       {gather && me.character && <GatherPanel spot={gather} onRod={(on) => harbor.send({ type: "fishing", on })} pier={pierHere ?? undefined} at={self?.pos} hole={holeHere} vessel={self?.vessel ?? null} gilded={me.character?.title === BOOK_TITLE} renderer={renderer} onClose={() => setGather(null)} onStamina={setStamina} onPaid={() => void refresh()} />}
       {fishmonger && me.character && <CatchPanel buyer="market" onGold={() => void refresh()} onClose={() => setFishmonger(false)} />}
-      {baitOpen && me.character && <BaitPanel gold={gold} onGold={() => void refresh()} onClose={() => setBaitOpen(false)} />}
+      {baitOpen && me.character && <BaitPanel gold={gold} onGold={() => void refresh()} onBoat={() => void refreshAll()} onClose={() => setBaitOpen(false)} />}
       {wellOpen && atWell && me.character && (
         <WellMenu renderer={renderer} onClose={() => setWellOpen(false)} onChanged={() => void refresh()} />
       )}

@@ -4,9 +4,10 @@
 
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { BAIT_SALE, HARBOR_FISH_SPOTS, RODS, type GatherChoice } from "@gantt-quest/world";
+import { BAIT_SALE, BOAT_SALE, HARBOR_FISH_SPOTS, RODS, type GatherChoice } from "@gantt-quest/world";
 import type { HexPos } from "@gantt-quest/core";
-import { baitOf, buyBait, buyRod, ownedRod, rodsOf } from "../src/server/bait";
+import { baitCounter, baitOf, buyBait, buyBoat, buyRod, ownedRod, rodsOf } from "../src/server/bait";
+import { ownedVessel } from "../src/server/fishmarket";
 import { startOuting, stepOuting, type Standing } from "../src/server/gather";
 import { addHero, openDb } from "./d1";
 
@@ -41,7 +42,7 @@ describe("buying bait", () => {
   it("takes the gold and gives a lot, and refuses past what a hero carries or can pay for", async () => {
     expect(await baitOf(db, "ann")).toEqual({});
     const r = await buyBait(db, "ann", "worms");
-    expect(r).toEqual({ bait: { worms: BAIT_SALE.worms.per }, rods: [], gold: 100 - BAIT_SALE.worms.price });
+    expect(r).toEqual({ bait: { worms: BAIT_SALE.worms.per }, rods: [], vessel: null, gold: 100 - BAIT_SALE.worms.price });
     expect(gold()).toBe(100 - BAIT_SALE.worms.price);
 
     for (let i = 0; i < 2; i++) expect(typeof (await buyBait(db, "ann", "glow_lure"))).toBe("object");
@@ -84,6 +85,32 @@ describe("buying a rod", () => {
     at(clock + 1000);
     const next = await step({ t: "cast", power: 0.6, rod: "split_cane" });
     expect(next.outing!.sitting!.ease.rod).toBe("greenheart");
+  });
+});
+
+describe("buying a boat", () => {
+  it("sells the same boat as is crafted, once, never a barrel to a rowboat's owner, and only for the gold", async () => {
+    expect(await buyBoat(db, "ann", "rowboat")).toMatch(/300 gold/);
+    expect(await buyBoat(db, "ann", "yacht")).toMatch(/doesn't sell/);
+    const r = await buyBoat(db, "ann", "float_barrel");
+    expect(r).toMatchObject({ vessel: "barrel", gold: 100 - BOAT_SALE.float_barrel.price });
+    expect(await ownedVessel(db, "ann")).toBe("barrel");
+    expect(await buyBoat(db, "ann", "float_barrel")).toMatch(/barrel already/);
+    sql.prepare("UPDATE characters SET gold = 1000 WHERE player_id = 'ann'").run();
+    expect(await buyBoat(db, "ann", "rowboat")).toMatchObject({ vessel: "rowboat" });
+    expect(await buyBoat(db, "ann", "rowboat")).toMatch(/rowboat already/);
+    expect(await buyBoat(db, "ann", "float_barrel")).toMatch(/step down/);
+    expect(gold()).toBe(1000 - BOAT_SALE.rowboat.price);
+    // Kept at the pier, as a crafted one is: a furnishing, never placed in a room.
+    const rows = sql.prepare("SELECT def_id, q FROM furnishings WHERE player_id = 'ann' ORDER BY def_id").all() as { def_id: string; q: number | null }[];
+    expect(rows).toEqual([{ def_id: "float_barrel", q: null }, { def_id: "rowboat", q: null }]);
+    expect((await baitCounter(db, "ann")).vessel).toBe("rowboat");
+  });
+
+  it("will not sell a barrel to one who crafted a rowboat", async () => {
+    sql.prepare("INSERT INTO furnishings (player_id, def_id, label, meta_json, created_at) VALUES ('ann', 'rowboat', 'Rowboat', '{}', 0)").run();
+    expect(await buyBoat(db, "ann", "float_barrel")).toMatch(/step down/);
+    expect(gold()).toBe(100);
   });
 });
 

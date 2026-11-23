@@ -1,6 +1,6 @@
 // The fishmonger: an old sailor in a yellow raincoat who keeps the fish shack on the south-west shore, by the pier.
 // He stands at the shack's east end, by his drying line, all day and all night: he buys the catch at the day's
-// board (fishmarket.ts), sells bait (fishing.ts, BAIT_SALE) and rods (fishfight.ts, RODS) and, asked, says where they are biting
+// board (fishmarket.ts), sells bait and boats (fishing.ts, BAIT_SALE and BOAT_SALE) and rods (fishfight.ts, RODS) and, asked, says where they are biting
 // (fishingholes.ts, bestHole). He keeps out of the way of the shack's door, which is the one way to the water there.
 
 import type { HexPos } from "@gantt-quest/core";
@@ -57,7 +57,7 @@ export const FISHMONGER_ADVICE: readonly string[] = [
   "Some fish only come up at night, lights on their noses and all. One or two only show in a storm. Mad, the lot of them.",
   "Worms for a shoal, shrimp for a deep hole, a glow lure for the night feeders. Wrong bait, you're feeding the tiddlers.",
   "A lure comes back to you, cast after cast. Till something snaps your line or takes it all. Then it's gone with the fish.",
-  "Get yourself a rowboat and row out to the open sea. There's fish out there this pier's never seen.",
+  "Get yourself a rowboat and row out to the open sea. There's fish out there this pier's never seen. Build one, or buy one off me.",
   // Selling.
   `My board changes four times a day. What's chalked up as wanted pays ${FISH_WANTED_BONUS === 2 ? "double" : `${FISH_WANTED_BONUS} times`}. Read it before you sell.`,
   "Old Tam at the pub pays a fair price every day, and double for what his stew wants. Some days that beats me. Don't tell him.",
