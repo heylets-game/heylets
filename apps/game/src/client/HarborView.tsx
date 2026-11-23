@@ -7,7 +7,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 import { useAudioScene } from "./audio/useAudioScene";
 import { hexDistance, hexNeighbors, type HexPos } from "@gantt-quest/core";
 import { GATHER_SPOTS, GATHER_SPOT_IDS, HARBOR_APOTHECARY, HARBOR_LAPIDARY, HARBOR_BOARD, HARBOR_BUILDINGS, footing, HARBOR_CAVE, HARBOR_WAYGATE, HARBOR_CHEST, HARBOR_GALLEY, HARBOR_LIGHTHOUSE, HARBOR_SMITHY, HARBOR_GATHER, HARBOR_NAME, HARBOR_PLOTS, HARBOR_PLOT_FACING, HARBOR_PUB, HARBOR_RING, HARBOR_SHOP, HARBOR_SPAWN, HARBOR_WORKS, PLOT_PRICE, RESOURCE_KINDS, SHACK_COST, binFill, binNeeds, builtProjects, BOOK_TITLE, fishFrom, harborDoor, tileAt, type FishSpot, FISH_SPOTS, HOLE_NAMES, holeFishNames, generateHarbor, projectById, projectProgress, harborPoi, hutTier, poiAt, salesman, gardenBeds, gardenCorner, gardenLooks, plotAt, gardenSpotAt, GARDEN_SPOTS, HARBOR_WELL, HARBOR_WELL_AT, bedProgress, nextReady, readyCount, growText, type GardenBed, type GatherSpot, type Resources, regular as regularOf, regularTalk, type RegularId, roofColor, DECORATOR, FINISHES_STALL, HARBOR_FINISHES, decoratorTalk, FISHMONGER, FISHMONGER_FACES, FISHMONGER_POS, isFishmongerAt, fishmongerAdvice, fishmongerTalk, fishmongerTip, bestHole } from "@gantt-quest/world";
-import type { Poi } from "@gantt-quest/world";
+import type { Poi, Vessel, WorldMap } from "@gantt-quest/world";
 import { MusterPanel, useMuster } from "./atlas/Muster";
 import { api, type Me, type RegularsView } from "./api";
 import { BaitPanel } from "./BaitPanel";
@@ -141,6 +141,15 @@ function nextAdvice(): number {
   } catch {
     return askedHere++;
   }
+}
+
+/**
+ * The boat a hero has with them: the one they own, all the time, not only once they stand on water. The renderer draws
+ * it under them only while they are on a water hex, so one rowing back to shore stays in it until they reach land
+ * rather than walking the last of the water. Someone on water with no boat known is in a barrel.
+ */
+function boatOf(map: WorldMap, p: { pos: HexPos; vessel?: Vessel | null }): Vessel | undefined {
+  return p.vessel ?? (tileAt(map, p.pos)?.biome === "water" ? "barrel" : undefined);
 }
 
 export function HarborView({ me, refresh, resting = false }: { me: Me; refresh(): Promise<unknown>; resting?: boolean }) {
@@ -280,7 +289,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
       you,
       map: { ...base, pois },
       heroes: [
-        ...players.map((p): RenderHero => ({ id: p.id, classId: p.classId, pos: p.pos, label: p.name, outfit: p.id === you ? ownOutfit : p.outfit, asleep: !!p.bedroll && same(p.bedroll, p.pos), rod: p.fishing ? (p.gilded ? "gilded" : true) : false, boat: tileAt(base, p.pos)?.biome === "water" ? p.vessel ?? "barrel" : undefined, level: p.level, xp: p.xp })),
+        ...players.map((p): RenderHero => ({ id: p.id, classId: p.classId, pos: p.pos, label: p.name, outfit: p.id === you ? ownOutfit : p.outfit, asleep: !!p.bedroll && same(p.bedroll, p.pos), rod: p.fishing ? (p.gilded ? "gilded" : true) : false, boat: boatOf(base, p), level: p.level, xp: p.xp })),
         ...about.map(regularHero),
         // Bram the fishmonger, at his shack by the pier, day and night.
         { id: FISHMONGER.id, classId: FISHMONGER.look, pos: FISHMONGER_POS, label: FISHMONGER.name },
