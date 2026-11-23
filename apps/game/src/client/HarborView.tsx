@@ -45,6 +45,7 @@ import { RegularPanel } from "./RegularPanel";
 import { FinishesPanel } from "./FinishesPanel";
 import { useConversation } from "./useConversation";
 import { regularHero, regularOn, regularUnit, useRegularsAbout } from "./useRegularsAbout";
+import { useBanter } from "./useBanter";
 import "./pub.css";
 
 const same = (a: HexPos, b: HexPos) => a.q === b.q && a.r === b.r;
@@ -348,6 +349,8 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
       setFinishesOpen(false);
     },
   });
+  // The regulars passing the time of day with each other as they go about the town (not whoever you are with).
+  useBanter(renderer, me.crew?.id, "harbor", !resting, [talk.active?.unit, wantRegular ? regularUnit(wantRegular) : null, chatWith ? regularUnit(chatWith) : null]);
   // The conversation over: they are on their way again.
   const talking = !!talk.active;
   useEffect(() => {
