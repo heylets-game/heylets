@@ -832,11 +832,8 @@ export const enemyShove = (kind: string): number => 1 + enemySave(kind);
 /** What an enemy adds to a saving throw: bosses and the big are harder to shake. */
 export const enemySave = (kind: string): number => (ENEMIES[kind]?.boss ? 3 : (ENEMIES[kind]?.hp ?? 0) >= 18 ? 2 : 0);
 
-/** Every enemy's hit points, at every level, against what its entry and the level give. */
-export const ENEMY_HP_SCALE = 1.1;
-
-/** Hit points for a party of this level (half again as much by level 4). */
-export const enemyHp = (kind: string, level: number): number => Math.round((ENEMIES[kind]?.hp ?? 1) * (1 + 0.15 * Math.max(0, level - 1)) * ENEMY_HP_SCALE);
+/** Hit points for a party of this level: its entry's at level 1, and 15% more of them for every level after. */
+export const enemyHp = (kind: string, level: number): number => Math.round((ENEMIES[kind]?.hp ?? 1) * (1 + 0.15 * Math.max(0, level - 1)));
 
 /** How many more stand with a group than its leader would bring. */
 export const GROUP_EXTRAS = 0;

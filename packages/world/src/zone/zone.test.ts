@@ -14,7 +14,7 @@ import { ALERT_RANGE, DEFAULT_ZONE_OPTIONS, JOIN_RANGE, generateZone, zoneOption
 import { HEX_ROOM, adjacent, blast, blockerAt, flies, isDead, seesFor, solid, stepCost, unitAt, zoneReach } from "./geometry";
 import { propOf } from "./props";
 import { SITE_IDS, backdropOf, siteInside, type SiteId } from "./sites";
-import { ACTION_AP, AP_MAX, AP_TURN, AQUEOUS, RALLY, SUMMON_AP_TURN, AURAS, CHART, COMMON_ACTIONS, BLOCK, BONUS_AP, BOLSTER, AGAINST_WAVES, ENDURE, STAND_STRONG, STURDY, ENEMY_BURST, ENEMY_HP_SCALE, ENEMY_KIT, ENEMY_MOVE_AP, EXPLORE_ROUND_MS, FLEE_RANGE, LIGHT_RADIUS, SHIELD_SET_ASIDE, TACTICS, TORCH_GROUND_ROUNDS, TORCH_HELD_ROUNDS, TORCH_ROUND_MS, abilityDice as abilityDiceFor, commonCost, enemyHp, DEFAULT_MIND, abilityStrikes, enemyMove, enemyStrikes, mindOf, tacticOf, unitStrikes } from "./kit";
+import { ACTION_AP, AP_MAX, AP_TURN, AQUEOUS, RALLY, SUMMON_AP_TURN, AURAS, CHART, COMMON_ACTIONS, BLOCK, BONUS_AP, BOLSTER, AGAINST_WAVES, ENDURE, STAND_STRONG, STURDY, ENEMY_BURST, ENEMY_KIT, ENEMY_MOVE_AP, EXPLORE_ROUND_MS, FLEE_RANGE, LIGHT_RADIUS, SHIELD_SET_ASIDE, TACTICS, TORCH_GROUND_ROUNDS, TORCH_HELD_ROUNDS, TORCH_ROUND_MS, abilityDice as abilityDiceFor, commonCost, enemyHp, DEFAULT_MIND, abilityStrikes, enemyMove, enemyStrikes, mindOf, tacticOf, unitStrikes } from "./kit";
 import { MAX_CATCHUP_ROUNDS } from "./clock";
 import { d20, diceAverage, diceFor, heroMove, hitChance } from "./rules";
 import { createZone, ensureMouth, loadZone, spentOut, standInHero, stepZone, zoneView } from "./zone";
@@ -1209,7 +1209,7 @@ describe("items", () => {
 
 describe("enemy strength", () => {
   it("rises with level, and each band has as many as its leader would bring", () => {
-    expect(enemyHp("wolf", 1)).toBe(Math.round(ENEMIES.wolf.hp * ENEMY_HP_SCALE));
+    expect(enemyHp("wolf", 1)).toBe(ENEMIES.wolf.hp);
     expect(enemyHp("wolf", 4)).toBeGreaterThan(enemyHp("wolf", 1));
     expect(enemyStrikes("wolf", 5)[0].bonus).toBe(enemyStrikes("wolf", 1)[0].bonus + 1);
     // A band is as many as the party (one more, for a party of three or four): never fewer than two.
