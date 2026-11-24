@@ -3,7 +3,7 @@
 // it reachable from any device. Forgot the password, or played before
 // passwords: an emailed six-digit code sets a new one.
 
-import { useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { api, type Me } from "./api";
 
 type Mode = "login" | "signup" | "reset";
@@ -18,15 +18,21 @@ const DONE: Record<Mode, string> = {
 
 /** Better Auth's error codes, said for a player. Anything else shows the server's own message. */
 const ERRORS: Record<string, string> = {
-  INVALID_EMAIL_OR_PASSWORD: "That email and password do not match. Forgot it? Set a new one with a code.",
-  USER_ALREADY_EXISTS: "That email already has an account. Log in instead.",
-  USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL: "That email already has an account. Log in instead.",
+  INVALID_EMAIL_OR_PASSWORD: "That email and password do not match.",
+  USER_ALREADY_EXISTS: "That email already has an account.",
+  USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL: "That email already has an account.",
   PASSWORD_TOO_SHORT: `The password needs at least ${MIN_PASSWORD} characters.`,
   INVALID_OTP: "That code is wrong. Check the email, or ask for a new one.",
   OTP_EXPIRED: "That code has expired. Ask for a new one.",
   TOO_MANY_ATTEMPTS: "Too many wrong codes. Ask for a new one.",
   INVALID_EMAIL: "That does not look like an email address.",
 };
+/**
+ * Errors that may mean an account with no password yet: one from before there were passwords, or one whose owner has
+ * forgotten it. The answer is the same either way (so nobody can learn which emails have accounts), and the error
+ * offers to email a code to set a password.
+ */
+const OFFERS_CODE = new Set(["INVALID_EMAIL_OR_PASSWORD", "USER_ALREADY_EXISTS", "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL"]);
 
 interface FormProps {
   /** Called after a successful login, once the caller should reload the player. */
@@ -42,8 +48,13 @@ export function EmailSignIn({ onDone, hasCharacter }: FormProps) {
   const [code, setCode] = useState("");
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ text: string; offerCode: boolean } | null>(null);
   const [done, setDone] = useState<Mode | null>(null);
+  const codeBox = useRef<HTMLInputElement>(null);
+  // Once the code is on its way, the cursor waits in the box for it.
+  useEffect(() => {
+    if (sent) codeBox.current?.focus();
+  }, [sent]);
 
   const switchTo = (next: Mode) => {
     setMode(next);
@@ -58,7 +69,7 @@ export function EmailSignIn({ onDone, hasCharacter }: FormProps) {
       await fn();
     } catch (e) {
       const err = e as Error & { code?: string };
-      setError((err.code && ERRORS[err.code]) || err.message);
+      setError({ text: (err.code && ERRORS[err.code]) || err.message, offerCode: !!err.code && OFFERS_CODE.has(err.code) });
     } finally {
       setBusy(false);
     }
@@ -74,7 +85,7 @@ export function EmailSignIn({ onDone, hasCharacter }: FormProps) {
     if (busy) return;
     if (mode === "login" && emailOk && password) void run(async () => { await api.logIn(email.trim(), password); await finish("login"); });
     else if (mode === "signup" && emailOk && passwordOk) void run(async () => { await api.signUp(email.trim(), password); await finish("signup"); });
-    else if (mode === "reset" && !sent && emailOk) void run(async () => { await api.sendPasswordCode(email.trim()); setSent(true); });
+    else if (mode === "reset" && !sent && emailOk) sendCode();
     else if (mode === "reset" && sent && code.length === 6 && passwordOk)
       void run(async () => {
         await api.resetPassword(email.trim(), code, password);
@@ -83,6 +94,17 @@ export function EmailSignIn({ onDone, hasCharacter }: FormProps) {
       });
   };
   const onEnter = (e: KeyboardEvent) => e.key === "Enter" && submit();
+  /** Email a code for setting a password to the address in the box, from wherever the form is. */
+  function sendCode() {
+    setMode("reset");
+    setCode("");
+    // A password typed into the log-in box (most likely a wrong guess) is not carried over as the new one.
+    setPassword("");
+    void run(async () => {
+      await api.sendPasswordCode(email.trim());
+      setSent(true);
+    });
+  }
 
   if (done) return <p className="good">{DONE[done]}</p>;
   const ready = mode === "login" ? emailOk && !!password : mode === "signup" ? emailOk && passwordOk : sent ? code.length === 6 && passwordOk : emailOk;
@@ -93,11 +115,33 @@ export function EmailSignIn({ onDone, hasCharacter }: FormProps) {
         <button role="tab" aria-selected={mode === "login"} className={mode === "login" ? "selected" : undefined} onClick={() => switchTo("login")}>Log in</button>
         <button role="tab" aria-selected={mode === "signup"} className={mode === "signup" ? "selected" : undefined} onClick={() => switchTo("signup")}>New account</button>
       </div>
-      {error && <div className="banner error" role="alert">{error}</div>}
+      {mode === "login" && !error && (
+        <div className="signin-returning">
+          <p><strong>Played before there were passwords?</strong> Your hero is waiting. Set a password with a code we email you, and you're in.</p>
+          <button className="small" disabled={busy} onClick={() => switchTo("reset")}>Set a password</button>
+        </div>
+      )}
+      {error && (
+        <div className="banner error" role="alert">
+          {error.text}
+          {error.offerCode && (
+            <>
+              {" "}If you played before there were passwords, or have forgotten yours, set one with a code.
+              <span className="signin-error-action">
+                <button className="small" disabled={busy || !emailOk} onClick={sendCode}>{emailOk ? `Email a code to ${email.trim()}` : "Email me a code"}</button>
+              </span>
+            </>
+          )}
+        </div>
+      )}
       {mode === "reset" && (
-        <p className="muted">
-          {sent ? <>A six-digit code is on its way to <strong>{email.trim()}</strong>. It works for 15 minutes.</> : "Forgot your password, or played before there were passwords? We'll email you a code to set one."}
-        </p>
+        <div className="signin-reset-note">
+          {sent ? (
+            <p>A six-digit code is on its way to <strong>{email.trim()}</strong>. Type it below with the password you want, and you're logged in with your hero just as you left them. The code works for 15 minutes; check your spam folder if it doesn't arrive.</p>
+          ) : (
+            <p><strong>Set a password.</strong> Forgot yours, or played before there were passwords? Enter your email and we'll send a six-digit code. With it you choose a password and you're back in, hero and all.</p>
+          )}
+        </div>
       )}
       {!(mode === "reset" && sent) && (
         <label className="field">
@@ -108,7 +152,7 @@ export function EmailSignIn({ onDone, hasCharacter }: FormProps) {
       {mode === "reset" && sent && (
         <label className="field">
           <span>Code</span>
-          <input className="code-input" autoComplete="one-time-code" inputMode="numeric" value={code} maxLength={6} placeholder="000000" onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} onKeyDown={onEnter} />
+          <input ref={codeBox} className="code-input" autoComplete="one-time-code" inputMode="numeric" value={code} maxLength={6} placeholder="000000" onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} onKeyDown={onEnter} />
         </label>
       )}
       {(mode !== "reset" || sent) && (

@@ -460,6 +460,12 @@ body.drag-carrying, body.drag-carrying * { cursor: grabbing !important; }
 .signin .field { width: 100%; max-width: 320px; margin: 0; }
 .signin .field small { display: block; margin-top: 2px; }
 .signin-modes { gap: 6px; }
+/* A note on the Log in tab for players from before passwords, and the button an error offers to email a code. */
+.signin-returning { width: 100%; max-width: 360px; box-sizing: border-box; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 8px 10px; border: 1px dashed var(--line); background: rgba(0, 0, 0, 0.2); }
+.signin-returning p, .signin-reset-note p { margin: 0; font-size: 13px; }
+.signin-reset-note { max-width: 360px; }
+.signin-error-action { display: block; margin-top: 6px; }
+.signin-error-action button { max-width: 100%; box-sizing: border-box; white-space: normal; overflow-wrap: anywhere; text-align: left; }
 .code-input { font-size: 22px; letter-spacing: 0.35em; width: 9em; text-align: center; }
 .small-print { font-size: 12px; }
 .signed-in { margin-top: 16px; }
