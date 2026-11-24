@@ -6,7 +6,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAudioScene } from "./audio/useAudioScene";
 import { hexDistance, hexNeighbors, type HexPos } from "@gantt-quest/core";
-import { GATHER_SPOTS, GATHER_SPOT_IDS, HARBOR_APOTHECARY, HARBOR_LAPIDARY, HARBOR_BOARD, HARBOR_BUILDINGS, footing, HARBOR_CAVE, HARBOR_WAYGATE, HARBOR_CHEST, HARBOR_GALLEY, HARBOR_LIGHTHOUSE, HARBOR_SMITHY, HARBOR_GATHER, HARBOR_NAME, HARBOR_PLOTS, HARBOR_PLOT_FACING, HARBOR_PUB, HARBOR_RING, HARBOR_SHOP, HARBOR_SPAWN, HARBOR_WORKS, PLOT_PRICE, RESOURCE_KINDS, SHACK_COST, binFill, binNeeds, builtProjects, BOOK_TITLE, fishFrom, harborDoor, tileAt, type FishSpot, FISH_SPOTS, HOLE_NAMES, holeFishNames, generateHarbor, projectById, projectProgress, harborPoi, hutTier, poiAt, salesman, gardenBeds, gardenCorner, gardenLooks, plotAt, gardenSpotAt, GARDEN_SPOTS, HARBOR_WELL, HARBOR_WELL_AT, bedProgress, nextReady, readyCount, growText, type GardenBed, type GatherSpot, type Resources, regular as regularOf, regularTalk, type RegularId, roofColor, DECORATOR, FINISHES_STALL, HARBOR_FINISHES, decoratorTalk, FISHMONGER, FISHMONGER_FACES, FISHMONGER_POS, isFishmongerAt, fishmongerAdvice, fishmongerTalk, fishmongerTip, bestHole } from "@gantt-quest/world";
+import { GATHER_SPOTS, GATHER_SPOT_IDS, HARBOR_APOTHECARY, HARBOR_LAPIDARY, HARBOR_BOARD, HARBOR_BUILDINGS, footing, HARBOR_CAVE, HARBOR_WAYGATE, HARBOR_CHEST, HARBOR_GALLEY, HARBOR_LIGHTHOUSE, HARBOR_SMITHY, HARBOR_GATHER, HARBOR_NAME, HARBOR_PLOTS, HARBOR_PLOT_FACING, HARBOR_PUB, HARBOR_RING, HARBOR_SHOP, HARBOR_SPAWN, HARBOR_WORKS, PLOT_PRICE, RESOURCE_KINDS, SHACK_COST, binFill, binNeeds, builtProjects, BOOK_TITLE, fishFrom, harborDoor, tileAt, type FishSpot, FISH_SPOTS, HOLE_NAMES, holeFishNames, generateHarbor, projectById, projectProgress, harborPoi, hutTier, poiAt, salesman, gardenBeds, gardenCorner, gardenLooks, plotAt, gardenSpotAt, GARDEN_SPOTS, HARBOR_WELL, HARBOR_WELL_AT, bedProgress, nextReady, readyCount, growText, type GardenBed, type GatherSpot, type Resources, regular as regularOf, regularTalk, type RegularId, roofColor, DECORATOR, DECORATOR_SHUT, FINISHES_STALL, HARBOR_FINISHES, decoratorOpen, decoratorOpensAt, decoratorTalk, FISHMONGER, FISHMONGER_FACES, FISHMONGER_POS, isFishmongerAt, fishmongerAdvice, fishmongerTalk, fishmongerTip, bestHole } from "@gantt-quest/world";
 import { FURNISHINGS as FURNITURE, flotsamName, flotsamWithin } from "@gantt-quest/world";
 import type { Poi, Vessel, WorldMap } from "@gantt-quest/world";
 import { MusterPanel, useMuster } from "./atlas/Muster";
@@ -266,13 +266,24 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     return paid ? Math.round(projectProgress(projectById(id)!, paid) * 100) / 100 : 0;
   };
   const lighthouseFill = projectFill("lighthouse");
+  /** Whether Nell is at her stall: by day on the Harbor's clock. At nightfall she covers it up and goes home. Looked at every second, so she goes as the dark comes. */
+  const [nellIn, setNellIn] = useState(() => decoratorOpen(Date.now()));
+  useEffect(() => {
+    const t = setInterval(() => setNellIn(decoratorOpen(Date.now())), 1000);
+    return () => clearInterval(t);
+  }, []);
+  /** How long until Nell is back at her stall, in words: "in about 3 minutes". */
+  const nellBack = () => {
+    const min = Math.max(1, Math.round((decoratorOpensAt(Date.now()) - Date.now()) / 60_000));
+    return `in about ${min} minute${min === 1 ? "" : "s"}`;
+  };
 
   // The Harbor as the renderer sees it: the fixed map plus a hut per member.
   const scene = useMemo<RenderState | null>(() => {
     if (!you) return null;
     const pois = [
       // The lighthouse's spit, and the apothecary's, smithy's and galley's spots, are building sites until the crew has paid for them.
-      ...base.pois.map((p) => (p.id === "lighthouse" ? { ...p, cleared: lit, fill: lighthouseFill } : p.id === "apothecary" ? { ...p, cleared: apothecaryBuilt, fill: projectFill("apothecary") } : p.id === "smithy" ? { ...p, cleared: smithyBuilt, fill: projectFill("smithy") } : p.id === "galley" ? { ...p, cleared: galleyBuilt, fill: projectFill("galley") } : p)),
+      ...base.pois.map((p) => (p.id === "lighthouse" ? { ...p, cleared: lit, fill: lighthouseFill } : p.id === "apothecary" ? { ...p, cleared: apothecaryBuilt, fill: projectFill("apothecary") } : p.id === "smithy" ? { ...p, cleared: smithyBuilt, fill: projectFill("smithy") } : p.id === "galley" ? { ...p, cleared: galleyBuilt, fill: projectFill("galley") } : p.id === "finishes" && !nellIn ? { ...p, shut: true } : p)),
       // A plot someone has bought has their hut on it, or a resource bin while the shack is still to go up; the rest are staked out and for sale.
       ...HARBOR_PLOTS.map((pos, i) => {
         const owner = board.members.find((m) => m.plot === i);
@@ -299,8 +310,8 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
         ...about.map(regularHero),
         // Bram the fishmonger, at his shack by the pier, day and night.
         { id: FISHMONGER.id, classId: FISHMONGER.look, pos: FISHMONGER_POS, label: FISHMONGER.name },
-        // Nell, at her counter among her samples, beside the market stall.
-        { id: DECORATOR.id, classId: DECORATOR.look, pos: FINISHES_STALL, label: DECORATOR.name },
+        // Nell, at her counter among her samples, beside the market stall: by day. At night she has gone home.
+        ...(nellIn ? [{ id: DECORATOR.id, classId: DECORATOR.look, pos: FINISHES_STALL, label: DECORATOR.name }] : []),
       ],
       freeRoam: true,
       homeYaw: HARBOR_VIEW_YAW,
@@ -309,7 +320,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
       stamina: stamina ?? undefined,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [base, board, players, you, stamina, ownOutfit, clock, about]);
+  }, [base, board, players, you, stamina, ownOutfit, clock, about, nellIn]);
   const latest = useRef(scene);
   latest.current = scene;
   const heroSheet = useHeroSheet();
@@ -524,7 +535,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     : hoverPoi.kind === "cave" ? "The Haunted Caverns: go down and fight what lurks in the dark"
     : hoverPoi.kind === "board" ? (unseen ? "Notice board: news of what has changed. Something new is pinned up!" : "Notice board: news of what has changed")
     : hoverPoi.kind === "shop" ? "Market stall: gear, and furniture for your hut"
-    : hoverPoi.kind === "finishes" ? `${DECORATOR.name}, ${DECORATOR.trade}: wallpaper, floors and roof colours for your hut. Click to walk up and talk.`
+    : hoverPoi.kind === "finishes" ? (nellIn ? `${DECORATOR.name}, ${DECORATOR.trade}: wallpaper, floors and roof colours for your hut. Click to walk up and talk.` : `${DECORATOR.name}'s stall, covered up for the night. She's back at first light, ${nellBack()}.`)
     : hoverPoi.kind === "ring" ? "Sparring ring: being rebuilt"
     : hoverPoi.kind === "fishing" ? `The fish shack: ${FISHMONGER.short} the fishmonger buys your catch and sells bait. Cast a line from its jetty, or anywhere along the shore`
     : hoverPoi.kind === "felling" || hoverPoi.kind === "quarry" ? `${GATHER_SPOTS[hoverPoi.kind].name}: gather hut materials`
@@ -693,6 +704,15 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     setNote(text);
     setTimeout(() => setNote((n) => (n === text ? null : n)), 5000);
   };
+  // Night falls while you are talking with Nell or looking through her patterns: she packs up all the same.
+  const withNell = finishesOpen || talk.active?.unit === DECORATOR.id;
+  useEffect(() => {
+    if (nellIn || !withNell) return;
+    setFinishesOpen(false);
+    if (talk.active?.unit === DECORATOR.id) talk.close();
+    say_(DECORATOR_SHUT);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nellIn, withNell]);
   const restHere = async () => {
     try {
       const res = await api.rest("bedroll");
@@ -797,7 +817,9 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     : atLapidary ? { title: <>The Lapidary <span className="muted">· lodestones for the atlas are cut and worked here, and gems bought</span></>, label: "Go in", run: () => goInside(`${HARBOR_LAPIDARY.q},${HARBOR_LAPIDARY.r}`, "lapidary") }
     : atCave ? { title: <>The Haunted Caverns <span className="muted">· something lurks in the dark</span></>, label: "Go down", run: goDown }
     : atShop ? { title: "The market stall", label: "Browse the wares", run: () => setShop(true) }
-    : atFinishes ? { title: <>{DECORATOR.name} <span className="muted">· wallpaper, floors and roof colours for your hut</span></>, label: `Talk to ${DECORATOR.short}`, run: () => talk.begin(decoratorTalk()) }
+    : atFinishes ? (nellIn
+        ? { title: <>{DECORATOR.name} <span className="muted">· wallpaper, floors and roof colours for your hut</span></>, label: `Talk to ${DECORATOR.short}`, run: () => talk.begin(decoratorTalk()) }
+        : shut(<>{DECORATOR.short}'s stall <span className="muted">· covered up for the night. She's back at first light, {nellBack()}</span></>))
     // Beside a hut's herb garden (once its shack stands): the camera goes down over the beds.
     : gardenHere ? {
         title: <>{gardenHere.id === you ? "Your herb garden" : `${gardenHere.name}'s herb garden`} <span className="muted">· {gardenStatus(gardenHere)}</span></>,

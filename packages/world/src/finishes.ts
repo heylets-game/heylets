@@ -4,12 +4,14 @@
 // edit mode at home. She does not lay out every wallpaper and floor at once: each UTC day her table has half of
 // each, picked from the date (`finishStock`), the same for every crew, so a pattern seen today may be gone tomorrow
 // and back another day. Roofs are all on sale every day. A hut with none chosen looks as huts always have: bare walls, honey boards, and a roof
-// colour of its own picked from its owner's id.
+// colour of its own picked from its owner's id. She keeps daylight hours on the Harbor's clock (`decoratorOpen`):
+// at nightfall she covers her stall and goes home, and sells nothing until first light.
 //
 // Each finish carries what it is drawn with (`look`): the client paints the wallpaper and the floor from it
 // (render/groundArt.ts) and colours the roof, its shutters and the Lodge's pennant with it (render/places/huts.ts).
 
 import type { HexPos } from "@gantt-quest/core";
+import { DAWN, GAME_DAY_MS, harborSky, timeOfDay } from "./gameclock";
 import { makeRng, seedFromString } from "./rng";
 
 export type FinishKind = "wall" | "floor" | "roof";
@@ -229,5 +231,21 @@ export const DECORATOR = {
   trade: "home furnishings",
   look: "keeper_decor",
   hello: "Mind the paste, it's still wet. Come to brighten the place up?",
-  line: "Wallpaper, floors, roofs. Buy it once, it's yours for good, and you can change your mind at home as often as you like. I put out different patterns every day, so come and look again tomorrow.",
+  line: "Wallpaper, floors, roofs. Buy it once, it's yours for good, and you can change your mind at home as often as you like. I put out different patterns every day, so come and look again tomorrow. I'm here from first light till dark.",
 } as const;
+
+// ---------- her hours ----------
+
+/** Whether Nell is at her stall at `now`: all day, from the moment the Harbor's sky is more light than dark until it is more dark than light. */
+export const decoratorOpen = (now: number): boolean => !harborSky(now).night;
+
+/** When Nell is next back at her stall after `now`: the coming dawn on the Harbor's clock (`now` itself while she is there). */
+export function decoratorOpensAt(now: number): number {
+  if (decoratorOpen(now)) return now;
+  const dayStart = now - timeOfDay(now) * GAME_DAY_MS;
+  const dawn = dayStart + DAWN * GAME_DAY_MS;
+  return Math.ceil(dawn > now ? dawn : dawn + GAME_DAY_MS);
+}
+
+/** What she would say, could she be asked, while her stall is covered for the night. */
+export const DECORATOR_SHUT = "Nell has covered her stall and gone home for the night. She's back at first light.";

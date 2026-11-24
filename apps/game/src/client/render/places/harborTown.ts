@@ -277,18 +277,21 @@ export const lapidary: PlaceModel = (_poi, kit) => {
  * squares of flooring and a paste pot on it; a rack behind her hung with lengths of her wallpapers; rolls of paper
  * standing in a basket at one end; a row of little painted roofs along the top of the rack, one for each colour she
  * sells; and a short sage-striped awning over the rack, not over her, so she is seen from above. The samples are today's patterns, in their own colours.
+ * At night (`poi.shut`) she has gone home: her samples, papers and little roofs are packed away, and canvas dust
+ * sheets are thrown over the counter and hung down the rack.
  */
-export const finishes: PlaceModel = (_poi, kit) => {
+export const finishes: PlaceModel = (poi, kit) => {
   const { g, add, box, lambert } = kit;
   const timber = lambert("#4a2f22");
   const plank = lambert("#a07a4c");
   const sage = lambert("#8fa478");
   const cream = lambert("#efe6cf");
-  // Her samples are what she has out today.
-  const today = new Set(finishStock(finishDay(Date.now())));
+  // Her samples are what she has out today: none, once she has packed up for the night.
+  const shut = !!poi.shut;
+  const today = new Set(shut ? [] : finishStock(finishDay(Date.now())));
   const walls = finishesOf("wall").filter((f) => today.has(f.id));
   const floors = finishesOf("floor").filter((f) => today.has(f.id));
-  const roofs = finishesOf("roof");
+  const roofs = shut ? [] : finishesOf("roof");
   // The platform she stands on.
   add(box(0.9, 0.04, 0.8), lambert("#6b5138"), 0, 0.02, 0);
   // The counter in front of her: a plank front and a top, with floor samples laid across it in a row.
@@ -301,8 +304,20 @@ export const finishes: PlaceModel = (_poi, kit) => {
     if (f.look.tones[1]) add(box(0.05, 0.013, 0.05), lambert(f.look.tones[1]), x + 0.022, 0.257, 0.278);
   });
   // A paste pot with a brush standing in it, at one end.
-  add(new THREE.CylinderGeometry(0.035, 0.03, 0.06, 8), lambert("#d8d2c2"), 0.34, 0.28, 0.32);
-  add(box(0.012, 0.11, 0.012), timber, 0.345, 0.33, 0.32).rotation.z = 0.3;
+  if (!shut) {
+    add(new THREE.CylinderGeometry(0.035, 0.03, 0.06, 8), lambert("#d8d2c2"), 0.34, 0.28, 0.32);
+    add(box(0.012, 0.11, 0.012), timber, 0.345, 0.33, 0.32).rotation.z = 0.3;
+  } else {
+    // Packed up: a dust sheet over the counter, hanging down its front and ends, and another down the rack.
+    const canvas = lambert("#d6ccb2");
+    add(box(0.84, 0.02, 0.24), canvas, 0, 0.255, 0.3);
+    add(box(0.84, 0.17, 0.012), canvas, 0, 0.17, 0.42);
+    for (const x of [-0.42, 0.42]) add(box(0.012, 0.15, 0.24), canvas, x, 0.18, 0.3);
+    add(box(0.82, 0.78, 0.01), canvas, 0, 0.67, -0.28);
+    // A few folds down it, a shade darker, so it reads as cloth and not a board.
+    const fold = lambert("#bfb497");
+    for (const x of [-0.24, 0.03, 0.27]) add(box(0.025, 0.76, 0.012), fold, x, 0.67, -0.274);
+  }
   // The rack behind her: two posts and a rail, and lengths of paper hanging from it.
   for (const x of [-0.4, 0.4]) add(new THREE.CylinderGeometry(0.022, 0.022, 1.24, 6), timber, x, 0.62, -0.3);
   add(box(0.86, 0.03, 0.04), timber, 0, 1.06, -0.3);

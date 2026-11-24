@@ -3,7 +3,7 @@
 
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { finishById, finishDay, finishStock, finishesOf } from "@gantt-quest/world";
+import { DUSK, GAME_DAY_MS, finishById, finishDay, finishStock, finishesOf } from "@gantt-quest/world";
 import { buyFinish, finishesView, hutFinish, ownedFinishes, setFinish } from "../src/server/finishes";
 import { getHut, harborBoard } from "../src/server/db";
 import { addHero, openDb } from "./d1";
@@ -16,7 +16,8 @@ const gold = (id = "ann") => (sql.prepare("SELECT gold FROM characters WHERE pla
 const setGold = (n: number, id = "ann") => sql.prepare("UPDATE characters SET gold = ? WHERE player_id = ?").run(n, id);
 const shack = (id: string, plot: number) => sql.prepare("INSERT INTO huts (player_id, tier, plot, bin_json) VALUES (?, 1, ?, NULL)").run(id, plot);
 const price = (id: string) => finishById(id)!.price;
-const T0 = Date.UTC(2026, 10, 23, 12);
+/** Noon on the Harbor's clock (its days are ten minutes, from the epoch), when Nell is at her stall. */
+const T0 = Date.UTC(2026, 10, 23, 12, 5);
 /** A wallpaper and a floor Nell has out on the test's day, and a wallpaper she has not. */
 const STOCK = finishStock(finishDay(T0));
 const WALL = STOCK.find((id) => id.startsWith("wall_"))!;
@@ -57,6 +58,16 @@ describe("buying from Nell", () => {
     vi.setSystemTime(T0 + 86_400_000);
     const tomorrow = finishStock(finishDay(Date.now()));
     expect(tomorrow).not.toEqual(STOCK);
+  });
+
+  it("sells nothing at night, when she has covered her stall and gone home", async () => {
+    vi.setSystemTime(T0 + (DUSK - 0.5 + 0.02) * GAME_DAY_MS);
+    expect(await buyFinish(db, "ann", WALL)).toMatch(/for the night/);
+    expect(gold()).toBe(500);
+    expect(await ownedFinishes(db, "ann")).toEqual([]);
+    // What you own can still be put up at home, day or night.
+    sql.prepare("INSERT INTO owned_finishes (player_id, finish_id, bought_at) VALUES ('ann', ?, 0)").run(WALL);
+    expect(await setFinish(db, "ann", "wall", WALL)).toMatchObject({ wall: WALL });
   });
 
   it("refuses what it does not sell, or what you cannot pay for", async () => {
