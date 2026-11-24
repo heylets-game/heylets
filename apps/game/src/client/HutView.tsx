@@ -203,7 +203,7 @@ export function HutView({ ownerId, me, refresh, onLeave }: { ownerId: string; me
         const pillow = bed && footprintCentre(bed.defId, bed, { x: bed.x, z: bed.z, angle: turnOf(bed) });
         const mid = bed && hexCentre(bed);
         const lying = bed && pillow && mid ? { pos: { q: bed.q, r: bed.r }, asleep: true, at: { x: pillow.x - mid.x, z: pillow.z - mid.z, y: 0.3 } } : { pos: p.pos };
-        return { id: p.id, classId: p.classId, label: p.name, outfit: p.outfit, level: p.level, xp: p.xp, ...lying };
+        return { id: p.id, classId: p.classId, label: p.name, outfit: p.outfit, level: p.level, xp: p.xp, floorSit: !!p.sat, ...lying };
       }),
       freeRoam: true,
       indoors: true,

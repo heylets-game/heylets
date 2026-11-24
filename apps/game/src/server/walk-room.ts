@@ -208,7 +208,8 @@ export class Walkers<Out> {
    * as they now are.
    */
   walk(ws: WebSocket, player: HarborPlayer, path: HexPos[], ends: Partial<HarborPlayer> = {}): HarborPlayer {
-    const next: HarborPlayer = { ...player, pos: path[path.length - 1], ...ends };
+    // Walking off gets them up off the floor, wherever this is.
+    const next: HarborPlayer = { ...player, pos: path[path.length - 1], sat: undefined, ...ends };
     ws.serializeAttachment(next);
     this.tell({ type: "moved", id: player.id, path });
     return next;
@@ -232,7 +233,7 @@ export class Walkers<Out> {
     const now = Date.now();
     if (now - (this.unstuckAt.get(player.id) ?? -Infinity) < UNSTICK_COOLDOWN_MS) return false;
     this.unstuckAt.set(player.id, now);
-    ws.serializeAttachment({ ...player, pos, ...ends } satisfies HarborPlayer);
+    ws.serializeAttachment({ ...player, pos, sat: undefined, ...ends } satisfies HarborPlayer);
     this.tell({ type: "placed", id: player.id, pos });
     return true;
   }
@@ -243,12 +244,18 @@ export class Walkers<Out> {
     if (text) this.tell({ type: "said", id: player.id, name: player.name, text });
   }
 
-  /** An emote (a wave, a dance and so on), shown to everyone here (the one emoting too) and not kept. At most one per EMOTE_MIN_MS from each player. */
-  emote(player: HarborPlayer, asked: unknown): void {
+  /**
+   * An emote (a wave, a dance and so on), shown to everyone here (the one emoting too). At most one per
+   * EMOTE_MIN_MS from each player. Only a sit is kept on their socket, for whoever comes in later to see them sat:
+   * until they walk off, or another emote gets them up.
+   */
+  emote(ws: WebSocket, player: HarborPlayer, asked: unknown): void {
     const emote = validEmote(asked);
     const now = Date.now();
     if (emote === null || now - (this.emotedAt.get(player.id) ?? -Infinity) < EMOTE_MIN_MS) return;
     this.emotedAt.set(player.id, now);
+    const sat = emote === "sit" || undefined;
+    if (!!player.sat !== !!sat) ws.serializeAttachment({ ...player, sat } satisfies HarborPlayer);
     this.tell({ type: "emoted", id: player.id, emote });
   }
 

@@ -208,7 +208,7 @@ export class HutRoom extends DurableObject<Env> {
     const { player, msg } = heard;
 
     if (msg.type === "say") return this.here.say(player, msg.text);
-    if (msg.type === "emote") return this.here.emote(player, msg.emote);
+    if (msg.type === "emote") return this.here.emote(ws, player, msg.emote);
     const hut = await this.load(ownerId);
 
     if (msg.type === "move") {
@@ -227,7 +227,7 @@ export class HutRoom extends DurableObject<Env> {
       // Purely for show, like a bedroll in the Harbor: the rest itself is `/api/rest`, which checks the cooldown.
       const problem = lieDownProblem(hut.room, hut.furnishings, Number(msg.id), player.pos, player.id === ownerId);
       if (problem) return this.here.send(ws, { type: "refused", reason: problem });
-      return this.here.show(ws, { ...player, bed: Number(msg.id) });
+      return this.here.show(ws, { ...player, bed: Number(msg.id), sat: undefined });
     }
 
     if (msg.type === "look") return this.here.look(ws, player, msg.look);

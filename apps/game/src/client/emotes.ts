@@ -1,5 +1,5 @@
 // Emotes heard from a place's connection, carried to its view: someone here
-// waved, cheered, bowed, danced or breakdanced (see EMOTES), and their figure is to do it.
+// waved, cheered, bowed, danced, breakdanced or sat down (see EMOTES), and their figure is to do it.
 // Like gaze.ts, so that the connection (the Harbor, a hut, the pub or a map)
 // and the view need not know each other.
 

@@ -307,12 +307,12 @@ export class HarborRoom extends DurableObject<Env> {
     } else if (msg.type === "bedroll") {
       // Purely for show: the rest itself is decided by the server over HTTP. Not on a place, a street corner is fine.
       if (MAP.pois.some((p) => p.pos.q === player.pos.q && p.pos.r === player.pos.r)) return;
-      this.here.show(ws, { ...player, bedroll: player.pos });
+      this.here.show(ws, { ...player, bedroll: player.pos, sat: undefined });
     } else if (msg.type === "fishing") {
       // Purely for show, like the bedroll: the sitting itself is the server's over HTTP. Only at a fishing spot.
       const on = msg.on === true && fishFrom(MAP, player.pos, player.vessel ?? null) !== null;
       if (!!player.fishing === on) return;
-      this.here.show(ws, { ...player, fishing: on || undefined });
+      this.here.show(ws, { ...player, fishing: on || undefined, sat: undefined });
     } else if (msg.type === "look") {
       this.here.look(ws, player, msg.look);
     } else if (msg.type === "unstick") {
@@ -321,7 +321,7 @@ export class HarborRoom extends DurableObject<Env> {
     } else if (msg.type === "say") {
       this.here.say(player, msg.text);
     } else if (msg.type === "emote") {
-      this.here.emote(player, msg.emote);
+      this.here.emote(ws, player, msg.emote);
     }
   }
 

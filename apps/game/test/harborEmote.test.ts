@@ -1,6 +1,6 @@
 // Emotes in the walk-in rooms (walk-room.ts, here through the Harbor's room):
 // a wave, a cheer, a bow or a dance is shown to everyone there, the one
-// emoting too, rate-limited and never kept.
+// emoting too, and rate-limited. Only a sit is kept, until they walk off.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EMOTE_MIN_MS, HARBOR_SPAWN, type HarborPlayer } from "@gantt-quest/world";
@@ -42,7 +42,7 @@ describe("HarborRoom emote", () => {
     expect(emotes(theirs)).toEqual([]);
   });
 
-  it("passes on no more than one per EMOTE_MIN_MS from each player, and keeps nothing", async () => {
+  it("passes on no more than one per EMOTE_MIN_MS from each player, and keeps nothing but a sit", async () => {
     const before = JSON.stringify(mine.deserializeAttachment());
     await emote(mine, "cheer");
     vi.advanceTimersByTime(EMOTE_MIN_MS - 1);
@@ -52,5 +52,19 @@ describe("HarborRoom emote", () => {
     await emote(mine, "bow");
     expect(emotes(mine).map((m) => m.type === "emoted" && `${m.id}:${m.emote}`)).toEqual(["me:cheer", "them:dance", "me:bow"]);
     expect(JSON.stringify(mine.deserializeAttachment())).toBe(before);
+  });
+
+  it("keeps a sit on the socket until they walk off, or another emote gets them up", async () => {
+    const move = (to: unknown) => room.webSocketMessage(mine as unknown as WebSocket, JSON.stringify({ type: "move", to }));
+    await emote(mine, "sit");
+    expect(mine.deserializeAttachment()?.sat).toBe(true);
+    vi.advanceTimersByTime(EMOTE_MIN_MS);
+    await emote(mine, "wave");
+    expect(mine.deserializeAttachment()?.sat).toBeUndefined();
+    vi.advanceTimersByTime(EMOTE_MIN_MS);
+    await emote(mine, "sit");
+    await move({ q: HARBOR_SPAWN.q + 3, r: HARBOR_SPAWN.r });
+    expect(mine.sent.at(-1)?.type).toBe("moved");
+    expect(mine.deserializeAttachment()?.sat).toBeUndefined();
   });
 });

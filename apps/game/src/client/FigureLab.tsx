@@ -74,6 +74,8 @@ interface Live {
   pace: number;
   lying: boolean;
   sitting: number;
+  /** Sat on the floor (the sit emote, held as a pose), 0 to 1. */
+  floor: number;
   rowing: boolean;
   speed: number;
   paused: boolean;
@@ -92,7 +94,7 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
   const [ownLook, setOwnLook] = useState(false);
   const [rod, setRod] = useState(false);
   const [asleep, setAsleep] = useState(false);
-  const [live, setLive] = useState<Live>({ walking: false, pace: 1.5, lying: false, sitting: 0, rowing: false, speed: 1, paused: false, spin: false, pivot: false, repeat: null, every: 1.6 });
+  const [live, setLive] = useState<Live>({ walking: false, pace: 1.5, lying: false, sitting: 0, floor: 0, rowing: false, speed: 1, paused: false, spin: false, pivot: false, repeat: null, every: 1.6 });
   const [note, setNote] = useState("");
   const set = (patch: Partial<Live>) => setLive((was) => ({ ...was, ...patch }));
 
@@ -180,7 +182,7 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
       }
       // At the oars the stroke runs on its own: reach, pull, reach.
       const rowing = now.rowing ? 0.5 - 0.5 * Math.cos(t * 2.4) : undefined;
-      s.figure?.update({ time: t, stride, walking: now.walking, lean, lying: now.lying, sitting: now.sitting, rowing });
+      s.figure?.update({ time: t, stride, walking: now.walking, lean, lying: now.lying, sitting: now.sitting, floor: now.floor, rowing });
       // A jump goes up and comes down on the spot, as high as one of two tiles does in the game.
       const up = (t - sprang) / JUMP_AIR;
       if (s.figure) s.figure.root.position.y = up > 0 && up < 1 ? 4 * JUMP_HIGH * up * (1 - up) : 0;
@@ -497,6 +499,13 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
             Sit
             <input type="range" min={0} max={1} step={0.01} value={live.sitting} disabled={!person} onChange={(e) => set({ sitting: Number(e.target.value) })} />
             {live.sitting.toFixed(2)}
+          </label>
+        </div>
+        <div className="dev-row">
+          <label title="The sit emote, held until the hero walks off: from standing (0) to sat on the floor, legs straight out and spread (1). Only people sit.">
+            Sit on floor
+            <input type="range" min={0} max={1} step={0.01} value={live.floor} disabled={!person} onChange={(e) => set({ floor: Number(e.target.value) })} />
+            {live.floor.toFixed(2)}
           </label>
         </div>
 
