@@ -18,14 +18,16 @@ import { loadContent } from "./content";
 // screens loaded on demand have no sheet of their own.)
 import "./admin/admin.css";
 import { AtlasView } from "./atlas/AtlasView";
-import { Harbor } from "./Harbor";
+import { MainMenu } from "./MainMenu";
 import { HarborView } from "./HarborView";
 import { HutView } from "./HutView";
 import { KeeperView } from "./KeeperView";
+import { MAIN_MENU_HASH } from "./OptionsMenu";
 import { PubView } from "./PubView";
 import { ZoneView } from "./ZoneView";
 
 const pubFromHash = () => location.hash === "#pub";
+const menuFromHash = () => location.hash === MAIN_MENU_HASH;
 /** Inside the smithy, the apothecary, the galley or the Lapidary (KeeperView). */
 const keeperFromHash = (): KeeperHouse | null => {
   const house = location.hash.slice(1);
@@ -54,6 +56,7 @@ export function App() {
   const [invite, setInvite] = useState(inviteFromHash);
   const [hut, setHut] = useState(hutFromHash);
   const [pub, setPub] = useState(pubFromHash);
+  const [menu, setMenu] = useState(menuFromHash);
   const [keeper, setKeeper] = useState(keeperFromHash);
   const [zone, setZone] = useState(zoneFromHash);
   const [atlas, setAtlas] = useState(atlasFromHash);
@@ -81,6 +84,7 @@ export function App() {
       setInvite(inviteFromHash());
       setHut(hutFromHash());
       setPub(pubFromHash());
+      setMenu(menuFromHash());
       setKeeper(keeperFromHash());
       setZone(zoneFromHash());
       setAtlas(atlasFromHash());
@@ -98,13 +102,13 @@ export function App() {
   // On a development deployment (local and staging) the dev toolbox sits in the corner of every screen.
   return (
     <>
-      <Screen me={me} refresh={refresh} zone={zone} atlas={atlas} invite={invite} hut={hut} pub={pub} keeper={keeper} admin={admin} catches={catches} />
+      <Screen me={me} refresh={refresh} zone={zone} atlas={atlas} invite={invite} hut={hut} pub={pub} keeper={keeper} admin={admin} catches={catches} menu={menu} />
       {me.devTools && <Suspense fallback={null}><DevToolbox me={me} refresh={refresh} /></Suspense>}
     </>
   );
 }
 
-function Screen({ me, refresh, zone, atlas, invite, hut, pub, keeper, admin, catches }: { me: Me; refresh(): Promise<void>; zone: string | null; atlas: boolean; invite: string | null; hut: string | null; pub: boolean; keeper: KeeperHouse | null; admin: boolean; catches: boolean }) {
+function Screen({ me, refresh, zone, atlas, invite, hut, pub, keeper, admin, catches, menu }: { me: Me; refresh(): Promise<void>; zone: string | null; atlas: boolean; invite: string | null; hut: string | null; pub: boolean; keeper: KeeperHouse | null; admin: boolean; catches: boolean; menu: boolean }) {
   const ready = me.character?.status === "active";
   const leave = () => (location.hash = "");
   // Somewhere that is not the town: a lab, the admin page, a map, the atlas.
@@ -122,11 +126,12 @@ function Screen({ me, refresh, zone, atlas, invite, hut, pub, keeper, admin, cat
   const town = ready && !!me.crew && (!invite || invite === me.crew.id);
   // A screen with a view of the world (the town, a map, the atlas) takes the opening screen away itself, once it
   // has something to show (WorldRenderer's reveal). Any other has nothing to wait for.
-  const world = isValidElement(elsewhere) ? elsewhere.type === ZoneView || elsewhere.type === AtlasView : town;
+  const world = isValidElement(elsewhere) ? elsewhere.type === ZoneView || elsewhere.type === AtlasView : town && !menu;
   useEffect(() => {
     if (!world) dismissBoot();
   }, [world]);
-  if (!town) return elsewhere ?? <Harbor me={me} refresh={refresh} invite={invite} />;
+  // The main menu (#menu, from the game menu) is the opening screen, with a way back to the town.
+  if (!town || menu) return elsewhere ?? <MainMenu me={me} refresh={refresh} invite={invite} onContinue={town ? leave : undefined} />;
   // The whole town is loaded once and kept: the Harbor, the pub and the workshops, each put away (its `resting`)
   // while the player is somewhere else. So nothing is built on walking through a door, or on coming home from a
   // map. A hut is not kept: what is in one is only known on going in.

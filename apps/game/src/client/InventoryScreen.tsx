@@ -112,7 +112,7 @@ import {
   stoneOfItem,
 } from "@gantt-quest/world";
 import { api, type ChestView, type Hut, type InventoryItem, type Me } from "./api";
-import { useAct } from "./Harbor";
+import { useAct } from "./useAct";
 import { Icon, ItemDetail, ItemTile, toOwned, type OwnedItem } from "./items";
 import { label } from "./labels";
 import { ThingIcon, furnishingIcon, resourceIcon } from "./thingIcons";

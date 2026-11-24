@@ -17,9 +17,9 @@ pnpm --filter @gantt-quest/game dev
 
 Open http://localhost:5180, create a character and found a crew. To play two players on one machine, open a second tab at http://localhost:5180/?p=2 — the `p` parameter gives that tab its own guest account — and join the crew with its invite code. Background tabs do not animate (browsers pause rendering), so bring a tab to the front to watch it.
 
-### Email sign-in
+### Logging in
 
-Players start as guests and can attach an email to keep their character. Locally there is no mail binding, so the six-digit code is printed in the dev server's output as `[email/dev] to=… Your Gantt Quest sign-in code is …`. Use any made-up address.
+Logins are [Better Auth](https://better-auth.com) (`src/server/auth.ts`). Players start as guests and make an account with an email and password to keep their character. A forgotten password is set again with an emailed six-digit code. Locally there is no mail binding, so the code is printed in the dev server's output as `[email/dev] to=… Your Harbor of Heylets code is …`. Use any made-up address. Locally the login cookies are signed with a fixed secret; a deployed Worker needs the `BETTER_AUTH_SECRET` secret.
 
 To send real mail (staging does), the environment needs a `send_email` binding named `EMAIL` and a `MAIL_FROM_ADDRESS` var on a domain onboarded for Email Sending; see the staging block in `wrangler.example.jsonc`.
 
@@ -103,9 +103,10 @@ A tab left open on an older build is told when a newer one is out (`src/client/N
 | `apps/game/src/server/gather.ts`, `fishing.ts`, `bait.ts`, `projects.ts`, `trade.ts`, `workshops.ts`, `lapidary.ts`, `townchest.ts`, `lodestones.ts` | D1 work for each of those |
 | `apps/game/src/server/ai.ts` | Prompts and the Workers AI calls (and the mock): the barkeep, and naming a hero |
 | `apps/game/src/server/db/`, `db.ts` | D1 access, a module to each domain: players and sign-in, characters, inventory, the market stall, crews, plots, huts and their containers, spending, rewards. `db.ts` only passes on what they export, so everything is still imported from `./db` |
-| `apps/game/src/server/email.ts` | Sending sign-in codes |
+| `apps/game/src/server/auth.ts` | Logins (Better Auth): accounts, guests, sessions, and the player behind a request |
+| `apps/game/src/server/email.ts` | Sending the codes for a new password |
 | `apps/game/src/client/render/` | Three.js renderer (`WorldRenderer.ts`), the model of every kind of place on a map, a function to each kind (`places/`: `index.ts` lists them and says how to add one, `placing.ts` says how big each is drawn), the heroes and enemies as figures (`figures.ts`, `gearModels.ts`), a map's scenery and backdrop (`zoneScenery.ts`, `backdrop.ts`), spell effects (`SpellFx.ts`), furniture models (`props.ts`), the sky, weather, shadows and moving decoration (`ambience.ts`), the gathering stages (`FishingStage.ts`, `MineStage.ts`, `fellingScene.ts`), the pub's tables (`TableStage.ts`), and a map's combat view (`cutaway.ts`: on by itself in a fight, or with its button or V, walls and rock in the way sink to a kerb and trees thin to ghosts, all in the scenery's own shaders) |
-| `apps/game/src/client/*.tsx` | Character creation, crew gate, the Harbor, huts, the pub, keeper rooms, notice board (`board/`), works (`works/`), the atlas (`atlas/`), the town chest (`chest/`), gathering, trading, inventory, market stall, and a map and its fights (`ZoneView.tsx`, `zone/`) |
+| `apps/game/src/client/*.tsx` | The main menu (`MainMenu.tsx`: continue, create or join a world, settings, account), character creation (`CharacterCreation.tsx`), the settings shared with the game menu (`Settings.tsx`), the Harbor, huts, the pub, keeper rooms, notice board (`board/`), works (`works/`), the atlas (`atlas/`), the town chest (`chest/`), gathering, trading, inventory, market stall, and a map and its fights (`ZoneView.tsx`, `zone/`) |
 | `apps/game/src/client/itemArt.ts` | Pixel-art item icons drawn in code; the accent colour is the item's rarity |
 
 ## Rules worth knowing before changing things

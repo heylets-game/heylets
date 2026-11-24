@@ -29,7 +29,7 @@ export class Stmt {
   }
   exec() {
     const stmt = this.sql.prepare(this.text);
-    if (/^\s*(SELECT|WITH)/i.test(this.text)) return { results: stmt.all(...(this.args as never[])) as Row[], meta: { changes: 0, last_row_id: 0 } };
+    if (/^\s*(SELECT|WITH|PRAGMA)/i.test(this.text)) return { results: stmt.all(...(this.args as never[])) as Row[], meta: { changes: 0, last_row_id: 0 } };
     // A write that hands back what it wrote, as D1 does: its rows, and as many changes as there are of them.
     if (/\bRETURNING\b/i.test(this.text)) {
       const rows = stmt.all(...(this.args as never[])) as Row[];
@@ -62,6 +62,11 @@ export function openDb(opts: { answered?: () => Promise<void> } = {}): { sql: Da
   for (const text of migrationSql()) sql.exec(text);
   const db = {
     prepare: (text: string) => new Stmt(sql, text, [], opts.answered),
+    // Better Auth tells D1 apart from other databases by `exec` being there.
+    async exec(text: string) {
+      sql.exec(text);
+      return { count: 0, duration: 0 };
+    },
     async batch(stmts: Stmt[]) {
       if (opts.answered) await opts.answered();
       sql.exec("BEGIN");

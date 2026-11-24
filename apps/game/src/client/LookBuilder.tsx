@@ -37,99 +37,121 @@ export function startingOutfit(classId: string, look: Appearance, dressed = true
   return outfit;
 }
 
-/**
- * `wearing` is what a hero already out in the world has on, to see them in instead of their class's
- * starting clothes (changing their look from their sheet; see ChangeLook).
- */
-export function LookBuilder({ classId, look, onChange, wearing }: { classId: string; look: Appearance; onChange(next: Appearance): void; wearing?: Outfit }) {
+/** How the hero on the stage is shown: in clothes or not, turning, walking, and turned to a side being drawn on. Shared by the stage and the pickers. */
+export function useLookView() {
   const [dressed, setDressed] = useState(true);
   const [spin, setSpin] = useState(true);
   const [walk, setWalk] = useState(false);
   // Which way to turn the hero: set when a side of the paper doll is drawn on, to show that side.
   const [aim, setAim] = useState<{ turn: number; n: number } | null>(null);
+  return { dressed, setDressed, spin, setSpin, walk, setWalk, aim, setAim };
+}
+export type LookView = ReturnType<typeof useLookView>;
+
+/**
+ * The hero turning on a plinth, with buttons for how they are shown. `wearing` is what a hero already out in the
+ * world has on, to see them in instead of their class's starting clothes (changing their look from their sheet;
+ * see ChangeLook). `size` is the plinth's width in pixels.
+ */
+export function LookStage({ classId, look, onChange, wearing, view, size = 260 }: { classId: string; look: Appearance; onChange(next: Appearance): void; wearing?: Outfit; view: LookView; size?: number }) {
+  const { dressed, setDressed, spin, setSpin, walk, setWalk, aim } = view;
   const outfit = useMemo(() => (wearing && dressed ? { ...wearing, appearance: look } : startingOutfit(classId, look, dressed)), [classId, look, dressed, wearing]);
-  const set = <K extends keyof Appearance>(field: K, value: Appearance[K]) => onChange({ ...look, [field]: value });
-
   return (
-    <div className="look-builder">
-      <div className="look-stage">
-        <span className="look-plinth">
-          <FigurePreview classId={classId} outfit={outfit} size={260} spin={spin} walk={walk} aim={aim} />
-          <button type="button" className="small look-walk" aria-pressed={walk} onClick={() => setWalk(!walk)}>
-            {walk ? "■ Stand" : "Walk"}
-          </button>
-          <button type="button" className="small look-spin" aria-pressed={!spin} onClick={() => setSpin(!spin)} title={spin ? "Stop turning" : "Turn"} aria-label={spin ? "Stop turning" : "Turn"}>
-            {spin ? "❚❚" : "▶"}<span className="look-spin-word">{spin ? " Stop turning" : " Turn"}</span>
-          </button>
-        </span>
-        <div className="look-stage-row" role="group" aria-label="What they are wearing">
-          <button type="button" className={`small ${dressed ? "selected" : ""}`} aria-pressed={dressed} onClick={() => setDressed(true)}>
-            {wearing ? "What they wear" : "Starting clothes"}
-          </button>
-          <button type="button" className={`small ${!dressed ? "selected" : ""}`} aria-pressed={!dressed} onClick={() => setDressed(false)}>
-            Undergarments
-          </button>
-        </div>
-        <button type="button" className="small look-dice" onClick={() => onChange({ ...randomAppearance(), ink: look.ink })}>
-          <span aria-hidden>🎲</span> Surprise me
+    <div className="look-stage">
+      <span className="look-plinth" style={size === 260 ? undefined : { width: size, height: size }}>
+        <FigurePreview classId={classId} outfit={outfit} size={size} spin={spin} walk={walk} aim={aim} />
+        <button type="button" className="small look-walk" aria-pressed={walk} onClick={() => setWalk(!walk)}>
+          {walk ? "■ Stand" : "Walk"}
         </button>
-        <p className="muted hint look-explain">Drag to turn them by hand. The hat, tunic, trousers and shoes are items you can take off or swap for armor.</p>
+        <button type="button" className="small look-spin" aria-pressed={!spin} onClick={() => setSpin(!spin)} title={spin ? "Stop turning" : "Turn"} aria-label={spin ? "Stop turning" : "Turn"}>
+          {spin ? "❚❚" : "▶"}<span className="look-spin-word">{spin ? " Stop turning" : " Turn"}</span>
+        </button>
+      </span>
+      <div className="look-stage-row" role="group" aria-label="What they are wearing">
+        <button type="button" className={`small ${dressed ? "selected" : ""}`} aria-pressed={dressed} onClick={() => setDressed(true)}>
+          {wearing ? "What they wear" : "Starting clothes"}
+        </button>
+        <button type="button" className={`small ${!dressed ? "selected" : ""}`} aria-pressed={!dressed} onClick={() => setDressed(false)}>
+          Undergarments
+        </button>
       </div>
+      <button type="button" className="small look-dice" onClick={() => onChange({ ...randomAppearance(), ink: look.ink })}>
+        <span aria-hidden>🎲</span> Surprise me
+      </button>
+      <p className="muted hint look-explain">Drag to turn them by hand. The hat, tunic, trousers and shoes are items you can take off or swap for armor.</p>
+    </div>
+  );
+}
 
-      <div className="look-pickers">
-        {GROUPS.map((g) => (
-          <fieldset key={g.title} className="look-group">
-            <legend>{g.title}</legend>
-            {g.fields.map(([field, name]) => (
-              <div key={field} className="look-row" role="radiogroup" aria-label={name}>
-                <span className="look-label">{name}</span>
-                <span className="look-chips">
-                  {(APPEARANCE_OPTIONS[field] as readonly { id: string; label: string }[]).map((p) => {
-                    const on = look[field] === p.id;
-                    return (
-                      <button key={p.id} type="button" role="radio" aria-checked={on} className={`look-chip ${on ? "selected" : ""}`} onClick={() => set(field, p.id as Appearance[typeof field])}>
-                        {p.label}
-                      </button>
-                    );
-                  })}
-                </span>
-              </div>
-            ))}
-          </fieldset>
-        ))}
-        <fieldset className="look-group">
-          <legend>Tattoos</legend>
-          <InkEditor
-            look={look}
-            onChange={(ink) => onChange({ ...look, ink })}
-            onView={(view) => {
-              // Show the hero bare and still, turned to the side being drawn on.
-              setDressed(false);
-              setSpin(false);
-              setAim((a) => ({ turn: view === "b" ? Math.PI : 0, n: (a?.n ?? 0) + 1 }));
-            }}
-          />
-        </fieldset>
-        <fieldset className="look-group">
-          <legend>Colouring</legend>
-          {(
-            [
-              ["skin", "Skin", SKIN_TONES],
-              ["hair", "Hair", HAIR_COLORS],
-            ] as const
-          ).map(([field, name, colors]) => (
+/** The rows of presets and swatches, the tattoos and the colouring. */
+export function LookPickers({ look, onChange, view }: { look: Appearance; onChange(next: Appearance): void; view: LookView }) {
+  const { setDressed, setSpin, setAim } = view;
+  const set = <K extends keyof Appearance>(field: K, value: Appearance[K]) => onChange({ ...look, [field]: value });
+  return (
+    <div className="look-pickers">
+      {GROUPS.map((g) => (
+        <fieldset key={g.title} className="look-group">
+          <legend>{g.title}</legend>
+          {g.fields.map(([field, name]) => (
             <div key={field} className="look-row" role="radiogroup" aria-label={name}>
               <span className="look-label">{name}</span>
               <span className="look-chips">
-                {colors.map((c, i) => {
-                  const on = look[field] === c;
-                  return <button key={c} type="button" role="radio" aria-checked={on} aria-label={`${name} ${i + 1}`} className={`look-swatch ${on ? "selected" : ""}`} style={{ background: c }} onClick={() => set(field, c)} />;
+                {(APPEARANCE_OPTIONS[field] as readonly { id: string; label: string }[]).map((p) => {
+                  const on = look[field] === p.id;
+                  return (
+                    <button key={p.id} type="button" role="radio" aria-checked={on} className={`look-chip ${on ? "selected" : ""}`} onClick={() => set(field, p.id as Appearance[typeof field])}>
+                      {p.label}
+                    </button>
+                  );
                 })}
               </span>
             </div>
           ))}
         </fieldset>
-      </div>
+      ))}
+      <fieldset className="look-group">
+        <legend>Tattoos</legend>
+        <InkEditor
+          look={look}
+          onChange={(ink) => onChange({ ...look, ink })}
+          onView={(view) => {
+            // Show the hero bare and still, turned to the side being drawn on.
+            setDressed(false);
+            setSpin(false);
+            setAim((a) => ({ turn: view === "b" ? Math.PI : 0, n: (a?.n ?? 0) + 1 }));
+          }}
+        />
+      </fieldset>
+      <fieldset className="look-group">
+        <legend>Colouring</legend>
+        {(
+          [
+            ["skin", "Skin", SKIN_TONES],
+            ["hair", "Hair", HAIR_COLORS],
+          ] as const
+        ).map(([field, name, colors]) => (
+          <div key={field} className="look-row" role="radiogroup" aria-label={name}>
+            <span className="look-label">{name}</span>
+            <span className="look-chips">
+              {colors.map((c, i) => {
+                const on = look[field] === c;
+                return <button key={c} type="button" role="radio" aria-checked={on} aria-label={`${name} ${i + 1}`} className={`look-swatch ${on ? "selected" : ""}`} style={{ background: c }} onClick={() => set(field, c)} />;
+              })}
+            </span>
+          </div>
+        ))}
+      </fieldset>
+    </div>
+  );
+}
+
+/** The whole builder: the hero on the left, the pickers beside them. */
+export function LookBuilder({ classId, look, onChange, wearing }: { classId: string; look: Appearance; onChange(next: Appearance): void; wearing?: Outfit }) {
+  const view = useLookView();
+  return (
+    <div className="look-builder">
+      <LookStage classId={classId} look={look} onChange={onChange} wearing={wearing} view={view} />
+      <LookPickers look={look} onChange={onChange} view={view} />
     </div>
   );
 }

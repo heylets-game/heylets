@@ -23,6 +23,8 @@ export interface Env {
   EMAIL?: SendEmail;
   MAIL_FROM_ADDRESS?: string;
   MAIL_FROM_NAME?: string;
+  /** Secret: signs login cookies (auth.ts). Required on a deployed Worker; localhost falls back to a fixed one. */
+  BETTER_AUTH_SECRET?: string;
   /** Secret: comma-separated emails allowed into the admin side. Unset means nobody is an admin. */
   ADMIN_EMAILS?: string;
   /** "dev" on local and staging: the client shows the dev toolbox and its seeding routes answer (dev.ts). Production leaves it out. */

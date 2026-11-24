@@ -2818,7 +2818,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         onBag={() => !tradeWith && setBag((open) => !open)}
         // In a fight the emote wheel hangs off the side of the hotbar (out of one it is with the quick buttons).
         emote={fighting && !act.down ? <EmoteWheel onEmote={zone.emote} tab /> : undefined}
-        menu={<OptionsMenu title={state.options.name ?? `Map ${code}`} subtitle={<>{state.options.biome} · {state.options.size}{state.options.tier ? ` · ${state.options.tier} ${state.options.tier === 1 ? "ring" : "rings"} out` : ""}</>} actions={[caves
+        menu={<OptionsMenu mainMenuBlocked={fighting ? "You're in a fight: win it or flee first." : caves && !atMouth ? "Walk back to the cave mouth first." : undefined} title={state.options.name ?? `Map ${code}`} subtitle={<>{state.options.biome} · {state.options.size}{state.options.tier ? ` · ${state.options.tier} ${state.options.tier === 1 ? "ring" : "rings"} out` : ""}</>} actions={[caves
           ? {
               label: "Leave the cave",
               hint: !atMouth ? "The way out is the cave mouth: walk back to it to leave." : !fighting ? "Back up to the Harbor. The cave stays as you left it." : fleeBlock ? `In a fight: you can leave once you could flee it. ${fleeBlock}` : "Flee the fight and climb back up to the Harbor.",

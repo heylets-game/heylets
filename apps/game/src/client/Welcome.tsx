@@ -105,19 +105,20 @@ function Ribbon({ text, scale }: { text: string; scale: number }) {
  * readers. "The Harbor of Heylets" stacks as THE / HARBOR / OF HEYLETS; any
  * other name is drawn on one line, or as plain text if the font lacks a letter.
  */
-export function HarborTitle({ name }: { name: string }) {
+export function HarborTitle({ name, compact = false }: { name: string; /** Smaller, for the main menu's side panel. */ compact?: boolean }) {
+  const k = compact ? 0.75 : 1;
   const m = /^the (\S+) (of .+)$/i.exec(name);
   return (
     <h1 className="harbor-title">
       <span className="visually-hidden">{name}</span>
       {m && canPixelText(m[1]) && canPixelText(m[2]) ? (
         <>
-          <Ribbon text="THE" scale={3} />
-          <PixelText className="harbor-title-name" text={m[1]} scale={8} />
-          <Ribbon text={m[2]} scale={4} />
+          <Ribbon text="THE" scale={compact ? 2 : 3} />
+          <PixelText className="harbor-title-name" text={m[1]} scale={8 * k} />
+          <Ribbon text={m[2]} scale={4 * k} />
         </>
       ) : canPixelText(name) ? (
-        <PixelText className="harbor-title-name" text={name} scale={6} />
+        <PixelText className="harbor-title-name" text={name} scale={6 * k} />
       ) : (
         <span aria-hidden className="harbor-title-plain">{name}</span>
       )}
