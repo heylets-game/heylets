@@ -310,7 +310,7 @@ describe("the Catch Book, records and mounts", () => {
   it("hangs a fish from the trophy chest on a Mounted Fish at home, and takes it down again", async () => {
     const env = { DB: db } as unknown as Env;
     sql.prepare("INSERT INTO fish (id, player_id, species, grams, mm, specimen, spot, caught_at, place) VALUES ('t1', 'ann', 'halibut', 60000, 1800, 1, 'east', 0, 'trophy'), ('i1', 'ann', 'herring', 300, 250, 0, 'middle', 0, 'icebox')").run();
-    const mount = Number(sql.prepare("INSERT INTO furnishings (player_id, def_id, label, meta_json, created_at) VALUES ('ann', 'mounted_fish', 'Mounted Fish', '{}', 0)").run().lastInsertRowid);
+    const mount = Number(sql.prepare("INSERT INTO furnishings (player_id, crew_id, def_id, label, meta_json, created_at) VALUES ('ann', (SELECT crew_id FROM crew_members WHERE player_id = 'ann'), 'mounted_fish', 'Mounted Fish', '{}', 0)").run().lastInsertRowid);
     expect(await hangAtHome(env, "ann", mount, "i1")).toMatch(/trophy chest/);
     expect(await hangAtHome(env, "ann", mount, "t1")).toEqual({ ok: true });
     expect(one("SELECT place, furnishing_id FROM fish WHERE id = 't1'")).toMatchObject({ place: "hut", furnishing_id: mount });

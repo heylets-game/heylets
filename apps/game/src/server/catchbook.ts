@@ -4,6 +4,7 @@
 
 import { FISH, PUB_MOUNT_SLOTS, TROPHY_SLOTS, type BookPage } from "@gantt-quest/world";
 import { crewFor, refreshHut, type Env } from "./db";
+import { homeCrewSql, inHomeSql } from "./db/rows";
 
 export interface BookEntry {
   species: string;
@@ -128,7 +129,11 @@ export async function hangAtHome(env: Env, playerId: string, furnishingId: unkno
   const db = env.DB;
   const id = Number(furnishingId);
   if (!Number.isInteger(id)) return "Which mount?";
-  const mount = await db.prepare("SELECT def_id AS defId, meta_json AS meta FROM furnishings WHERE id = ? AND player_id = ?").bind(id, playerId).first<{ defId: string; meta: string | null }>();
+  // A mount in their hut in the world they are in now.
+  const mount = await db
+    .prepare(`SELECT def_id AS defId, meta_json AS meta FROM furnishings WHERE id = ?1 AND player_id = ?2 AND ${inHomeSql(homeCrewSql("?2"))}`)
+    .bind(id, playerId)
+    .first<{ defId: string; meta: string | null }>();
   if (!mount || mount.defId !== "mounted_fish") return "That is not a mount for a fish.";
   const was = (JSON.parse(mount.meta || "{}") as { fish?: { id: string } }).fish?.id ?? null;
   const statements: D1PreparedStatement[] = [];

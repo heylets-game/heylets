@@ -1,6 +1,6 @@
 // Worlds on the account (db/crews.ts): a hero belongs to several worlds and
 // is in one at a time; joining another keeps the first; leaving one puts them
-// in the next; a hut stands in one world and is only drawn there.
+// in the next; each world is its own home, with a plot bought in each.
 
 import { describe, expect, it } from "vitest";
 import { buyPlot } from "../src/server/db/plots";
@@ -49,7 +49,7 @@ describe("a hero in several worlds", () => {
     expect(await joinCrew(db, "ann", world.id, 1)).toMatchObject({ id: world.id, joined: false });
   });
 
-  it("a hut stands in one world: drawn only there, and not bought again in another", async () => {
+  it("each world is its own home: a plot is bought in each, and each is drawn only in its own world", async () => {
     const { db, sql } = openDb();
     addHero(sql, { id: "ann", name: "Ann", gold: 10_000 });
     const home = await createCrew(db, "ann", "Home");
@@ -59,13 +59,16 @@ describe("a hero in several worlds", () => {
     const plotIn = async (crewId: string) => (await harborBoard(db, crewId)).members.find((m) => m.id === "ann")?.plot ?? null;
     expect(await plotIn(home.id)).toBe(2);
     expect(await plotIn(away.id)).toBeNull();
-    expect(await buyPlot(db, away.id, "ann", 2, 12)).toBe("Your hut already stands in Home.");
+    // A new world means a new plot, even the same number of one, and only one in each world.
+    expect(await buyPlot(db, away.id, "ann", 2, 12)).toBeNull();
+    expect(await buyPlot(db, away.id, "ann", 5, 12)).toBe("You already own a plot.");
+    expect(await plotIn(away.id)).toBe(2);
+    expect(await plotIn(home.id)).toBe(2);
 
-    // Leaving the world the hut is not in keeps it; leaving its own world gives the plot up.
+    // Leaving a world gives up the plot there, and only there; the hut is kept for a rejoin.
     await leaveCrew(db, "ann", away.id);
     expect(await plotIn(home.id)).toBe(2);
-    await leaveCrew(db, "ann", home.id);
-    expect(sql.prepare("SELECT plot, plot_crew_id FROM huts WHERE player_id = 'ann'").get()).toEqual({ plot: null, plot_crew_id: null });
+    expect(sql.prepare("SELECT plot FROM huts WHERE player_id = 'ann' AND crew_id = ?").get(away.id)).toEqual({ plot: null });
   });
 
   it("lists every world an account's heroes are in, with which heroes", async () => {

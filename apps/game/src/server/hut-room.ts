@@ -1,6 +1,6 @@
-// HutRoom: one Durable Object per hut (named by its owner's player id), for
-// the walk-in room where the owner and visiting crewmates see each other and
-// the furniture.
+// HutRoom: one Durable Object per hut (named by its owner's player id and the
+// world it stands in: each world is its own home), for the walk-in room where
+// the owner and visiting crewmates see each other and the furniture.
 //
 // Presence, walking and chat work as they do in HarborRoom (walk-room.ts): a
 // relay with no tick loop and no alarm, with who is here kept in each
@@ -36,7 +36,8 @@ import {
   type HutServerMessage,
   type Placed,
   type WorldMap, } from "@gantt-quest/world";
-import { containerUsed, crewFor, furnishingStatement, getCharacter, getHut, hasShack, heroInitFor, homeOf, type Env, type Player } from "./db";
+import { containerUsed, getCharacter, getHut, hasShack, heroInitFor, homeCrewOf, homeOf, hutHeaders, hutRoomOf, type Env, type Player } from "./db";
+import { HERO_WIDE_FURNISHINGS } from "./db/rows";
 import { Walkers, hexAsked, walkerFrom, withHero } from "./walk-room";
 
 /** What a player with nothing at all is given the first time they open their own hut. */
@@ -51,38 +52,36 @@ interface Hut {
 
 /**
  * The Worker's side of `GET /api/hut/:owner/ws`: check that this player may
- * walk into that hut, then hand the socket to the hut's room. A hut is open
- * to its owner and to members of the owner's crew.
+ * walk into that hut, then hand the socket to the hut's room. The hut is the
+ * owner's in the world the player is in now (each world is its own home, and
+ * the owner may be in another of theirs just now). It is open to its owner and
+ * to the other members of that world.
  */
 export async function enterHut(env: Env, player: Player, ownerId: string, request: Request): Promise<Response> {
-  const [character, owner, crew, ownerCrew] = await Promise.all([
-    getCharacter(env.DB, player.id),
-    ownerId === player.id ? null : getCharacter(env.DB, ownerId),
-    crewFor(env.DB, player.id),
-    ownerId === player.id ? null : crewFor(env.DB, ownerId),
-  ]);
-  if (character?.status !== "active") return new Response("Create a character first.", { status: 409 });
   const mine = ownerId === player.id;
-  // The same answer whether the hut does not exist or belongs to another crew.
-  if (!mine && (owner?.status !== "active" || !crew || ownerCrew?.id !== crew.id)) {
+  const [character, owner, world] = await Promise.all([getCharacter(env.DB, player.id), mine ? null : getCharacter(env.DB, ownerId), homeCrewOf(env.DB, player.id)]);
+  if (character?.status !== "active") return new Response("Create a character first.", { status: 409 });
+  const member = mine || (world !== "" && !!(await env.DB.prepare("SELECT 1 FROM crew_members WHERE crew_id = ? AND player_id = ?").bind(world, ownerId).first()));
+  // The same answer whether the hut does not exist or its owner is not in this world.
+  if (!mine && (owner?.status !== "active" || !member)) {
     return new Response("That hut is not in your crew's Harbor.", { status: 403 });
   }
   // A hut stands on a plot, once its shack is up: until then there is nothing to walk into.
-  if (!(await hasShack(env.DB, ownerId))) {
-    const bought = (await homeOf(env.DB, ownerId)).plot !== null;
+  if (!(await hasShack(env.DB, ownerId, world))) {
+    const bought = (await homeOf(env.DB, ownerId, world)).plot !== null;
     const reason = mine
       ? bought ? "Your plot has only a resource bin on it. Fill it and the shack goes up." : "You have no hut yet. Buy a plot in the Harbor first."
       : bought ? "Their shack is not built yet." : "They have not built a hut yet.";
     return new Response(reason, { status: 403 });
   }
   const headers = new Headers(request.headers);
-  headers.set("x-hut-owner", ownerId);
+  for (const [k, v] of Object.entries(hutHeaders(ownerId, world))) headers.set(k, v);
   headers.set("x-hut-owner-name", encodeURIComponent(mine ? character.name : owner!.name));
   headers.set("x-player-id", player.id);
   headers.set("x-player-name", encodeURIComponent(character.name));
   headers.set("x-player-class", character.class_id);
   headers.set("x-player-level", String(character.level));
-  return env.HUT_ROOM.get(env.HUT_ROOM.idFromName(ownerId)).fetch(new Request(request.url, { headers }));
+  return hutRoomOf(env, ownerId, world).fetch(new Request(request.url, { headers }));
 }
 
 export class HutRoom extends DurableObject<Env> {
@@ -97,15 +96,15 @@ export class HutRoom extends DurableObject<Env> {
     this.here = new Walkers(ctx);
   }
 
-  private async read(ownerId: string): Promise<Hut> {
-    const { tier, furnishings, finish } = await getHut(this.env.DB, ownerId);
+  private async read(ownerId: string, crewId: string): Promise<Hut> {
+    const { tier, furnishings, finish } = await getHut(this.env.DB, ownerId, crewId);
     return { tier, room: hutRoom(tier), furnishings, finish };
   }
 
   /** The hut, from memory or D1. Concurrent callers share one read. */
-  private load(ownerId: string, fresh = false): Promise<Hut> {
+  private load(ownerId: string, crewId: string, fresh = false): Promise<Hut> {
     if (this.hut && !fresh) return Promise.resolve(this.hut);
-    this.loading ??= this.read(ownerId)
+    this.loading ??= this.read(ownerId, crewId)
       .then((hut) => (this.hut = hut))
       .finally(() => (this.loading = null));
     return this.loading;
@@ -116,13 +115,23 @@ export class HutRoom extends DurableObject<Env> {
    * start with. Every home also comes with a free storage chest and a free
    * wardrobe (HOME_FREEBIES), standing in the room; a hut built before one
    * existed gets it on the owner's next visit. Each insert checks for its
-   * piece itself, so two tabs at once cannot both add one.
+   * piece itself, so two tabs at once cannot both add one. All of it goes
+   * into this world's hut: a hut in a new world starts from the same few.
    */
-  private async stock(ownerId: string): Promise<Hut> {
-    const hut = await this.load(ownerId, true);
+  private async stock(ownerId: string, crewId: string): Promise<Hut> {
+    const hut = await this.load(ownerId, crewId, true);
     const statements: D1PreparedStatement[] = [];
-    if (hut.furnishings.length === 0) {
-      statements.push(...STARTER_SET.map((defId) => furnishingStatement(this.env.DB, ownerId, { defId, label: FURNISHINGS[defId].name })));
+    /** A piece into this world's hut, unless it has one already. */
+    const add = (defId: string, spot: { q: number; r: number } | null) =>
+      this.env.DB
+        .prepare(
+          `INSERT INTO furnishings (player_id, crew_id, def_id, label, meta_json, q, r, facing, created_at)
+           SELECT ?1, ?2, ?3, ?4, '{}', ?5, ?6, 0, ?7 WHERE NOT EXISTS (SELECT 1 FROM furnishings WHERE player_id = ?1 AND crew_id = ?2 AND def_id = ?3)`,
+        )
+        .bind(ownerId, crewId, defId, FURNISHINGS[defId].name, spot?.q ?? null, spot?.r ?? null, Date.now());
+    // The boats are the hero's in every world, so a hut in a new world with only those is still bare.
+    if (hut.furnishings.every((f) => HERO_WIDE_FURNISHINGS.includes(f.defId))) {
+      statements.push(...STARTER_SET.map((defId) => add(defId, null)));
     }
     // Each free piece takes the next free spot, clear of the ones set down before it.
     const placed: Placed[] = placedFurnishings(hut.furnishings);
@@ -130,28 +139,26 @@ export class HutRoom extends DurableObject<Env> {
       if (hut.furnishings.some((f) => f.defId === defId)) continue;
       const spot = freeSpot(hut.room, placed, defId, hutDoor(hut.tier));
       if (spot) placed.push({ ...spot, defId });
-      statements.push(
-        this.env.DB
-          .prepare(
-            `INSERT INTO furnishings (player_id, def_id, label, meta_json, q, r, facing, created_at)
-             SELECT ?1, ?2, ?3, '{}', ?4, ?5, 0, ?6 WHERE NOT EXISTS (SELECT 1 FROM furnishings WHERE player_id = ?1 AND def_id = ?2)`,
-          )
-          .bind(ownerId, defId, FURNISHINGS[defId].name, spot?.q ?? null, spot?.r ?? null, Date.now()),
-      );
+      statements.push(add(defId, spot));
     }
     if (statements.length === 0) return hut;
     await this.env.DB.batch(statements);
-    return this.load(ownerId, true);
+    return this.load(ownerId, crewId, true);
   }
 
-  /** The owner's id is the tag every socket in this room carries besides its player's. */
+  /** The owner's id and the hut's world are tags every socket in this room carries besides its player's. */
   private ownerId(ws: WebSocket): string | null {
     return this.ctx.getTags(ws).find((t) => t.startsWith("owner:"))?.slice(6) ?? null;
   }
 
+  private crewId(ws: WebSocket): string | null {
+    return this.ctx.getTags(ws).find((t) => t.startsWith("crew:"))?.slice(5) ?? null;
+  }
+
   async fetch(request: Request): Promise<Response> {
     const ownerId = request.headers.get("x-hut-owner");
-    if (!ownerId) return new Response("missing hut", { status: 400 });
+    const crewId = request.headers.get("x-hut-crew");
+    if (!ownerId || crewId === null) return new Response("missing hut", { status: 400 });
     const { pathname } = new URL(request.url);
 
     // Is this player standing in this hut right now? Asked before gear comes out of a container:
@@ -167,7 +174,7 @@ export class HutRoom extends DurableObject<Env> {
     // The hut changed from outside this room (a new furnishing, a bigger hut, new wallpaper): re-read it.
     if (pathname === "/refresh") {
       if (this.ctx.getWebSockets().length > 0) {
-        const hut = await this.load(ownerId, true);
+        const hut = await this.load(ownerId, crewId, true);
         this.here.broadcast({ type: "furnishings", tier: hut.tier, furnishings: hut.furnishings, finish: hut.finish });
       } else {
         this.hut = null;
@@ -179,14 +186,14 @@ export class HutRoom extends DurableObject<Env> {
     const id = request.headers.get("x-player-id");
     if (!id) return new Response("missing player", { status: 400 });
     const canEdit = id === ownerId;
-    const hut = canEdit ? await this.stock(ownerId) : await this.load(ownerId);
+    const hut = canEdit ? await this.stock(ownerId, crewId) : await this.load(ownerId, crewId);
 
     // One socket per player. A new tab takes over, standing where the old one stood; anyone else arrives in the door.
     const pos = this.here.takeOver(id, hutDoor(hut.tier));
     const player = walkerFrom(request, id, await heroInitFor(this.env.DB, id), pos);
 
     const pair = new WebSocketPair();
-    this.here.admit(pair[1], player, `owner:${ownerId}`);
+    this.here.admit(pair[1], player, `owner:${ownerId}`, `crew:${crewId}`);
     this.here.send(pair[1], {
       type: "snapshot",
       you: id,
@@ -204,12 +211,13 @@ export class HutRoom extends DurableObject<Env> {
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     const heard = this.here.read<HutClientMessage>(ws, message);
     const ownerId = this.ownerId(ws);
-    if (!heard || !ownerId) return;
+    const crewId = this.crewId(ws);
+    if (!heard || !ownerId || crewId === null) return;
     const { player, msg } = heard;
 
     if (msg.type === "say") return this.here.say(player, msg.text);
     if (msg.type === "emote") return this.here.emote(ws, player, msg.emote);
-    const hut = await this.load(ownerId);
+    const hut = await this.load(ownerId, crewId);
 
     if (msg.type === "move") {
       const to = hexAsked(msg.to);
@@ -250,6 +258,8 @@ export class HutRoom extends DurableObject<Env> {
     if (player.id !== ownerId) return refuse("Only the owner can move the furniture.");
     const piece = hut.furnishings.find((f) => f.id === Number(msg.id));
     if (!piece) return refuse("You do not own that.");
+    // A boat is the hero's in every world's hut at once: it is kept at the pier, never set down or put away in one.
+    if (HERO_WIDE_FURNISHINGS.includes(piece.defId)) return refuse("That is kept at the pier.");
     const small = isSmall(piece.defId);
     const mounted = isMounted(piece.defId);
     const others = hut.furnishings.filter((f) => f !== piece);

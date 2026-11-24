@@ -4,7 +4,7 @@
 
 import type { Hono } from "hono";
 import type { HexPos } from "@gantt-quest/core";
-import { crewFor, type Env, type Player } from "../db";
+import { crewFor, homeCrewOf, hutHeaders, hutRoomOf, type Env, type Player } from "../db";
 import type { Standing } from "../gather";
 import { crewPlaces } from "../zones";
 
@@ -13,10 +13,11 @@ export type AppEnv = { Bindings: Env; Variables: { player: Player } };
 /** The app each route module registers its routes on (worker.ts makes it and calls them in order). */
 export type GameApp = Hono<AppEnv>;
 
-/** True if the player has a socket open in their own hut's room right now: they are standing in it. */
+/** True if the player has a socket open in their own hut's room (in the world they are in now) right now: they are standing in it. */
 export async function inOwnHut(env: Env, playerId: string): Promise<boolean> {
   try {
-    const res = await env.HUT_ROOM.get(env.HUT_ROOM.idFromName(playerId)).fetch("https://hut/present", { headers: { "x-hut-owner": playerId, "x-player-id": playerId } });
+    const crew = await homeCrewOf(env.DB, playerId);
+    const res = await hutRoomOf(env, playerId, crew).fetch("https://hut/present", { headers: { ...hutHeaders(playerId, crew), "x-player-id": playerId } });
     return (await res.text()) === "yes";
   } catch {
     return false;

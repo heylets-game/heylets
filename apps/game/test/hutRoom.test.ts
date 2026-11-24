@@ -49,14 +49,14 @@ async function enter(id: string, name: string, to = hut): Promise<HutSocket> {
   serveNext(ws);
   const res = await to.fetch({
     url: "https://hut/ws",
-    headers: new Headers({ Upgrade: "websocket", "x-hut-owner": "ann", "x-hut-owner-name": "Ann", "x-player-id": id, "x-player-name": encodeURIComponent(name), "x-player-class": "cleric", "x-player-level": "1" }),
+    headers: new Headers({ Upgrade: "websocket", "x-hut-owner": "ann", "x-hut-crew": CREW, "x-hut-owner-name": "Ann", "x-player-id": id, "x-player-name": encodeURIComponent(name), "x-player-class": "cleric", "x-player-level": "1" }),
   } as never);
   if (res.status !== 101) throw new Error(`refused: ${await res.text()}`);
   return ws;
 }
 
 const tell = (ws: HutSocket, message: unknown, to = hut) => to.webSocketMessage(ws as unknown as WebSocket, typeof message === "string" ? message : JSON.stringify(message));
-const ask = (path: string, init: RequestInit = {}) => hut.fetch(new Request(`https://hut${path}`, { ...init, headers: { "x-hut-owner": "ann", ...(init.headers as Record<string, string> | undefined) } }));
+const ask = (path: string, init: RequestInit = {}) => hut.fetch(new Request(`https://hut${path}`, { ...init, headers: { "x-hut-owner": "ann", "x-hut-crew": CREW, ...(init.headers as Record<string, string> | undefined) } }));
 const at = (ws: HutSocket) => ws.deserializeAttachment()?.pos;
 /** Somewhere across the floor that can be walked to from the door, round the furniture: the far end of the longest such walk. */
 function across(furnishings: Furnishing[], from = DOOR) {
@@ -89,8 +89,8 @@ describe("walking into a hut", () => {
       { type: "snapshot", you: "ann", owner: { id: "ann", name: "Ann" }, tier: 1, canEdit: true, players: [expect.objectContaining({ id: "ann", name: "Ann", classId: "cleric", level: 1, xp: 0, pos: DOOR })], furnishings: expect.any(Array), finish: { wall: null, floor: null, roof: null } },
     ]);
     expect(ann.furnishings.map((f) => f.defId).sort()).toEqual(["table", "chair", "rug", ...HOME_FREEBIES].sort());
-    // Every socket here carries its player's id and the hut's owner.
-    expect(state.sockets[0].tags).toEqual(["ann", "owner:ann"]);
+    // Every socket here carries its player's id, the hut's owner and the world the hut is in.
+    expect(state.sockets[0].tags).toEqual(["ann", "owner:ann", `crew:${CREW}`]);
   });
 
   it("lets a crewmate in to look, standing in the door, and tells whoever is here that they came", async () => {
@@ -107,7 +107,7 @@ describe("walking into a hut", () => {
   it("answers only for a hut, an upgrade, and a player", async () => {
     expect((await hut.fetch(new Request("https://hut/ws"))).status).toBe(400);
     expect((await ask("/ws")).status).toBe(426);
-    const res = await hut.fetch({ url: "https://hut/ws", headers: new Headers({ Upgrade: "websocket", "x-hut-owner": "ann" }) } as never);
+    const res = await hut.fetch({ url: "https://hut/ws", headers: new Headers({ Upgrade: "websocket", "x-hut-owner": "ann", "x-hut-crew": CREW }) } as never);
     expect([res.status, await res.text()]).toEqual([400, "missing player"]);
   });
 
@@ -270,7 +270,7 @@ describe("in a hut", () => {
   });
 
   it("reads the hut again when it changed from outside, and tells everyone here", async () => {
-    sql.prepare("INSERT INTO furnishings (player_id, def_id, label, created_at) VALUES ('ann', 'chair', 'Chair', ?)").run(T0);
+    sql.prepare("INSERT INTO furnishings (player_id, crew_id, def_id, label, created_at) VALUES ('ann', ?, 'chair', 'Chair', ?)").run(CREW, T0);
     expect(await (await ask("/refresh")).text()).toBe("ok");
     const told = ann.since(heard[0]);
     expect(told).toMatchObject([{ type: "furnishings", tier: 1 }]);

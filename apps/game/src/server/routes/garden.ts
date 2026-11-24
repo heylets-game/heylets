@@ -12,13 +12,16 @@ import type { GameApp } from "./shared";
 type Body = { owner?: unknown; bed?: unknown; with?: unknown; qty?: unknown };
 
 export function gardenRoutes(app: GameApp): void {
-  /** The crew of the asker, if `owner` is in it too (or is the asker). */
+  /**
+   * The crew of the asker, if `owner` belongs to it too (or is the asker). Each world is its own home, so it is the
+   * owner's garden in that world, wherever the owner is just now.
+   */
   const sameCrew = async (db: D1Database, playerId: string, owner: unknown) => {
     const crew = await crewFor(db, playerId);
     if (!crew || typeof owner !== "string") return null;
     if (owner === playerId) return crew;
-    const theirs = await crewFor(db, owner);
-    return theirs?.id === crew.id ? crew : null;
+    const member = await db.prepare("SELECT 1 FROM crew_members WHERE crew_id = ? AND player_id = ?").bind(crew.id, owner).first();
+    return member ? crew : null;
   };
 
   // A garden as its panel shows it: yours, or a crewmate's.

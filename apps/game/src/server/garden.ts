@@ -1,5 +1,6 @@
 // The garden by a hut's door in D1 (packages/world/src/garden.ts has the rules): a row per bed with something
-// growing in it. Its owner plants and picks it; anyone in their crew may water it and feed it bonemeal. Every
+// growing in it. Each world is its own home, so a hero's garden is theirs in one world (garden_beds.crew_id): the
+// owner plants and picks the one in the world they are in now; anyone in that world may water it and feed it bonemeal. Every
 // change is one batch whose first statement re-checks what the rules checked on a read, so two requests at once
 // (a double click, two crewmates watering together) cannot both go through.
 
@@ -27,7 +28,7 @@ import {
   type Resources,
   type SowWith,
 } from "@gantt-quest/world";
-import { getCharacter, getHut, homeOf, resourceStatements } from "./db";
+import { getCharacter, getHut, homeCrewOf, homeOf, resourceStatements } from "./db";
 import { prepareXp, xpOutcome, type XpResult } from "./harbor-xp";
 
 const now = () => Date.now();
@@ -44,9 +45,9 @@ interface BedRow {
 
 const toBed = (r: BedRow): GardenBed => ({ bed: r.bed, crop: asCrop(r.crop), plantedAt: r.planted_at, readyAt: r.ready_at, ...(r.watered_by ? { wateredBy: r.watered_by } : {}), ...(r.fed_by ? { fedBy: r.fed_by } : {}) });
 
-/** What is growing in a player's garden, a bed at a time. */
-export async function gardenOf(db: D1Database, playerId: string): Promise<GardenBed[]> {
-  const rows = await db.prepare("SELECT * FROM garden_beds WHERE player_id = ? ORDER BY bed").bind(playerId).all<BedRow>();
+/** What is growing in a player's garden in world `crewId`, a bed at a time. */
+export async function gardenOf(db: D1Database, playerId: string, crewId: string): Promise<GardenBed[]> {
+  const rows = await db.prepare("SELECT * FROM garden_beds WHERE player_id = ? AND crew_id = ? ORDER BY bed").bind(playerId, crewId).all<BedRow>();
   return rows.results.map(toBed);
 }
 
@@ -63,23 +64,29 @@ export interface GardenView {
   now: number;
 }
 
-/** The owner's garden, if their shack stands: else why there is none. */
-async function gardenSize(db: D1Database, ownerId: string): Promise<number | string> {
-  const [home, hut] = await Promise.all([homeOf(db, ownerId), getHut(db, ownerId)]);
+/** The owner's garden in world `crewId`, if their shack stands there: else why there is none. */
+async function gardenSize(db: D1Database, ownerId: string, crewId: string): Promise<number | string> {
+  const [home, hut] = await Promise.all([homeOf(db, ownerId, crewId), getHut(db, ownerId, crewId)]);
   if (home.plot === null || home.bin !== null) return "There is no garden there until the shack stands.";
   return gardenBeds(hut.tier);
 }
 
+/** `ownerId`'s garden as `askerId` sees it: the one in the world the asker is in (the owner may be in another now). */
 export async function gardenView(db: D1Database, askerId: string, ownerId: string): Promise<GardenView | string> {
-  const [size, growing, hut, c, can] = await Promise.all([gardenSize(db, ownerId), gardenOf(db, ownerId), getHut(db, askerId), getCharacter(db, askerId), canOf(db, askerId)]);
+  const world = await homeCrewOf(db, askerId);
+  const [size, growing, hut, c, can] = await Promise.all([gardenSize(db, ownerId, world), gardenOf(db, ownerId, world), getHut(db, askerId), getCharacter(db, askerId), canOf(db, askerId)]);
   if (typeof size === "string") return size;
   const r = hut.resources;
   return { owner: ownerId, beds: size, growing, held: { seeds: r.seeds ?? 0, herbs: r.herbs ?? 0, mushrooms: r.mushrooms ?? 0, bonemeal: r.bonemeal ?? 0, bone: r.bone ?? 0 }, can, gold: c?.gold ?? 0, now: now() };
 }
 
-/** Plant one of your own beds with a packet of seeds or a herb (it grows herbs), or a mushroom (it grows mushrooms). */
+/**
+ * Plant one of your own beds (in the world you are in now) with a packet of seeds or a herb (it grows herbs), or a
+ * mushroom (it grows mushrooms).
+ */
 export async function plantBed(db: D1Database, playerId: string, bed: unknown, with_: unknown): Promise<string | null> {
-  const [size, growing, hut] = await Promise.all([gardenSize(db, playerId), gardenOf(db, playerId), getHut(db, playerId)]);
+  const world = await homeCrewOf(db, playerId);
+  const [size, growing, hut] = await Promise.all([gardenSize(db, playerId, world), gardenOf(db, playerId, world), getHut(db, playerId, world)]);
   if (typeof size === "string") return "Your shack has to stand before there is a garden by its door.";
   const problem = plantProblem({ tier: hut.tier, beds: growing, resources: hut.resources }, bed, with_);
   if (problem) return problem;
@@ -89,8 +96,8 @@ export async function plantBed(db: D1Database, playerId: string, bed: unknown, w
   const [took, planted] = await db.batch([
     db.prepare("UPDATE resources SET qty = qty - 1 WHERE player_id = ?1 AND kind = ?2 AND qty >= 1").bind(playerId, sow),
     db
-      .prepare("INSERT OR IGNORE INTO garden_beds (player_id, bed, crop, planted_at, ready_at) SELECT ?1, ?2, ?5, ?3, ?4 WHERE changes() > 0")
-      .bind(playerId, bed as number, t, t + CROP_GROW_MS[crop], crop),
+      .prepare("INSERT OR IGNORE INTO garden_beds (player_id, crew_id, bed, crop, planted_at, ready_at) SELECT ?1, ?6, ?2, ?5, ?3, ?4 WHERE changes() > 0")
+      .bind(playerId, bed as number, t, t + CROP_GROW_MS[crop], crop, world),
   ]).then((res) => res.map((r) => r.meta.changes));
   if (!took) return "You no longer have that to plant.";
   if (!planted) {
@@ -138,9 +145,13 @@ export async function fillCan(db: D1Database, playerId: string): Promise<string 
   return { water: CAN_CAPACITY };
 }
 
-/** Water a bed in `ownerId`'s garden (yours, or a crewmate's: the route checks the crew) from your watering can. */
+/**
+ * Water a bed in `ownerId`'s garden (yours, or a crewmate's: the route checks the crew) from your watering can: their
+ * garden in the world you are in.
+ */
 export async function waterBed(db: D1Database, playerId: string, ownerId: string, bed: unknown): Promise<string | null> {
-  const [growing, name, can] = await Promise.all([gardenOf(db, ownerId), tender(db, playerId), canOf(db, playerId)]);
+  const world = await homeCrewOf(db, playerId);
+  const [growing, name, can] = await Promise.all([gardenOf(db, ownerId, world), tender(db, playerId), canOf(db, playerId)]);
   if (!name) return "Create a character first.";
   const t = now();
   const problem = waterProblem(growing.find((b) => b.bed === bed), t, can);
@@ -149,8 +160,8 @@ export async function waterBed(db: D1Database, playerId: string, ownerId: string
   const [poured, watered] = await db.batch([
     db.prepare("UPDATE watering_cans SET water = water - 1 WHERE player_id = ?1 AND water >= 1").bind(playerId),
     db
-      .prepare("UPDATE garden_beds SET watered_by = ?3 WHERE player_id = ?1 AND bed = ?2 AND watered_by IS NULL AND ready_at > ?4 AND changes() > 0")
-      .bind(ownerId, bed as number, name, t),
+      .prepare("UPDATE garden_beds SET watered_by = ?3 WHERE player_id = ?1 AND crew_id = ?5 AND bed = ?2 AND watered_by IS NULL AND ready_at > ?4 AND changes() > 0")
+      .bind(ownerId, bed as number, name, t, world),
   ]).then((res) => res.map((r) => r.meta.changes));
   if (!poured) return "Your watering can is empty. Fill it at the well on the green.";
   if (!watered) {
@@ -161,9 +172,10 @@ export async function waterBed(db: D1Database, playerId: string, ownerId: string
   return null;
 }
 
-/** Feed a bed in `ownerId`'s garden a scoop of your bonemeal: what it still has to grow is halved. */
+/** Feed a bed in `ownerId`'s garden (in the world you are in) a scoop of your bonemeal: what it still has to grow is halved. */
 export async function feedBed(db: D1Database, playerId: string, ownerId: string, bed: unknown): Promise<string | null> {
-  const [growing, name, hut] = await Promise.all([gardenOf(db, ownerId), tender(db, playerId), getHut(db, playerId)]);
+  const world = await homeCrewOf(db, playerId);
+  const [growing, name, hut] = await Promise.all([gardenOf(db, ownerId, world), tender(db, playerId), getHut(db, playerId)]);
   if (!name) return "Create a character first.";
   const t = now();
   const b = growing.find((x) => x.bed === bed);
@@ -172,8 +184,8 @@ export async function feedBed(db: D1Database, playerId: string, ownerId: string,
   const [took, fed] = await db.batch([
     db.prepare("UPDATE resources SET qty = qty - 1 WHERE player_id = ?1 AND kind = 'bonemeal' AND qty >= 1").bind(playerId),
     db
-      .prepare("UPDATE garden_beds SET fed_by = ?3, ready_at = ?4 WHERE player_id = ?1 AND bed = ?2 AND fed_by IS NULL AND ready_at = ?5 AND changes() > 0")
-      .bind(ownerId, bed as number, name, fedReadyAt(b!, t), b!.readyAt),
+      .prepare("UPDATE garden_beds SET fed_by = ?3, ready_at = ?4 WHERE player_id = ?1 AND crew_id = ?6 AND bed = ?2 AND fed_by IS NULL AND ready_at = ?5 AND changes() > 0")
+      .bind(ownerId, bed as number, name, fedReadyAt(b!, t), b!.readyAt, world),
   ]).then((res) => res.map((r) => r.meta.changes));
   if (!took) return "You no longer have any bonemeal.";
   if (!fed) {
@@ -184,12 +196,13 @@ export async function feedBed(db: D1Database, playerId: string, ownerId: string,
 }
 
 /**
- * Pick every ready bed in your garden: what grew in them (herbs, mushrooms) goes to you, the beds are bare again,
- * and a little Harbor XP.
+ * Pick every ready bed in your garden (in the world you are in now): what grew in them (herbs, mushrooms) goes to
+ * you, the beds are bare again, and a little Harbor XP.
  */
 export async function pickGarden(db: D1Database, playerId: string): Promise<string | { herbs: number; mushrooms: number; beds: number; xp?: XpResult }> {
   const t = now();
-  const ready = (await gardenOf(db, playerId)).filter((b) => b.readyAt <= t);
+  const world = await homeCrewOf(db, playerId);
+  const ready = (await gardenOf(db, playerId, world)).filter((b) => b.readyAt <= t);
   if (ready.length === 0) return "Nothing is ready to pick yet.";
   const harvest = gardenHarvest(playerId, ready);
   const crops = CROPS.filter((c) => (harvest[c] ?? 0) > 0);
@@ -199,7 +212,7 @@ export async function pickGarden(db: D1Database, playerId: string): Promise<stri
   // nothing and is paid nothing.
   const plantings = ready.map((b) => `'${b.bed}:${b.plantedAt}'`).join(",");
   const results = await db.batch([
-    db.prepare(`DELETE FROM garden_beds WHERE player_id = ?1 AND ready_at <= ?2 AND (bed || ':' || planted_at) IN (${plantings})`).bind(playerId, t),
+    db.prepare(`DELETE FROM garden_beds WHERE player_id = ?1 AND crew_id = ?3 AND ready_at <= ?2 AND (bed || ':' || planted_at) IN (${plantings})`).bind(playerId, t, world),
     ...crops.map((crop, i) =>
       db
         .prepare("INSERT INTO resources (player_id, kind, qty) SELECT ?1, ?2, ?3 WHERE changes() = ?4 ON CONFLICT(player_id, kind) DO UPDATE SET qty = qty + ?3")

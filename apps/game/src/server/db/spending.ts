@@ -21,7 +21,7 @@ import { prepareXp, xpOutcome, type XpResult } from "../harbor-xp";
 import { getCharacter } from "./characters";
 import { getHut } from "./huts";
 import { usedSql } from "./inventory";
-import { now } from "./rows";
+import { homeCrewSql, inHomeSql, newFurnishingCrewSql, now } from "./rows";
 
 // ---------- huts: spending gold and materials ----------
 
@@ -82,10 +82,10 @@ function drawFromChests(db: D1Database, playerId: string, need: Resources, hut: 
   return out;
 }
 
-/** A new furnishing into storage, but only if the statement before it in the batch changed a row. */
+/** A new furnishing into storage (the hut of the world they are in now; a boat, every world's), but only if the statement before it in the batch changed a row. */
 export function paidFurnishingStatement(db: D1Database, playerId: string, defId: string): D1PreparedStatement {
   return db
-    .prepare("INSERT INTO furnishings (player_id, def_id, label, meta_json, created_at) SELECT ?, ?, ?, '{}', ? WHERE changes() > 0")
+    .prepare(`INSERT INTO furnishings (player_id, def_id, label, meta_json, created_at, crew_id) SELECT ?1, ?2, ?3, '{}', ?4, ${newFurnishingCrewSql("?1", "?2")} WHERE changes() > 0`)
     .bind(playerId, defId, FURNISHINGS[defId].name, now());
 }
 
@@ -106,7 +106,7 @@ export async function craftFurnishing(db: D1Database, playerId: string, defId: s
 
 /** Buy a furnishing at the market stall. The price is the catalogue's; the client names only the piece. */
 export async function buyFurniture(db: D1Database, playerId: string, defId: string): Promise<string | null> {
-  const [c, hut] = await Promise.all([getCharacter(db, playerId), db.prepare("SELECT tier FROM huts WHERE player_id = ?").bind(playerId).first<{ tier: number }>()]);
+  const [c, hut] = await Promise.all([getCharacter(db, playerId), db.prepare(`SELECT tier FROM huts WHERE player_id = ?1 AND crew_id = ${homeCrewSql("?1")}`).bind(playerId).first<{ tier: number }>()]);
   if (c?.status !== "active") return "Create a character first.";
   // The biggest pieces wait for a bigger hut (a player with no hut yet has a Shack's worth of room).
   const problem = buyFurnitureProblem(defId, c.gold, hut?.tier ?? 1);
@@ -130,7 +130,7 @@ export async function sellFurniture(db: D1Database, playerId: string, furnishing
   const row = await db
     .prepare(
       `SELECT def_id AS defId, q, in_id AS inId, meta_json AS meta, ${usedSql("?2")} + (SELECT COUNT(*) FROM furnishings WHERE on_id = ?2 AND player_id = ?1) AS used
-       FROM furnishings WHERE id = ?2 AND player_id = ?1`,
+       FROM furnishings WHERE id = ?2 AND player_id = ?1 AND ${inHomeSql(homeCrewSql("?1"))}`,
     )
     .bind(playerId, id)
     .first<{ defId: string; q: number | null; inId: number | null; meta: string | null; used: number }>();
@@ -165,15 +165,17 @@ export async function upgradeHut(db: D1Database, playerId: string): Promise<stri
   if (problem) return problem;
   const next = nextHutTier(hut.tier)!;
   // The tier is checked again inside the batch, so two requests at once cannot both pay.
-  const stillThisTier = `COALESCE((SELECT tier FROM huts WHERE player_id = ?1), ${HUT_TIERS[0].tier}) = ${Math.floor(hut.tier)}`;
+  // The hut of the world they are in now, and they must be in one.
+  const here = `player_id = ?1 AND crew_id = ${homeCrewSql("?1")}`;
+  const stillThisTier = `${homeCrewSql("?1")} != '' AND COALESCE((SELECT tier FROM huts WHERE ${here}), ${HUT_TIERS[0].tier}) = ${Math.floor(hut.tier)}`;
   const spend = [...drawFromChests(db, playerId, next.resources, hut), ...spendStatements(db, playerId, next.gold, next.resources, stillThisTier)];
   const res = await db.batch([
     ...spend,
     db
-      .prepare("INSERT INTO huts (player_id, tier) SELECT ?1, ?2 WHERE changes() > 0 ON CONFLICT(player_id) DO UPDATE SET tier = ?2")
+      .prepare(`INSERT INTO huts (player_id, crew_id, tier) SELECT ?1, ${homeCrewSql("?1")}, ?2 WHERE changes() > 0 ON CONFLICT(player_id, crew_id) DO UPDATE SET tier = ?2`)
       .bind(playerId, next.tier),
     ...displacedFurnishings(next.tier, hut.furnishings).map((f) =>
-      db.prepare("UPDATE furnishings SET q = NULL, r = NULL, on_id = NULL WHERE id = ?1 AND player_id = ?2 AND (SELECT tier FROM huts WHERE player_id = ?2) = ?3").bind(f.id, playerId, next.tier),
+      db.prepare(`UPDATE furnishings SET q = NULL, r = NULL, on_id = NULL WHERE id = ?1 AND player_id = ?2 AND (SELECT tier FROM huts WHERE player_id = ?2 AND crew_id = ${homeCrewSql("?2")}) = ?3`).bind(f.id, playerId, next.tier),
     ),
   ]);
   return res[spend.length].meta.changes > 0 ? { tier: next.tier } : "You no longer have what that costs.";

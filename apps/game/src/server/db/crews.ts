@@ -100,8 +100,9 @@ export async function joinCrew(db: D1Database, playerId: string, crewId: string,
 
 /**
  * Leave a world for good (the one they are in now, unless one is named). A plot is land in that world's Harbor, so
- * a hut standing there gives it up, garden and all; the hut's contents stay with the hero. They are then in the
- * next of their worlds, if any.
+ * their hut there gives it up, garden and all. The hut's size, finishes, furniture and what its chests hold are kept
+ * for a rejoin, out of reach meanwhile: back in that world, a new plot raises the same hut again. They are then in
+ * the next of their worlds, if any.
  */
 export async function leaveCrew(db: D1Database, playerId: string, crewId?: string): Promise<void> {
   const crew = crewId ?? (await crewFor(db, playerId))?.id;
@@ -110,8 +111,8 @@ export async function leaveCrew(db: D1Database, playerId: string, crewId?: strin
     db.prepare("DELETE FROM crew_members WHERE player_id = ? AND crew_id = ?").bind(playerId, crew),
     db.prepare("UPDATE players SET current_crew_id = NULL WHERE id = ? AND current_crew_id = ?").bind(playerId, crew),
     // The garden was by the hut's door on that plot: it goes with it.
-    db.prepare("DELETE FROM garden_beds WHERE player_id = ? AND EXISTS (SELECT 1 FROM huts WHERE player_id = ?1 AND plot_crew_id = ?2)").bind(playerId, crew),
-    db.prepare("UPDATE huts SET plot = NULL, plot_crew_id = NULL WHERE player_id = ? AND plot_crew_id = ?").bind(playerId, crew),
+    db.prepare("DELETE FROM garden_beds WHERE player_id = ? AND crew_id = ?").bind(playerId, crew),
+    db.prepare("UPDATE huts SET plot = NULL WHERE player_id = ? AND crew_id = ?").bind(playerId, crew),
   ]);
 }
 
@@ -127,8 +128,8 @@ export async function harborBoard(db: D1Database, crewId: string): Promise<Harbo
       .prepare(
         `SELECT m.player_id AS id, c.name, c.class_id AS classId, c.level, COALESCE(h.tier, 1) AS hutTier, h.plot AS plot, h.bin_json AS bin, h.roof AS roof
          FROM crew_members m JOIN characters c ON c.player_id = m.player_id AND c.status = 'active'
-         -- A hut is drawn only in the world it stands in.
-         LEFT JOIN huts h ON h.player_id = m.player_id AND h.plot_crew_id = m.crew_id
+         -- Each world is its own home: a member's hut here, not one they have in another world.
+         LEFT JOIN huts h ON h.player_id = m.player_id AND h.crew_id = m.crew_id
          WHERE m.crew_id = ? ORDER BY m.joined_at, m.player_id`,
       )
       .bind(crewId)
@@ -143,7 +144,7 @@ export async function harborBoard(db: D1Database, crewId: string): Promise<Harbo
       .all<{ code: string; node: string | null }>(),
     // What is growing in each member's garden, by their hut's door.
     db
-      .prepare("SELECT g.player_id, g.bed, g.crop, g.planted_at, g.ready_at, g.watered_by, g.fed_by FROM garden_beds g JOIN crew_members m ON m.player_id = g.player_id WHERE m.crew_id = ? ORDER BY g.bed")
+      .prepare("SELECT g.player_id, g.bed, g.crop, g.planted_at, g.ready_at, g.watered_by, g.fed_by FROM garden_beds g JOIN crew_members m ON m.player_id = g.player_id AND m.crew_id = g.crew_id WHERE m.crew_id = ? ORDER BY g.bed")
       .bind(crewId)
       .all<{ player_id: string; bed: number; crop: string | null; planted_at: number; ready_at: number; watered_by: string | null; fed_by: string | null }>(),
   ]);

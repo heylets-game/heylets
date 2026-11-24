@@ -4,6 +4,7 @@
 
 import { FLOTSAM_TIDE_MS, FURNISHINGS, RESOURCE_KINDS, flotsamAt, flotsamFind, flotsamName, flotsamReachProblem, type FlotsamFind } from "@gantt-quest/world";
 import { crewFor } from "./db";
+import { newFurnishingCrewSql } from "./db/rows";
 import type { Standing } from "./gather";
 
 
@@ -50,7 +51,8 @@ export async function takeFlotsam(db: D1Database, playerId: string, id: unknown,
   if (find.furnishing) {
     pay.push(
       db
-        .prepare(`INSERT INTO furnishings (player_id, def_id, label, meta_json, created_at) SELECT ?1, ?5, ?6, '{}', ?7 WHERE ${mine}`)
+        // Into storage in the hut of the world it was found in.
+        .prepare(`INSERT INTO furnishings (player_id, def_id, label, meta_json, created_at, crew_id) SELECT ?1, ?5, ?6, '{}', ?7, ${newFurnishingCrewSql("?1", "?5")} WHERE ${mine}`)
         .bind(playerId, where.crewId, piece.id, claim, find.furnishing, FURNISHINGS[find.furnishing].name, now),
     );
   }

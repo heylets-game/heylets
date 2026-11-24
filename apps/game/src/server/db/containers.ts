@@ -3,7 +3,7 @@
 
 import { FURNISHINGS, RESOURCE_KINDS, RESOURCE_LABEL, addedSlots, carryProblem, itemCells, storageFree } from "@gantt-quest/world";
 import { CARRIED_SQL, CELLS_SQL, STACKS_SQL, carryState, keepStatement } from "./inventory";
-import { getItem, type InventoryRow } from "./rows";
+import { getItem, homeCrewSql, homeFurnishingIdsSql, inHomeSql, type InventoryRow } from "./rows";
 
 // ---------- containers: what a chest, crate or cupboard holds ----------
 
@@ -20,10 +20,13 @@ export async function containerUsed(db: D1Database, playerId: string, containerI
   return row?.used ?? 0;
 }
 
-/** The owner's container `containerId`, or null if it is not theirs or holds nothing. */
+/** The owner's container `containerId` in their hut in the world they are in now, or null if it is not that or holds nothing. */
 async function ownContainer(db: D1Database, playerId: string, containerId: number): Promise<{ defId: string } | null> {
   if (!Number.isSafeInteger(containerId)) return null;
-  const row = await db.prepare("SELECT def_id AS defId FROM furnishings WHERE id = ? AND player_id = ?").bind(containerId, playerId).first<{ defId: string }>();
+  const row = await db
+    .prepare(`SELECT def_id AS defId FROM furnishings WHERE id = ?2 AND player_id = ?1 AND ${inHomeSql(homeCrewSql("?1"))}`)
+    .bind(playerId, containerId)
+    .first<{ defId: string }>();
   return row && FURNISHINGS[row.defId]?.storage ? row : null;
 }
 
@@ -83,9 +86,10 @@ export async function stowGear(db: D1Database, playerId: string, containerId: nu
 }
 
 /**
- * Take a piece of gear out of whatever container holds it, back into the
- * pack. Refused if the pack is full; the count is checked again inside the
- * write. The route only calls this for a player standing in their own hut.
+ * Take a piece of gear out of whatever container holds it in the hut of the
+ * world they are in now, back into the pack. Refused if the pack is full; the
+ * count is checked again inside the write. The route only calls this for a
+ * player standing in their own hut.
  */
 export async function unstowGear(db: D1Database, playerId: string, itemId: number): Promise<string | null> {
   if (!Number.isSafeInteger(itemId)) return "No such item.";
@@ -95,7 +99,7 @@ export async function unstowGear(db: D1Database, playerId: string, itemId: numbe
   const full = carryProblem(carry, cells);
   if (full) return full;
   const res = await db
-    .prepare(`UPDATE inventory SET stored_in = NULL WHERE id = ?2 AND player_id = ?1 AND stored_in IS NOT NULL AND ${CARRIED_SQL} + ${CELLS_SQL} <= ?3`)
+    .prepare(`UPDATE inventory SET stored_in = NULL WHERE id = ?2 AND player_id = ?1 AND stored_in IN ${homeFurnishingIdsSql("?1", homeCrewSql("?1"))} AND ${CARRIED_SQL} + ${CELLS_SQL} <= ?3`)
     .bind(playerId, itemId, carry.limit)
     .run();
   if (res.meta.changes > 0) return null;
