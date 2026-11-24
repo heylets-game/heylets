@@ -44,6 +44,11 @@ The binding list should show `DB (gantt-quest-game)`, `EMAIL`, `AI`, `AI_MODE ("
 
 ## 3. Secrets
 
+- `BETTER_AUTH_SECRET`: signs login cookies. **Required**: without it every login fails. Use a long random value (`openssl rand -base64 32`) and a different one per environment. Don't change it casually: changing it logs everyone out, and a guest who is logged out loses their character.
+  - **(approval)**
+    ```bash
+    pnpm --filter @gantt-quest/game exec wrangler secret put BETTER_AUTH_SECRET --name gantt-quest-game
+    ```
 - `ADMIN_EMAILS` (comma-separated, lower-case). Unset means nobody is an admin, which is safe, so set it **after** the first deploy. `secret put` on a Worker that doesn't exist yet would create an empty one.
   - **(approval)**
     ```bash
@@ -152,7 +157,7 @@ Checked in the code on 2026-11-12:
 
 - **No hard-coded hosts.** No `heylets.party`, `harbor-staging` or `workers.dev` appears anywhere in `apps/game/src`. The client calls relative `/api/*` paths and same-origin WebSockets.
 - **Cookies are fine for production.**
-  - `gq_session` is host-only (no `Domain`), so staging and production sessions are separate.
+  - The login cookies (`gq.session_token` and `gq.session_data`, from Better Auth) are host-only (no `Domain`), so staging and production sessions are separate. The old `gq_session` is read once by `/api/auth/resume` and then cleared.
   - It is `HttpOnly`, `SameSite=Lax`, and `Secure` whenever the request is HTTPS.
 - **`MAIL_FROM_ADDRESS` is a var**, not a constant. The template sets it per environment, and staging's old placeholder `noreply@yourdomain.com` is gone. With no `EMAIL` binding, codes are written to the log rather than failing, so a misconfigured production would *look* fine but nobody could sign in. Check the email step of the smoke test.
 - **Dev-only overrides are gated by `import.meta.env.DEV`**, which Vite sets to `false` in a build:
@@ -184,6 +189,6 @@ Each post is a 70B call, and `?p=` makes new guests trivial. Before announcing t
 
 1. **Add a rate limit** to `/api/pub/talk`. The Workers Rate Limiting binding is the easiest, keyed by player id, for example 10 per minute. Optionally add a per-crew daily count in D1, with canned replies once it's spent.
 2. **Set a spend alert** in the Cloudflare dashboard (Billing > Notifications) for Workers AI. Workers AI has no hard cap you can set; the free daily allocation is shared across the account (equipflow and the other Workers too).
-3. **Consider a WAF rate-limiting rule** on `harbor.heylets.party/api/auth/*`. Email codes already have a 30-second cooldown per address and an attempt limit, but nothing stops one client requesting codes for many addresses, which can hurt the sending domain's reputation.
+3. **Consider a WAF rate-limiting rule** on `harbor.heylets.party/api/auth/*`. Password codes have an attempt limit, and Better Auth's own rate limit only counts within one Worker isolate, so nothing stops one client requesting codes for many addresses, which can hurt the sending domain's reputation.
 
 None of these block a soft launch to a small, known group. All three should be in place before the link goes anywhere public.

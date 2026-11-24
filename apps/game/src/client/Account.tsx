@@ -1,87 +1,132 @@
-// Email sign-in. A guest account lives only in this browser's cookie; adding
-// an email makes it durable and reachable from any device. The same two-step
-// form (address, then the six-digit code that was mailed) serves a guest
-// saving their progress and a returning player signing in.
+// Logging in with an email and password. A guest account lives only in this
+// browser's cookie; making an account keeps the guest's character and makes
+// it reachable from any device. Forgot the password, or played before
+// passwords: an emailed six-digit code sets a new one.
 
-import { useState } from "react";
+import { useState, type KeyboardEvent } from "react";
 import { api, type Me } from "./api";
 
-type Outcome = "linked" | "signed_in" | "created" | "already";
+type Mode = "login" | "signup" | "reset";
 
-const DONE: Record<Outcome, string> = {
-  linked: "Saved. This character is now tied to your email.",
-  signed_in: "Welcome back. You are signed in to your account.",
-  created: "Account created.",
-  already: "You are already signed in with that address.",
+const MIN_PASSWORD = 8;
+
+const DONE: Record<Mode, string> = {
+  login: "Welcome back. You are logged in.",
+  signup: "Account made. This character is saved to it.",
+  reset: "Password set. You are logged in.",
+};
+
+/** Better Auth's error codes, said for a player. Anything else shows the server's own message. */
+const ERRORS: Record<string, string> = {
+  INVALID_EMAIL_OR_PASSWORD: "That email and password do not match. Forgot it? Set a new one with a code.",
+  USER_ALREADY_EXISTS: "That email already has an account. Log in instead.",
+  USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL: "That email already has an account. Log in instead.",
+  PASSWORD_TOO_SHORT: `The password needs at least ${MIN_PASSWORD} characters.`,
+  INVALID_OTP: "That code is wrong. Check the email, or ask for a new one.",
+  OTP_EXPIRED: "That code has expired. Ask for a new one.",
+  TOO_MANY_ATTEMPTS: "Too many wrong codes. Ask for a new one.",
+  INVALID_EMAIL: "That does not look like an email address.",
 };
 
 interface FormProps {
-  /** Called after a successful sign-in, once the caller should reload the player. */
+  /** Called after a successful login, once the caller should reload the player. */
   onDone(): Promise<unknown>;
-  /** The guest has a character that signing in to another account would leave behind. */
+  /** The guest has a character that logging in to another account would leave behind. */
   hasCharacter: boolean;
 }
 
 export function EmailSignIn({ onDone, hasCharacter }: FormProps) {
+  const [mode, setMode] = useState<Mode>(hasCharacter ? "signup" : "login");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<Outcome | null>(null);
+  const [done, setDone] = useState<Mode | null>(null);
 
+  const switchTo = (next: Mode) => {
+    setMode(next);
+    setError(null);
+    setSent(false);
+    setCode("");
+  };
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
     setError(null);
     try {
       await fn();
     } catch (e) {
-      setError((e as Error).message);
+      const err = e as Error & { code?: string };
+      setError((err.code && ERRORS[err.code]) || err.message);
     } finally {
       setBusy(false);
     }
   };
-  const request = () =>
-    run(async () => {
-      await api.requestCode(email);
-      setSent(true);
-      setCode("");
-    });
-  const verify = () =>
-    run(async () => {
-      const { outcome } = await api.verifyCode(email, code);
-      setDone(outcome);
-      await onDone();
-    });
+  const finish = async (how: Mode) => {
+    setDone(how);
+    await onDone();
+  };
+
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const passwordOk = password.length >= MIN_PASSWORD;
+  const submit = () => {
+    if (busy) return;
+    if (mode === "login" && emailOk && password) void run(async () => { await api.logIn(email.trim(), password); await finish("login"); });
+    else if (mode === "signup" && emailOk && passwordOk) void run(async () => { await api.signUp(email.trim(), password); await finish("signup"); });
+    else if (mode === "reset" && !sent && emailOk) void run(async () => { await api.sendPasswordCode(email.trim()); setSent(true); });
+    else if (mode === "reset" && sent && code.length === 6 && passwordOk)
+      void run(async () => {
+        await api.resetPassword(email.trim(), code, password);
+        await api.logIn(email.trim(), password);
+        await finish("reset");
+      });
+  };
+  const onEnter = (e: KeyboardEvent) => e.key === "Enter" && submit();
 
   if (done) return <p className="good">{DONE[done]}</p>;
+  const ready = mode === "login" ? emailOk && !!password : mode === "signup" ? emailOk && passwordOk : sent ? code.length === 6 && passwordOk : emailOk;
+  const label = mode === "login" ? "Log in" : mode === "signup" ? "Make an account" : sent ? "Set password and log in" : "Email me a code";
   return (
     <div className="signin">
-      {error && <div className="banner error">{error}</div>}
-      {!sent ? (
-        <>
-          <label className="field">
-            <span>Email</span>
-            <input type="email" autoComplete="email" inputMode="email" value={email} maxLength={254} placeholder="you@example.com" onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === "Enter" && email.includes("@") && void request()} />
-          </label>
-          <button className="primary" disabled={busy || !email.includes("@")} onClick={request}>Email me a code</button>
-        </>
-      ) : (
-        <>
-          <p className="muted">A six-digit code is on its way to <strong>{email}</strong>. It works for 15 minutes.</p>
-          <label className="field">
-            <span>Code</span>
-            <input className="code-input" autoComplete="one-time-code" inputMode="numeric" value={code} maxLength={6} placeholder="000000" onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} onKeyDown={(e) => e.key === "Enter" && code.length === 6 && void verify()} />
-          </label>
-          <div className="row">
-            <button className="primary" disabled={busy || code.length !== 6} onClick={verify}>Sign in</button>
-            <button disabled={busy} onClick={() => { setSent(false); setError(null); }}>Use a different address</button>
-          </div>
-        </>
+      <div className="row signin-modes" role="tablist" aria-label="Account">
+        <button role="tab" aria-selected={mode === "login"} className={mode === "login" ? "selected" : undefined} onClick={() => switchTo("login")}>Log in</button>
+        <button role="tab" aria-selected={mode === "signup"} className={mode === "signup" ? "selected" : undefined} onClick={() => switchTo("signup")}>New account</button>
+      </div>
+      {error && <div className="banner error" role="alert">{error}</div>}
+      {mode === "reset" && (
+        <p className="muted">
+          {sent ? <>A six-digit code is on its way to <strong>{email.trim()}</strong>. It works for 15 minutes.</> : "Forgot your password, or played before there were passwords? We'll email you a code to set one."}
+        </p>
       )}
-      {hasCharacter && (
+      {!(mode === "reset" && sent) && (
+        <label className="field">
+          <span>Email</span>
+          <input type="email" autoComplete="email" inputMode="email" value={email} maxLength={254} placeholder="you@example.com" onChange={(e) => setEmail(e.target.value)} onKeyDown={onEnter} />
+        </label>
+      )}
+      {mode === "reset" && sent && (
+        <label className="field">
+          <span>Code</span>
+          <input className="code-input" autoComplete="one-time-code" inputMode="numeric" value={code} maxLength={6} placeholder="000000" onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} onKeyDown={onEnter} />
+        </label>
+      )}
+      {(mode !== "reset" || sent) && (
+        <label className="field">
+          <span>{mode === "login" ? "Password" : "New password"}</span>
+          <input type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} value={password} maxLength={128} onChange={(e) => setPassword(e.target.value)} onKeyDown={onEnter} />
+          {mode !== "login" && <small className="muted">At least {MIN_PASSWORD} characters.</small>}
+        </label>
+      )}
+      <div className="row">
+        <button className="primary" disabled={busy || !ready} onClick={submit}>{label}</button>
+        {mode === "login" && <button className="link" disabled={busy} onClick={() => switchTo("reset")}>Forgot password?</button>}
+        {mode === "reset" && sent && <button disabled={busy} onClick={() => { setSent(false); setError(null); }}>Use a different address</button>}
+        {mode === "reset" && <button className="link" disabled={busy} onClick={() => switchTo("login")}>Back to log in</button>}
+      </div>
+      {hasCharacter && mode !== "signup" && (
         <p className="muted small-print">
-          If that address has no account yet, this character is saved to it. If it already has one, you will be signed in to that account and this guest character is left behind.
+          Logging in to an account that already has a character leaves this guest character behind. To keep it, make a new account instead.
         </p>
       )}
     </div>
@@ -92,7 +137,7 @@ export function EmailSignIn({ onDone, hasCharacter }: FormProps) {
 export function AccountPanel({ me, refresh, onClose }: { me: Me; refresh(): Promise<unknown>; onClose(): void }) {
   const [busy, setBusy] = useState(false);
   const signOut = async () => {
-    if (!confirm("Sign out? You can sign back in with your email at any time.")) return;
+    if (!confirm("Log out? You can log back in with your email and password at any time.")) return;
     setBusy(true);
     await api.signOut().catch(() => undefined);
     // A fresh guest takes over this browser; the account waits for its owner.
@@ -109,14 +154,14 @@ export function AccountPanel({ me, refresh, onClose }: { me: Me; refresh(): Prom
         </header>
         {me.player.email ? (
           <>
-            <p>Signed in as <strong>{me.player.email}</strong>.</p>
-            <p className="muted">Your character, gear and crew are saved to this address. Sign in with it on any device to pick up where you left off.</p>
-            <button className="danger" disabled={busy} onClick={signOut}>Sign out</button>
+            <p>Logged in as <strong>{me.player.email}</strong>.</p>
+            <p className="muted">Your character, gear and crew are saved to this address. Log in with it on any device to pick up where you left off.</p>
+            <button className="danger" disabled={busy} onClick={signOut}>Log out</button>
           </>
         ) : (
           <>
             <p><strong>You are playing as a guest.</strong></p>
-            <p className="muted">Right now this character exists only in this browser. Clear its cookies, or switch device, and it is gone. Add an email to keep it.</p>
+            <p className="muted">Right now this character exists only in this browser. Clear its cookies, or switch device, and it is gone. Make an account to keep it.</p>
             <EmailSignIn onDone={refresh} hasCharacter={me.character?.status === "active"} />
           </>
         )}

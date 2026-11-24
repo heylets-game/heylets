@@ -137,8 +137,9 @@ async function request<T>(path: string, body?: unknown, extra: Record<string, st
     headers: { "content-type": "application/json", ...(PROFILE ? { "x-gq-profile": PROFILE } : {}), ...extra },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  const data = (await res.json().catch(() => ({}))) as { error?: string };
-  if (!res.ok) throw Object.assign(new Error(data.error ?? `Request failed (${res.status})`), { status: res.status });
+  // The game's routes answer `error`; Better Auth's (/api/auth/*) answer `message` and `code`.
+  const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string; code?: string };
+  if (!res.ok) throw Object.assign(new Error(data.error ?? data.message ?? `Request failed (${res.status})`), { status: res.status, code: data.code });
   return data as T;
 }
 
@@ -156,8 +157,9 @@ async function fetchMe(): Promise<Me> {
     return await request<Me>("/api/me");
   } catch (err) {
     if ((err as { status?: number }).status !== 401) throw err;
-    // Single-flight, so concurrent first loads share one guest account.
-    signingIn ??= request("/api/auth/guest", {});
+    // Single-flight, so concurrent first loads share one guest account. A session cookie from before the move to
+    // Better Auth is swapped for a new one first, so nobody who played before loses their character.
+    signingIn ??= request("/api/auth/resume", {}).catch(() => request("/api/auth/sign-in/anonymous", {}));
     await signingIn;
     return request<Me>("/api/me");
   }
@@ -187,9 +189,15 @@ export const api = {
   buy: (index: number) => request("/api/shop/buy", { index }),
   /** The notice board's release notes are read up to this release. */
   releaseSeen: (id: string) => request<{ seenRelease: string }>("/api/releases/seen", { id }),
-  requestCode: (email: string) => request("/api/auth/email/request", { email }),
-  verifyCode: (email: string, code: string) => request<{ outcome: "linked" | "signed_in" | "created" | "already" }>("/api/auth/email/verify", { email, code }),
-  signOut: () => request("/api/auth/signout", {}),
+  /** Log in to an account. A guest's character stays behind, unless the account has none yet. */
+  logIn: (email: string, password: string) => request("/api/auth/sign-in/email", { email, password }),
+  /** Make an account. A guest's character comes with them. */
+  signUp: (email: string, password: string) => request("/api/auth/sign-up/email", { email, password, name: email.split("@")[0] }),
+  /** Email a six-digit code for setting a new password. The answer is the same whether or not the address has an account. */
+  sendPasswordCode: (email: string) => request("/api/auth/email-otp/send-verification-otp", { email, type: "forget-password" }),
+  /** Set a new password with the emailed code. Logs in nobody: follow it with `logIn`. */
+  resetPassword: (email: string, otp: string, password: string) => request("/api/auth/email-otp/reset-password", { email, otp, password }),
+  signOut: () => request("/api/auth/sign-out", {}),
   createCrew: (name: string) => request("/api/crew", { name }),
   joinCrew: (code: string) => request("/api/crew/join", { code }),
   leaveCrew: () => request("/api/crew/leave", {}),

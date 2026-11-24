@@ -8,7 +8,6 @@
 // this file.
 
 export { insertItem, paidItemStatement, rowToItem, statsOf, type CharacterRow, type Env, type InventoryRow, type Player } from "./db/rows";
-export { attachEmail, consumeEmailCode, createGuest, createPlayerWithEmail, createSession, deleteSession, issueEmailCode, normalizeEmail, playerByEmail, playerForToken } from "./db/players";
 export {
   classAppearance,
   cleanHeroName,
