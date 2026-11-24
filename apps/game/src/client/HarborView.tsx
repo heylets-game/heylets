@@ -782,13 +782,20 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
   // Flotsam bobbing beside the hero (or under their boat): fished out from the beach or from a boat.
   const flotsamHere = self ? flotsamWithin(flotsam.pieces, self.pos) : null;
   const takeFlotsam = async (id: string) => {
+    // "Fish it out" floats over the hero (and the next thing to do may take its place): what was found rises above it.
+    const button = document.querySelector(".tile-action")?.getBoundingClientRect().height ?? 0;
     try {
       const r = await api.takeFlotsam(id);
       flotsam.took(id);
       void refresh();
-      const got = [costText(r.find.resources), r.find.gold ? `${r.find.gold} gold` : "", r.find.furnishing ? `a ${FURNITURE[r.find.furnishing].name.toLowerCase()} (in your hut's storage)` : ""].filter((t) => t && t !== "nothing");
+      // What was in it rises over the hero's head, one thing at a time: gold first, then the rest.
+      const pops = [
+        ...(r.find.gold ? [{ text: `+${r.find.gold} gold`, color: "#ffd23f" }] : []),
+        ...RESOURCE_KINDS.filter((k) => (r.find.resources[k] ?? 0) > 0).map((k) => ({ text: `+${r.find.resources[k]} ${label("resource", k).toLowerCase()}`, color: "#e8dcc0" })),
+        ...(r.find.furnishing ? [{ text: `+${FURNITURE[r.find.furnishing].name.toLowerCase()}`, color: "#9fd8ff" }] : []),
+      ];
+      if (you && pops.length > 0) renderer.current?.pickups(you, pops, { clear: button && button + 6 });
       if (r.find.note) setBottle({ note: r.find.note, line: r.find.line });
-      else say_(`${r.find.line}${got.length ? ` You get ${got.join(", ")}.` : ""}`);
     } catch (e) {
       const why = (e as Error).message;
       // Gone already (a crewmate was quicker, or the tide turned): off the water with it.
