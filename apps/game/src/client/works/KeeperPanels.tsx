@@ -1,8 +1,7 @@
 // Dealing with the smith or the apothecary, standing in front of them in
 // their shop (KeeperView): what they sell from their own stock for gold, and
-// what they do with what you bring. (The galley's cook has a panel too, but
-// nothing to sell.) The keeper and what you hold stay at the
-// top; the list of items and services scrolls under them. The hotbar is put
+// what they do with what you bring, laid out on their shelves (ShopShelf.tsx).
+// (The galley's cook has a panel too, but nothing to sell.) The hotbar is put
 // away meanwhile; "Step away" walks you back from the keeper and brings it back.
 //
 // Anything with a gold price can be haggled over, once a day: pick how much
@@ -11,12 +10,12 @@
 // What can be done is worked out here only to grey out buttons; the server
 // checks every purchase, flask, step and haggle again.
 
-import { useMemo, useState, type ReactNode } from "react";
-import { FLASK_RECIPES, HAGGLE_ASKS, KEEPER_PLACES, RARITY_COLOR, SHELF_DAILY, SLOT_LABEL, SMITHY_MAX_STEPS, THROWABLES, THROWABLE_KINDS, equipProblem, flaskProblem, haggledPrice, smithyProblem, smithyWork, upgradedName, workKey, type Deal, type HaggleAsk, type KeeperHouse, type KeeperShop, type Resources, type Throwable } from "@gantt-quest/world";
+import { useMemo, useState } from "react";
+import { FLASK_RECIPES, HAGGLE_ASKS, KEEPER_PLACES, RARITY_COLOR, SHELF_DAILY, SLOT_LABEL, SMITHY_MAX_STEPS, THROWABLES, THROWABLE_KINDS, flaskProblem, haggledPrice, smithyProblem, smithyWork, upgradedName, workKey, type Deal, type HaggleAsk, type ItemDef, type KeeperShop, type Resources, type Throwable } from "@gantt-quest/world";
 import { api, type ApothecaryView, type HaggleResult, type KeeperWare, type Me, type SmithyView } from "../api";
-import { DragPanel } from "../DragPanel";
 import { CostChips, RewardChips } from "../hutDrops";
-import { Icon, ItemTile, VerdictTag, bonusSummary, compare, powerLabel, toOwned } from "../items";
+import { Icon, ItemDetail, VerdictTag, bonusSummary, compare, powerLabel, toOwned } from "../items";
+import { ShopShelf, type Said, type ShelfWare } from "../ShopShelf";
 import { itemName, label } from "../labels";
 import { regularFace } from "../RegularPanel";
 import { GOLD_ICON, ThingIcon } from "../thingIcons";
@@ -27,11 +26,7 @@ import "./works.css";
 const amountsText = (gold: number, r: Resources) =>
   [gold > 0 ? `${gold} gold` : "", ...Object.entries(r).filter(([, n]) => n).map(([k, n]) => `${n} ${label("resource", k).toLowerCase()}`)].filter(Boolean).join(", ");
 
-/** What the panel shows after something is done: the keeper's word on it, or what went wrong. */
-export interface Said {
-  text: string;
-  tone: "good" | "bad" | "plain";
-}
+export type { Said } from "../ShopShelf";
 
 /** A gold price, with the list price struck through beside it once it has been talked down. */
 function Price({ list, price }: { list: number; price: number }) {
@@ -68,29 +63,6 @@ function HaggleAsks({ list, chances, busy, onAsk, onCancel }: { list: number; ch
   );
 }
 
-/** The shared frame: the keeper at the top, what you hold, the last word, and the scrolling list. (The Lapidary's panel, LapidaryPanel.tsx, stands in it too.) */
-export function Frame({ shop, said, hold, onDone, children }: { shop: KeeperHouse; said: Said | null; hold: ReactNode; onDone(): void; children: ReactNode }) {
-  const { keeper, title } = KEEPER_PLACES[shop];
-  return (
-    <DragPanel id={`keeper.${shop}`} title={title} className={`story panel pub-bar keeper-panel keeper-${shop}`}>
-      <div className="keeper-top">
-        <div className="regular-head">
-          <img className="regular-face" src={regularFace(keeper.look)} alt="" />
-          <div>
-            <h3>{keeper.name} <span className="muted">· {keeper.trade}</span></h3>
-            <p className={`salesman-says ${said?.tone === "bad" ? "bad" : said?.tone === "good" ? "good" : ""}`} role="status">{said ? said.text : `“${keeper.line}”`}</p>
-          </div>
-        </div>
-        <div className="keeper-hold">
-          {hold}
-          <button className="small" onClick={onDone} title="Step back from the keeper: the hotbar comes back">Step away</button>
-        </div>
-      </div>
-      <div className="keeper-list" tabIndex={0} aria-label="Items and services">{children}</div>
-    </DragPanel>
-  );
-}
-
 /** Everything the two panels share: what is busy, which row is being haggled over, and the last word. */
 function useDealing(shop: KeeperShop, reload: () => Promise<unknown>, refresh: () => Promise<unknown>, onSay: (text: string) => void) {
   const [busy, setBusy] = useState(false);
@@ -99,15 +71,18 @@ function useDealing(shop: KeeperShop, reload: () => Promise<unknown>, refresh: (
   const [haggling, setHaggling] = useState<string | null>(null);
 
   /** Run one request; on failure say why, and read the shop again in case it has changed. */
-  const run = async (work: () => Promise<Said | void>) => {
+  /** Resolves true when it went through. */
+  const run = async (work: () => Promise<Said | void>): Promise<boolean> => {
     setBusy(true);
     setSaid(null);
     try {
       const done = await work();
       if (done) setSaid(done);
+      return true;
     } catch (e) {
       setSaid({ text: (e as Error).message, tone: "bad" });
       void reload();
+      return false;
     } finally {
       setBusy(false);
     }
@@ -137,6 +112,21 @@ function HaggleButton({ entry, deal, list, open, busy, disabled, onOpen }: { ent
 
 // ---------- the apothecary ----------
 
+/** The Haggle button and, while it is open, the asks; or what came of haggling today. For the counter. */
+function Haggling({ entry, deal, list, chances, d, disabled }: { entry: string; deal: Deal | null; list: number; chances: Record<HaggleAsk, number>; d: ReturnType<typeof useDealing>; disabled?: boolean }) {
+  const open = d.haggling === entry;
+  return (
+    <>
+      <DealTag deal={deal} />
+      <HaggleButton entry={entry} deal={deal} list={list} open={open} busy={d.busy} disabled={disabled} onOpen={d.setHaggling} />
+      {open && <HaggleAsks list={list} chances={chances} busy={d.busy} onAsk={(ask) => void d.haggle(entry, ask)} onCancel={() => d.setHaggling(null)} />}
+    </>
+  );
+}
+
+/** "−20%" for a price talked down today. */
+const sealOf = (deal: Deal | null) => (deal && deal.pct > 0 ? `−${deal.pct}%` : undefined);
+
 export function ApothecaryKeeperPanel({ view, setView, reload, refresh, onSay, onDone }: {
   view: ApothecaryView;
   setView(view: ApothecaryView): void;
@@ -150,6 +140,7 @@ export function ApothecaryKeeperPanel({ view, setView, reload, refresh, onSay, o
   onDone(): void;
 }) {
   const d = useDealing("apothecary", reload, refresh, onSay);
+  const { keeper, title } = KEEPER_PLACES.apothecary;
 
   const buy = (ware: KeeperWare) =>
     d.run(async () => {
@@ -165,63 +156,59 @@ export function ApothecaryKeeperPanel({ view, setView, reload, refresh, onSay, o
       void refresh();
       return { text: `${THROWABLES[kind].name}: one more in your pack, ${res.carried[kind] ?? 1} in all.${res.xp?.text ? ` ${res.xp.text}` : ""}`, tone: "good" };
     });
+
+  const shelf: ShelfWare[] = view.wares.flatMap((w) => {
+    if (w.goods.kind !== "flask") return [];
+    const kind = w.goods.flask;
+    const def = THROWABLES[kind];
+    const icon = ITEM_ICON[kind];
+    return [{
+      key: w.key,
+      name: `${def.name}${w.goods.qty > 1 ? ` × ${w.goods.qty}` : ""}`,
+      color: icon.color,
+      art: <Icon name={icon.name} color={icon.color} size={68} />,
+      tag: <Price list={w.list} price={w.price} />,
+      seal: sealOf(w.deal),
+      facts: [`You carry ${view.carried[kind] ?? 0}`, w.left > 0 ? `${w.left} left today` : "None left today"],
+      brief: def.blurb,
+      stamp: w.left <= 0 ? "Sold out" : undefined,
+      problem: w.problem,
+      act: { label: `Buy · ${w.price}g`, title: w.problem ?? `Buy for ${w.price} gold`, disabled: d.busy || !!w.problem, run: () => buy(w) },
+      more: <Haggling entry={w.key} deal={w.deal} list={w.list} chances={view.chances} d={d} disabled={w.left <= 0} />,
+    }];
+  });
+  const brews: ShelfWare[] = THROWABLE_KINDS.map((kind) => {
+    const def = THROWABLES[kind];
+    const icon = ITEM_ICON[kind];
+    const problem = flaskProblem(kind, view);
+    return {
+      key: `brew:${kind}`,
+      name: def.name,
+      color: icon.color,
+      art: <Icon name={icon.name} color={icon.color} size={68} />,
+      tag: <CostChips cost={FLASK_RECIPES[kind]} have={view.resources} />,
+      facts: [`You carry ${view.carried[kind] ?? 0}`, "No charge but the makings"],
+      brief: def.blurb,
+      problem,
+      act: { label: "Brew one", title: problem ?? `Brew one more ${def.name.toLowerCase()}`, disabled: d.busy || !!problem, run: () => brewFlask(kind) },
+    };
+  });
+
   return (
-    <Frame
-      shop="apothecary"
+    <ShopShelf
+      id="keeper.apothecary"
+      title={title}
+      className="keeper-apothecary"
+      keeper={{ name: keeper.name, trade: keeper.trade, face: regularFace(keeper.look) }}
+      says={keeper.line}
       said={d.said}
       onDone={onDone}
-      hold={<p className="works-stock">You hold: <RewardChips zeros gold={view.gold} resources={{ herbs: view.resources.herbs ?? 0, mushrooms: view.resources.mushrooms ?? 0, bone: view.resources.bone ?? 0, wood: view.resources.wood ?? 0, copper: view.resources.copper ?? 0, fur: view.resources.fur ?? 0, slime: view.resources.slime ?? 0 }} /></p>}
-    >
-      <h4 className="keeper-section">On the shelf <span className="muted">· ready-made, for gold · {SHELF_DAILY} of each a day</span></h4>
-      <ul className="workshop-list">
-        {view.wares.map((w) => {
-          if (w.goods.kind !== "flask") return null;
-          const kind = w.goods.flask;
-          const def = THROWABLES[kind];
-          const open = d.haggling === w.key;
-          return (
-            <li key={w.key} className={`keeper-row ${w.left <= 0 ? "sold" : ""}`} data-ware={w.key}>
-              <div className="keeper-line">
-                <Icon name={ITEM_ICON[kind].name} color={ITEM_ICON[kind].color} size={36} />
-                <span className="grow">
-                  <strong>{def.name}{w.goods.qty > 1 ? ` × ${w.goods.qty}` : ""}</strong> <span className="muted">· you carry {view.carried[kind] ?? 0} · {w.left} left today</span>
-                  <br />
-                  <span className="muted small-note">{def.blurb}</span>
-                  <br />
-                  <Price list={w.list} price={w.price} /> <DealTag deal={w.deal} />
-                </span>
-                <span className="keeper-buttons">
-                  <button className="small primary" disabled={d.busy || !!w.problem} title={w.problem ?? `Buy for ${w.price} gold`} onClick={() => void buy(w)}>{w.left <= 0 ? "Sold out" : `Buy · ${w.price}g`}</button>
-                  <HaggleButton entry={w.key} deal={w.deal} list={w.list} open={open} busy={d.busy} disabled={w.left <= 0} onOpen={d.setHaggling} />
-                </span>
-              </div>
-              {open && <HaggleAsks list={w.list} chances={view.chances} busy={d.busy} onAsk={(ask) => void d.haggle(w.key, ask)} onCancel={() => d.setHaggling(null)} />}
-            </li>
-          );
-        })}
-      </ul>
-
-      <h4 className="keeper-section">Brewed from what you bring <span className="muted">· for your pack · no charge but the makings</span></h4>
-      <ul className="workshop-list">
-        {THROWABLE_KINDS.map((kind) => {
-          const def = THROWABLES[kind];
-          const have = view.carried[kind] ?? 0;
-          const problem = flaskProblem(kind, view);
-          return (
-            <li key={kind} className={have > 0 ? "having" : ""} data-flask={kind}>
-              <Icon name={ITEM_ICON[kind].name} color={ITEM_ICON[kind].color} size={36} />
-              <span className="grow">
-                <strong>{def.name}</strong> <span className="muted">· you carry {have}</span>
-                <br />
-                <CostChips cost={FLASK_RECIPES[kind]} have={view.resources} />
-              </span>
-              <button className="small" disabled={d.busy || !!problem} title={problem ?? `Brew one more ${def.name.toLowerCase()}`} onClick={() => void brewFlask(kind)}>Brew</button>
-            </li>
-          );
-        })}
-      </ul>
-
-    </Frame>
+      purse={<RewardChips zeros gold={view.gold} resources={{ herbs: view.resources.herbs ?? 0, mushrooms: view.resources.mushrooms ?? 0, bone: view.resources.bone ?? 0, wood: view.resources.wood ?? 0, copper: view.resources.copper ?? 0, fur: view.resources.fur ?? 0, slime: view.resources.slime ?? 0 }} />}
+      shelves={[
+        { id: "shelf", title: "On the shelf", sub: `Ready-made, for gold · ${SHELF_DAILY} of each a day`, wares: shelf },
+        { id: "brew", title: "Brewed from what you bring", sub: "For your pack · no charge but the makings", wares: brews },
+      ]}
+    />
   );
 }
 
@@ -238,6 +225,7 @@ export function SmithyKeeperPanel({ me, view, setView, reload, refresh, onSay, o
 }) {
   const c = me.character!;
   const d = useDealing("smithy", reload, refresh, onSay);
+  const { keeper, title } = KEEPER_PLACES.smithy;
   const worn = useMemo(() => new Map(me.inventory.map(toOwned).filter((i) => i.equipped).map((i) => [i.slot, i])), [me.inventory]);
 
   const buy = (ware: KeeperWare) =>
@@ -256,78 +244,92 @@ export function SmithyKeeperPanel({ me, view, setView, reload, refresh, onSay, o
       return { text: `The smith hands it back: ${res.worked}.${res.xp?.text ? ` ${res.xp.text}` : ""}`, tone: "good" };
     });
 
-  return (
-    <Frame shop="smithy" said={d.said} onDone={onDone} hold={<p className="works-stock">You hold: <RewardChips zeros gold={view.gold} resources={{ iron: view.resources.iron ?? 0, copper: view.resources.copper ?? 0 }} /></p>}>
-      <h4 className="keeper-section">On the rack <span className="muted">· today's work, for gold · made for your class and level</span></h4>
-      <ul className="workshop-list">
-        {view.wares.map((w) => {
-          if (w.goods.kind !== "item") return null;
-          const item = w.goods.item;
-          const open = d.haggling === w.key;
-          return (
-            <li key={w.key} className={`keeper-row ${w.left <= 0 ? "sold" : ""}`} data-ware={w.key}>
-              <div className="keeper-line">
-                <ItemTile item={item} locked={!!equipProblem(item, c.class_id, c.level)} />
-                <span className="grow">
-                  <strong style={{ color: RARITY_COLOR[item.rarity] }}>{itemName(item)}</strong> <VerdictTag verdict={compare(item, worn.get(item.slot) ?? null).verdict} />
-                  <br />
-                  <span className="muted small-note">{SLOT_LABEL[item.slot]}{item.power > 0 && ` · +${item.power} ${powerLabel(item).toLowerCase()}`}{bonusSummary(item) && ` · ${bonusSummary(item)}`}</span>
-                  <br />
-                  <Price list={w.list} price={w.price} /> <DealTag deal={w.deal} />
-                </span>
-                <span className="keeper-buttons">
-                  <button className="small primary" disabled={d.busy || !!w.problem} title={w.problem ?? `Buy for ${w.price} gold`} onClick={() => void buy(w)}>{w.left <= 0 ? "Sold" : `Buy · ${w.price}g`}</button>
-                  <HaggleButton entry={w.key} deal={w.deal} list={w.list} open={open} busy={d.busy} disabled={w.left <= 0} onOpen={d.setHaggling} />
-                </span>
-              </div>
-              {open && <HaggleAsks list={w.list} chances={view.chances} busy={d.busy} onAsk={(ask) => void d.haggle(w.key, ask)} onCancel={() => d.setHaggling(null)} />}
-            </li>
-          );
-        })}
-      </ul>
+  const rack: ShelfWare[] = view.wares.flatMap((w) => {
+    if (w.goods.kind !== "item") return [];
+    const item = w.goods.item;
+    const color = RARITY_COLOR[item.rarity];
+    const current = worn.get(item.slot) ?? null;
+    return [{
+      key: w.key,
+      name: itemName(item),
+      color,
+      art: <Icon name={item.icon} color={color} size={68} />,
+      tag: <Price list={w.list} price={w.price} />,
+      seal: sealOf(w.deal),
+      corner: <VerdictTag verdict={compare(item, current).verdict} />,
+      facts: [item.rarity, item.levelReq > 1 ? `Level ${item.levelReq}` : "", w.left > 0 ? `${w.left} left today` : ""].filter(Boolean),
+      brief: gearBrief(item),
+      detail: <ItemDetail item={item} current={current} classId={c.class_id} level={c.level} />,
+      stamp: w.left <= 0 ? "Sold" : undefined,
+      problem: w.problem,
+      act: { label: `Buy · ${w.price}g`, title: w.problem ?? `Buy for ${w.price} gold`, disabled: d.busy || !!w.problem, run: () => buy(w) },
+      more: <Haggling entry={w.key} deal={w.deal} list={w.list} chances={view.chances} d={d} disabled={w.left <= 0} />,
+    }];
+  });
+  const anvil: ShelfWare[] = view.items.map((item) => {
+    const color = RARITY_COLOR[item.rarity];
+    const problem = smithyProblem(item, view);
+    const verb = smithyWork(item) === "sharpen" ? "Sharpen" : "Reinforce";
+    const key = workKey(item.id);
+    return {
+      key,
+      name: upgradedName(item.name, item.upgrades),
+      color,
+      art: <Icon name={item.icon} color={color} size={68} />,
+      tag: item.cost
+        ? <><CostChips cost={item.cost.resources} have={view.resources} gold={item.cost.gold} haveGold={view.gold} />{item.cost.gold < item.listGold && <s>{item.listGold}g</s>}</>
+        : "Finest",
+      seal: item.cost ? sealOf(item.deal) : undefined,
+      corner: item.equipped ? <span className="ss-ribbon">Worn</span> : undefined,
+      facts: [`Power ${item.power}`, item.cost ? `${verb}, step ${item.upgrades + 1} of ${SMITHY_MAX_STEPS}` : `+${SMITHY_MAX_STEPS}, the most there is`],
+      brief: item.cost ? `${verb}ing adds 1 power, worn or in your pack.` : "As good as the smith can make it.",
+      stamp: item.cost ? undefined : "Finest",
+      owned: !item.cost,
+      problem: item.cost ? problem : null,
+      act: item.cost ? { label: `${verb} +1`, title: problem ?? `${verb} for ${amountsText(item.cost.gold, item.cost.resources)}`, disabled: d.busy || !!problem, run: () => work(item.id) } : undefined,
+      more: item.cost ? <Haggling entry={key} deal={item.deal} list={item.listGold} chances={view.chances} d={d} /> : undefined,
+    };
+  });
 
-      <h4 className="keeper-section">Work on your gear <span className="muted">· +1 power a step, up to +{SMITHY_MAX_STEPS} · worn or in your pack</span></h4>
-      {view.items.length === 0 && <p className="muted">You have no weapons or armour with you.</p>}
-      <ul className="workshop-list">
-        {view.items.map((item) => {
-          const shown = upgradedName(item.name, item.upgrades);
-          const problem = smithyProblem(item, view);
-          const verb = smithyWork(item) === "sharpen" ? "Sharpen" : "Reinforce";
-          const key = workKey(item.id);
-          const open = d.haggling === key;
-          return (
-            <li key={item.id} className="keeper-row" data-item={item.id}>
-              <div className="keeper-line">
-                <span className="thing-tile workshop-gear" style={{ borderColor: RARITY_COLOR[item.rarity] }}><Icon name={item.icon} color={RARITY_COLOR[item.rarity]} size={36} /></span>
-                <span className="grow">
-                  <strong>{shown}</strong> <span className="muted">· power {item.power}{item.equipped ? " · worn" : ""}</span>
-                  <br />
-                  <span className="muted small-note">
-                    {item.cost ? <>{verb}, step {item.upgrades + 1} of {SMITHY_MAX_STEPS}: <CostChips cost={item.cost.resources} have={view.resources} gold={item.cost.gold} haveGold={view.gold} />{item.cost.gold < item.listGold && <> <s>{item.listGold}g</s></>}</> : "As good as the smith can make it."}
-                  </span>
-                  {item.cost && item.deal && <><br /><DealTag deal={item.deal} /></>}
-                </span>
-                <span className="keeper-buttons">
-                  <button className="small primary" disabled={d.busy || !!problem} title={problem ?? `${verb} for ${amountsText(item.cost!.gold, item.cost!.resources)}`} onClick={() => void work(item.id)}>{item.cost ? `${verb} +1` : `+${SMITHY_MAX_STEPS}`}</button>
-                  {item.cost && <HaggleButton entry={key} deal={item.deal} list={item.listGold} open={open} busy={d.busy} onOpen={d.setHaggling} />}
-                </span>
-              </div>
-              {open && item.cost && <HaggleAsks list={item.listGold} chances={view.chances} busy={d.busy} onAsk={(ask) => void d.haggle(key, ask)} onCancel={() => d.setHaggling(null)} />}
-            </li>
-          );
-        })}
-      </ul>
-    </Frame>
+  return (
+    <ShopShelf
+      id="keeper.smithy"
+      title={title}
+      className="keeper-smithy"
+      keeper={{ name: keeper.name, trade: keeper.trade, face: regularFace(keeper.look) }}
+      says={keeper.line}
+      said={d.said}
+      onDone={onDone}
+      purse={<RewardChips zeros gold={view.gold} resources={{ iron: view.resources.iron ?? 0, copper: view.resources.copper ?? 0 }} />}
+      shelves={[
+        { id: "rack", title: "On the rack", sub: "Today's work, for gold · made for your class and level", wares: rack },
+        { id: "anvil", title: "Work on your gear", sub: `+1 power a step, up to +${SMITHY_MAX_STEPS} · worn or in your pack`, wares: anvil, empty: "You have no weapons or armour with you." },
+      ]}
+    />
   );
+}
+
+/** A piece of gear in a few words: "Main hand · +4 power · +1 Strength". */
+function gearBrief(item: ItemDef): string {
+  return [SLOT_LABEL[item.slot], item.power > 0 ? `+${item.power} ${powerLabel(item).toLowerCase()}` : "", bonusSummary(item)].filter(Boolean).join(" · ");
 }
 
 // ---------- the galley ----------
 
-/** The cook has nothing to sell and makes nothing: the panel says so, and lets you step away. */
+/** The cook has nothing to sell and makes nothing: his shelf says so, and lets you step away. */
 export function GalleyKeeperPanel({ onDone }: { onDone(): void }) {
+  const { keeper, title } = KEEPER_PLACES.galley;
   return (
-    <Frame shop="galley" said={null} onDone={onDone} hold={null}>
-      <p className="muted">The cook has nothing to sell and nothing to cook for you.</p>
-    </Frame>
+    <ShopShelf
+      id="keeper.galley"
+      title={title}
+      className="keeper-galley"
+      keeper={{ name: keeper.name, trade: keeper.trade, face: regularFace(keeper.look) }}
+      says={keeper.line}
+      said={null}
+      onDone={onDone}
+      purse={null}
+      shelves={[{ id: "galley", title: "The galley", wares: [], empty: "The cook has nothing to sell and nothing to cook for you." }]}
+    />
   );
 }

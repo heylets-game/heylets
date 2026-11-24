@@ -3,9 +3,9 @@
 // lodestone from stone and iron, works the ones you carry at her bench (fuse,
 // attune, temper, reroll: atlas/StoneBench.tsx), and buys gems for gold.
 //
-// It stands in the same frame as the smith's, the apothecary's and the cook's
-// panels (KeeperPanels.tsx): her face and her last word at the top with what
-// you hold, the work scrolling under it, and "Step away" to put it away.
+// It stands on the same shelves as the smith's and the apothecary's
+// (ShopShelf.tsx): her face and her last word at the top with what you hold,
+// the gems she buys on a shelf, and her bench on the back wall under it.
 // Unlike theirs there is no stock and nothing to haggle over, and nothing to
 // ask the server for on the way in: what you carry is in `me`.
 //
@@ -17,8 +17,9 @@ import { GEM_PRICE, KEEPER_PLACES, stoneName, type Lodestone } from "@gantt-ques
 import { api, type Me } from "../api";
 import { StoneBench } from "../atlas/StoneBench";
 import { RewardChips } from "../hutDrops";
-import { ThingIcon, resourceIcon } from "../thingIcons";
-import { Frame, type Said } from "./KeeperPanels";
+import { regularFace } from "../RegularPanel";
+import { ShopShelf, type Said, type ShelfWare } from "../ShopShelf";
+import { GOLD_ICON, ThingIcon, resourceIcon } from "../thingIcons";
 import "./works.css";
 
 /** What she says, out loud over her head, to each thing she does for you. */
@@ -41,7 +42,7 @@ export function LapidaryKeeperPanel({ me, refresh, onSay, onDone }: {
   /** Step back from the keeper, which puts the panel away. */
   onDone(): void;
 }) {
-  const { keeper } = KEEPER_PLACES.lapidary;
+  const { keeper, title } = KEEPER_PLACES.lapidary;
   const [said, setSaid] = useState<Said | null>(null);
   const [busy, setBusy] = useState(false);
   const gold = me.character?.gold ?? 0;
@@ -52,7 +53,7 @@ export function LapidaryKeeperPanel({ me, refresh, onSay, onDone }: {
     onSay(SAYS[how]);
     setSaid({ text: `“${SAYS[how]}” ${how === "cut" ? "A plain lodestone" : stoneName(stone)} goes into your pack.`, tone: "good" });
   };
-  const sell = async (qty: number) => {
+  const sell = async (qty: number): Promise<boolean> => {
     setBusy(true);
     setSaid(null);
     try {
@@ -61,40 +62,47 @@ export function LapidaryKeeperPanel({ me, refresh, onSay, onDone }: {
       const line = qty === 1 ? SAYS.gem : SAYS.gems;
       onSay(line);
       setSaid({ text: `“${line}” ${qty === 1 ? "A gem" : `${qty} gems`} for ${res.gold}g.`, tone: "good" });
+      return true;
     } catch (e) {
       setSaid({ text: (e as Error).message, tone: "bad" });
       void refresh();
+      return false;
     } finally {
       setBusy(false);
     }
   };
 
+  const gemIcon = resourceIcon("gem");
+  const gemWare: ShelfWare = {
+    key: "gem",
+    name: "Gems",
+    color: gemIcon.color,
+    art: <ThingIcon icon={gemIcon} size={68} />,
+    full: true,
+    tag: <>Pays <ThingIcon icon={GOLD_ICON} size={16} />{GEM_PRICE}g</>,
+    corner: <span className="ss-ribbon">You carry {gems}</span>,
+    facts: [`You carry ${gems}`, `${GEM_PRICE}g each`],
+    brief: "Tempering a lodestone takes gems, and so does attuning one to a boon. Sell what you will not spend.",
+    problem: gems < 1 ? "You carry no gems." : null,
+    act: { label: `Sell 1 · ${GEM_PRICE}g`, disabled: busy || gems < 1, run: () => sell(1) },
+    more: gems > 1 ? <button className="small" disabled={busy} onClick={() => void sell(gems)}>Sell all {gems} · {GEM_PRICE * gems}g</button> : undefined,
+  };
+
   return (
-    <Frame
-      shop="lapidary"
+    <ShopShelf
+      id="keeper.lapidary"
+      title={title}
+      className="keeper-lapidary"
+      keeper={{ name: keeper.name, trade: keeper.trade, face: regularFace(keeper.look) }}
+      says={keeper.line}
       said={said}
       onDone={onDone}
-      hold={<p className="works-stock">You hold: <RewardChips zeros gold={gold} resources={{ gem: gems, stone: held.stone ?? 0, iron: held.iron ?? 0 }} /></p>}
-    >
-      <h4 className="keeper-section">Lodestones <span className="muted">· cut plain, or worked at her bench · out of your pack</span></h4>
-      <StoneBench me={me} refresh={refresh} onMade={made} />
-
-      <h4 className="keeper-section">Gems <span className="muted">· {keeper.short} buys them · {GEM_PRICE}g each</span></h4>
-      <ul className="workshop-list">
-        <li className={gems > 0 ? "having" : ""} data-sell="gem">
-          <ThingIcon icon={resourceIcon("gem")} size={36} />
-          <span className="grow">
-            <strong>Gems</strong> <span className="muted">· you carry {gems}</span>
-            <br />
-            <span className="muted small-note">Tempering a lodestone takes gems, and so does attuning one to a boon. Sell what you will not spend.</span>
-          </span>
-          <span className="keeper-buttons">
-            <button className="small" disabled={busy || gems < 1} onClick={() => void sell(1)}>Sell 1 · {GEM_PRICE}g</button>
-            <button className="small" disabled={busy || gems < 2} onClick={() => void sell(gems)}>Sell all · {GEM_PRICE * gems}g</button>
-          </span>
-        </li>
-      </ul>
-      <p className="muted small-note lapidary-where">Gems turn up in the quarry's seams and geodes, in a pearl oyster on the line, and now and then on what you beat out on the maps.</p>
-    </Frame>
+      purse={<RewardChips zeros gold={gold} resources={{ gem: gems, stone: held.stone ?? 0, iron: held.iron ?? 0 }} />}
+      shelves={[
+        { id: "gems", title: "Gems she buys", sub: `${GEM_PRICE}g each · tempering and attuning take them too`, wares: [gemWare] },
+        { id: "bench", title: "At her bench", sub: "Lodestones cut plain, or worked · out of your pack", wares: [], body: <StoneBench me={me} refresh={refresh} onMade={made} /> },
+      ]}
+      notes={<p>Gems turn up in the quarry's seams and geodes, in a pearl oyster on the line, and now and then on what you beat out on the maps.</p>}
+    />
   );
 }

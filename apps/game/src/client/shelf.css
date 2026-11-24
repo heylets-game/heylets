@@ -1,0 +1,353 @@
+/* A shopkeeper's wares on their shelves (ShopShelf.tsx): a cabinet of the fight bar's tarred timber (zone/fight.css),
+   with the keeper's name carved over it, a lamplit plank for each kind of thing they sell, a paper tag hung under each
+   thing with its name and price, a card beside the cabinet for what is pointed at, and the counter at its foot. */
+
+.shop-shelf {
+  --s-out: #1c0d0e; --s-rim: #6b3524; --s-wood: #2a1614; --s-wood-hi: #3d231d;
+  --s-brass: #c9a24a; --s-brass-hi: #f6e2a1; --s-brass-lo: #6f5222;
+  --s-gold: #f4c64e; --s-parch: #e6d3a3; --s-ink: #33180e; --s-dim: #b89a82;
+}
+
+/* ---------- The cabinet ---------- */
+.story.pub-bar.shop-shelf:not(.folded) {
+  top: 40px; left: 14px; width: min(548px, calc(100vw / var(--ui-z, 1) - 28px)); max-width: none; max-height: calc(100vh / var(--ui-z, 1) - 100px);
+  padding: 0; overflow: visible;
+  background:
+    linear-gradient(180deg, rgba(255, 214, 170, 0.08), rgba(0, 0, 0, 0) 30%, rgba(0, 0, 0, 0.3)),
+    linear-gradient(rgba(96, 30, 24, 0.34), rgba(96, 30, 24, 0.34)),
+    var(--tex-wood, none) 0 0 / 128px 128px,
+    var(--s-wood);
+  border: 3px solid var(--s-out); border-image: none;
+  box-shadow: inset 0 2px 0 rgba(214, 150, 96, 0.3), inset 0 -2px 0 rgba(0, 0, 0, 0.55), 0 0 0 1px var(--s-rim), 0 0 0 4px rgba(0, 0, 0, 0.25), 0 18px 40px rgba(0, 0, 0, 0.6);
+  animation: shelf-in 0.5s cubic-bezier(0.2, 1.2, 0.4, 1) both;
+}
+@keyframes shelf-in { from { opacity: 0; translate: -36px 0; scale: 0.97; } }
+.story.pub-bar.shop-shelf:not(.folded) > .panel-title { display: none; }
+/* Opened over the Harbor rather than beside someone (the market stall): in the middle of the screen. */
+.story.pub-bar.shop-shelf.centred:not(.folded) { left: max(14px, calc(50% - 274px)); }
+.overlay.shelf-overlay { background: radial-gradient(ellipse at 50% 40%, rgba(8, 6, 4, 0.35), rgba(8, 6, 4, 0.7)); }
+.story.pub-bar.shop-shelf:not(.folded) > .panel-body { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; margin: 0; padding: 0; overflow: visible; }
+.shop-shelf > .panel-tools { top: 8px; right: 8px; z-index: 3; }
+.shelf-root { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.shop-shelf button { font: inherit; }
+/* A price, with what it was before haggling struck through beside it. */
+.keeper-price { display: inline-flex; align-items: center; gap: 4px; vertical-align: middle; }
+.keeper-price s { font-size: 12px; }
+
+/* ---------- The keeper, carved over the top ---------- */
+.shelf-crown {
+  position: relative; flex: none; display: flex; align-items: center; gap: 12px; padding: 12px 44px 12px 14px;
+  background: radial-gradient(ellipse 60% 120% at 20% 0, rgba(255, 196, 120, 0.16), transparent 70%), linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.25));
+  border-bottom: 3px solid var(--s-out);
+  box-shadow: inset 0 -2px 0 rgba(201, 162, 74, 0.35), 0 3px 0 rgba(0, 0, 0, 0.35);
+}
+.shelf-face {
+  position: relative; flex: none; width: 60px; height: 60px; border-radius: 50%; overflow: hidden;
+  background: radial-gradient(circle at 50% 35%, #5c3a2a, #1b0e0c 75%);
+  border: 3px solid var(--s-brass); box-shadow: 0 0 0 2px var(--s-out), inset 0 0 10px rgba(0, 0, 0, 0.7), 0 3px 0 rgba(0, 0, 0, 0.5);
+}
+.shelf-face::after { content: ""; position: absolute; inset: 0; border-radius: 50%; box-shadow: inset 0 2px 0 rgba(255, 240, 200, 0.35); pointer-events: none; }
+.shelf-face img { position: absolute; left: 50%; top: 4px; width: 66px; translate: -50% 0; image-rendering: pixelated; }
+.shelf-who { min-width: 0; flex: 1; }
+.shelf-crown h3.shelf-name { display: block; margin: 0; font-family: var(--font-title); font-size: 30px; line-height: 1; letter-spacing: 0.03em; color: #ffe9a8; text-align: left; text-shadow: 0 2px 0 #000, 0 0 14px rgba(244, 198, 78, 0.25); }
+.shelf-crown h3.shelf-name::before, .shelf-crown h3.shelf-name::after { display: none; }
+.shelf-trade { display: block; margin-top: 1px; font-family: var(--font-head); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #c9a877; }
+.shelf-says { margin: 5px 0 0; font-family: var(--font-book); font-style: italic; font-size: 15px; line-height: 1.3; color: #f0e2c4; text-shadow: 0 1px 0 #000; animation: shelf-said 0.3s ease-out; }
+.shelf-says.good { color: #b6ec9f; font-style: normal; }
+.shelf-says.bad { color: #ff9a86; font-style: normal; }
+@keyframes shelf-said { from { opacity: 0; translate: 0 4px; } }
+
+/* What you hold, and the way back. */
+.shelf-purse {
+  flex: none; display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 14px;
+  font-size: 13px; color: #e2d2b6; background: rgba(0, 0, 0, 0.32); border-bottom: 2px solid var(--s-out);
+}
+.shelf-hold { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.shelf-hold .cost-chips { gap: 10px; }
+.shelf-hold .cost { color: #f6ead2; text-shadow: 0 1px 0 #000; }
+.shelf-away { flex: none; }
+
+/* Many shelves: a brass tab for each, to go straight to it. */
+.shelf-jump { flex: none; display: flex; gap: 3px; padding: 5px 10px; overflow-x: auto; scrollbar-width: none; background: rgba(0, 0, 0, 0.22); border-bottom: 2px solid var(--s-out); }
+.shop-shelf .shelf-jump button { flex: none; font-family: var(--font-head); font-size: 12px; letter-spacing: 0.02em; padding: 2px 7px; white-space: nowrap; }
+
+/* ---------- The shelves ---------- */
+.shelf-cabinet {
+  position: relative; flex: 1 1 auto; min-height: 120px; overflow-y: auto; overscroll-behavior: contain; padding: 2px 0 16px;
+  background:
+    radial-gradient(ellipse 75% 220px at 50% 0, rgba(255, 186, 104, 0.16), transparent 75%),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.6), transparent 8%, transparent 92%, rgba(0, 0, 0, 0.6)),
+    repeating-linear-gradient(90deg, transparent 0 71px, rgba(0, 0, 0, 0.28) 71px 73px, rgba(255, 210, 160, 0.05) 73px 74px),
+    linear-gradient(rgba(18, 7, 6, 0.62), rgba(18, 7, 6, 0.62)),
+    var(--tex-wood, none) 0 0 / 128px 128px,
+    #1d0f0d;
+  box-shadow: inset 0 12px 18px -6px rgba(0, 0, 0, 0.75), inset 0 -10px 14px -6px rgba(0, 0, 0, 0.6);
+  scrollbar-width: thin; scrollbar-color: var(--s-brass-lo) transparent;
+}
+.shelf-cabinet:focus-visible { outline: 2px solid var(--s-gold); outline-offset: -2px; }
+.shelf-loading, .shelf-bare { margin: 0; padding: 20px 16px; text-align: center; font-family: var(--font-book); font-style: italic; font-size: 15px; color: var(--s-dim); }
+.shelf + .shelf { margin-top: 6px; }
+
+/* Each shelf's name, painted on the back wall between two flourishes. */
+.shop-shelf h4.shelf-sign { display: flex; flex-direction: column; align-items: center; gap: 1px; margin: 12px 14px 14px; text-align: center; }
+.shelf-sign > span { display: flex; align-items: center; gap: 10px; font-family: var(--font-head); font-size: 17px; letter-spacing: 0.08em; color: var(--s-brass-hi); text-shadow: 0 2px 0 #000; }
+.shelf-sign > span::before, .shelf-sign > span::after { content: ""; flex: none; width: 48px; height: 11px; background: var(--flourish) center / 48px 11px no-repeat; opacity: 0.9; }
+.shelf-sign > span::after { scale: -1 1; }
+.shelf-sign small { font-family: var(--font-book); font-style: italic; font-size: 12.5px; letter-spacing: 0; color: var(--s-dim); text-shadow: 0 1px 0 #000; }
+
+/* A row of places, a plank under each: with no gap between them the planks run the cabinet's width. */
+.shelf-row { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); row-gap: 12px; }
+.shelf-slot { position: relative; min-width: 0; animation: ss-in 0.55s cubic-bezier(0.2, 1.4, 0.4, 1) both; animation-delay: calc(var(--i, 0) * 32ms + 140ms); }
+.shelf-slot.gap { animation: none; padding-top: 88px; }
+@keyframes ss-in { from { opacity: 0; translate: 0 -16px; } }
+
+.shop-shelf button.ss-thing,
+.shop-shelf button.ss-thing:hover:not(:disabled),
+.shop-shelf button.ss-thing:active:not(:disabled) {
+  display: flex; flex-direction: column; align-items: stretch; width: 100%; padding: 0; margin: 0;
+  background: none; border: none; border-radius: 0; box-shadow: none; text-shadow: none; color: inherit; cursor: pointer;
+}
+.shop-shelf button.ss-thing:focus-visible { outline: none; }
+.shop-shelf button.ss-thing:focus-visible .ss-tag { outline: 2px solid var(--s-gold); outline-offset: 2px; }
+
+/* Where the thing stands: a pool of its own colour behind it, lamplight falling on it, and its shadow on the plank. */
+.ss-stage { position: relative; height: 88px; display: flex; align-items: flex-end; justify-content: center; }
+.ss-glow {
+  position: absolute; left: 50%; bottom: -8px; width: 96px; height: 96px; translate: -50% 0; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle at 50% 58%, color-mix(in srgb, var(--c) 60%, transparent) 0, color-mix(in srgb, var(--c) 18%, transparent) 42%, transparent 66%);
+  opacity: 0.42; transition: opacity 0.3s, scale 0.3s;
+}
+.ss-stage::before {
+  content: ""; position: absolute; left: 50%; top: -6px; bottom: 0; width: 84%; translate: -50% 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(255, 228, 170, 0.02), rgba(255, 228, 170, 0.16));
+  clip-path: polygon(38% 0, 62% 0, 100% 100%, 0 100%); opacity: 0; transition: opacity 0.3s;
+}
+.ss-stage::after {
+  content: ""; position: absolute; left: 50%; bottom: -4px; width: 58px; height: 10px; translate: -50% 0; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.7), transparent); transition: scale 0.3s, opacity 0.3s;
+}
+.ss-art { position: relative; z-index: 1; display: block; line-height: 0; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.45)) drop-shadow(0 0 10px rgba(0, 0, 0, 0.35)); transition: translate 0.3s cubic-bezier(0.2, 1.5, 0.4, 1), scale 0.3s cubic-bezier(0.2, 1.5, 0.4, 1), filter 0.3s; }
+.ss-art > :not(.finish-swatch) { display: block; width: 68px; height: 68px; }
+/* The 3D icons are drawn small in the middle of their square: shown larger, in the same room, so the thing fills its place. */
+.ss-art > img.voxel-icon { width: 116px; height: 116px; margin: -26px -24px -22px; }
+.ss-art.full > img.voxel-icon { width: 80px; height: 80px; margin: -8px -6px -4px; }
+/* Nell's samples keep their own shapes, a length of wallpaper standing tall, with a frame round them. */
+.ss-art > .finish-swatch { display: block; outline: 2px solid #1a0c08; box-shadow: 0 0 0 3px rgba(201, 162, 74, 0.5); }
+.ss-art > svg.finish-swatch { outline: none; box-shadow: none; }
+
+.ss-thing:hover .ss-art, .ss-thing:focus-visible .ss-art, .shelf-slot.picked .ss-art { translate: 0 -11px; scale: 1.12; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.45)) drop-shadow(0 0 12px color-mix(in srgb, var(--c) 55%, transparent)); }
+.ss-thing:hover .ss-art { animation: ss-bob 1.8s ease-in-out 0.3s infinite; }
+@keyframes ss-bob { 50% { translate: 0 -15px; } }
+.ss-thing:hover .ss-glow, .ss-thing:focus-visible .ss-glow { opacity: 1; scale: 1.18; }
+.ss-thing:hover .ss-stage::before, .ss-thing:focus-visible .ss-stage::before, .shelf-slot.picked .ss-stage::before { opacity: 1; }
+.ss-thing:hover .ss-stage::after, .shelf-slot.picked .ss-stage::after { scale: 0.72; opacity: 0.55; }
+/* On the counter: a ring of gold light on the plank under it. */
+.shelf-slot.picked .ss-glow { opacity: 1; scale: 1.1; }
+.shelf-slot.picked .ss-stage::after { scale: 1.15 1; opacity: 1; background: radial-gradient(closest-side, rgba(255, 226, 140, 0.95), rgba(244, 198, 78, 0.35) 60%, transparent); animation: ss-ring 1.6s ease-in-out infinite; }
+@keyframes ss-ring { 50% { opacity: 0.55; } }
+
+/* Gone for today, or already yours: stamped, and the thing in shadow. */
+.shelf-slot.out .ss-art { filter: grayscale(0.85) brightness(0.55); }
+.shelf-slot.out .ss-glow { opacity: 0.08; }
+.shelf-slot.owned .ss-art { filter: brightness(0.85); }
+.shelf-slot.owned .ss-glow { opacity: 0.25; }
+.ss-stamp {
+  position: absolute; left: 50%; top: 48%; z-index: 2; translate: -50% -50%; rotate: -13deg; padding: 0 8px 1px;
+  font-family: var(--font-title); font-size: 19px; line-height: 1.15; letter-spacing: 0.05em; white-space: nowrap; pointer-events: none;
+  color: #e2584a; border: 2px solid currentColor; border-radius: 4px; background: rgba(28, 10, 8, 0.55); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+  animation: ss-stamp 0.4s cubic-bezier(0.2, 1.6, 0.4, 1) both; animation-delay: calc(var(--i, 0) * 32ms + 420ms);
+}
+.shelf-slot.owned .ss-stamp { color: #9be08a; rotate: -8deg; }
+@keyframes ss-stamp { from { opacity: 0; scale: 2.4; } }
+.ss-corner { position: absolute; top: 4px; left: 6px; z-index: 2; pointer-events: none; }
+.ss-corner .verdict, .ss-corner .ss-ribbon { display: inline-block; padding: 1px 6px; font-family: var(--font-head); font-size: 10.5px; letter-spacing: 0.06em; background: rgba(20, 8, 6, 0.8); }
+.ss-ribbon { color: #e9d8ab; border: 1px solid var(--s-brass-lo); }
+
+/* The plank: a lit top edge, a front face, and its shadow on the wall. */
+.ss-plank {
+  position: relative; display: block; height: 17px; flex: none;
+  background:
+    linear-gradient(180deg, rgba(255, 220, 176, 0.34) 0, rgba(255, 220, 176, 0.16) 4px, rgba(0, 0, 0, 0.05) 5px, rgba(0, 0, 0, 0.22) 6px, rgba(0, 0, 0, 0.5) 100%),
+    var(--tex-wood, none) 0 0 / 128px 128px,
+    #6a3e2a;
+  border-bottom: 2px solid #120807;
+  box-shadow: 0 7px 9px -3px rgba(0, 0, 0, 0.7);
+}
+
+/* The tag, hung by a string from the plank: its name, a band of its colour, and its price. */
+.ss-hang { position: relative; align-self: center; width: calc(100% - 14px); max-width: 124px; padding-top: 9px; transform-origin: 50% 0; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.45)) drop-shadow(0 0 1px rgba(0, 0, 0, 0.8)); }
+.ss-hang::before { content: ""; position: absolute; left: 50%; top: 0; width: 1px; height: 16px; background: #c9b28a; box-shadow: 1px 0 0 rgba(0, 0, 0, 0.4); z-index: 1; }
+.ss-tag {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 11px 6px 5px;
+  color: var(--s-ink); text-align: center;
+  background:
+    linear-gradient(180deg, rgba(255, 250, 230, 0.4), rgba(120, 90, 40, 0.16)),
+    var(--tex-paper, none) 0 0 / 512px 512px,
+    var(--s-parch);
+  clip-path: polygon(11px 0, calc(100% - 11px) 0, 100% 11px, 100% 100%, 0 100%, 0 11px);
+  box-shadow: inset 0 -2px 0 rgba(90, 60, 20, 0.25), inset 0 3px 0 color-mix(in srgb, var(--c) 85%, #000);
+}
+/* The hole the string goes through. */
+.ss-tag::before { content: ""; position: absolute; left: 50%; top: 5px; width: 6px; height: 6px; translate: -50% 0; border-radius: 50%; background: #2a1512; box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(150, 110, 60, 0.6); }
+/* Every tag is the same height: two lines' room for the name, the name centred in it, and one line for the price. */
+.ss-tag-name {
+  display: flex; align-items: center; justify-content: center; width: 100%; height: 2.2em; flex: none;
+  font-family: var(--font-head); font-size: 12.5px; line-height: 1.1; letter-spacing: 0.02em;
+}
+.ss-tag-name > span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 100%; overflow-wrap: anywhere; }
+.ss-tag-price { display: flex; align-items: center; justify-content: center; gap: 3px; flex: none; height: 22px; max-width: 100%; overflow: hidden; white-space: nowrap; font-family: var(--font-title); font-size: 18px; line-height: 1.1; color: #4a2008; }
+.ss-tag-price .keeper-price { gap: 3px; }
+.ss-tag-price .keeper-price strong { font-weight: normal; }
+.ss-tag-price s { font-family: var(--font-book); font-size: 12px; color: #8a6a4a; }
+.ss-tag-price .cost-chips { flex-wrap: nowrap; gap: 5px; justify-content: center; font-family: var(--font-book); font-size: 13px; }
+.ss-tag-price .cost { gap: 1px; }
+.ss-tag-price .cost img { width: 15px; height: 15px; }
+.ss-tag-price .cost.short { color: #a3392c; }
+.shelf-slot.short .ss-tag-price { color: #a3392c; }
+/* Talked down: a wax seal on the tag's corner. */
+.ss-seal {
+  position: absolute; right: -9px; top: -3px; z-index: 2; display: grid; place-items: center; width: 31px; height: 31px; rotate: -14deg; border-radius: 50%;
+  font-family: var(--font-head); font-size: 10.5px; letter-spacing: 0; color: #ffe8d6;
+  background: radial-gradient(circle at 38% 32%, #e0574a, #8d1f17 70%); box-shadow: 0 0 0 2px #6a140f, 0 2px 0 rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 200, 180, 0.5);
+}
+.ss-thing:hover .ss-hang { animation: ss-swing 1.5s ease-in-out; }
+@keyframes ss-swing { 20% { rotate: 6deg; } 45% { rotate: -4deg; } 65% { rotate: 2.4deg; } 82% { rotate: -1deg; } }
+
+/* Just bought: it hops on its shelf, and gold sparks fly. */
+.shelf-slot.hopping .ss-art { animation: ss-hop 0.75s cubic-bezier(0.2, 1.4, 0.4, 1); }
+@keyframes ss-hop { 0% { translate: 0 0; scale: 1; } 30% { translate: 0 -30px; scale: 1.3; rotate: -8deg; } 60% { translate: 0 -4px; scale: 0.94; rotate: 3deg; } 100% { translate: 0 -11px; scale: 1.12; rotate: 0deg; } }
+.ss-burst { position: absolute; left: 50%; top: 40%; z-index: 3; width: 0; height: 0; pointer-events: none; }
+.ss-burst i { position: absolute; left: -4px; top: -4px; width: 8px; height: 8px; rotate: 45deg; background: #ffe08a; box-shadow: 0 0 8px 2px rgba(255, 210, 90, 0.8); animation: ss-spark 0.8s ease-out both; }
+.ss-burst i:nth-child(1) { --x: -44px; --y: -30px; }
+.ss-burst i:nth-child(2) { --x: 44px; --y: -34px; animation-delay: 0.04s; }
+.ss-burst i:nth-child(3) { --x: -26px; --y: -58px; animation-delay: 0.08s; }
+.ss-burst i:nth-child(4) { --x: 28px; --y: -62px; animation-delay: 0.02s; }
+.ss-burst i:nth-child(5) { --x: -52px; --y: 4px; animation-delay: 0.06s; }
+.ss-burst i:nth-child(6) { --x: 52px; --y: 0; animation-delay: 0.1s; }
+@keyframes ss-spark { from { translate: 0 0; scale: 1.4; opacity: 1; } to { translate: var(--x) var(--y); scale: 0.2; opacity: 0; } }
+
+/* A shelf of the keeper's own (the Lapidary's bench): their work, on the back wall. */
+.shelf-body { margin: 0 14px; padding: 10px 12px; color: #f0e2c4; background: rgba(12, 5, 4, 0.55); border: 2px solid var(--s-out); box-shadow: 0 0 0 1px rgba(201, 162, 74, 0.25), inset 0 0 14px rgba(0, 0, 0, 0.6); }
+.shelf-body .small-note { font-family: var(--font-book); font-size: 13.5px; }
+.shelf-body h5 { font-family: var(--font-head); font-size: 13px; letter-spacing: 0.08em; color: var(--s-brass-hi); }
+
+.shelf-notes { margin: 14px 16px 0; font-family: var(--font-book); font-style: italic; font-size: 13px; line-height: 1.35; color: var(--s-dim); text-align: center; text-shadow: 0 1px 0 #000; }
+.shelf-notes p { margin: 0 0 4px; }
+
+/* ---------- The counter, at the cabinet's foot ---------- */
+.shelf-counter {
+  position: relative; flex: none; display: grid; grid-template-columns: 66px minmax(0, 1fr) auto; align-items: center; gap: 4px 12px; padding: 10px 14px 12px;
+  background:
+    radial-gradient(ellipse 50% 140% at 12% 50%, color-mix(in srgb, var(--c, #e3b757) 16%, transparent), transparent 70%),
+    linear-gradient(180deg, rgba(255, 214, 170, 0.12), rgba(0, 0, 0, 0.25)),
+    linear-gradient(rgba(96, 30, 24, 0.3), rgba(96, 30, 24, 0.3)),
+    var(--tex-wood, none) 0 0 / 128px 128px,
+    var(--s-wood-hi);
+  border-top: 3px solid var(--s-out);
+  box-shadow: inset 0 2px 0 rgba(214, 150, 96, 0.32), 0 -4px 10px rgba(0, 0, 0, 0.45);
+  animation: sc-in 0.3s cubic-bezier(0.2, 1.3, 0.4, 1);
+}
+@keyframes sc-in { from { opacity: 0.2; translate: 0 10px; } }
+.shelf-counter.idle { display: block; padding: 12px 14px; text-align: center; font-family: var(--font-book); font-style: italic; font-size: 14px; color: var(--s-dim); animation: none; }
+.shelf-counter.idle span::before { content: "☞ "; font-style: normal; color: var(--s-brass); }
+.sc-art { display: grid; place-items: center; width: 66px; height: 66px; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--c) 45%, transparent), transparent 68%); animation: sc-art 0.5s cubic-bezier(0.2, 1.6, 0.4, 1); }
+.sc-art > * { max-width: 58px; max-height: 58px; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.5)); }
+.sc-art > :not(.finish-swatch) { width: 58px; height: 58px; }
+.sc-art > .finish-swatch { width: auto; height: auto; object-fit: contain; }
+.sc-art > img.voxel-icon { width: 96px; height: 96px; max-width: none; max-height: none; margin: -19px; }
+@keyframes sc-art { from { scale: 0.4; rotate: -20deg; } }
+.shelf-counter.hop .sc-art { animation: ss-hop 0.75s cubic-bezier(0.2, 1.4, 0.4, 1); }
+.sc-body { min-width: 0; }
+.shop-shelf h4.sc-name { margin: 0; font-family: var(--font-title); font-size: 25px; line-height: 1; letter-spacing: 0.02em; color: color-mix(in srgb, var(--c) 55%, #fff4d6); text-shadow: 0 2px 0 #000; }
+.sc-facts { margin: 3px 0 0; font-family: var(--font-head); font-size: 12px; letter-spacing: 0.06em; color: #c9a877; }
+.sc-brief { margin: 3px 0 0; font-family: var(--font-book); font-size: 15px; line-height: 1.3; color: #eadcc0; }
+.sc-problem { margin: 3px 0 0; font-family: var(--font-book); font-size: 14px; line-height: 1.3; color: #ff9a86; }
+.sc-buy { display: flex; flex-direction: column; align-items: stretch; gap: 6px; text-align: center; }
+.sc-price { display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-title); font-size: 26px; line-height: 1; color: #ffe9a8; text-shadow: 0 2px 0 #000; }
+.sc-price .keeper-price strong { font-weight: normal; }
+.sc-price .keeper-price s { font-family: var(--font-book); font-size: 14px; color: #a98a72; }
+.sc-price .cost-chips { justify-content: center; font-family: var(--font-book); font-size: 14px; color: #f6ead2; }
+.sc-out { font-family: var(--font-title); font-size: 22px; color: #e2584a; }
+.shelf-counter.owned .sc-out { color: #9be08a; }
+.shop-shelf button.sc-act { min-width: 118px; min-height: 38px; padding: 4px 14px; font-family: var(--font-head); font-size: 16px; letter-spacing: 0.04em; }
+.shop-shelf button.sc-act:not(:disabled) { animation: sc-act 2.4s ease-in-out infinite; }
+@keyframes sc-act { 50% { box-shadow: 0 0 14px rgba(155, 224, 138, 0.45); } }
+.sc-more { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.sc-more:empty { display: none; }
+.sc-more .keeper-asks { width: 100%; margin-top: 2px; }
+.sc-more .keeper-haggle { margin-left: auto; }
+
+/* ---------- The card beside the cabinet, for what is pointed at ---------- */
+.shelf-card {
+  position: absolute; left: calc(100% + 16px); z-index: 40; width: 280px; padding: 12px 14px 10px; pointer-events: none;
+  font-size: 13px; line-height: 1.35; color: #f6ead2;
+  background: linear-gradient(180deg, rgba(255, 214, 170, 0.07), rgba(0, 0, 0, 0)), rgba(30, 15, 13, 0.97);
+  border: 2px solid var(--s-out); box-shadow: 0 0 0 1px var(--s-brass-lo), 0 0 22px color-mix(in srgb, var(--c) 18%, transparent), 0 12px 26px rgba(0, 0, 0, 0.6);
+  animation: card-in 0.16s ease-out;
+}
+.shelf-card.left { left: auto; right: calc(100% + 16px); }
+@keyframes card-in { from { opacity: 0; translate: -6px 0; } }
+.shelf-card::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: linear-gradient(90deg, transparent, var(--c), transparent); }
+/* A point back at the cabinet. */
+.shelf-card::after { content: ""; position: absolute; left: -9px; top: 34px; width: 14px; height: 14px; rotate: 45deg; background: rgb(30, 15, 13); border-left: 2px solid var(--s-out); border-bottom: 2px solid var(--s-out); }
+.shelf-card.left::after { left: auto; right: -9px; rotate: -135deg; }
+.shelf-card .sc-name { font-size: 26px; }
+.shelf-card .sc-brief { font-size: 16px; }
+.shelf-card .detail { margin: 0; }
+.shelf-card .detail > p, .shelf-card .abilities { font-family: var(--font-book); font-size: 14.5px; line-height: 1.3; }
+.shelf-card .detail-head strong { font-family: var(--font-title); font-size: 22px; font-weight: normal; }
+.shelf-card .detail p { margin: 4px 0; }
+.sc-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(201, 162, 74, 0.3); }
+.sc-tag { display: inline-flex; align-items: center; font-family: var(--font-title); font-size: 21px; line-height: 1; color: #ffe9a8; }
+.sc-tag .keeper-price strong { font-weight: normal; }
+.sc-tag .keeper-price s { font-family: var(--font-book); font-size: 13px; color: #a98a72; }
+.sc-tag .cost-chips { font-family: var(--font-book); font-size: 13px; color: #f6ead2; }
+.sc-foot .sc-problem { flex-basis: 100%; margin: 0; }
+.sc-hint { margin-left: auto; font-family: var(--font-book); font-style: italic; font-size: 11.5px; color: #a98a72; }
+
+/* ---------- Phones ---------- */
+/* No pointer to hover with: what is picked is all on the counter. */
+@media (hover: none) { .shelf-card { display: none; } }
+/* Narrow: the cabinet is docked along the bottom, clear of the way back to the conversation. */
+@media (max-width: 760px) {
+  .story.pub-bar.shop-shelf.centred:not(.folded) { left: 6px; }
+  .story.pub-bar.shop-shelf:not(.folded) { top: auto; left: 6px; bottom: 58px; width: calc(100vw / var(--ui-z, 1) - 12px); max-height: calc(64vh / var(--ui-z, 1)); z-index: 14; animation-name: shelf-up; }
+  @keyframes shelf-up { from { opacity: 0; translate: 0 30px; } }
+  .shelf-crown { padding: 8px 40px 8px 10px; gap: 10px; }
+  .shelf-face { width: 44px; height: 44px; border-width: 2px; }
+  .shelf-face img { width: 50px; top: 2px; }
+  .shelf-crown h3.shelf-name { font-size: 23px; }
+  .shelf-says { font-size: 13.5px; margin-top: 3px; }
+  .shelf-purse { padding: 4px 10px; font-size: 12px; }
+  .ss-stage { height: 74px; }
+  .ss-art > :not(.finish-swatch) { width: 56px; height: 56px; }
+  .ss-art > img.voxel-icon { width: 96px; height: 96px; margin: -22px -20px -18px; }
+  .ss-glow { width: 80px; height: 80px; }
+  .shelf-slot.gap { padding-top: 74px; }
+  .shelf-counter { grid-template-columns: 50px minmax(0, 1fr) auto; padding: 8px 10px 10px; gap: 3px 10px; }
+  .sc-art { width: 50px; height: 50px; }
+  .sc-art > :not(.finish-swatch) { width: 44px; height: 44px; }
+  .sc-art > * { max-width: 44px; max-height: 44px; }
+  .sc-art > img.voxel-icon { width: 76px; height: 76px; margin: -16px; }
+  .shop-shelf h4.sc-name { font-size: 20px; }
+  .sc-price { font-size: 22px; }
+  .shop-shelf button.sc-act { min-width: 96px; min-height: 44px; }
+  .shelf-card { display: none; }
+}
+/* Short (a phone on its side): down the left side, top to bottom, with the keeper's line left out. */
+@media (max-height: 520px) and (min-width: 761px) {
+  .story.pub-bar.shop-shelf:not(.folded) { top: 6px; left: 6px; bottom: 6px; width: min(460px, calc(54vw / var(--ui-z, 1))); max-height: none; }
+  .shelf-crown { padding: 6px 40px 6px 10px; }
+  .shelf-face { width: 38px; height: 38px; }
+  .shelf-face img { width: 44px; }
+  .shelf-crown h3.shelf-name { font-size: 21px; }
+  .shelf-says { display: none; }
+  .ss-stage { height: 70px; }
+  .ss-art > :not(.finish-swatch) { width: 52px; height: 52px; }
+  .ss-art > img.voxel-icon { width: 90px; height: 90px; margin: -20px -19px -18px; }
+  .shelf-slot.gap { padding-top: 70px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shop-shelf, .shop-shelf *, .shop-shelf *::before, .shop-shelf *::after { animation: none !important; transition: none !important; }
+}

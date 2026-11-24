@@ -1,13 +1,14 @@
 // Nell's catalogue, opened from a word with her at her stall beside the market stall: wallpaper, floors and roof
-// colours for your hut, each bought once and yours for good. What you own is put up at home, from Decorate.
+// colours for your hut on her shelves (ShopShelf.tsx), each bought once and yours for good. What you own is put up at
+// home, from Decorate.
 
 import { useEffect, useState } from "react";
 import { DECORATOR, finishesOf, type FinishKind } from "@gantt-quest/world";
 import { api } from "./api";
-import { DragPanel } from "./DragPanel";
 import { FinishSwatch } from "./FinishSwatch";
 import "./finishes.css";
 import { regularFace } from "./RegularPanel";
+import { ShopShelf, type Said, type Shelf, type ShelfWare } from "./ShopShelf";
 import { GOLD_ICON, ThingIcon } from "./thingIcons";
 
 type View = Awaited<ReturnType<typeof api.finishes>>;
@@ -26,68 +27,80 @@ export const FINISH_TABS: { kind: FinishKind; label: string }[] = [
   { kind: "roof", label: "Roofs" },
 ];
 
+/** The swatch's size on a shelf: a length of wallpaper stands tall, a square of floor and a little house sit square. */
+const SHELF_SIZE: Record<FinishKind, number> = { wall: 0.82, floor: 0.9, roof: 1.2 };
+
 export function FinishesPanel({ onClose, refresh }: { onClose(): void; refresh(): unknown }) {
   const [view, setView] = useState<View | null>(null);
-  const [tab, setTab] = useState<FinishKind>("wall");
   const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<{ text: string; ok: boolean } | null>(null);
-  const load = () => api.finishes().then(setView, (e: Error) => setNote({ text: e.message, ok: false }));
+  const [said, setSaid] = useState<Said | null>(null);
+  const load = () => api.finishes().then(setView, (e: Error) => setSaid({ text: e.message, tone: "bad" }));
   useEffect(() => void load(), []);
 
-  const buy = async (id: string, name: string) => {
+  const buy = async (id: string, name: string): Promise<boolean> => {
     setBusy(true);
-    setNote(null);
+    setSaid(null);
     try {
       await api.buyFinish(id);
-      setNote({ text: view?.hut ? `${name} is yours. Put it up at home: Decorate, then Walls, floor and roof.` : `${name} is yours, for when you have a hut to put it in.`, ok: true });
+      setSaid({ text: view?.hut ? `${name} is yours. Put it up at home: Decorate, then Walls, floor and roof.` : `${name} is yours, for when you have a hut to put it in.`, tone: "good" });
       await load();
       void refresh();
+      return true;
     } catch (e) {
-      setNote({ text: (e as Error).message, ok: false });
+      setSaid({ text: (e as Error).message, tone: "bad" });
+      return false;
     } finally {
       setBusy(false);
     }
   };
 
+  const shelves: Shelf[] = !view ? [] : FINISH_TABS.map(({ kind, label }) => {
+    const today = finishesOf(kind).filter((f) => view.stock.includes(f.id));
+    return {
+      id: kind,
+      title: label,
+      sub: kind === "roof" ? "Every colour, every day" : `Today's patterns: ${today.length} of ${finishesOf(kind).length}`,
+      wares: today.map((f): ShelfWare => {
+        const owned = view.owned.includes(f.id);
+        const wearing = view.finish[kind] === f.id;
+        const short = !owned && view.gold < f.price;
+        return {
+          key: f.id,
+          name: f.name,
+          color: "#e3c88a",
+          art: <FinishSwatch kind={kind} id={f.id} size={SHELF_SIZE[kind]} />,
+          tag: <span className="keeper-price"><ThingIcon icon={GOLD_ICON} size={16} /><strong>{f.price}g</strong></span>,
+          facts: [label.replace(/s$/, ""), owned ? (wearing ? "On your hut" : "Yours for good") : "Yours for good, once bought"],
+          brief: f.blurb,
+          stamp: owned ? (wearing ? "On your hut" : "Yours") : undefined,
+          owned,
+          problem: short ? `${f.price} gold, and you have ${view.gold}.` : null,
+          act: owned ? undefined : { label: `Buy · ${f.price}g`, title: short ? `${f.price} gold, and you have ${view.gold}` : `Buy for ${f.price} gold, yours for good`, disabled: busy || short, run: () => buy(f.id, f.name) },
+        };
+      }),
+      empty: "Nothing of this out today.",
+    };
+  });
+
   return (
-    <DragPanel id="harbor.finishes" title="Home furnishings" className="story panel pub-bar finishes-panel">
-      <div className="regular-head">
-        <img className="regular-face" src={regularFace(DECORATOR.look)} alt="" />
-        <div>
-          <h3>{DECORATOR.name} <span className="muted">· {DECORATOR.trade}</span></h3>
-          <p className="salesman-says">“Buy it once and it's yours for good. I put out different patterns every day, so look again tomorrow.”</p>
-        </div>
-      </div>
-      <div className="finish-tabs" role="tablist">
-        {FINISH_TABS.map((t) => (
-          <button key={t.kind} role="tab" aria-selected={tab === t.kind} className={`small ${tab === t.kind ? "selected" : ""}`} onClick={() => setTab(t.kind)}>{t.label}</button>
-        ))}
-        <span className="spacer" />
-        {view && <span className="finish-gold"><ThingIcon icon={GOLD_ICON} size={18} />{view.gold}g</span>}
-      </div>
-      {!view ? <p className="muted">Unrolling the samples…</p> : (
-        <ul className={`finish-grid ${tab}`}>
-          {finishesOf(tab).filter((f) => view.stock.includes(f.id)).map((f) => {
-            const owned = view.owned.includes(f.id);
-            const wearing = view.finish[tab] === f.id;
-            const short = !owned && view.gold < f.price;
-            return (
-              <li key={f.id} className={`finish-card ${owned ? "owned" : ""}`} title={f.blurb}>
-                <FinishSwatch kind={tab} id={f.id} />
-                <strong>{f.name}</strong>
-                <span className="muted small-note">{f.blurb}</span>
-                {owned
-                  ? <span className="tag good">{wearing ? "On your hut" : "Yours"}</span>
-                  : <button className="small primary" disabled={busy || short} title={short ? `${f.price} gold, and you have ${view.gold}` : `Buy for ${f.price} gold, yours for good`} onClick={() => void buy(f.id, f.name)}>Buy {f.price}g</button>}
-              </li>
-            );
-          })}
-        </ul>
+    <ShopShelf
+      id="harbor.finishes"
+      title="Home furnishings"
+      className="finishes-shelf"
+      keeper={{ name: DECORATOR.name, trade: DECORATOR.trade, face: regularFace(DECORATOR.look) }}
+      says="Buy it once and it's yours for good. I put out different patterns every day, so look again tomorrow."
+      said={said}
+      onDone={onClose}
+      doneLabel="Close"
+      purse={view && <span className="cost"><ThingIcon icon={GOLD_ICON} size={18} /> {view.gold}g</span>}
+      loading={!view && !said ? "Unrolling the samples…" : null}
+      shelves={shelves}
+      notes={view && (
+        <>
+          <p>New patterns {untilRestock(view.restock)}.</p>
+          {!view.hut && <p>You have no hut standing yet. What you buy keeps until you do.</p>}
+        </>
       )}
-      {view && tab !== "roof" && <p className="muted small-note">Today's patterns: {view.stock.filter((id) => id.startsWith(`${tab}_`)).length} of {finishesOf(tab).length}. New ones {untilRestock(view.restock)}.</p>}
-      {note && <p className={note.ok ? "good" : "bad"}>{note.text}</p>}
-      {view && !view.hut && <p className="muted small-note">You have no hut standing yet. What you buy keeps until you do.</p>}
-      <div className="row"><span className="spacer" /><button onClick={onClose}>Done</button></div>
-    </DragPanel>
+    />
   );
 }

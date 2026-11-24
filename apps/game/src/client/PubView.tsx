@@ -401,8 +401,9 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
       if (what === "board") setBarOpen(true);
       else if (what === "fish") setSellingFish(true);
       else if (what === "records") setRecords(true);
+      // (The salesman's wares and Hollis's board both open from a "trade": whoever is stood beside.)
+      else if (what === "trade" && atTrader) setTrading(true);
       else if (what === "trade" || what === "contracts") setDealing(what);
-      else if (what === "trade") setTrading(true);
       else if (what === "errand" && talkingRegular.current) setTalkTo(talkingRegular.current);
     },
     ask: api.pubTalk,
@@ -587,7 +588,7 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
       {you && wall && readingFish !== null && <WallFishCard wall={wall} slot={readingFish} you={you} onWall={setWall} onClose={() => setReadingFish(null)} />}
       {you && records && <RecordBoard you={you} onClose={() => (setRecords(false), loadWall())} />}
       {you && sellingFish && <CatchPanel buyer="tam" onGold={() => void refresh()} onClose={() => setSellingFish(false)} />}
-      {you && atTrader && seller && trading && <SalesmanPanel me={me} refresh={refresh} />}
+      {you && atTrader && seller && trading && <SalesmanPanel me={me} refresh={refresh} onClose={() => setTrading(false)} />}
       {you && atBoard && reading && <PubLeaderboard you={you} version={dicePhase} onClose={() => setReading(false)} />}
       {you && atDealer && dealing && <DealerPanel tab={dealing} refresh={refresh} onClose={() => setDealing(null)} />}
       {you && talking && regs && <RegularPanel key={talking.regular} view={talking} handedIn={regs.handedIn} cap={regs.cap} reload={loadRegs} refresh={refresh} onClose={() => setTalkTo(null)} />}
