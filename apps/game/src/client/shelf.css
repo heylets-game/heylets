@@ -10,7 +10,7 @@
 
 /* ---------- The cabinet ---------- */
 .story.pub-bar.shop-shelf:not(.folded) {
-  top: 40px; left: 14px; width: min(548px, calc(100vw / var(--ui-z, 1) - 28px)); max-height: calc(100vh / var(--ui-z, 1) - 100px);
+  top: 40px; left: 14px; width: min(548px, calc(100vw / var(--ui-z, 1) - 28px)); max-width: none; max-height: calc(100vh / var(--ui-z, 1) - 100px);
   padding: 0; overflow: visible;
   background:
     linear-gradient(180deg, rgba(255, 214, 170, 0.08), rgba(0, 0, 0, 0) 30%, rgba(0, 0, 0, 0.3)),
@@ -23,10 +23,16 @@
 }
 @keyframes shelf-in { from { opacity: 0; translate: -36px 0; scale: 0.97; } }
 .story.pub-bar.shop-shelf:not(.folded) > .panel-title { display: none; }
+/* Opened over the Harbor rather than beside someone (the market stall): in the middle of the screen. */
+.story.pub-bar.shop-shelf.centred:not(.folded) { left: max(14px, calc(50% - 274px)); }
+.overlay.shelf-overlay { background: radial-gradient(ellipse at 50% 40%, rgba(8, 6, 4, 0.35), rgba(8, 6, 4, 0.7)); }
 .story.pub-bar.shop-shelf:not(.folded) > .panel-body { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; margin: 0; padding: 0; overflow: visible; }
 .shop-shelf > .panel-tools { top: 8px; right: 8px; z-index: 3; }
 .shelf-root { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 .shop-shelf button { font: inherit; }
+/* A price, with what it was before haggling struck through beside it. */
+.keeper-price { display: inline-flex; align-items: center; gap: 4px; vertical-align: middle; }
+.keeper-price s { font-size: 12px; }
 
 /* ---------- The keeper, carved over the top ---------- */
 .shelf-crown {
@@ -60,6 +66,10 @@
 .shelf-hold .cost-chips { gap: 10px; }
 .shelf-hold .cost { color: #f6ead2; text-shadow: 0 1px 0 #000; }
 .shelf-away { flex: none; }
+
+/* Many shelves: a brass tab for each, to go straight to it. */
+.shelf-jump { flex: none; display: flex; gap: 3px; padding: 5px 10px; overflow-x: auto; scrollbar-width: none; background: rgba(0, 0, 0, 0.22); border-bottom: 2px solid var(--s-out); }
+.shop-shelf .shelf-jump button { flex: none; font-family: var(--font-head); font-size: 12px; letter-spacing: 0.02em; padding: 2px 7px; white-space: nowrap; }
 
 /* ---------- The shelves ---------- */
 .shelf-cabinet {
@@ -120,6 +130,7 @@
 .ss-art > :not(.finish-swatch) { display: block; width: 68px; height: 68px; }
 /* The 3D icons are drawn small in the middle of their square: shown larger, in the same room, so the thing fills its place. */
 .ss-art > img.voxel-icon { width: 116px; height: 116px; margin: -26px -24px -22px; }
+.ss-art.full > img.voxel-icon { width: 80px; height: 80px; margin: -8px -6px -4px; }
 /* Nell's samples keep their own shapes, a length of wallpaper standing tall, with a frame round them. */
 .ss-art > .finish-swatch { display: block; outline: 2px solid #1a0c08; box-shadow: 0 0 0 3px rgba(201, 162, 74, 0.5); }
 .ss-art > svg.finish-swatch { outline: none; box-shadow: none; }
@@ -211,6 +222,11 @@
 .ss-burst i:nth-child(6) { --x: 52px; --y: 0; animation-delay: 0.1s; }
 @keyframes ss-spark { from { translate: 0 0; scale: 1.4; opacity: 1; } to { translate: var(--x) var(--y); scale: 0.2; opacity: 0; } }
 
+/* A shelf of the keeper's own (the Lapidary's bench): their work, on the back wall. */
+.shelf-body { margin: 0 14px; padding: 10px 12px; color: #f0e2c4; background: rgba(12, 5, 4, 0.55); border: 2px solid var(--s-out); box-shadow: 0 0 0 1px rgba(201, 162, 74, 0.25), inset 0 0 14px rgba(0, 0, 0, 0.6); }
+.shelf-body .small-note { font-family: var(--font-book); font-size: 13.5px; }
+.shelf-body h5 { font-family: var(--font-head); font-size: 13px; letter-spacing: 0.08em; color: var(--s-brass-hi); }
+
 .shelf-notes { margin: 14px 16px 0; font-family: var(--font-book); font-style: italic; font-size: 13px; line-height: 1.35; color: var(--s-dim); text-align: center; text-shadow: 0 1px 0 #000; }
 .shelf-notes p { margin: 0 0 4px; }
 
@@ -290,6 +306,7 @@
 @media (hover: none) { .shelf-card { display: none; } }
 /* Narrow: the cabinet is docked along the bottom, clear of the way back to the conversation. */
 @media (max-width: 760px) {
+  .story.pub-bar.shop-shelf.centred:not(.folded) { left: 6px; }
   .story.pub-bar.shop-shelf:not(.folded) { top: auto; left: 6px; bottom: 58px; width: calc(100vw / var(--ui-z, 1) - 12px); max-height: calc(64vh / var(--ui-z, 1)); z-index: 14; animation-name: shelf-up; }
   @keyframes shelf-up { from { opacity: 0; translate: 0 30px; } }
   .shelf-crown { padding: 8px 40px 8px 10px; gap: 10px; }

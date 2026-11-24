@@ -10,13 +10,12 @@
 // What can be done is worked out here only to grey out buttons; the server
 // checks every purchase, flask, step and haggle again.
 
-import { useMemo, useState, type ReactNode } from "react";
-import { FLASK_RECIPES, HAGGLE_ASKS, KEEPER_PLACES, RARITY_COLOR, SHELF_DAILY, SLOT_LABEL, SMITHY_MAX_STEPS, THROWABLES, THROWABLE_KINDS, flaskProblem, haggledPrice, smithyProblem, smithyWork, upgradedName, workKey, type Deal, type HaggleAsk, type ItemDef, type KeeperHouse, type KeeperShop, type Resources, type Throwable } from "@gantt-quest/world";
+import { useMemo, useState } from "react";
+import { FLASK_RECIPES, HAGGLE_ASKS, KEEPER_PLACES, RARITY_COLOR, SHELF_DAILY, SLOT_LABEL, SMITHY_MAX_STEPS, THROWABLES, THROWABLE_KINDS, flaskProblem, haggledPrice, smithyProblem, smithyWork, upgradedName, workKey, type Deal, type HaggleAsk, type ItemDef, type KeeperShop, type Resources, type Throwable } from "@gantt-quest/world";
 import { api, type ApothecaryView, type HaggleResult, type KeeperWare, type Me, type SmithyView } from "../api";
-import { DragPanel } from "../DragPanel";
 import { CostChips, RewardChips } from "../hutDrops";
 import { Icon, ItemDetail, VerdictTag, bonusSummary, compare, powerLabel, toOwned } from "../items";
-import { ShopShelf, type ShelfWare } from "../ShopShelf";
+import { ShopShelf, type Said, type ShelfWare } from "../ShopShelf";
 import { itemName, label } from "../labels";
 import { regularFace } from "../RegularPanel";
 import { GOLD_ICON, ThingIcon } from "../thingIcons";
@@ -27,11 +26,7 @@ import "./works.css";
 const amountsText = (gold: number, r: Resources) =>
   [gold > 0 ? `${gold} gold` : "", ...Object.entries(r).filter(([, n]) => n).map(([k, n]) => `${n} ${label("resource", k).toLowerCase()}`)].filter(Boolean).join(", ");
 
-/** What the panel shows after something is done: the keeper's word on it, or what went wrong. */
-export interface Said {
-  text: string;
-  tone: "good" | "bad" | "plain";
-}
+export type { Said } from "../ShopShelf";
 
 /** A gold price, with the list price struck through beside it once it has been talked down. */
 function Price({ list, price }: { list: number; price: number }) {
@@ -65,29 +60,6 @@ function HaggleAsks({ list, chances, busy, onAsk, onCancel }: { list: number; ch
         <button className="small" disabled={busy} onClick={onCancel}>Never mind</button>
       </div>
     </div>
-  );
-}
-
-/** The shared frame: the keeper at the top, what you hold, the last word, and the scrolling list. (The Lapidary's panel, LapidaryPanel.tsx, stands in it too.) */
-export function Frame({ shop, said, hold, onDone, children }: { shop: KeeperHouse; said: Said | null; hold: ReactNode; onDone(): void; children: ReactNode }) {
-  const { keeper, title } = KEEPER_PLACES[shop];
-  return (
-    <DragPanel id={`keeper.${shop}`} title={title} className={`story panel pub-bar keeper-panel keeper-${shop}`}>
-      <div className="keeper-top">
-        <div className="regular-head">
-          <img className="regular-face" src={regularFace(keeper.look)} alt="" />
-          <div>
-            <h3>{keeper.name} <span className="muted">· {keeper.trade}</span></h3>
-            <p className={`salesman-says ${said?.tone === "bad" ? "bad" : said?.tone === "good" ? "good" : ""}`} role="status">{said ? said.text : `“${keeper.line}”`}</p>
-          </div>
-        </div>
-        <div className="keeper-hold">
-          {hold}
-          <button className="small" onClick={onDone} title="Step back from the keeper: the hotbar comes back">Step away</button>
-        </div>
-      </div>
-      <div className="keeper-list" tabIndex={0} aria-label="Items and services">{children}</div>
-    </DragPanel>
   );
 }
 
@@ -344,11 +316,20 @@ function gearBrief(item: ItemDef): string {
 
 // ---------- the galley ----------
 
-/** The cook has nothing to sell and makes nothing: the panel says so, and lets you step away. */
+/** The cook has nothing to sell and makes nothing: his shelf says so, and lets you step away. */
 export function GalleyKeeperPanel({ onDone }: { onDone(): void }) {
+  const { keeper, title } = KEEPER_PLACES.galley;
   return (
-    <Frame shop="galley" said={null} onDone={onDone} hold={null}>
-      <p className="muted">The cook has nothing to sell and nothing to cook for you.</p>
-    </Frame>
+    <ShopShelf
+      id="keeper.galley"
+      title={title}
+      className="keeper-galley"
+      keeper={{ name: keeper.name, trade: keeper.trade, face: regularFace(keeper.look) }}
+      says={keeper.line}
+      said={null}
+      onDone={onDone}
+      purse={null}
+      shelves={[{ id: "galley", title: "The galley", wares: [], empty: "The cook has nothing to sell and nothing to cook for you." }]}
+    />
   );
 }

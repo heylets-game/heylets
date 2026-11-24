@@ -25,6 +25,8 @@ export interface ShelfWare {
   color?: string;
   /** Its picture, about 64px. */
   art: ReactNode;
+  /** The picture fills its own square (a gem, not a little flask in the middle of one): shown at its size, not enlarged. */
+  full?: boolean;
   /** On the tag under its name: the price, or what it takes. */
   tag: ReactNode;
   /** A ribbon on its corner: "Better", "L3". */
@@ -56,6 +58,8 @@ export interface Shelf {
   wares: ShelfWare[];
   /** Said on the shelf when there is nothing on it. */
   empty?: string;
+  /** Something of the keeper's own in place of a row of wares (the Lapidary's bench). */
+  body?: ReactNode;
 }
 
 export interface ShelfKeeper {
@@ -85,7 +89,7 @@ export function ShopShelf({ id, title, keeper, says, said, purse, shelves, notes
   says: string;
   /** What they said about the last thing done, or what went wrong. */
   said: Said | null;
-  /** What you hold, under their name. */
+  /** What you hold, under their name (nothing to hold, nothing shown but the way back). */
   purse: ReactNode;
   shelves: Shelf[];
   /** Small print at the foot of the cabinet. */
@@ -98,6 +102,8 @@ export function ShopShelf({ id, title, keeper, says, said, purse, shelves, notes
 }) {
   const [picked, setPicked] = useState<string | null>(null);
   const [hover, setHover] = useState<{ key: string; top: number; left: boolean } | null>(null);
+  /** The shelf scrolled to from the tabs along the top. */
+  const [at, setAt] = useState<string | null>(null);
   /** The thing just bought, while it hops. */
   const [hop, setHop] = useState<{ key: string; n: number } | null>(null);
   const root = useRef<HTMLDivElement>(null);
@@ -154,15 +160,34 @@ export function ShopShelf({ id, title, keeper, says, said, purse, shelves, notes
           <button className="small shelf-away" onClick={onDone} title="Put the shop away">{doneLabel}</button>
         </div>
 
+        {/* Many shelves: a tab for each along the top, to go straight to it. */}
+        {!loading && shelves.length > 3 && (
+          <nav className="shelf-jump" aria-label="Shelves">
+            {shelves.map((s) => (
+              <button
+                key={s.id}
+                className={`small ${at === s.id ? "selected" : ""}`}
+                onClick={() => {
+                  setAt(s.id);
+                  const el = cabinet.current?.querySelector<HTMLElement>(`[data-shelf="${s.id}"]`);
+                  if (el && cabinet.current) cabinet.current.scrollTo({ top: el.offsetTop - 4, behavior: "smooth" });
+                }}
+              >
+                {s.title}
+              </button>
+            ))}
+          </nav>
+        )}
+
         <div className="shelf-cabinet" ref={cabinet} tabIndex={-1} onScroll={() => setHover(null)} style={{ "--cols": cols } as CSSProperties}>
           {loading && <p className="shelf-loading">{loading}</p>}
           {!loading && shelves.map((s) => (
-            <section key={s.id} className="shelf">
+            <section key={s.id} className="shelf" data-shelf={s.id}>
               <h4 className="shelf-sign">
                 <span>{s.title}</span>
                 {s.sub && <small>{s.sub}</small>}
               </h4>
-              {s.wares.length === 0 ? <p className="shelf-bare">{s.empty ?? "Nothing on this shelf today."}</p> : (
+              {s.body ? <div className="shelf-body">{s.body}</div> : s.wares.length === 0 ? <p className="shelf-bare">{s.empty ?? "Nothing on this shelf today."}</p> : (
                 <ul className="shelf-row">
                   {s.wares.map((w) => (
                     <Slot
@@ -185,7 +210,8 @@ export function ShopShelf({ id, title, keeper, says, said, purse, shelves, notes
           {notes && <div className="shelf-notes">{notes}</div>}
         </div>
 
-        <Counter ware={pickedWare} hop={!!pickedWare && hop?.key === pickedWare.key} onAct={act} />
+        {/* (Nothing on any shelf, as with the galley's cook: no counter either.) */}
+        {(all.length > 0 || loading) && <Counter ware={pickedWare} hop={!!pickedWare && hop?.key === pickedWare.key} onAct={act} />}
 
         {hoverWare && hover && (
           <aside className={`shelf-card ${hover.left ? "left" : ""}`} style={{ top: hover.top, "--c": hoverWare.color ?? "#e3b757" } as CSSProperties} aria-hidden>
@@ -223,7 +249,7 @@ function Slot({ ware: w, order, picked, hop, onPick, onPoint, onLeave }: { ware:
       >
         <span className="ss-stage">
           <span className="ss-glow" aria-hidden />
-          <span className="ss-art" key={hop || undefined}>{w.art}</span>
+          <span className={`ss-art ${w.full ? "full" : ""}`} key={hop || undefined}>{w.art}</span>
           {hop > 0 && <span className="ss-burst" key={`b${hop}`} aria-hidden><i /><i /><i /><i /><i /><i /></span>}
           {w.corner && <span className="ss-corner">{w.corner}</span>}
           {w.stamp && <span className="ss-stamp">{w.stamp}</span>}
