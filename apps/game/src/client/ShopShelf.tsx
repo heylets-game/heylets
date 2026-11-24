@@ -257,7 +257,8 @@ function Slot({ ware: w, order, picked, hop, onPick, onPoint, onLeave }: { ware:
         <span className="ss-plank" aria-hidden />
         <span className="ss-hang">
           <span className="ss-tag">
-            <span className="ss-tag-name">{w.name}</span>
+            {/* (Two lines' room whatever the name, so every tag is the same height.) */}
+            <span className="ss-tag-name"><span>{w.name}</span></span>
             <span className="ss-tag-price">{w.tag}</span>
           </span>
           {w.seal && <span className="ss-seal">{w.seal}</span>}
