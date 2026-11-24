@@ -6,17 +6,18 @@
 //   (your hero)        who you are playing; Change hero lists the account's heroes and makes new ones
 //   Continue           back to your hero's world, when they have one
 //   Create world  ->   name it  ->  make a hero (if none yet)  ->  invite friends
-//   Join world    ->   your world, or an invite code  ->  make a hero (if none yet)
+//   Join world    ->   the account's worlds, or an invite code  ->  make a hero (if none yet)
 //   Settings           sound and display (the same as in the game menu)
 //   Log in / Account
 //
-// A world is a crew: one Harbor and its atlas, shared with whoever joins. For
-// now each hero is in one world at a time: the one they made or joined last.
+// A world is a crew: one Harbor and its atlas, shared with whoever joins. A
+// hero can belong to several worlds and is in one at a time: the one they went
+// into last. Joining another keeps their place in the others.
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { DEFAULT_APPEARANCE, parseAppearance } from "@gantt-quest/world";
 import { EmailSignIn } from "./Account";
-import { api, type HeroSlot, type Me } from "./api";
+import { api, type AccountWorld, type HeroSlot, type Me } from "./api";
 import { label } from "./labels";
 import { startingOutfit } from "./LookBuilder";
 import { spriteDataUrl } from "./render/sprites";
@@ -63,6 +64,29 @@ export function MainMenu({ me, refresh, invite, onContinue }: Props) {
   useEffect(() => {
     void loadHeroes();
   }, [loadHeroes, me.player.id, me.character?.status]);
+  // The account's worlds, for Join world: read again when the hero or the world they are in changes.
+  const [worlds, setWorlds] = useState<AccountWorld[] | null>(null);
+  const loadWorlds = useCallback(() => api.worlds().then((r) => setWorlds(r.worlds), () => setWorlds(null)), []);
+  useEffect(() => {
+    void loadWorlds();
+  }, [loadWorlds, me.player.id, me.crew?.id]);
+  /** Leave a world for good, after asking. */
+  const leaveWorld = async (w: AccountWorld) => {
+    const hero = me.character?.name ?? "Your hero";
+    if (!confirm(`Leave ${w.name}? ${hero} gives up their place there, and their hut too if it stands there. They can join again with its code.`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      location.hash = MAIN_MENU_HASH;
+      await api.leaveCrew(w.id);
+      await refresh();
+      await loadWorlds();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   /** Play another hero. The menu stays up: their world is one Continue away. */
   const choose = async (id: string) => {
@@ -213,7 +237,7 @@ export function MainMenu({ me, refresh, invite, onContinue }: Props) {
   } else if (view === "create") {
     body = <CreateWorld me={me} back={back} busy={busy} onHeroes={() => go("heroes")} onCreate={(name) => void start({ kind: "create", name })} />;
   } else if (view === "join") {
-    body = <JoinWorld me={me} back={back} busy={busy} invite={invite} ready={ready} onContinue={onContinue} onHeroes={() => go("heroes")} onJoin={(code) => void start({ kind: "join", code })} />;
+    body = <JoinWorld me={me} back={back} busy={busy} invite={invite} ready={ready} worlds={worlds} onHeroes={() => go("heroes")} onLeave={(w) => void leaveWorld(w)} onJoin={(code) => void start({ kind: "join", code })} />;
   } else if (view === "invite") {
     body = <InviteFriends me={me} />;
   } else if (view === "settings") {
@@ -314,7 +338,7 @@ function CreateWorld({ me, back, busy, onHeroes, onCreate }: { me: Me; back: Rea
         <span>World name</span>
         <input autoFocus value={name} maxLength={30} placeholder="The Salty Dogs" onChange={(e) => setName(e.target.value)} />
       </label>
-      {me.crew && <p className="muted small-print">{me.character?.name ?? "Your hero"} will leave {me.crew.name}, with what they carry. To keep them there, make the world with another hero.</p>}
+      {me.crew && <p className="muted small-print">{me.character?.name ?? "Your hero"} keeps their place in {me.crew.name} too.</p>}
       <button className="primary big" type="submit" disabled={busy || !ok}>
         {ready ? "Create world" : "Next: your hero"} <span aria-hidden>▸</span>
       </button>
@@ -322,27 +346,42 @@ function CreateWorld({ me, back, busy, onHeroes, onCreate }: { me: Me; back: Rea
   );
 }
 
-function JoinWorld({ me, back, busy, invite, ready, onContinue, onHeroes, onJoin }: { me: Me; back: ReactNode; busy: boolean; invite: string | null; ready: boolean; onContinue?(): void; onHeroes(): void; onJoin(code: string): void }) {
-  const [code, setCode] = useState(invite && invite !== me.crew?.id ? invite : "");
+function JoinWorld({ me, back, busy, invite, ready, worlds, onHeroes, onLeave, onJoin }: { me: Me; back: ReactNode; busy: boolean; invite: string | null; ready: boolean; worlds: AccountWorld[] | null; onHeroes(): void; onLeave(world: AccountWorld): void; onJoin(code: string): void }) {
+  const known = new Set((worlds ?? []).map((w) => w.id));
+  const [code, setCode] = useState(invite && !known.has(invite) && invite !== me.crew?.id ? invite : "");
+  const hero = me.character?.status === "active" ? me.character.name : null;
   return (
     <form className="mm-form" onSubmit={(e) => { e.preventDefault(); if (code.length === 6 && !busy) onJoin(code); }}>
       <header className="mm-sub-head">{back}<h2>Join world</h2></header>
       <AsHero me={me} onChange={onHeroes} />
-      {me.crew && (
-        <div className="mm-world">
-          <span className="mm-world-name">
-            <strong>{me.crew.name}</strong>
-            <span className="muted">Your world · code {me.crew.id}</span>
-          </span>
-          {onContinue && <button type="button" className="primary" onClick={onContinue}>Enter</button>}
+      {worlds && worlds.length > 0 && (
+        <div className="mm-worlds" role="list" aria-label="Your worlds">
+          {worlds.map((w) => {
+            const mine = w.heroes.some((h) => h.id === me.player.id);
+            const here = me.crew?.id === w.id;
+            return (
+              <div key={w.id} role="listitem" className={`mm-world ${here ? "here" : ""}`}>
+                <span className="mm-world-name">
+                  <strong>{w.name}</strong>
+                  <span className="muted">{w.heroes.length > 0 ? w.heroes.map((h) => h.name).join(", ") : "None of your heroes yet"} · {w.members} {w.members === 1 ? "member" : "members"} · code {w.id}</span>
+                </span>
+                <span className="mm-world-actions">
+                  <button type="button" className={mine ? "primary" : undefined} disabled={busy} onClick={() => onJoin(w.id)}>
+                    {mine ? "Enter" : hero ? `Join as ${hero}` : "Join"}
+                  </button>
+                  {mine && <button type="button" className="link" disabled={busy} onClick={() => onLeave(w)}>Leave</button>}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
       <label className="field">
-        <span>{me.crew ? "Join another with its invite code" : "Invite code"}</span>
-        <input autoFocus={!me.crew} className="mm-code" value={code} maxLength={6} placeholder="ABCDEF" autoCapitalize="characters" onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z]/g, ""))} />
+        <span>{worlds && worlds.length > 0 ? "Or join another with its invite code" : "Invite code"}</span>
+        <input autoFocus={!worlds?.length} className="mm-code" value={code} maxLength={6} placeholder="ABCDEF" autoCapitalize="characters" onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z]/g, ""))} />
       </label>
       <p className="muted small-print">
-        {me.crew ? `Joining another world takes ${me.character?.name ?? "your hero"} out of ${me.crew.name}, with what they carry. To keep them there, join with another hero.` : "Ask a friend for their world's six-letter code, or open the invite link they sent."}
+        {me.crew ? `${hero ?? "Your hero"} keeps their place in their other worlds.` : "Ask a friend for their world's six-letter code, or open the invite link they sent."}
       </p>
       <button className="primary big" type="submit" disabled={busy || code.length !== 6}>
         {ready ? "Join world" : "Next: your hero"} <span aria-hidden>▸</span>

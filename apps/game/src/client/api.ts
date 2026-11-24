@@ -131,6 +131,15 @@ export interface Me {
 
 export type { StatKey };
 
+/** A world one of the account's heroes belongs to, as Join world lists them (server/db/crews.ts). */
+export interface AccountWorld {
+  id: string;
+  name: string;
+  /** Which of the account's heroes are in it. */
+  heroes: { id: string; name: string }[];
+  members: number;
+}
+
 /** One of the account's heroes, as the main menu lists them (server/routes/heroes.ts). */
 export interface HeroSlot {
   id: string;
@@ -218,7 +227,10 @@ export const api = {
   newHero: () => request<{ id: string }>("/api/heroes/new", {}),
   createCrew: (name: string) => request("/api/crew", { name }),
   joinCrew: (code: string) => request("/api/crew/join", { code }),
-  leaveCrew: () => request("/api/crew/leave", {}),
+  /** Leave a world for good: the one named, or else the one the hero is in. */
+  leaveCrew: (code?: string) => request("/api/crew/leave", code ? { code } : {}),
+  /** Every world the account's heroes belong to, the most recently joined first, with which heroes are in each. */
+  worlds: () => request<{ worlds: AccountWorld[] }>("/api/worlds"),
   gather: () => request<GatherStatus & { sitting?: SittingPaid }>("/api/gather"),
   /** Kept fish: the icebox and the trophy chest, with today's prices. */
   fish: () => request<FishStock>("/api/fish"),

@@ -7,7 +7,7 @@
 import type { Context } from "hono";
 import { setCookie } from "hono/cookie";
 import { MAX_HEROES, heroCookieName } from "../auth";
-import { now } from "../db/rows";
+import { currentCrewSql, now } from "../db/rows";
 import type { AppEnv, GameApp } from "./shared";
 
 /** A hero as the menu lists it. */
@@ -18,7 +18,7 @@ export interface HeroSlot {
   level: number;
   /** JSON Appearance, or null. */
   appearance: string | null;
-  /** The world (crew) they are in, if any. */
+  /** The world (crew) they are in now, if any. */
   crew: { id: string; name: string } | null;
 }
 
@@ -36,8 +36,7 @@ export function heroRoutes(app: GameApp): void {
       `SELECT p.id, ch.name, ch.class_id AS classId, ch.level, ch.appearance, cr.id AS crewId, cr.name AS crewName
          FROM players p
          JOIN characters ch ON ch.player_id = p.id AND ch.status = 'active'
-         LEFT JOIN crew_members m ON m.player_id = p.id
-         LEFT JOIN crews cr ON cr.id = m.crew_id
+         LEFT JOIN crews cr ON cr.id = ${currentCrewSql("p.id")}
         WHERE p.user_id = ?
         ORDER BY p.last_played_at DESC, p.created_at, p.id`,
     )
