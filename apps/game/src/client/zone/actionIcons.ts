@@ -142,11 +142,11 @@ export const STONE_ICON = (carries: number): ActionIcon => ({ name: "item-lodest
 
 export const ITEM_ICON: Record<Throwable, ActionIcon> = {
   healing: { name: "item-flask", color: "#e0453a" },
-  poison: { name: "item-flask", color: "#84cc16" },
+  poison: { name: "item-poison", color: "#84cc16" },
   fire: { name: "item-bomb", color: "#ff5a2a" },
   oil: { name: "item-flask", color: "#57534e" },
   water: { name: "item-waterskin", color: "#38bdf8" },
-  acid: { name: "item-flask", color: "#bef264" },
+  acid: { name: "item-acid", color: "#e8dc2c" },
   slime: { name: "item-flask", color: "#4d7c0f" },
   torch: { name: "item-torch", color: "#ffb070" },
 };

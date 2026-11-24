@@ -448,7 +448,8 @@ export const ENEMIES: Record<string, EnemyDef> = {
       { name: "Bone Rattle", rolls: 2, pct: 45, damage: 4, target: "hero", perfect: { effect: "stunned", turns: 1 }, weight: 1 },
     ],
   },
-  // A cave slime: very slow and very tough, and its acid leaves its prey exposed (taking more from every hit).
+  // A cave slime: very slow and very tough, and its acid leaves its prey exposed (taking more from every hit). The acid
+  // burns and is spent: it leaves no poison lying about (kit.ts).
   slime: {
     kind: "slime", name: "Cave Slime", hp: 20, speed: 25, xp: 13,
     attacks: [
