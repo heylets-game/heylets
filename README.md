@@ -119,7 +119,7 @@ npx wrangler deploy                                           # 3. deploy what w
 - **Migrations first.** Apply them, and check they're recorded (`SELECT name FROM d1_migrations ORDER BY id DESC LIMIT 1`), before deploying, so new code never runs against an old schema. Migrations can't be rolled back; deploys can (`wrangler rollback`).
 - **Build every time.** `wrangler deploy` ships whatever the last build produced, for whichever environment it was built for.
 - **Production:** use `--env production` and `CLOUDFLARE_ENV=production`. The full checklist (secrets, the first deploy, smoke test, rollback) is [`docs/game-production-checklist.md`](docs/game-production-checklist.md).
-- **Secrets:** `ADMIN_EMAILS` is a Worker secret per environment: `npx wrangler secret put ADMIN_EMAILS --env staging`.
+- **Secrets:** `BETTER_AUTH_SECRET` (signs login cookies; required) and `ADMIN_EMAILS` are Worker secrets per environment: `npx wrangler secret put BETTER_AUTH_SECRET --env staging`.
 
 ### Branches and shipping a change
 

@@ -27,7 +27,7 @@ import {
 } from "@gantt-quest/world";
 import { api, type Me, type StatKey } from "./api";
 import { CatchBookPanel } from "./CatchBook";
-import { useAct } from "./Harbor";
+import { useAct } from "./useAct";
 import { toOwned } from "./items";
 import { blurb, label } from "./labels";
 import { spriteDataUrl, withLook } from "./render/sprites";

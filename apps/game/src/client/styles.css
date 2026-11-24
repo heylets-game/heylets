@@ -458,6 +458,8 @@ body.drag-carrying, body.drag-carrying * { cursor: grabbing !important; }
 .overlay .panel.account { max-width: 460px; display: flex; flex-direction: column; gap: 8px; }
 .signin { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .signin .field { width: 100%; max-width: 320px; margin: 0; }
+.signin .field small { display: block; margin-top: 2px; }
+.signin-modes { gap: 6px; }
 .code-input { font-size: 22px; letter-spacing: 0.35em; width: 9em; text-align: center; }
 .small-print { font-size: 12px; }
 .signed-in { margin-top: 16px; }
