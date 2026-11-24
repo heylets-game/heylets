@@ -235,7 +235,7 @@ function rollOff(ctx: Ctx, enc: Encounter, unit: Unit): void {
 function enter(ctx: Ctx, enc: Encounter, unit: Unit): void {
   if (enc.order.includes(unit.id)) return;
   if (enc.init[unit.id] === undefined) {
-    const bonus = unit.side === "hero" ? mod(statOf(unit, "agi")) : Math.round(((ENEMIES[unit.kind]?.speed ?? 50) - 50) / 15);
+    const bonus = unit.side === "hero" ? mod(statOf(unit, "agi")) : (ENEMIES[unit.kind]?.init ?? 0);
     const roll = d20(ctx.rng, { kind: "initiative", id: unit.id, label: "Initiative", bonus, vs: 0, adv: 0 });
     ctx.events.push({ t: "roll", roll });
     enc.init[unit.id] = roll.total;

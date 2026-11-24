@@ -14,8 +14,8 @@ describe("the bear", () => {
     expect(bear.boss).toBeFalsy();
     expect(bear.hp).toBeGreaterThan(brute.hp);
     expect(bear.hp).toBeGreaterThan(wolf.hp * 2);
-    expect(bear.speed).toBeLessThan(wolf.speed);
-    expect(bear.speed).toBeLessThanOrEqual(brute.speed);
+    expect(bear.move).toBeLessThan(wolf.move);
+    expect(bear.init).toBeLessThanOrEqual(brute.init);
     const hardest = Math.max(...attacksOf(bear).map((a) => a.damage));
     expect(hardest).toBeGreaterThan(Math.max(...attacksOf(wolf).map((a) => a.damage)));
     // Its heavy blow makes them bleed; only its roar stuns.
@@ -28,7 +28,7 @@ describe("the bear", () => {
     const big = ENEMIES.great_bear;
     expect(big.boss).toBe(true);
     expect(big.hp).toBeGreaterThan(ENEMIES.bear.hp);
-    expect(big.speed).toBeLessThan(ENEMIES.alpha.speed);
+    expect(big.move).toBeLessThan(ENEMIES.alpha.move);
     expect(attacksOf(big).some((a) => a.shape === "burst" && a.perfect?.effect === "stunned")).toBe(true);
   });
 
@@ -47,7 +47,7 @@ describe("the ogre", () => {
     const { ogre, bear, brute } = ENEMIES;
     expect(ogre.boss).toBeFalsy();
     expect(ogre.hp).toBeGreaterThan(bear.hp);
-    expect(ogre.speed).toBeLessThan(bear.speed);
+    expect(ogre.init).toBeLessThan(bear.init);
     const rank = Object.values(ENEMIES).filter((e) => !e.boss && e.kind !== "dummy");
     expect(Math.max(...attacksOf(ogre).map((a) => a.damage))).toBe(Math.max(...rank.flatMap((e) => attacksOf(e).map((a) => a.damage))));
     expect(attacksOf(ogre).find((a) => a.name === "Club Smash")?.perfect?.effect).toBe("stunned");

@@ -805,15 +805,17 @@ export const enemyStrikes = (kind: string, level: number, more = 0): EnemyStrike
 export const unitStrikes = (state: Pick<ZoneState, "options">, unit: Unit): EnemyStrike[] =>
   abilityStrikes(unit.abilities, unit.level, modsOf(state.options).edge).filter((s) => !(unit.cooldowns[s.id] > 0));
 
-/** The quick are hard to hit: 10, one more for every 30 of speed, one more for a boss. */
-export const enemyDefence = (kind: string): number => 10 + Math.floor((ENEMIES[kind]?.speed ?? 0) / 30) + (ENEMIES[kind]?.boss ? 1 : 0);
+/** What a hero's attack has to roll to hit this kind, as its entry sets it. */
+export const enemyDefence = (kind: string): number => ENEMIES[kind]?.defence ?? 10;
 
 /**
- * Steps 1 AP buys an enemy, and `more` for what the map's modifiers add: 2 for most of what goes on foot, as for an
- * ordinary hero (rules.ts heroMove), and 3 for the quick (a speed of 63 or more: wolves, hounds, spiders, archers,
- * shades, bats). Never more than 3 before `more`. A training dummy stays put.
+ * Steps 1 AP buys an enemy, as its entry sets it, and `more` for what the map's modifiers add. One whose entry says 0
+ * (a training dummy) stays put whatever the map says.
  */
-export const enemyMove = (kind: string, more = 0): number => (kind === "dummy" ? 0 : Math.max(1, Math.floor(Math.max(3, Math.min(7, 3 + Math.round((ENEMIES[kind]?.speed ?? 0) / 25))) / 2)) + more);
+export const enemyMove = (kind: string, more = 0): number => {
+  const move = ENEMIES[kind]?.move ?? 2;
+  return move > 0 ? move + more : 0;
+};
 
 /**
  * The most AP an enemy puts into movement in one turn, whether or not it also strikes: two strides, so 4 hexes of open
