@@ -2771,7 +2771,7 @@ export class SpellFx {
         fumed = 0.12;
         const a = Math.random() * Math.PI * 2;
         const d = Math.sqrt(Math.random()) * radius * 0.8;
-        this.smoke(ground.clone().add(new THREE.Vector3(Math.cos(a) * d, 0.1, Math.sin(a) * d)), "#eef5c8", rand(0.6, 1), 0.5);
+        this.smoke(ground.clone().add(new THREE.Vector3(Math.cos(a) * d, 0.1, Math.sin(a) * d)), "#f5f0c8", rand(0.6, 1), 0.5);
       }
       return age < life;
     });

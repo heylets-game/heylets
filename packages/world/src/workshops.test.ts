@@ -69,7 +69,7 @@ describe("brewing for the pack", () => {
     expect(Object.keys(FLASK_RECIPES).sort()).toEqual([...THROWABLE_KINDS].sort());
     expect(FLASK_RECIPES).toEqual({
       healing: { herbs: 3 },
-      poison: { slime: 1, mushrooms: 1 },
+      poison: { mushrooms: 2 },
       fire: { wood: 2, copper: 1 },
       oil: { bone: 2 },
       water: { fur: 1 },
@@ -79,9 +79,9 @@ describe("brewing for the pack", () => {
     });
   });
 
-  it("takes cave slime for the poison, acid and slime flasks", () => {
-    expect(flaskProblem("poison", { built: true, resources: { mushrooms: 3 }, carried: {}, carry: room })).toMatch(/1 slime, 1 mushrooms/);
-    expect(flaskProblem("poison", { built: true, resources: { slime: 1, mushrooms: 1 }, carried: {}, carry: room })).toBeNull();
+  it("brews poison from toadstools, and takes cave slime for the acid and slime flasks", () => {
+    expect(flaskProblem("poison", { built: true, resources: { slime: 3, mushrooms: 1 }, carried: {}, carry: room })).toMatch(/2 mushrooms/);
+    expect(flaskProblem("poison", { built: true, resources: { mushrooms: 2 }, carried: {}, carry: room })).toBeNull();
     expect(flaskProblem("acid", { built: true, resources: { slime: 2, bone: 1 }, carried: {}, carry: room })).toBeNull();
     expect(flaskProblem("slime", { built: true, resources: { slime: 1 }, carried: {}, carry: room })).toMatch(/2 slime/);
   });

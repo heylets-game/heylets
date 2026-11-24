@@ -845,6 +845,32 @@ export const ACTION_ART: Record<string, Art> = {
     spans(p, p.accent, [[8, 5, 10], [9, 5, 10], [10, 5, 10], [11, 6, 9]]);
     p.r(5, 6, 1, 2, C.shine);
   },
+  // Poison: a round-bellied flask with a skull on it, and a wisp of fumes off the cork. (Acid is the tall vial below.)
+  "item-poison": (p) => {
+    p.r(7, 2, 2, 1, C.bark);
+    p.r(7, 3, 2, 2, K.glass);
+    spans(p, K.glass, [[5, 5, 10], [6, 4, 11], [7, 3, 12], [8, 3, 12], [9, 3, 12], [10, 3, 12], [11, 4, 11], [12, 5, 10]]);
+    spans(p, p.accent, [[7, 4, 11], [8, 4, 11], [9, 4, 11], [10, 4, 11], [11, 5, 10]]);
+    spans(p, C.bone, [[7, 6, 9], [8, 5, 10], [9, 6, 9], [10, 6, 6], [10, 9, 9]]);
+    p.r(6, 8, 1, 1, C.dark);
+    p.r(9, 8, 1, 1, C.dark);
+    p.r(4, 6, 1, 2, C.shine);
+    p.r(9, 1, 1, 1, p.accent);
+    p.r(10, 0, 1, 1, p.accent);
+  },
+  // Acid: a tall, narrow vial, bubbling, with a drop running down its side and eating a hole where it lands.
+  "item-acid": (p) => {
+    p.r(6, 0, 3, 1, C.bark);
+    spans(p, K.glass, [[1, 6, 8], [2, 6, 8], [3, 5, 9], [4, 5, 9], [5, 5, 9], [6, 5, 9], [7, 5, 9], [8, 5, 9], [9, 5, 9], [10, 5, 9], [11, 5, 9], [12, 6, 8]]);
+    spans(p, p.accent, [[6, 6, 8], [7, 6, 8], [8, 6, 8], [9, 6, 8], [10, 6, 8], [11, 6, 8]]);
+    p.r(7, 4, 1, 1, p.accent);
+    p.r(6, 5, 1, 1, C.shine);
+    p.r(8, 7, 1, 1, C.shine);
+    p.r(10, 9, 1, 3, p.accent);
+    p.r(10, 13, 1, 1, p.accent);
+    spans(p, C.dark, [[15, 8, 12]]);
+    spans(p, p.accent, [[14, 8, 8], [14, 12, 12]]);
+  },
   "item-bomb": (p) => {
     spans(p, C.dark, [[6, 6, 10], [7, 5, 11], [8, 4, 12], [9, 4, 12], [10, 4, 12], [11, 5, 11], [12, 6, 10]]);
     p.r(6, 8, 2, 1, C.iron);

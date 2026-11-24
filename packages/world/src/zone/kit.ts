@@ -615,11 +615,11 @@ export interface ThrowableDef {
 
 export const THROWABLES: Record<Throwable, ThrowableDef> = {
   healing: { name: "Healing potion", blurb: "Drink it, or throw it: it heals whoever it lands on, and half as much everyone on the six hexes around.", radius: 1, heal: POTION_DICE, drink: true },
-  poison: { name: "Poison flask", blurb: "Brewed with cave slime: leaves poison on the ground for 4 rounds.", radius: 1, surface: { kind: "poison", rounds: 4 } },
+  poison: { name: "Poison flask", blurb: "Toadstool venom: leaves a pool of poison for 4 rounds that hurts and Poisons whoever stands in it. Fire sets it off.", radius: 1, surface: { kind: "poison", rounds: 4 } },
   fire: { name: "Fire bomb", blurb: "Bursts into flame: damage to everyone near, and fire left burning for 2 rounds.", radius: 1, damage: { n: 2, d: 6, plus: 0 }, surface: { kind: "fire", rounds: 2 } },
   oil: { name: "Oil flask", blurb: "Slick ground that slows whoever crosses it, and goes up at a spark.", radius: 1, surface: { kind: "oil", rounds: 4 } },
   water: { name: "Water skin", blurb: "Douses fire and leaves the ground wet for 3 rounds.", radius: 1, surface: { kind: "water", rounds: 3 } },
-  acid: { name: "Acid flask", blurb: "Splashes slime acid: a little damage to everyone near, and leaves them Exposed for 2 rounds unless they dodge it.", radius: 1, damage: { n: 1, d: 6, plus: 0 }, condition: { kind: "exposed", rounds: 2 } },
+  acid: { name: "Acid flask", blurb: "Slime acid that burns on contact and is gone: a little damage to everyone near, and leaves them Exposed for 2 rounds unless they dodge it. No pool is left behind.", radius: 1, damage: { n: 1, d: 6, plus: 0 }, condition: { kind: "exposed", rounds: 2 } },
   slime: { name: "Slime flask", blurb: "Leaves a sticky slick for 3 rounds: it costs a step more to cross and slows whoever walks into it.", radius: 1, surface: { kind: "slime", rounds: 3 } },
   torch: { name: "Torch", blurb: "Light it to hold in your off hand (1 AP) and see in the dark, with your shield set aside. Thrown, it lies burning where it lands, and sets oil alight.", radius: 0, light: true },
 };
@@ -705,7 +705,8 @@ export const ENEMY_KIT: Record<string, EnemyKit> = {
   shade: { attacks: { "Chill Touch": { chills: true } } },
   bat: { fly: true },
   skeleton: { shoves: true },
-  slime: { attacks: { "Acid Splash": { range: 3, surface: { kind: "poison", rounds: 2 } } } },
+  // Its acid eats into whoever it hits and is spent: it leaves no pool behind (that is poison's way).
+  slime: { attacks: { "Acid Splash": { range: 3 } } },
   haunt: {},
   villain: { shoves: true },
   spider: { pack: true, attacks: { "Venomous Bite": { surface: { kind: "poison", rounds: 2 } }, "Web Spit": { range: 4, surface: { kind: "slime", rounds: 2 } } } },

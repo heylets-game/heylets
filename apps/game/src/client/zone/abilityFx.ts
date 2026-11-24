@@ -251,7 +251,7 @@ const ENEMY_FX: Record<string, Fx> = {
   "Barbed Arrow": fx("arrow", "#e8dcc0"),
   "Dark Bolt": fx("bolt", "#a78bfa"),
   Immolate: fx("bolt", "#ff7a2a"),
-  "Acid Splash": fx("bolt", "#84cc16"),
+  "Acid Splash": fx("bolt", "#f0e44a"),
 };
 
 /** How a hero's ability (by id) or an enemy's attack (by name) looks. `burst` says an enemy attack was on every hero at once. */
@@ -261,7 +261,7 @@ export function fxFor(what: string, burst = false): Fx {
 }
 
 /** The colour of each thing thrown, in the air and where it breaks. */
-export const THROW_COLOR: Record<Throwable, string> = { healing: "#ff6b6b", poison: "#84cc16", fire: "#ff7a2a", oil: "#8a7f6a", water: "#38bdf8", acid: "#d9f99d", slime: "#65a30d", torch: "#ffb070" };
+export const THROW_COLOR: Record<Throwable, string> = { healing: "#ff6b6b", poison: "#84cc16", fire: "#ff7a2a", oil: "#8a7f6a", water: "#38bdf8", acid: "#f0e44a", slime: "#65a30d", torch: "#ffb070" };
 
 /** How high a shot or a spell arcs when it is aimed, as SpellFx flies it. */
 export const aimKind = (what: string): "arrow" | "spell" => (["arrow", "pike", "hook", "harpoon"].includes(fxFor(what).kind) ? "arrow" : "spell");
