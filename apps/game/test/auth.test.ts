@@ -8,6 +8,7 @@ import { DatabaseSync } from "node:sqlite";
 import { Hono } from "hono";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Env } from "../src/server/db";
+import { heroRoutes } from "../src/server/routes/heroes";
 import { signInRoutes, signedInOnly } from "../src/server/routes/session";
 import type { AppEnv } from "../src/server/routes/shared";
 import { openDb, Stmt } from "./d1";
@@ -19,6 +20,7 @@ function appFor(db: D1Database) {
   signInRoutes(app);
   signedInOnly(app);
   app.get("/api/whoami", (c) => c.json(c.get("player")));
+  heroRoutes(app);
   const env = { DB: db } as Env;
 
   // One browser: keeps the cookies it is given and sends them back.
@@ -115,6 +117,76 @@ describe("logins", () => {
     expect((await browser.call("/api/auth/email-otp/reset-password", { email: "forgetful@example.com", otp: code, password: "second password" })).status).toBe(200);
     expect((await browser.call("/api/auth/sign-in/email", { email: "forgetful@example.com", password: "second password" })).status).toBe(200);
     expect((await browser.whoami()).id).toBe(player.id);
+  });
+});
+
+/** A finished hero for a player row, as character creation leaves one. */
+function giveHero(sql: DatabaseSync, playerId: string, name: string) {
+  sql.prepare("INSERT INTO characters (player_id, name, class_id, status, level, str, int_stat, vit, agi, dex, gold, created_at) VALUES (?, ?, 'qa_paladin', 'active', 1, 5, 5, 5, 5, 5, 0, 0)").run(playerId, name);
+}
+
+describe("several heroes to an account", () => {
+  it("makes a new hero, switches between them, and a second device takes the last played", async () => {
+    const { db, sql } = openDb();
+    const desk = appFor(db);
+    await desk.call("/api/auth/sign-up/email", { email: "many@example.com", password: "a long password", name: "many" });
+    const first = await desk.whoami();
+    giveHero(sql, first.id, "First");
+
+    const made = await desk.call("/api/heroes/new", {});
+    expect(made.status).toBe(200);
+    const second = await desk.whoami();
+    expect(second.id).toBe(made.data.id);
+    expect(second.id).not.toBe(first.id);
+    // A slot with no hero yet is used again, not doubled.
+    expect((await desk.call("/api/heroes/new", {})).data.id).toBe(second.id);
+    giveHero(sql, second.id, "Second");
+
+    const list = (await desk.call("/api/heroes")).data as { heroes: { id: string; name: string }[]; max: number };
+    expect(list.heroes.map((h) => h.name).sort()).toEqual(["First", "Second"]);
+
+    expect((await desk.call("/api/heroes/choose", { id: first.id })).status).toBe(200);
+    expect((await desk.whoami()).id).toBe(first.id);
+
+    // Another device has no hero cookie: it plays whichever was played last.
+    const phone = appFor(db);
+    await phone.call("/api/auth/sign-in/email", { email: "many@example.com", password: "a long password" });
+    expect((await phone.whoami()).id).toBe(first.id);
+  });
+
+  it("refuses someone else's hero, and a seventh", async () => {
+    const { db, sql } = openDb();
+    const other = appFor(db);
+    await other.call("/api/auth/sign-up/email", { email: "other@example.com", password: "a long password", name: "other" });
+    const theirs = await other.whoami();
+
+    const me = appFor(db);
+    await me.call("/api/auth/sign-up/email", { email: "me@example.com", password: "a long password", name: "me" });
+    expect((await me.call("/api/heroes/choose", { id: theirs.id })).status).toBe(404);
+
+    giveHero(sql, (await me.whoami()).id, "Hero 1");
+    for (let i = 2; i <= 6; i++) {
+      const slot = await me.call("/api/heroes/new", {});
+      expect(slot.status).toBe(200);
+      giveHero(sql, slot.data.id as string, `Hero ${i}`);
+    }
+    expect((await me.call("/api/heroes/new", {})).status).toBe(409);
+  });
+
+  it("brings a guest's hero into the account they log in to, and keeps playing it", async () => {
+    const { db, sql } = openDb();
+    const owner = appFor(db);
+    await owner.call("/api/auth/sign-up/email", { email: "owner2@example.com", password: "a long password", name: "owner" });
+    giveHero(sql, (await owner.whoami()).id, "Owner's");
+
+    const browser = appFor(db);
+    const guest = await browser.visit();
+    giveHero(sql, guest.id, "Guest's");
+    expect((await browser.call("/api/auth/sign-in/email", { email: "owner2@example.com", password: "a long password" })).status).toBe(200);
+    // The guest's hero was played most recently, so it is the one still being played.
+    expect((await browser.whoami()).id).toBe(guest.id);
+    const names = ((await browser.call("/api/heroes")).data as { heroes: { name: string }[] }).heroes.map((h) => h.name).sort();
+    expect(names).toEqual(["Guest's", "Owner's"]);
   });
 });
 

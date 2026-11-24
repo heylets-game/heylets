@@ -97,10 +97,18 @@ export function createAuth(env: Env, req: Request) {
     plugins: [
       anonymous({
         generateName: () => "Guest",
-        // A guest signing up keeps their character; signing in to an account that already has one leaves the guest's behind.
+        // A guest's heroes come with them: into a new account, or into one they log in to beside its own heroes. (An
+        // empty slot, a guest who never made a hero, is only brought into an account that has nothing yet.)
         async onLinkAccount({ anonymousUser, newUser }) {
           const has = await db.prepare("SELECT 1 FROM players WHERE user_id = ?").bind(newUser.user.id).first();
-          if (!has) await db.prepare("UPDATE players SET user_id = ? WHERE user_id = ?").bind(newUser.user.id, anonymousUser.user.id).run();
+          await db
+            .prepare(
+              has
+                ? "UPDATE players SET user_id = ?1 WHERE user_id = ?2 AND EXISTS (SELECT 1 FROM characters c WHERE c.player_id = players.id AND c.status = 'active')"
+                : "UPDATE players SET user_id = ?1 WHERE user_id = ?2",
+            )
+            .bind(newUser.user.id, anonymousUser.user.id)
+            .run();
         },
       }),
       emailOTP({
@@ -119,20 +127,36 @@ export function createAuth(env: Env, req: Request) {
   });
 }
 
-/** The player behind a request's session, made on first use for a new account. Null if not signed in. */
+/** Heroes an account may have. */
+export const MAX_HEROES = 6;
+
+/** The cookie that says which of the account's heroes this device is playing (beside Better Auth's, by profile). */
+export function heroCookieName(req: Request): string {
+  const profile = profileOf(req);
+  return `${profile ? `gq${profile}` : "gq"}.hero`;
+}
+
+/**
+ * The hero behind a request's session: the one this device chose (its hero cookie), if it is the account's; else the
+ * account's most recently played. A new account's first hero slot is made on first use. Null if not signed in.
+ */
 export async function playerForRequest(env: Env, req: Request): Promise<Player | null> {
   const found = await createAuth(env, req).api.getSession({ headers: req.headers });
   if (!found) return null;
   const { user } = found;
   const email = (user as { isAnonymous?: boolean | null }).isAnonymous ? null : user.email;
-  const find = () => env.DB.prepare("SELECT id, name FROM players WHERE user_id = ? ORDER BY created_at, id LIMIT 1").bind(user.id).first<{ id: string; name: string }>();
+  const chosen = readCookie(req, heroCookieName(req)) ?? "";
+  const find = () =>
+    env.DB.prepare("SELECT id, name FROM players WHERE user_id = ?1 ORDER BY id = ?2 DESC, last_played_at DESC, created_at, id LIMIT 1")
+      .bind(user.id, chosen)
+      .first<{ id: string; name: string }>();
   let row = await find();
   if (!row) {
     // Two first requests at once must not make two players: only insert while there is none.
-    await env.DB.prepare("INSERT INTO players (id, name, created_at, user_id) SELECT ?1, ?2, ?3, ?4 WHERE NOT EXISTS (SELECT 1 FROM players WHERE user_id = ?4)")
+    await env.DB.prepare("INSERT INTO players (id, name, created_at, last_played_at, user_id) SELECT ?1, ?2, ?3, ?3, ?4 WHERE NOT EXISTS (SELECT 1 FROM players WHERE user_id = ?4)")
       .bind(crypto.randomUUID(), email ? "Sailor" : "Guest", now(), user.id)
       .run();
     row = await find();
   }
-  return row ? { ...row, email } : null;
+  return row ? { ...row, email, userId: user.id } : null;
 }

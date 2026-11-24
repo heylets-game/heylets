@@ -170,7 +170,7 @@ export function EmailSignIn({ onDone, hasCharacter }: FormProps) {
       </div>
       {hasCharacter && mode !== "signup" && (
         <p className="muted small-print">
-          Logging in to an account that already has a character leaves this guest character behind. To keep it, make a new account instead.
+          Logging in brings this hero into your account, beside any heroes you already have there.
         </p>
       )}
     </div>

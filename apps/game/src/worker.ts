@@ -18,6 +18,7 @@ import { crewRoutes } from "./server/routes/crew";
 import { devRoutes } from "./server/routes/dev";
 import { fishRoutes } from "./server/routes/fish";
 import { gatherRoutes } from "./server/routes/gather";
+import { heroRoutes } from "./server/routes/heroes";
 import { hutRoutes } from "./server/routes/huts";
 import { keeperRoutes } from "./server/routes/keepers";
 import { lapidaryRoutes } from "./server/routes/lapidary";
@@ -47,6 +48,7 @@ versionRoutes(app);
 signedInOnly(app);
 
 meRoutes(app);
+heroRoutes(app);
 // Brings its own check: only on a development deployment.
 devRoutes(app);
 // Brings its own check for /api/admin: admins only.

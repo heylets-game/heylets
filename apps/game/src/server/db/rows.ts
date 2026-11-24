@@ -36,6 +36,8 @@ export interface Player {
   name: string;
   /** Null for a guest: the account exists only in this browser's cookie. */
   email: string | null;
+  /** The account (Better Auth user) this hero belongs to. Absent where a player is made up without one (tests, rooms). */
+  userId?: string;
 }
 
 export interface CharacterRow {
