@@ -16,7 +16,7 @@ import "./camera.css";
 import { PINCH_PAN_SLACK, followIconSvg, readFollow, writeFollow } from "./cameraFollow";
 import type { HexPos } from "@gantt-quest/core";
 import { hexDistance } from "@gantt-quest/core";
-import { lookStep, lookYaw, BASE_HEIGHT, HARBOR_HEART_AT, BIG_REACH, ENEMIES, HEX_DIRS, SEATS, tileCost, WALL_FACE_HALF, WALL_ITEM_BOTTOM, WALL_ITEM_TOP, hexAt, xpProgress, reachable, tileAt, wallFace, wallFaces, type Biome, type Clime, type Emote, type Outfit, type Poi, type Tile, type WorldMap, type FloorLook, type WallLook } from "@gantt-quest/world";
+import { lookStep, lookYaw, BASE_HEIGHT, HARBOR_HEART_AT, BIG_REACH, ENEMIES, HEX_DIRS, SEATS, tileCost, WALL_FACE_HALF, WALL_ITEM_BOTTOM, WALL_ITEM_TOP, hexAt, reachable, tileAt, wallFace, wallFaces, type Biome, type Clime, type Emote, type Outfit, type Poi, type Tile, type WorldMap, type FloorLook, type WallLook } from "@gantt-quest/world";
 import { fancy, fancyGrass, inkLine } from "./fancy";
 import { NightLife } from "./nightlife";
 import { Storm } from "./storm";
@@ -62,7 +62,7 @@ import { SQRT3, UP, hexToWorld, placeOf, yawOf } from "./places/placing";
 import { nearWater, openEar, sounds } from "../audio/gameSounds";
 import type { AttackStyle, Fighter } from "../audio/names";
 import { PUFFS, footfalls, stepGround, worldToHex, type PuffLook } from "./footsteps";
-import { badgeTexture, badgesKey, bubbleTexture, fxTexture, labelTexture, lookFor, plateKey, sleepZTexture, spriteKey, textTexture, type Badge, type FxKind, type PlateStats } from "./sprites";
+import { badgeTexture, badgesKey, bubbleTexture, fxTexture, labelTexture, lookFor, plateFontsReady, plateKey, sleepZTexture, spriteKey, textTexture, type Badge, type FxKind, type PlateStats, type PlateTone } from "./sprites";
 
 /** What `setGlow` lights: a place by id, a waygate by its hex, or a prop by id. */
 type GlowTarget = string | HexPos | { prop: string | number } | null;
@@ -140,8 +140,6 @@ export interface RenderState {
   walls?: WallDressing | FinishWalls;
   /** What a room's floor is laid with: boards (the default), flagstones (the smithy), or a hut's own finish from Nell's stall. Changing it relays the floor. */
   floor?: FloorDressing;
-  /** Your gathering outings, shown as lightning bolts on your own plate. */
-  stamina?: { left: number; max: number };
   /** A piece being carried: a ghost of it follows the pointer, and a click sets it down (RendererCallbacks.onPlace). */
   holding?: Holding | null;
   /**
@@ -259,12 +257,15 @@ export function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] || name;
 }
 
-/** A hero's plate stats, or nothing for someone who is not a player's hero. */
+/**
+ * A hero's plate stats, or nothing for someone who is not a player's hero. Their HP (and any shield) only where
+ * it is kept, on a zone's map: anywhere else everyone is whole, and a full bar over every head would only clutter.
+ */
 export function plateOf(h: RenderHero): PlateStats | undefined {
   if (h.level === undefined) return undefined;
-  const hp = h.hp !== undefined && h.maxHp ? h.hp / h.maxHp : 1;
-  const shield = h.shield && h.maxHp ? h.shield / h.maxHp : 0;
-  return { level: h.level, hp, xp: xpProgress(h.level, h.xp ?? 0), ...(shield > 0 ? { shield } : {}) };
+  if (h.hp === undefined || !h.maxHp) return { level: h.level };
+  const shield = h.shield ? h.shield / h.maxHp : 0;
+  return { level: h.level, hp: h.hp / h.maxHp, ...(shield > 0 ? { shield, shieldPoints: h.shield } : {}) };
 }
 
 export interface SceneProp {
@@ -628,8 +629,26 @@ interface Unit {
   shadowTurn: number;
   shadowSize: number;
   ring: THREE.Mesh | null;
-  hpBack: THREE.Sprite | null;
-  hpFill: THREE.Sprite | null;
+  /** The hex it stands on (see key), so plates on one hex can be stacked. */
+  hex?: string;
+  /**
+   * How high the top of its model is over its feet, standing, measured once for each size it is drawn at
+   * (`topSize`): a beast on four legs stands well under its frame's height, and its plate should sit on it.
+   */
+  top?: number;
+  topSize?: number;
+  /**
+   * Its plate this frame (see layoutPlates): whether it is drawn, how high its foot is over the unit's feet in world
+   * units, and how many plate pixels above that it starts, clear of any plate under it on the same hex.
+   */
+  plateShown?: boolean;
+  plateLift?: number;
+  plateRaise?: number;
+  /**
+   * Sharing its hex with other plates: where the column of them stands (the middle of those on the hex, so it is
+   * one straight column), and how many plate pixels up its top is, for whatever hangs over it. Null alone.
+   */
+  plateColumn?: { x: number; z: number; top: number } | null;
   /** Its status badges, and what they were last drawn for. */
   badges?: THREE.Sprite | null;
   badgesKey?: string;
@@ -647,7 +666,7 @@ interface Unit {
   bob: number;
   kind: string;
   /** What its tag should show, kept so the XP glow can redraw it between updates. */
-  labelWant?: { label?: string; plate?: PlateStats; size: number; asleep?: boolean; stack?: number };
+  labelWant?: { label?: string; plate?: PlateStats; tone?: PlateTone; size: number; asleep?: boolean; stack?: number };
   /** The XP bar glows until this time on the render clock; `glowing` is whether it is drawn so now. */
   glowUntil: number;
   glowing: boolean;
@@ -704,11 +723,15 @@ interface Want {
   /** Draw the unit wearing this instead of its kind's stock look. */
   outfit?: Outfit;
   pos: THREE.Vector3;
+  /** The hex it stands on (see key). */
+  hex: string;
   size: number;
   label?: string;
-  /** Level, HP and XP drawn under the name. */
+  /** HP and any shield, and for a hero their level, drawn with the name. */
   plate?: PlateStats;
-  /** Heroes sharing a hex: which of them this is, so their plates are stacked instead of overlapping. */
+  /** Whose it is, which colours the name and the HP (see PlateTone). */
+  tone?: PlateTone;
+  /** Several sharing a hex: which of them this is, so their plates are stacked instead of overlapping. */
   stack?: number;
   ring?: string;
   /** Shown through a tree or a wall it is behind, as a flat shape of this colour (see silhouette.ts). */
@@ -1198,6 +1221,14 @@ export class WorldRenderer {
     this.renderer = makeRenderer({ antialias: true, powerPreference: "low-power", stencil: true });
     this.seeThrough = !!this.renderer.getContext().getContextAttributes()?.stencil;
     this.ear = opts.backdrop || opts.resting ? DEAF : openEar();
+    // Plates drawn before their faces had loaded are in a stand-in face: drawn again once they have.
+    void plateFontsReady().then(() => {
+      if (this.gone) return;
+      for (const unit of this.units.values()) {
+        unit.labelText = "";
+        this.applyLabel(unit);
+      }
+    });
     this.renderer.setPixelRatio(1);
     this.renderer.localClippingEnabled = true;
     if (!this.opts.backdrop) {
@@ -1694,15 +1725,16 @@ export class WorldRenderer {
     };
     type Box = { l: number; r: number; b: number; t: number };
     const taken: Box[] = [];
-    // Tags, where each one sits (see the label's centre in syncUnits).
+    // Plates being drawn, where each one sits (see layoutPlates): its foot may be above the head when it shares a hex.
     const tagTop = new Map<Unit, number>();
     for (const unit of this.units.values()) {
-      if (!unit.label) continue;
-      const at = screen(unit);
+      if (!unit.label?.visible) continue;
+      const head = screen(unit);
+      const at = screen(unit, unit.label.position);
       const rows = unit.label.userData.rows as number;
       const w = rows * (unit.label.userData.aspect as number);
-      const bottom = at.y + 5 + unit.stack * (rows + 2);
-      tagTop.set(unit, 5 + unit.stack * (rows + 2) + rows);
+      const bottom = at.y + (unit.plateRaise ?? 5);
+      tagTop.set(unit, bottom + rows - head.y);
       taken.push({ l: at.x - w / 2, r: at.x + w / 2, b: bottom, t: bottom + rows });
     }
     const placing: { id: string; b: Bubble; unit: Unit; x: number; y: number; base: number; anchor: THREE.Vector3 | null; fixed: number }[] = [];
@@ -4356,18 +4388,19 @@ export class WorldRenderer {
         pos.x += (i - (n - 1) / 2) * 0.6;
         pos.z += 0.25;
       }
-      const base = plateOf(h);
-      const plate = base && h.id === state.you && state.stamina ? { ...base, bolts: state.stamina } : base;
+      const plate = plateOf(h);
       // A plate shows a first name only: full names run long over a crowd.
       const full = h.label ?? (plate ? h.name : undefined);
       const label = plate && full ? firstName(full) : full;
-      want.set(h.id, { kind: h.classId, pace: h.pace, outfit: h.outfit, pos, size: 1.5, label, plate: label ? plate : undefined, stack: i, ring: colorOf(h.id), through: colorOf(h.id), pulse: !!h.active, asleep: h.asleep, rod: h.rod, boat: h.boat, down: h.down, falls: true, prone: h.prone, effects: h.effects, seat: seat?.top, floorSit: h.floorSit, unseen: h.unseen });
+      // A player's hero is named in their side's colour: yours gold, the rest sea-green. Townsfolk in plain parchment.
+      const tone: PlateTone = !plate ? "plain" : h.id === state.you ? "you" : "ally";
+      want.set(h.id, { kind: h.classId, pace: h.pace, outfit: h.outfit, pos, hex: key(h.pos), size: 1.5, label, plate: label ? plate : undefined, tone, stack: i, ring: colorOf(h.id), through: colorOf(h.id), pulse: !!h.active, asleep: h.asleep, rod: h.rod, boat: h.boat, down: h.down, falls: true, prone: h.prone, effects: h.effects, seat: seat?.top, floorSit: h.floorSit, unseen: h.unseen });
     }
     // A zone's enemies: beside whoever else is on their hex. The fallen lie in the middle of theirs.
     for (const u of state.units ?? []) {
       const pos = this.standAt(u.pos);
       pos.z += 0.25;
-      // The second on a hex has its name a row higher, so the two can be told apart.
+      // The second on a hex has its plate above the first's, so the two can be told apart.
       let slot = 0;
       if (!u.down) {
         const n = stacks.get(key(u.pos)) ?? 1;
@@ -4375,7 +4408,9 @@ export class WorldRenderer {
         seen.set(key(u.pos), slot + 1);
         pos.x += (slot - (n - 1) / 2) * 0.6;
       }
-      want.set(u.id, { kind: u.kind, pos, faceKey: u.id, size: isBoss(u.kind) ? 1.9 : isBig(u.kind) ? 1.6 : 1.4, label: u.name, ring: u.hostile ? ENEMY_RED : undefined, through: u.hostile ? ENEMY_RED : undefined, pulse: !!u.active, hp: u.hp, down: u.down, falls: true, nameless: true, prone: u.prone, effects: u.effects, stack: slot });
+      // With its HP to show (in a fight, or hurt), an enemy's plate has a red bar of it under the name.
+      const plate: PlateStats | undefined = u.hp !== undefined && !u.down ? { hp: u.hp } : undefined;
+      want.set(u.id, { kind: u.kind, pos, hex: key(u.pos), faceKey: u.id, size: isBoss(u.kind) ? 1.9 : isBig(u.kind) ? 1.6 : 1.4, label: u.name ?? (plate ? "" : undefined), plate, tone: "foe", ring: u.hostile ? ENEMY_RED : undefined, through: u.hostile ? ENEMY_RED : undefined, pulse: !!u.active, hp: u.hp, down: u.down, falls: true, nameless: true, prone: u.prone, effects: u.effects, stack: slot });
     }
 
     const turned = new Map<string, number>();
@@ -4392,11 +4427,9 @@ export class WorldRenderer {
       this.syncBoat(unit, undefined);
       if (unit.ring) {
         this.unitGroup.remove(unit.ring);
-        // Its shape was made for it alone. (Its material, and the health bar's two, are left to be collected, as SpellFx's are.)
+        // Its shape was made for it alone. (Its material is left to be collected, as SpellFx's are.)
         unit.ring.geometry.dispose();
       }
-      if (unit.hpBack) this.unitGroup.remove(unit.hpBack);
-      if (unit.hpFill) this.unitGroup.remove(unit.hpFill);
       if (unit.badges) {
         this.unitGroup.remove(unit.badges);
         unit.badges.material.map?.dispose();
@@ -4417,7 +4450,7 @@ export class WorldRenderer {
         this.unitGroup.add(figure.root);
         // New arrivals face the camera, turned a little so what they carry shows.
         const turn = turned.get(id) ?? this.yaw + 0.35;
-        unit = { figure, root: figure.root, size: w.size, turn, turnGoal: turn, lying: false, shadowAt: w.pos.clone(), shadowTurn: turn, shadowSize: 0, ring: null, hpBack: null, hpFill: null, label: null, labelText: "", goal: w.pos.clone(), path: [], kick: new THREE.Vector3(), lean: 0, stride: 0, bob: 0, kind: spriteKey(w.kind, w.outfit, w.asleep, w.rod), asleep: false, nextZ: 0, zCount: 0, glowUntil: 0, glowing: false, head: w.size + 0.3, stack: 0, feet: w.pos.clone() };
+        unit = { figure, root: figure.root, size: w.size, turn, turnGoal: turn, lying: false, shadowAt: w.pos.clone(), shadowTurn: turn, shadowSize: 0, ring: null, label: null, labelText: "", goal: w.pos.clone(), path: [], kick: new THREE.Vector3(), lean: 0, stride: 0, bob: 0, kind: spriteKey(w.kind, w.outfit, w.asleep, w.rod), asleep: false, nextZ: 0, zCount: 0, glowUntil: 0, glowing: false, head: w.size + 0.3, stack: 0, feet: w.pos.clone() };
         // Someone found on a stool is found sitting.
         if (w.seat !== undefined) unit.sit = 1;
         this.units.set(id, unit);
@@ -4456,6 +4489,13 @@ export class WorldRenderer {
       unit.stack = w.stack ?? 0;
       unit.size = w.size;
       unit.figure.setSize(w.size);
+      if (unit.topSize !== w.size) {
+        unit.topSize = w.size;
+        unit.root.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(unit.root);
+        // Never above its frame's height: a hat's plume or a raised blade should not lift the plate.
+        unit.top = Number.isFinite(box.max.y) ? Math.max(0.5, Math.min(w.size, box.max.y - unit.root.position.y)) : w.size;
+      }
       unit.figure.setDim(fell);
       unit.figure.setFade(w.unseen ? UNSEEN_FADE : 1);
       // A hero always, and an enemy once it is in a fight, is shown through the tree or wall it is behind.
@@ -4475,30 +4515,10 @@ export class WorldRenderer {
       if (w.pulse) this.pulsing.add(id);
 
       unit.nameless = !!w.nameless;
-      unit.labelWant = { label: w.label, plate: w.plate, size: w.size, asleep: w.asleep, stack: w.stack };
+      unit.hex = w.hex;
+      unit.labelWant = { label: w.label, plate: w.plate, tone: w.tone, size: w.size, asleep: w.asleep, stack: w.stack };
       this.applyLabel(unit);
 
-      if (w.hp !== undefined && !unit.hpBack) {
-        unit.hpBack = new THREE.Sprite(new THREE.SpriteMaterial({ color: "#1b1830", depthTest: false }));
-        unit.hpFill = new THREE.Sprite(new THREE.SpriteMaterial({ color: "#6ee06e", depthTest: false }));
-        unit.hpBack.center.set(0, 0.5);
-        unit.hpFill.center.set(0, 0.5);
-        unit.hpBack.renderOrder = 5;
-        unit.hpFill.renderOrder = 6;
-        unit.hpBack.layers.set(OVERLAY_LAYER);
-        unit.hpFill.layers.set(OVERLAY_LAYER);
-        this.unitGroup.add(unit.hpBack, unit.hpFill);
-      }
-      if (unit.hpBack && unit.hpFill) {
-        const show = w.hp !== undefined && !w.down;
-        unit.hpBack.visible = unit.hpFill.visible = show;
-        if (show) {
-          unit.hpBack.scale.set(1.2, 0.16, 1);
-          unit.hpFill.scale.set(Math.max(0.001, 1.14 * w.hp!), 0.1, 1);
-          unit.hpFill.material.color.set(w.hp! > 0.5 ? "#6ee06e" : w.hp! > 0.25 ? "#ffd23f" : "#ff6b6b");
-          unit.hpBack.userData.lift = unit.hpFill.userData.lift = w.size + 0.25;
-        }
-      }
       // What it is under, badged over its head until each wears off. Redrawn only when the list or a count changes.
       const effects = w.down ? [] : (w.effects ?? []);
       const key = badgesKey(effects);
@@ -4534,19 +4554,58 @@ export class WorldRenderer {
     return (px * perPx) / Math.max(0.3, Math.cos(this.pitch));
   }
 
-  /** Where the top of a unit's plate is, in world height, as it is drawn now. Null without a plate. */
+  /** Where the top of a unit's plate is, in world height, as it is drawn now. Null without a plate, or with it hidden. */
   private plateTop(unit: Unit): number | null {
     const label = unit.label;
-    if (!label) return null;
+    if (!label || !label.visible) return null;
     const rows = label.userData.rows as number;
-    const stack = unit.labelWant?.stack ?? 0;
     // An unattenuated sprite's size scales with its distance in front of the camera.
     const depth = -this.plateSpot.copy(label.position).applyMatrix4(this.camera.matrixWorldInverse).z;
     const row = (this.fine * 2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2))) / this.renderer.domElement.height;
     if (!(depth > 0) || !(rows > 0)) return null;
     // The plate is offset straight up the screen; a world-height rise looks shorter by the camera's tilt.
     const tilt = Math.max(0.3, Math.cos(this.pitch));
-    return label.position.y + ((5 + stack * (rows + 2) + rows) * row * depth) / tilt;
+    // In a column of plates on one hex, the top of the whole column, so what hangs over it clears them all.
+    const top = unit.plateColumn?.top ?? (unit.plateRaise ?? 5) + rows;
+    return label.position.y + (top * row * depth) / tilt;
+  }
+
+  /**
+   * Which plates are drawn this frame, and where. Out of a fight, everyone's. In one, a plate would only clutter
+   * the field: it shows for whoever's turn it is, and for whoever is on the hex under the pointer (or the one a tap
+   * on a touch screen is showing), and nobody else.
+   *
+   * Plates shown on one hex (a friend and an enemy can share it) stand in a column from the highest head there, in
+   * the order they stand on it, each clear of the one under it. A plate alone on its hex sits just over its own head.
+   */
+  private layoutPlates() {
+    const fighting = this.combat.fighting;
+    const pointed = this.hovered ? key(this.hovered) : null;
+    const byHex = new Map<string, Unit[]>();
+    for (const [id, unit] of this.units) {
+      unit.plateShown = !fighting || this.pulsing.has(id) || (pointed !== null && unit.hex === pointed);
+      if (!unit.label || !unit.plateShown || !unit.root.visible || this.quiet.has(id)) continue;
+      const hex = unit.hex ?? id;
+      const on = byHex.get(hex);
+      if (on) on.push(unit);
+      else byHex.set(hex, [unit]);
+    }
+    for (const unit of this.units.values()) unit.plateColumn = null;
+    for (const on of byHex.values()) {
+      on.sort((a, b) => a.stack - b.stack);
+      const lift = Math.max(...on.map((u) => u.label!.userData.lift as number));
+      let raise = 5;
+      for (const unit of on) {
+        unit.plateLift = on.length > 1 ? lift : (unit.label!.userData.lift as number);
+        unit.plateRaise = raise;
+        raise += (unit.label!.userData.rows as number) + 2;
+      }
+      if (on.length > 1) {
+        const x = on.reduce((s, u) => s + u.feet.x, 0) / on.length;
+        const z = on.reduce((s, u) => s + u.feet.z, 0) / on.length;
+        for (const unit of on) unit.plateColumn = { x, z, top: raise - 2 };
+      }
+    }
   }
 
   /** Draw (or redraw) a unit's name tag or plate: on a change, and as an XP glow on its bar starts and ends. */
@@ -4557,27 +4616,24 @@ export class WorldRenderer {
     const plate = lw.plate && unit.glowing ? { ...lw.plate, glow: true } : lw.plate;
     // A dead enemy, fallen, goes without its name.
     const label = unit.nameless && unit.down && unit.lying ? undefined : lw.label;
-    const labelKey = label ? plateKey(label, plate) : "";
+    // A plate with no name to it still shows its bars; a tag with no name is nothing.
+    const labelKey = label !== undefined && (label || plate?.hp !== undefined) ? plateKey(label, plate, lw.tone) : "";
     if (labelKey !== unit.labelText) {
       this.dropLabel(unit);
       unit.labelText = labelKey;
-      if (label) {
-        const { texture, aspect } = labelTexture(label, plate);
-        // A fixed size on screen, whatever the zoom: each pixel of the label lands on exactly one pixel of the view.
+      if (label !== undefined && labelKey) {
+        const { texture, aspect, rows } = labelTexture(label, plate, lw.tone);
+        // A fixed size on screen, whatever the zoom: `rows` plate pixels tall, each PIXEL screen pixels.
         unit.label = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false, sizeAttenuation: false }));
         unit.label.layers.set(OVERLAY_LAYER);
         unit.label.userData.aspect = aspect;
-        unit.label.userData.rows = texture.image.height;
-        unit.label.userData.lift = lw.asleep ? lw.size * LYING + 0.3 : lw.size + 0.3;
+        unit.label.userData.rows = rows;
+        unit.label.userData.lift = lw.asleep ? lw.size * LYING + 0.3 : (unit.top ?? lw.size) + 0.3;
         unit.label.renderOrder = 7;
+        // Until the frame loop lays it out (see layoutPlates): five of its own pixels clear of the head.
+        unit.label.center.set(0.5, -5 / rows);
         this.unitGroup.add(unit.label);
       }
-    }
-    if (unit.label) {
-      // Held five of its own pixels clear of the head, at any zoom, however tall the plate;
-      // a second hero on the same hex has theirs a plate higher, so neither hides the other.
-      const rows = unit.label.userData.rows as number;
-      unit.label.center.set(0.5, -(5 + (lw.stack ?? 0) * (rows + 2)) / rows);
     }
   }
 
@@ -5526,6 +5582,7 @@ export class WorldRenderer {
 
     // The height of one view pixel, in the units an unattenuated sprite is sized in.
     const labelRow = (this.fine * 2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2))) / this.renderer.domElement.height;
+    this.layoutPlates();
     for (const [id, unit] of this.units) {
       const p = unit.root.position;
       // The hop is drawn on top of where the unit really is, and a boat sits it lower: take both off before moving.
@@ -5681,12 +5738,14 @@ export class WorldRenderer {
         unit.ring.scale.set(s, s, 1);
       }
       if (unit.label) {
-        // A plate waits for the ground under it to come up.
-        if (this.rise) unit.label.visible = unit.root.visible && this.rise.reached(p.x, p.z);
-        unit.label.position.set(p.x, ground + unit.label.userData.lift + perch, p.z);
-        const tall = unit.label.userData.rows * labelRow;
+        // A plate waits for the ground under it to come up, and in a fight for its turn or the pointer (see layoutPlates).
+        unit.label.visible = unit.root.visible && unit.plateShown !== false && !this.quiet.has(id) && (!this.rise || this.rise.reached(p.x, p.z));
+        const column = unit.plateColumn;
+        unit.label.position.set(column?.x ?? p.x, ground + (unit.plateLift ?? unit.label.userData.lift) + perch, column?.z ?? p.z);
+        const rows = unit.label.userData.rows as number;
+        unit.label.center.set(0.5, -(unit.plateRaise ?? 5) / rows);
+        const tall = rows * labelRow;
         unit.label.scale.set(tall * unit.label.userData.aspect, tall, 1);
-        if (this.quiet.has(id)) unit.label.visible = false;
       }
       if (unit.ring && this.quiet.has(id)) unit.ring.visible = false;
       if (unit.arrows) {
@@ -5695,14 +5754,10 @@ export class WorldRenderer {
           a.sprite.material.rotation = a.rot + unit.lean;
         }
       }
-      if (unit.hpBack && unit.hpFill) {
-        const lift = unit.hpBack.userData.lift ?? 2;
-        unit.hpBack.position.set(p.x - 0.6, ground + lift, p.z);
-        unit.hpFill.position.set(p.x - 0.57, ground + lift, p.z);
-      }
       if (unit.badges) {
-        // Over the name tag or plate, clear of the health bar too.
-        const bar = unit.hpBack?.visible ? ground + (unit.hpBack.userData.lift ?? 2) + 0.26 : ground + unit.head + 0.4;
+        // Over the name tag or plate, and with it hidden in a fight while the plate is.
+        unit.badges.visible = unit.root.visible && unit.plateShown !== false && !this.quiet.has(id);
+        const bar = ground + unit.head + 0.4;
         const tag = this.plateTop(unit);
         const over = tag !== null ? Math.max(bar, tag + 0.2) : bar;
         const tall = 0.3;

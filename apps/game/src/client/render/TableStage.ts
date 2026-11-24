@@ -21,7 +21,7 @@ import { makeModelShip } from "./modelShip";
 import { sounds } from "../audio/gameSounds";
 import { PIXEL_CAP_ROWS, PIXEL_LINE_ROWS, canDrawPixelText, drawPixelText, pixelTextWidth } from "./pixelFont";
 import { SITTING_DROP, makeFigure, type Figure } from "./figures";
-import { labelTexture, lookFor, spriteKey } from "./sprites";
+import { pixelTagTexture, lookFor, spriteKey } from "./sprites";
 import { OVERLAY_LAYER } from "./post";
 import type { WorldMinigame, WorldRenderer } from "./WorldRenderer";
 import { SEAT_LIGHT_Y } from "./tableLamps";
@@ -834,7 +834,7 @@ export class TableStage implements WorldMinigame {
     const plateKey = `${firstName(info.name)}|${info.crate ? `${info.crate.score}${info.crate.lead ? "*" : ""}` : ""}`;
     if (r.plateKey !== plateKey) {
       r.plateKey = plateKey;
-      const { texture, aspect } = info.crate ? withCrate(labelTexture(firstName(info.name)), info.crate) : labelTexture(firstName(info.name));
+      const { texture, aspect } = info.crate ? withCrate(pixelTagTexture(firstName(info.name)), info.crate) : pixelTagTexture(firstName(info.name));
       this.own(texture);
       r.plate.material.map = texture;
       r.plate.material.needsUpdate = true;

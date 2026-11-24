@@ -321,7 +321,6 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
       homeYaw: HARBOR_VIEW_YAW,
       // Bedrolls laid out by whoever is resting.
       props: players.filter((p) => p.bedroll).map((p, i) => ({ id: 9000 + i, model: "bedroll", pos: p.bedroll!, facing: 0 })),
-      stamina: stamina ?? undefined,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [base, board, players, you, stamina, ownOutfit, clock, about, nellIn]);

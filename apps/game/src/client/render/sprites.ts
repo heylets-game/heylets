@@ -1,13 +1,14 @@
-// What is drawn on small canvases rather than modelled: name plates, speech
-// bubbles, floating numbers and battle effects, all pixel-crisp. Also the
+// What is drawn on small canvases rather than modelled: name plates (in the
+// interface's own type), and speech bubbles, floating numbers and battle
+// effects, pixel-crisp. Also the
 // characters' pictures for the HUD, which are rendered from their models
 // (figures.ts) by portraits.ts.
 
 import * as THREE from "three";
-import { SLOTS, appearanceKey, barPixels, parseAppearance, type Appearance, healthBand, type HealthBand, type Outfit } from "@gantt-quest/world";
+import { SLOTS, appearanceKey, parseAppearance, type Appearance, type Outfit } from "@gantt-quest/world";
 import { outlines } from "./fancy";
 import { LOOKS, mergeLook, type Look, type LookPalette } from "./looks";
-import { PIXEL_LINE_ROWS, canDrawPixelText, drawPixelText, drawSmallDigits, pixelTextWidth } from "./pixelFont";
+import { PIXEL_LINE_ROWS, canDrawPixelText, drawPixelText, pixelTextWidth } from "./pixelFont";
 import { hasOwnFace } from "./figures";
 import { isBlankPortrait, portraitUrl } from "./portraits";
 
@@ -125,88 +126,279 @@ export function textTexture(text: string, color: string): THREE.CanvasTexture {
   return tex;
 }
 
-/** What a hero's overhead plate shows beside their name: level, how full their HP and XP are (0 to 1), and outings left. */
+// ---------- name plates ----------
+
+/**
+ * What a plate shows under the name: how full the HP is (0 to 1), any shield, and for a hero their level. With
+ * no `hp` it is the name alone (and the level), as in the Harbor, where nobody is hurt.
+ */
 export interface PlateStats {
-  level: number;
-  hp: number;
-  /** A shield (Bolstered), as a share of max HP like `hp`: a pale stretch after the HP. */
+  /** Before the name, in brass. None on an enemy's. */
+  level?: number;
+  hp?: number;
+  /** A shield (Bolstered), as a share of max HP like `hp`: its own steel bar over the HP, and its points on a little shield. */
   shield?: number;
-  xp: number;
-  /** Just earned XP: the XP bar is drawn lit up for a moment. */
+  /** The shield's points, for the number on it. */
+  shieldPoints?: number;
+  /** Just earned XP: the name is lit up gold for a moment. */
   glow?: boolean;
-  /** Gathering outings: one lightning bolt each, lit for those left. Only on your own plate. */
-  bolts?: { left: number; max: number };
-}
-
-const PLATE_BG: [number, number, number, number] = [27, 24, 48, 225];
-const PLATE_EDGE = "#0e0b1c";
-const PLATE_FILL = "rgba(27, 24, 48, 0.9)";
-const PLATE_SHEEN = "rgba(74, 69, 112, 0.55)";
-const NAME_INK = "#f1eee4";
-const BAR_TRACK = "#3b3560";
-const HP_COLOR: Record<HealthBand, string> = { good: "#6ee06e", hurt: "#ffd23f", low: "#ff6b6b" };
-const SHIELD_COLOR = "#d6dde8";
-const XP_COLOR = "#7d8cff";
-/** The XP bar as it lights up on a gain: pale blue track, near-white fill. */
-const XP_GLOW_TRACK = "#5f7fd8";
-const XP_GLOW_COLOR = "#e4f4ff";
-
-/** A small heater shield for the level: gold rim, dark field. 11 by 12. */
-const SHIELD = [
-  "###########",
-  "#.........#",
-  "#.........#",
-  "#.........#",
-  "#.........#",
-  "#.........#",
-  "#.........#",
-  "#.........#",
-  ".#.......#.",
-  "..#.....#..",
-  "...#...#...",
-  "....###....",
-];
-/** The rim lit from above: one colour per row. */
-const SHIELD_RIM = ["#fff1a8", "#ffe27a", "#ffd23f", "#ffd23f", "#ffd23f", "#f5b93a", "#f5b93a", "#e8a22e", "#e8a22e", "#d48a24", "#d48a24", "#b8741c"];
-const SHIELD_FIELD = "#33295f";
-const SHIELD_FIELD_LIT = "#40357a";
-const SHIELD_INK = "#fff6d8";
-
-/** A lightning bolt for one gathering outing. 5 by 7. */
-const BOLT = ["...##", "..##.", ".##..", "#####", "..##.", ".##..", "##..."];
-const BOLT_ON = ["#fff1a8", "#ffe066", "#ffe066", "#ffd23f", "#f5b93a", "#e8a22e", "#d48a24"];
-const BOLT_OFF = "#4a4570";
-
-/** Rows of a plain name tag: a line of text with a row of margin above and below. */
-const TAG_ROWS = PIXEL_LINE_ROWS + 3;
-/** A plate: border, the name line, the HP bar, a gap, the XP bar, border. */
-const PLATE_ROWS = 18;
-const TEXT_X = 14;
-const TEXT_Y = 3;
-const HP_Y = 12;
-const XP_Y = 15;
-/** Bars never shorter than this, so a short name still gets a readable bar. */
-const MIN_BAR = 26;
-
-/** The key a plate is cached and redrawn by: it changes only when a pixel of it would. */
-export function plateKey(text: string, plate?: PlateStats): string {
-  if (!plate) return text;
-  const inner = plateWidth(text, plate) - TEXT_X - 3;
-  const bolts = plate.bolts ? `|${plate.bolts.left}/${plate.bolts.max}` : "";
-  const [hpPx, shieldPx] = hpPixels(plate, inner);
-  return `${text}|${plate.level}|${hpPx}+${shieldPx}:${healthBand(plate.hp)}|${barPixels(plate.xp, inner)}${bolts}${plate.glow ? "|glow" : ""}`;
 }
 
 /**
- * The HP bar's pixels of HP and of shield. With a shield that takes the two past max HP, the bar stands for
- * the two together, so the shield always shows whole.
+ * Whose plate it is, which colours the name and the HP bar as the fight interface does (fight.css): your own in
+ * gold, another hero in sea-green, an enemy in red, and anyone else (a townsperson) in plain parchment.
  */
-function hpPixels(plate: PlateStats, inner: number): [number, number] {
-  const shield = plate.shield ?? 0;
-  const whole = Math.max(1, plate.hp + shield);
-  const hp = barPixels(plate.hp / whole, inner);
-  return [hp, shield > 0 ? Math.max(1, barPixels((plate.hp + shield) / whole, inner) - hp) : 0];
+export type PlateTone = "you" | "ally" | "foe" | "plain";
+
+const TONE_INK: Record<PlateTone, string> = { you: "#f6cf68", ally: "#8fd3c8", foe: "#ff8571", plain: "#eadfc4" };
+/** The HP bar's liquid, lit at the top: green for a friend, red for an enemy (the turn order's bars, .fo-hp). */
+const HP_FILL: Record<"friend" | "foe", [string, string]> = { friend: ["#b6f09a", "#5fbf4a"], foe: ["#ff9a86", "#d8342a"] };
+const SHIELD_FILL: [string, string] = ["#f4f8ff", "#9fb4cf"];
+const PLATE_OUT = "#1c0d0e";
+const PLATE_WELL = "#120908";
+/** The level's medallion: brass lit from above, a darker rim inside the outline, the number stamped in dark ink. */
+const LEVEL_FILL: [string, string] = ["#f6e2a1", "#c9a24a"];
+const LEVEL_RIM = "#7a5a26";
+const BADGE_INK = "#33180e";
+const GLOW_INK = "#ffe9a8";
+
+/**
+ * Plates are drawn this many texture pixels to one plate pixel (which is two screen pixels), so their text is
+ * smooth type in the interface's own faces rather than the bitmap font, and still sharp when shown.
+ */
+const RES = 4;
+/** One screen pixel, in texture pixels. */
+const PX = RES / 2;
+
+const NAME_FONT = `${16 * PX}px "IM Fell English SC", "IM Fell English", Georgia, serif`;
+const LEVEL_FONT = `${14 * PX}px "Pirata One", "IM Fell English", Georgia, serif`;
+const SHIELD_FONT = `bold ${11 * PX}px "IM Fell English", Georgia, serif`;
+
+/** Screen pixels: the clear border round everything (room for the outline and a glow), the bars' width and heights. */
+const PAD = 3;
+const BAR_W = 58;
+const HP_H = 5;
+const SHIELD_H = 4;
+const NAME_H = 18;
+const GAP = 2;
+/** The little shield the shield's points are on: its size, and its gap from the bars. */
+const BADGE_W = 14;
+const BADGE_H = 15;
+const BADGE_GAP = 3;
+/** The level's medallion: round for one or two digits (this across), drawn out into a pill for more. */
+const MEDAL = 18;
+
+let plateCtx: CanvasRenderingContext2D | null = null;
+/** A little air between the name's letters, in texture pixels: small capitals read better for it. */
+const NAME_SPACING = `${0.6 * PX}px`;
+function textWidth(text: string, font: string, spacing = "0px"): number {
+  plateCtx ??= document.createElement("canvas").getContext("2d")!;
+  plateCtx.font = font;
+  (plateCtx as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = spacing;
+  return Math.ceil(plateCtx.measureText(text).width);
 }
+
+let fontsReady: Promise<void> | null = null;
+/**
+ * Resolves once the plates' faces are loaded (at once if they are). A plate drawn before then is in the fallback
+ * face, so whoever draws plates draws them again when this resolves.
+ */
+export function plateFontsReady(): Promise<void> {
+  if (typeof document === "undefined" || !document.fonts) return Promise.resolve();
+  fontsReady ??= Promise.all([NAME_FONT, LEVEL_FONT, SHIELD_FONT].map((f) => document.fonts.load(f))).then(
+    () => undefined,
+    () => undefined,
+  );
+  return fontsReady;
+}
+
+/** How many of the bar's screen pixels a share (0 to 1) fills: at least one for anything above nothing. */
+const fill = (share: number, w: number) => (share > 0 ? Math.max(1, Math.round(Math.min(1, share) * w)) : 0);
+
+/** The key a plate is cached and redrawn by: it changes only when a pixel of it would. */
+export function plateKey(text: string, plate?: PlateStats, tone: PlateTone = "plain"): string {
+  if (!plate) return `${tone}|${text}`;
+  const hp = plate.hp !== undefined ? fill(plate.hp, BAR_W) : "";
+  const shield = plate.shield ? `${fill(plate.shield, BAR_W)}/${plate.shieldPoints ?? ""}` : "";
+  return `${tone}|${text}|${plate.level ?? ""}|${hp}|${shield}${plate.glow ? "|glow" : ""}`;
+}
+
+/** A heater shield's outline, `w` by `h`, top-left at (x, y): flat across the top, curving in to a point. */
+function shieldPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + w, y);
+  ctx.lineTo(x + w, y + h * 0.45);
+  ctx.quadraticCurveTo(x + w, y + h * 0.85, x + w / 2, y + h);
+  ctx.quadraticCurveTo(x, y + h * 0.85, x, y + h * 0.45);
+  ctx.closePath();
+}
+
+/** A round-ended box `w` by `h`, top-left at (x, y): a circle when `w` is `h`. */
+function pillPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+  const r = h / 2;
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arc(x + w - r, y + r, r, -Math.PI / 2, Math.PI / 2);
+  ctx.lineTo(x + r, y + h);
+  ctx.arc(x + r, y + r, r, Math.PI / 2, (3 * Math.PI) / 2);
+  ctx.closePath();
+}
+
+/**
+ * A plate over someone's head: no box behind it, only the name in the interface's small capitals, outlined dark so
+ * it reads on any ground, in its owner's colour (see PlateTone), with a hero's level before it on a brass
+ * medallion. Under it, with HP to show, a slim bar of it; a shield sits on top of that as a steel bar of its own,
+ * its points on a little steel shield at the end, so it is never mistaken for HP. Everything is centred, so the
+ * plate stands square over its owner. `rows` is its height in plate pixels.
+ */
+export function labelTexture(text: string, plate?: PlateStats, tone: PlateTone = "plain"): { texture: THREE.CanvasTexture; aspect: number; rows: number } {
+  const p = plate ?? {};
+  const level = p.level !== undefined ? String(p.level) : "";
+  const nameW = textWidth(text, NAME_FONT, NAME_SPACING) / PX;
+  const medalW = level ? Math.max(MEDAL, Math.ceil(textWidth(level, LEVEL_FONT) / PX) + 7) : 0;
+  const levelW = level ? medalW + 4 : 0;
+  const lineW = nameW + levelW;
+  const bars = p.hp !== undefined;
+  const shielded = bars && !!p.shield && p.shield > 0;
+  const barsH = bars ? HP_H + (shielded ? SHIELD_H : 0) : 0;
+  // The shield's badge hangs off the right of the bars; the same room is left on the left, so the bars stay centred.
+  const side = shielded ? BADGE_GAP + BADGE_W : 0;
+  const w = Math.ceil(Math.max(lineW, bars ? BAR_W + 2 * side : 0)) + 2 * PAD;
+  const below = bars ? GAP + Math.max(barsH, shielded ? BADGE_H - 3 : 0) : 0;
+  const h = PAD + NAME_H + below + PAD;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = w * PX;
+  canvas.height = h * PX;
+  const ctx = canvas.getContext("2d")!;
+  ctx.scale(PX, PX);
+  ctx.lineJoin = "round";
+  const mid = w / 2;
+
+  // The name (and level), outlined and with a short drop shadow, on no background.
+  const baseline = PAD + NAME_H - 3;
+  const left = mid - lineW / 2;
+  const ink = TONE_INK[tone];
+  const word = (s: string, font: string, x: number, colour: string, glow = false) => {
+    ctx.save();
+    ctx.scale(1 / PX, 1 / PX);
+    ctx.font = font;
+    (ctx as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = NAME_SPACING;
+    ctx.textBaseline = "alphabetic";
+    const X = x * PX;
+    const Y = baseline * PX;
+    ctx.lineWidth = 3 * PX;
+    ctx.strokeStyle = PLATE_OUT;
+    ctx.shadowColor = "rgba(0, 0, 0, 0.55)";
+    ctx.shadowOffsetY = PX;
+    ctx.strokeText(s, X, Y);
+    ctx.shadowColor = "transparent";
+    if (glow) {
+      ctx.shadowColor = "rgba(255, 214, 110, 0.95)";
+      ctx.shadowBlur = 7 * PX;
+    }
+    ctx.fillStyle = colour;
+    ctx.fillText(s, X, Y);
+    // A second pass deepens the glow.
+    if (glow) ctx.fillText(s, X, Y);
+    ctx.restore();
+  };
+  if (level) {
+    // The level on its medallion, level with the middle of the name.
+    const my = PAD + (NAME_H - MEDAL) / 2 + 0.5;
+    pillPath(ctx, left - 1, my - 1, medalW + 2, MEDAL + 2);
+    ctx.fillStyle = PLATE_OUT;
+    ctx.fill();
+    pillPath(ctx, left, my, medalW, MEDAL);
+    const g = ctx.createLinearGradient(0, my, 0, my + MEDAL);
+    g.addColorStop(0, LEVEL_FILL[0]);
+    g.addColorStop(1, LEVEL_FILL[1]);
+    ctx.fillStyle = g;
+    ctx.fill();
+    pillPath(ctx, left + 1.5, my + 1.5, medalW - 3, MEDAL - 3);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = LEVEL_RIM;
+    ctx.stroke();
+    ctx.save();
+    ctx.scale(1 / PX, 1 / PX);
+    ctx.font = LEVEL_FONT;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = BADGE_INK;
+    ctx.fillText(level, (left + medalW / 2) * PX, (my + MEDAL / 2 + 0.5) * PX);
+    ctx.restore();
+  }
+  word(text, NAME_FONT, left + levelW, p.glow ? GLOW_INK : ink, !!p.glow);
+
+  if (bars) {
+    const x = mid - BAR_W / 2;
+    const y = PAD + NAME_H + GAP;
+    // One dark frame round both bars, a hair of the turn order's rim colour outside it.
+    ctx.fillStyle = PLATE_OUT;
+    ctx.fillRect(x - 1, y - 1, BAR_W + 2, barsH + 2);
+    ctx.fillStyle = PLATE_WELL;
+    ctx.fillRect(x, y, BAR_W, barsH);
+    const liquid = (top: number, height: number, share: number, [lit, body]: [string, string]) => {
+      const filled = fill(share, BAR_W);
+      if (filled <= 0) return;
+      const g = ctx.createLinearGradient(0, top, 0, top + height);
+      g.addColorStop(0, lit);
+      g.addColorStop(0.45, body);
+      g.addColorStop(1, body);
+      ctx.fillStyle = g;
+      ctx.fillRect(x, top, filled, height);
+    };
+    if (shielded) {
+      liquid(y, SHIELD_H - 1, p.shield!, SHIELD_FILL);
+      // A dark line between the shield and the HP, so the two never run together.
+      ctx.fillStyle = PLATE_OUT;
+      ctx.fillRect(x, y + SHIELD_H - 1, BAR_W, 1);
+    }
+    liquid(y + (shielded ? SHIELD_H : 0), HP_H, p.hp!, HP_FILL[tone === "foe" ? "foe" : "friend"]);
+
+    if (shielded) {
+      // The shield's points, on a little steel shield at the end of the bars.
+      const bx = x + BAR_W + BADGE_GAP;
+      const by = y + barsH / 2 - BADGE_H / 2 + 1;
+      shieldPath(ctx, bx - 1, by - 1, BADGE_W + 2, BADGE_H + 2);
+      ctx.fillStyle = PLATE_OUT;
+      ctx.fill();
+      shieldPath(ctx, bx, by, BADGE_W, BADGE_H);
+      const g = ctx.createLinearGradient(0, by, 0, by + BADGE_H);
+      g.addColorStop(0, SHIELD_FILL[0]);
+      g.addColorStop(1, SHIELD_FILL[1]);
+      ctx.fillStyle = g;
+      ctx.fill();
+      const points = p.shieldPoints !== undefined ? String(Math.min(99, p.shieldPoints)) : "";
+      if (points) {
+        ctx.save();
+        ctx.scale(1 / PX, 1 / PX);
+        ctx.font = SHIELD_FONT;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = BADGE_INK;
+        ctx.fillText(points, (bx + BADGE_W / 2) * PX, (by + BADGE_H * 0.44) * PX);
+        ctx.restore();
+      }
+    }
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.generateMipmaps = true;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  return { texture, aspect: canvas.width / canvas.height, rows: h / 2 };
+}
+
+// ---------- the pixel name tag (the pub's table) ----------
+
+const PLATE_BG: [number, number, number, number] = [27, 24, 48, 225];
+const NAME_INK = "#f1eee4";
+/** Rows of a plain name tag: a line of text with a row of margin above and below. */
+const TAG_ROWS = PIXEL_LINE_ROWS + 3;
 
 const LABEL_FONT = "12px ui-monospace, Menlo, Consolas, monospace";
 let measurer: CanvasRenderingContext2D | null = null;
@@ -219,15 +411,6 @@ function measure(text: string): number {
   return Math.ceil(measurer.measureText(text).width);
 }
 
-/** Width of the bolts after a name, with the gap before them. */
-const boltsWidth = (plate: PlateStats) => (plate.bolts && plate.bolts.max > 0 ? 4 + plate.bolts.max * 6 - 1 : 0);
-/** A name's width: in the bitmap font, or the system font for a name it cannot draw. */
-const nameWidth = (text: string) => (canDrawPixelText(text) ? pixelTextWidth(text) : measure(text));
-function plateWidth(text: string, plate: PlateStats): number {
-  const line = nameWidth(text) + boltsWidth(plate);
-  return TEXT_X + Math.max(MIN_BAR, line) + 3;
-}
-
 function makeTexture(canvas: HTMLCanvasElement): THREE.CanvasTexture {
   const texture = new THREE.CanvasTexture(canvas);
   texture.magFilter = THREE.NearestFilter;
@@ -237,55 +420,11 @@ function makeTexture(canvas: HTMLCanvasElement): THREE.CanvasTexture {
   return texture;
 }
 
-/** Fill the cells of a pixel pattern at (x, y), one colour per row or one for all. */
-function stamp(ctx: CanvasRenderingContext2D, rows: string[], x: number, y: number, ink: string | string[], mark = "#") {
-  rows.forEach((row, r) => {
-    ctx.fillStyle = typeof ink === "string" ? ink : ink[r];
-    for (let c = 0; c < row.length; c++) if (row[c] === mark) ctx.fillRect(x + c, y + r, 1, 1);
-  });
-}
-
-/** The level shield at (x, y): rim, field with a lit top-left, and the number. */
-function drawShield(ctx: CanvasRenderingContext2D, level: number, x: number, y: number) {
-  // The field is everything inside the rim, row by row.
-  SHIELD.forEach((row, r) => {
-    const first = row.indexOf("#");
-    const last = row.lastIndexOf("#");
-    if (r === 0 || last - first < 2) return;
-    ctx.fillStyle = r <= 2 ? SHIELD_FIELD_LIT : SHIELD_FIELD;
-    ctx.fillRect(x + first + 1, y + r, last - first - 1, 1);
-  });
-  stamp(ctx, SHIELD, x, y, SHIELD_RIM);
-  const digits = String(Math.min(99, Math.max(0, level)));
-  if (digits.length === 1) {
-    drawPixelText(ctx, digits, x + 3, y + 2, SHIELD_INK);
-  } else {
-    drawSmallDigits(ctx, digits, x + 2, y + 3, SHIELD_INK);
-  }
-}
-
-/** Text the bitmap font cannot draw, in the system font snapped to solid pixels, top-left at (x, y). */
-function drawSystemText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number) {
-  const scratch = document.createElement("canvas");
-  scratch.width = measure(text) + 2;
-  scratch.height = 13;
-  const sc = scratch.getContext("2d", { willReadFrequently: true })!;
-  sc.font = LABEL_FONT;
-  (sc as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = "1px";
-  sc.textBaseline = "middle";
-  sc.fillStyle = "#ffffff";
-  sc.fillText(text, 0, 7);
-  const px = sc.getImageData(0, 0, scratch.width, scratch.height).data;
-  ctx.fillStyle = NAME_INK;
-  for (let k = 0; k < px.length; k += 4) {
-    if (px[k + 3] < 96) continue;
-    const i = k / 4;
-    ctx.fillRect(x + (i % scratch.width), y + Math.floor(i / scratch.width), 1, 1);
-  }
-}
-
-/** A plain name tag, in the bitmap font where it can draw the name and the system font where it cannot. */
-function tagTexture(text: string): { texture: THREE.CanvasTexture; aspect: number } {
+/**
+ * A plain name tag in the bitmap font, where it can draw the name, and the system font where it cannot: the
+ * pub's table draws its players' names so, with a crate of their score beside each (TableStage.ts).
+ */
+export function pixelTagTexture(text: string): { texture: THREE.CanvasTexture; aspect: number } {
   const canvas = document.createElement("canvas");
   if (canDrawPixelText(text)) {
     canvas.width = pixelTextWidth(text) + 6;
@@ -319,59 +458,6 @@ function tagTexture(text: string): { texture: THREE.CanvasTexture; aspect: numbe
   return { texture: makeTexture(canvas), aspect: canvas.width / canvas.height };
 }
 
-/**
- * A name tag, and with `plate` a hero's overhead plate: their level on a
- * little gold shield, the name in the bitmap font, then a thin HP bar
- * (green, yellow, red as it drops) and a thinner XP bar. On your own plate,
- * a lightning bolt for each gathering outing, lit for those left. Every
- * pixel is solid, so it stays as crisp as the sprite under it.
- */
-export function labelTexture(text: string, plate?: PlateStats): { texture: THREE.CanvasTexture; aspect: number } {
-  if (!plate) return tagTexture(text);
-  const canvas = document.createElement("canvas");
-  canvas.width = plateWidth(text, plate);
-  canvas.height = PLATE_ROWS;
-  const ctx = canvas.getContext("2d")!;
-  const p = plate;
-  const w = canvas.width;
-  // The plate: a dark rim, its field, and a faint sheen along the top.
-  ctx.fillStyle = PLATE_EDGE;
-  ctx.fillRect(6, 1, w - 6, PLATE_ROWS - 1);
-  ctx.fillStyle = PLATE_FILL;
-  ctx.fillRect(7, 2, w - 8, PLATE_ROWS - 3);
-  ctx.fillStyle = PLATE_SHEEN;
-  ctx.fillRect(12, 2, w - 14, 1);
-  drawShield(ctx, p.level, 1, 3);
-  if (canDrawPixelText(text)) drawPixelText(ctx, text, TEXT_X, TEXT_Y, NAME_INK);
-  else drawSystemText(ctx, text, TEXT_X, TEXT_Y - 2);
-  if (p.bolts && p.bolts.max > 0) {
-    let x = TEXT_X + nameWidth(text) + 4;
-    for (let i = 0; i < p.bolts.max; i++) {
-      stamp(ctx, BOLT, x, TEXT_Y, i < p.bolts.left ? BOLT_ON : BOLT_OFF);
-      x += 6;
-    }
-  }
-  const inner = w - TEXT_X - 3;
-  const bar = (y: number, rows: number, fraction: number, colour: string, track = BAR_TRACK) => {
-    ctx.fillStyle = track;
-    ctx.fillRect(TEXT_X, y, inner, rows);
-    const filled = barPixels(fraction, inner);
-    if (filled > 0) {
-      ctx.fillStyle = colour;
-      ctx.fillRect(TEXT_X, y, filled, rows);
-    }
-  };
-  const [hpPx, shieldPx] = hpPixels(p, inner);
-  ctx.fillStyle = BAR_TRACK;
-  ctx.fillRect(TEXT_X, HP_Y, inner, 2);
-  ctx.fillStyle = HP_COLOR[healthBand(p.hp)];
-  ctx.fillRect(TEXT_X, HP_Y, hpPx, 2);
-  ctx.fillStyle = SHIELD_COLOR;
-  ctx.fillRect(TEXT_X + hpPx, HP_Y, shieldPx, 2);
-  if (p.glow) bar(XP_Y, 2, p.xp, XP_GLOW_COLOR, XP_GLOW_TRACK);
-  else bar(XP_Y, 2, p.xp, XP_COLOR);
-  return { texture: makeTexture(canvas), aspect: canvas.width / canvas.height };
-}
 
 // ---------- speech bubbles ----------
 
@@ -764,7 +850,7 @@ export function badgeTexture(badges: readonly Badge[]): { texture: THREE.CanvasT
   const ctx = canvas.getContext("2d")!;
   badges.forEach((b, i) => {
     const x = i * (SIZE + GAP);
-    ctx.fillStyle = "#14101f";
+    ctx.fillStyle = "#1c0d0e";
     ctx.fillRect(x, 0, SIZE, SIZE);
     ctx.fillStyle = b.color;
     ctx.globalAlpha = 0.28;
@@ -781,7 +867,7 @@ export function badgeTexture(badges: readonly Badge[]): { texture: THREE.CanvasT
       ctx.textAlign = "right";
       ctx.textBaseline = "bottom";
       ctx.lineWidth = 3;
-      ctx.strokeStyle = "#14101f";
+      ctx.strokeStyle = "#1c0d0e";
       ctx.strokeText(String(b.rounds), x + SIZE - 1, SIZE);
       ctx.fillStyle = "#fbe6c8";
       ctx.fillText(String(b.rounds), x + SIZE - 1, SIZE);
