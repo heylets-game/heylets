@@ -13,7 +13,7 @@ export async function sendAuthCode(env: Env, to: string, code: string): Promise<
   const subject = `Your Harbor of Heylets code: ${code}`;
   const text =
     `Your Harbor of Heylets code is ${code}\n\n` +
-    "Enter it with your new password within 15 minutes. If you did not ask for this, you can ignore this email.\n";
+    "Type it into the game with the password you want, within 15 minutes, and you are logged in with your hero just as you left them. If you did not ask for this, you can ignore this email.\n";
   if (!env.EMAIL || !env.MAIL_FROM_ADDRESS) {
     console.log(`[email/dev] to=${to} ${text.split("\n")[0]}`);
     return true;
@@ -24,7 +24,7 @@ export async function sendAuthCode(env: Env, to: string, code: string): Promise<
     '<h1 style="font-size:22px; color:#ffd23f; margin:0 0 12px;">The Harbor of Heylets</h1>' +
     '<p style="margin:0 0 16px; color:#a9a4c4;">Your code for a new password:</p>' +
     `<div style="font-size:32px; letter-spacing:8px; padding:16px; background:#14122a; border:2px solid #4a4570; text-align:center;">${code}</div>` +
-    '<p style="margin:16px 0 0; color:#a9a4c4; font-size:12px;">Enter it within 15 minutes. If you did not ask for this, ignore this email.</p>' +
+    '<p style="margin:16px 0 0; color:#a9a4c4; font-size:12px;">Type it into the game with the password you want, within 15 minutes, and you are back with your hero. If you did not ask for this, ignore this email.</p>' +
     "</div></body></html>";
   try {
     await env.EMAIL.send({ to, from: { email: env.MAIL_FROM_ADDRESS, name: env.MAIL_FROM_NAME ?? "The Harbor of Heylets" }, subject, text, html });
