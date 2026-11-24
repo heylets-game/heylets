@@ -15,7 +15,7 @@
 // The connection itself, and what every walk-in place's room says the same
 // way (who left, XP, looks, the chat), is useRoom.ts.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { HexPos } from "@gantt-quest/core";
 import { HARBOR_NAME, generateHarbor, harborPath, type HarborBoard, type HarborClientMessage, type HarborPlayer, type HarborServerMessage, type Muster, type XpMessage } from "@gantt-quest/world";
 import { PROFILE } from "./api";
@@ -26,7 +26,10 @@ import { useRoomPeople, useRoomSocket, type ChatLine } from "./useRoom";
 export interface HarborConnection {
   you: string | null;
   crew: { id: string; name: string } | null;
+  /** Whoever is walking about the Harbor (you too, wherever you are). */
   players: HarborPlayer[];
+  /** Crewmates inside one of the Harbor's buildings (`inside` says which): shown over its roof, not in the street. */
+  indoors: HarborPlayer[];
   board: HarborBoard;
   chat: ChatLine[];
   /** "paused": closed while the player is away; it opens again when they are back. */
@@ -49,11 +52,12 @@ const theHarbor = () => (harborMap ??= generateHarbor());
 
 /**
  * `onMoved` fires for every walk, including your own, so the renderer can animate it; `onSaid` for every chat line, yours too, so it can show it over the speaker.
- * `here`: false while the player is inside one of the Harbor's buildings with the Harbor kept behind it (HarborView's
- * `resting`). The connection is closed, as when they are away, so nobody sees them standing outside; it opens again
- * as they step back out, at the door they went in by.
+ * `here`: false while the Harbor is kept behind somewhere else (HarborView's `resting`). Out on a map or at the
+ * atlas the connection is closed, as when they are away. Inside one of the Harbor's own buildings (`inside`: "pub", a
+ * keeper's house or "hut:<owner id>") it is opened again marked as inside that one, so the crew sees their portrait
+ * over its roof rather than nobody at all; it opens afresh as they step back out, at the door they went in by.
  */
-export function useHarbor(onMoved: (id: string, path: HexPos[]) => void, onXp?: (m: XpMessage) => void, onSaid?: (id: string, text: string) => void, here = true): HarborConnection {
+export function useHarbor(onMoved: (id: string, path: HexPos[]) => void, onXp?: (m: XpMessage) => void, onSaid?: (id: string, text: string) => void, here = true, inside: string | null = null): HarborConnection {
   const [crew, setCrew] = useState<HarborConnection["crew"]>(null);
   const [board, setBoard] = useState<HarborBoard>(EMPTY);
   const [trades, setTrades] = useState(0);
@@ -85,14 +89,22 @@ export function useHarbor(onMoved: (id: string, path: HexPos[]) => void, onXp?: 
     walked(id, path);
   };
 
+  /** Inside a building, with the connection kept to say so. */
+  const indoorsNow = !here && !!inside;
   const socket = useRoomSocket<HarborServerMessage>({
-    awake: awake && here,
-    looks: true,
+    awake: awake && (here || indoorsNow),
+    // A new connection on going in and on coming out: the room is told where they are as it is opened.
+    key: indoorsNow ? `inside:${inside}` : "out",
+    looks: !indoorsNow,
     elsewhere: `${HARBOR_NAME} is open in another tab.`,
     lost: "Lost the connection to the Harbor. Reload to try again.",
     path() {
       // Coming out of a hut: ask to arrive at its door rather than the usual spot.
       const query = new URLSearchParams(PROFILE ? { p: PROFILE } : {});
+      if (indoorsNow) {
+        query.set("inside", inside!);
+        return `/api/crew/ws?${query}`;
+      }
       try {
         const at = sessionStorage.getItem("gq.harborAt");
         if (at) query.set("at", at);
@@ -105,11 +117,14 @@ export function useHarbor(onMoved: (id: string, path: HexPos[]) => void, onXp?: 
     },
     onMessage(msg) {
       if (msg.type === "snapshot") {
-        // The hint has been used. (Cleared here, not on connect, so a connection dropped before it lands can ask again.)
-        try {
-          sessionStorage.removeItem("gq.harborAt");
-        } catch {
-          // Nothing to clear.
+        // The hint has been used. (Cleared here, not on connect, so a connection dropped before it lands can ask
+        // again; and not on going in, for it is the door to come back out of.)
+        if (!msg.players.find((p) => p.id === msg.you)?.inside) {
+          try {
+            sessionStorage.removeItem("gq.harborAt");
+          } catch {
+            // Nothing to clear.
+          }
         }
         const me = msg.players.find((p) => p.id === msg.you);
         const asked = waiting.current;
@@ -207,5 +222,9 @@ export function useHarbor(onMoved: (id: string, path: HexPos[]) => void, onXp?: 
     showWalk(me.id, path);
   }, []);
   opening.current = here && awake && socket.status === "connecting";
-  return { you, crew, players, board, chat, status: socket.status, error: socket.error, trades, muster, flotsam, send };
+  // Crewmates indoors are kept apart from those in the street. (Your own hero stays in `players` at the door, as the
+  // Harbor last had you.)
+  const street = useMemo(() => players.filter((p) => !p.inside || p.id === you), [players, you]);
+  const indoors = useMemo(() => players.filter((p) => p.inside && p.id !== you), [players, you]);
+  return { you, crew, players: street, indoors, board, chat, status: socket.status, error: socket.error, trades, muster, flotsam, send };
 }

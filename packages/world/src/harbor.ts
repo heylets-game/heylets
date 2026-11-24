@@ -750,6 +750,12 @@ export interface HarborPlayer {
   gilded?: boolean;
   /** In a hut: the bed (a furnishing id) they are lying on after a rest, until they walk off. */
   bed?: number;
+  /**
+   * In the Harbor: they are inside one of its buildings, not walking about. "pub", a keeper's house ("smithy",
+   * "apothecary", "galley", "lapidary") or "hut:<owner id>". They are not drawn in the street; their portrait bobs
+   * over that building's roof instead, and `pos` is its door, where they come back out.
+   */
+  inside?: string;
 }
 
 /**

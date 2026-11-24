@@ -31,6 +31,7 @@ import { BottleNote } from "./BottleNote";
 import { Garden } from "./Garden";
 import { WellMenu } from "./WellMenu";
 import { GardenMarks, type GardenMarkInfo } from "./GardenMarks";
+import { IndoorMarks, insidePoi, insideWords } from "./IndoorMarks";
 import { HeroSheet, useHeroSheet } from "./HeroSheet";
 import { LOOK_CHANGED } from "./ChangeLook";
 import { InventoryScreen } from "./InventoryScreen";
@@ -155,7 +156,7 @@ function boatOf(map: WorldMap, p: { pos: HexPos; vessel?: Vessel | null }): Vess
   return p.vessel ?? (tileAt(map, p.pos)?.biome === "water" ? "barrel" : undefined);
 }
 
-export function HarborView({ me, refresh, resting = false }: { me: Me; refresh(): Promise<unknown>; resting?: boolean }) {
+export function HarborView({ me, refresh, resting = false, inside = null }: { me: Me; refresh(): Promise<unknown>; resting?: boolean; inside?: string | null }) {
   useAudioScene("harbor", !resting);
   /** Whether the Harbor was made put away (the game was opened somewhere else: on a map, in a building). */
   const born = useRef(resting);
@@ -212,6 +213,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     (m) => renderer.current?.playEvents(xpEvents(m)),
     (id, text) => renderer.current?.say(id, text),
     !resting,
+    inside,
   );
   // The crew's muster, told down the Harbor's socket: whoever says they are ready is taken to the map when it starts.
   const muster = useMuster(harbor.you ?? me.player.id, { pushed: harbor.muster, onStart: () => void refresh() });
@@ -232,7 +234,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
   aboutRef.current = about;
   /** Your gathering outings left today, drawn as lightning bolts on your plate. Read on the way in and after anything that spends or restores them. */
   const [stamina, setStamina] = useState<{ left: number; max: number } | null>(null);
-  const { board, players, you } = harbor;
+  const { board, players, indoors, you } = harbor;
   // Your own hero is drawn in what the bag shows while a change of gear is on its way; otherwise as the room tells.
   const ownOutfit = useOwnLook(players.find((p) => p.id === you)?.outfit);
   /** Go to where a crewmate is: the zone they are on (beside them), if the server says they can be joined. */
@@ -249,10 +251,12 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
   };
   // The whole crew, with whoever is walking the Harbor right now marked here (and drawn in what they wear),
   // and whoever is out on a map marked as that.
+  // Someone inside one of the town's buildings is here too, tagged with where.
   const roster: RosterMember[] = useMemo(() => board.members.map((m) => {
-    const p = players.find((x) => x.id === m.id);
-    return { id: m.id, name: m.name, classId: m.classId, level: p?.level ?? m.level, here: !!p && !m.zone, outfit: p?.outfit, tags: m.zone ? [m.zone.fighting ? "in a fight" : "on a map"] : undefined };
-  }), [board.members, players]);
+    const p = players.find((x) => x.id === m.id) ?? indoors.find((x) => x.id === m.id);
+    const tags = m.zone ? [m.zone.fighting ? "in a fight" : "on a map"] : p?.inside ? [insideWords(p, board.members)] : undefined;
+    return { id: m.id, name: m.name, classId: m.classId, level: p?.level ?? m.level, here: !!p && !m.zone, outfit: p?.outfit, tags };
+  }), [board.members, players, indoors]);
   const hereCount = roster.filter((m) => m.here).length;
   const built = builtProjects(board.works);
   const lit = built.includes("lighthouse");
@@ -529,7 +533,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
   const hoverRegular = hover ? regularOn(about, hover) : undefined;
   const hoverWho = hoverRegular ? regularOf(hoverRegular.id) : undefined;
   const hoverBram = !!hover && isFishmongerAt(hover);
-  const tip = hoverBram ? `${FISHMONGER.name}, ${FISHMONGER.trade}. He buys your catch and sells bait. Click to walk up and talk.`
+  const placeTip = hoverBram ? `${FISHMONGER.name}, ${FISHMONGER.trade}. He buys your catch and sells bait. Click to walk up and talk.`
     : hoverWho ? `${hoverWho.name}, ${hoverWho.trade}. Click to walk up and talk.`
     : !hoverPoi ? null
     : hoverPoi.kind === "cave" ? "The Haunted Caverns: go down and fight what lurks in the dark"
@@ -555,6 +559,9 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
     : hoverPoi.kind === "plot" ? `${board.members.find((m) => `plot:${m.id}` === hoverPoi.id)?.name ?? "Someone"}'s ${hutTier(hoverPoi.tier ?? 1).name.toLowerCase()}`
     : gardenOwner(hoverPoi) ? gardenTip(gardenOwner(hoverPoi)!)
     : null;
+  // Whoever is inside the building pointed at (their portraits bob over its roof) is named after what it is.
+  const inHover = hoverPoi && !hoverBram && !hoverWho ? indoors.filter((p) => p.inside && insidePoi(p.inside) === hoverPoi.id).map((p) => p.name) : [];
+  const tip = placeTip && inHover.length > 0 ? `${placeTip}. Inside: ${inHover.join(", ")}` : placeTip;
 
   /** The place's name alone, hung over it on a plate while it is pointed at (the tip says what it is for). */
   const ownerOf = (prefix: string) => board.members.find((m) => `${prefix}:${m.id}` === hoverPoi?.id);
@@ -1011,6 +1018,7 @@ export function HarborView({ me, refresh, resting = false }: { me: Me; refresh()
       {/* A place gone into by clicking it has no button over the hero: only what must be pressed (`press`) keeps one. */}
       {here?.press && !here.closed && self && !panelOpen && <TileAction renderer={renderer} pos={self.pos} unitId={self.id} label={here.label} run={here.run} />}
       {!panelOpen && <GardenMarks renderer={renderer} marks={gardenMarks} now={clock} />}
+      {!panelOpen && <IndoorMarks renderer={renderer} indoors={indoors} members={board.members} />}
       {tip && <div className="tip">{tip}</div>}
       {title && hoverPoi && !panelOpen && <PlaceTitle renderer={renderer} poiId={hoverPoi.id} title={title} />}
       {error && <div className="toast">{error}</div>}

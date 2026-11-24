@@ -140,6 +140,18 @@ input:focus, button:focus-visible, select:focus { outline: 2px solid var(--accen
 .attention-mark span::after { bottom: 0; height: 8px; }
 @keyframes attention-bounce { from { translate: 0 0; } to { translate: 0 -10px; } }
 @media (prefers-reduced-motion: reduce) { .attention-mark span { animation: none; } }
+/* Crewmates inside a building (IndoorMarks.tsx): their portraits in a little parchment pin over its roof, bobbing gently. */
+.indoor-mark { position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 5; pointer-events: none; visibility: hidden; will-change: transform; }
+.indoor-mark > div {
+  position: absolute; left: 0; bottom: 8px; translate: -50% 0; display: flex; align-items: center; gap: 2px; padding: 2px;
+  background: var(--paper); border: 1px solid var(--paper-lo); box-shadow: 0 0 0 1px rgba(44, 35, 24, 0.7), 0 3px 6px rgba(0, 0, 0, 0.45);
+  animation: indoor-bob 1.8s ease-in-out infinite alternate;
+}
+.indoor-mark > div::after { content: ""; position: absolute; left: 50%; top: 100%; translate: -50% 1px; width: 10px; height: 6px; background: var(--paper-lo); clip-path: polygon(0 0, 100% 0, 50% 100%); }
+.indoor-face { display: block; background: #3a3148; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35); }
+.indoor-more { padding: 0 3px; font-size: 11px; line-height: 33px; font-weight: bold; color: var(--paper-ink); }
+@keyframes indoor-bob { from { transform: translateY(0); } to { transform: translateY(-4px); } }
+@media (prefers-reduced-motion: reduce) { .indoor-mark > div { animation: none; } }
 
 .toast.note { background: #1f3a2c; border-color: var(--good); }
 .toast { position: absolute; left: 50%; top: 52px; transform: translateX(-50%); z-index: 40; background: #4a2020; border: 2px solid var(--bad); padding: 6px 14px; }
