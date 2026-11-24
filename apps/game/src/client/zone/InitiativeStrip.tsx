@@ -11,7 +11,7 @@
 // side's colour, with a pointer and its name under it. Your own heroes are
 // ringed in gold, the rest of the crew framed in sea-green, enemies in red.
 // Those who have acted this round are faded; the fallen are grey and struck
-// through. Each has its health under it (a shield after it, pale). Pointing
+// through. Each has its health under it (a shield as a steel bar over it). Pointing
 // at a face says who it is, what they have left and what they rolled for the
 // order (and the roll that broke a tie, if one did).
 //
@@ -120,7 +120,7 @@ export function InitiativeStrip({ round, units, onPick }: InitiativeStripProps) 
         >
           <div ref={track} className="fo-track" style={{ translate: `${-slide.at}px 0` }}>
             {units.map((u) => {
-              const whole = Math.max(u.maxHp, u.hp + (u.shield ?? 0), 1);
+              const max = Math.max(u.maxHp, 1);
               return (
                 <button
                   key={u.id}
@@ -138,9 +138,10 @@ export function InitiativeStrip({ round, units, onPick }: InitiativeStripProps) 
                   <span className="fo-pic">
                     {u.hidden ? <span className="fo-unseen" aria-hidden>?</span> : <img src={u.portrait} alt="" draggable={false} />}
                   </span>
-                  <span className="fo-hp" aria-hidden>
-                    {!u.hidden && <i style={{ width: `${(100 * Math.max(0, u.hp)) / whole}%` }} />}
-                    {!u.hidden && !!u.shield && <b style={{ width: `${(100 * u.shield) / whole}%` }} />}
+                  {/* A shield rides over the HP as a steel bar of its own, as on the plates over heads. */}
+                  <span className={`fo-hp ${!u.hidden && u.shield ? "shielded" : ""}`} aria-hidden>
+                    {!u.hidden && !!u.shield && <b style={{ width: `${Math.min(100, (100 * u.shield) / max)}%` }} />}
+                    {!u.hidden && <i style={{ width: `${Math.min(100, (100 * Math.max(0, u.hp)) / max)}%` }} />}
                   </span>
                   {u.turn && <span className="fo-point" aria-hidden />}
                 </button>

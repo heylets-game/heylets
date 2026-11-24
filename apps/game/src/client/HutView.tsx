@@ -211,7 +211,6 @@ export function HutView({ ownerId, me, refresh, onLeave }: { ownerId: string; me
       ...(finish.wall && wallLook(finish.wall) ? { walls: { id: finish.wall, look: wallLook(finish.wall)! } } : {}),
       ...(finish.floor && floorLook(finish.floor) ? { floor: { id: finish.floor, look: floorLook(finish.floor)! } } : {}),
       lampOff,
-      stamina: stamina ? { left: stamina.stamina.left, max: stamina.stamina.max } : undefined,
       props: placed.map((f) => {
         const def = defOf(f);
         const small = isSmall(f.defId);

@@ -1720,7 +1720,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       // What lies round the land: the sea, or a void it floats over.
       backdrop: (state.scene?.backdrop as BackdropKind | undefined) ?? "sea",
       // A lit torch is held in the off hand, where a shield would be.
-      heroes: picture.units.filter((u) => u.side === "hero").map((u) => ({ id: u.id, classId: u.kind, pos: shownAt.get(u.id) ?? u.pos, name: u.name, outfit: u.torch ? { ...u.outfit, [u.torchHand === "main" ? "main_hand" : "off_hand"]: TORCH_IN_HAND } : u.outfit, torch: !!u.torch || u.conditions.some((c) => c.kind === "beacon") || carriesLantern(u), effects: badgesOf(u), level: u.level, xp: 0, hp: u.hp, maxHp: u.maxHp, shield: shieldOf(u), down: u.down, prone: u.conditions.some((c) => c.kind === "prone"), unseen: u.conditions.some((c) => c.kind === "invisible"), active: turn(u.id) })),
+      heroes: picture.units.filter((u) => u.side === "hero").map((u) => ({ id: u.id, classId: u.kind, pos: shownAt.get(u.id) ?? u.pos, name: u.name, outfit: u.torch ? { ...u.outfit, [u.torchHand === "main" ? "main_hand" : "off_hand"]: TORCH_IN_HAND } : u.outfit, torch: !!u.torch || u.conditions.some((c) => c.kind === "beacon") || carriesLantern(u), effects: badgesOf(u), level: u.level, hp: u.hp, maxHp: u.maxHp, shield: shieldOf(u), down: u.down, prone: u.conditions.some((c) => c.kind === "prone"), unseen: u.conditions.some((c) => c.kind === "invisible"), active: turn(u.id) })),
       // What the dark hides is not drawn: out of a fight the server does not even send it.
       // The fallen lie where they fell, to be searched (the picture's own, while it still has them, are drawn over these).
       // One lost to a pit is not drawn at all.
