@@ -2,7 +2,7 @@
 // in its Harbor is shown (who is in it and where, its works, the maps it has
 // open).
 
-import { atlasNodeById, roofColor, type GardenBed, type HarborBoard } from "@gantt-quest/world";
+import { asCrop, atlasNodeById, roofColor, type GardenBed, type HarborBoard } from "@gantt-quest/world";
 import { crewWorks } from "../projects";
 import { crewPresence } from "../zones";
 import { parseBin } from "./plots";
@@ -100,15 +100,15 @@ export async function harborBoard(db: D1Database, crewId: string): Promise<Harbo
       .prepare("SELECT code, node FROM zones WHERE kind = 'atlas' AND crew_id = ?1 AND status != 'cleared' AND updated_at > ?2 ORDER BY updated_at DESC LIMIT 6")
       .bind(crewId, now() - OPEN_MAP_MS)
       .all<{ code: string; node: string | null }>(),
-    // What is growing in each member's herb garden, by their hut's door.
+    // What is growing in each member's garden, by their hut's door.
     db
-      .prepare("SELECT g.player_id, g.bed, g.planted_at, g.ready_at, g.watered_by, g.fed_by FROM garden_beds g JOIN crew_members m ON m.player_id = g.player_id WHERE m.crew_id = ? ORDER BY g.bed")
+      .prepare("SELECT g.player_id, g.bed, g.crop, g.planted_at, g.ready_at, g.watered_by, g.fed_by FROM garden_beds g JOIN crew_members m ON m.player_id = g.player_id WHERE m.crew_id = ? ORDER BY g.bed")
       .bind(crewId)
-      .all<{ player_id: string; bed: number; planted_at: number; ready_at: number; watered_by: string | null; fed_by: string | null }>(),
+      .all<{ player_id: string; bed: number; crop: string | null; planted_at: number; ready_at: number; watered_by: string | null; fed_by: string | null }>(),
   ]);
   const gardenOf = new Map<string, GardenBed[]>();
   for (const g of gardens.results) {
-    const bed: GardenBed = { bed: g.bed, plantedAt: g.planted_at, readyAt: g.ready_at, ...(g.watered_by ? { wateredBy: g.watered_by } : {}), ...(g.fed_by ? { fedBy: g.fed_by } : {}) };
+    const bed: GardenBed = { bed: g.bed, crop: asCrop(g.crop), plantedAt: g.planted_at, readyAt: g.ready_at, ...(g.watered_by ? { wateredBy: g.watered_by } : {}), ...(g.fed_by ? { fedBy: g.fed_by } : {}) };
     gardenOf.set(g.player_id, [...(gardenOf.get(g.player_id) ?? []), bed]);
   }
 

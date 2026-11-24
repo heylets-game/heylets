@@ -1,7 +1,7 @@
 // HTTP helpers for the Harbor screens.
 
 import type { StatKey } from "@gantt-quest/core";
-import type { FinishKind, HutFinish, Muster, MusterAnswer } from "@gantt-quest/world";
+import type { FinishKind, HutFinish, Muster, MusterAnswer, SowWith } from "@gantt-quest/world";
 import type { Appearance, BaitId, BoatId, RodId, CarryState, FishSpot, GatherChoice, HarborXpStatus, GatherSpot, HarborWorks, HutSummary, ItemDef, Lodestone, ProjectAmounts, PublicHero, Resources, SalesEntry, SalesmanId, SalesmanVisit, ShopEntry, Throwable, TradeSide } from "@gantt-quest/world";
 import { devTools } from "./devTools";
 import { forcedSalesman } from "./salesmanClock";
@@ -295,12 +295,12 @@ export const api = {
   answerMuster: (answer: MusterAnswer) => request<{ muster: Muster }>("/api/atlas/muster/answer", { answer }),
   /** The crew's town chest: its tabs and what is in each. Every call below gives the chest back as it now is. */
   chest: () => request<ChestView>("/api/chest"),
-  /** A hut's herb garden, yours or a crewmate's, and what you hold to tend it with. */
+  /** A hut's garden, yours or a crewmate's, and what you hold to tend it with. */
   garden: (owner: string) => request<GardenView>(`/api/garden/${encodeURIComponent(owner)}`),
-  gardenPlant: (bed: number, sow: "seeds" | "herbs") => request<{ ok: true }>("/api/garden/plant", { bed, with: sow }),
+  gardenPlant: (bed: number, sow: SowWith) => request<{ ok: true }>("/api/garden/plant", { bed, with: sow }),
   gardenWater: (owner: string, bed: number) => request<{ ok: true }>("/api/garden/water", { owner, bed }),
   gardenFeed: (owner: string, bed: number) => request<{ ok: true }>("/api/garden/feed", { owner, bed }),
-  gardenPick: () => request<{ herbs: number; beds: number; xp?: XpResult }>("/api/garden/pick", {}),
+  gardenPick: () => request<{ herbs: number; mushrooms: number; beds: number; xp?: XpResult }>("/api/garden/pick", {}),
   grindBone: (qty: number) => request<{ bonemeal: number }>("/api/garden/grind", { qty }),
   /** Your watering can: how many waterings are in it (null: you have none). */
   can: () => request<{ water: number | null }>("/api/can"),

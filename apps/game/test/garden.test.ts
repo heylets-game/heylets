@@ -1,9 +1,9 @@
-// The herb garden by a hut's door against a real SQLite database with the game's migrations applied (the stand-in
+// The garden by a hut's door against a real SQLite database with the game's migrations applied (the stand-in
 // for D1 in d1.ts, where a batch is one transaction).
 
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { BONEMEAL_PER_BONE, CAN_CAPACITY, CAN_PRICE, GARDEN_YIELD, GROW_MS, HARBOR_XP, SEED_PRICE, bedYield } from "@gantt-quest/world";
+import { BONEMEAL_PER_BONE, CAN_CAPACITY, CAN_PRICE, CROP_GROW_MS, GARDEN_YIELD, GROW_MS, HARBOR_XP, SEED_PRICE, bedYield } from "@gantt-quest/world";
 import { buyCan, buySeeds, canOf, feedBed, fillCan, gardenView, grindBone, pickGarden, plantBed, waterBed } from "../src/server/garden";
 import { harborBoard, leaveCrew } from "../src/server/db";
 import { addHero, openDb, type Row } from "./d1";
@@ -45,13 +45,24 @@ describe("planting", () => {
     give("herbs", 1);
     expect(await plantBed(db, "ann", 0, "seeds")).toBeNull();
     expect(qty("seeds")).toBe(1);
-    expect(bedRow(0)).toMatchObject({ planted_at: T0, ready_at: T0 + GROW_MS, watered_by: null, fed_by: null });
+    expect(bedRow(0)).toMatchObject({ crop: "herbs", planted_at: T0, ready_at: T0 + GROW_MS, watered_by: null, fed_by: null });
     expect(await plantBed(db, "ann", 0, "herbs")).toMatch(/already growing/);
     expect(await plantBed(db, "ann", 1, "herbs")).toBeNull();
     expect(qty("herbs")).toBe(0);
     // A Shack's garden has two beds.
     expect(await plantBed(db, "ann", 2, "seeds")).toMatch(/no such bed/);
     expect(qty("seeds")).toBe(1);
+  });
+
+  it("plants a mushroom from your stock, and it grows mushrooms, more slowly", async () => {
+    expect(await plantBed(db, "ann", 0, "mushrooms")).toMatch(/caverns/);
+    give("mushrooms", 2);
+    expect(await plantBed(db, "ann", 0, "mushrooms")).toBeNull();
+    expect(qty("mushrooms")).toBe(1);
+    expect(bedRow(0)).toMatchObject({ crop: "mushrooms", planted_at: T0, ready_at: T0 + CROP_GROW_MS.mushrooms });
+    const v = await gardenView(db, "ann", "ann");
+    expect(typeof v !== "string" && v.growing).toEqual([{ bed: 0, crop: "mushrooms", plantedAt: T0, readyAt: T0 + CROP_GROW_MS.mushrooms }]);
+    expect(typeof v !== "string" && v.held.mushrooms).toBe(1);
   });
 
   it("plants once when asked twice at the same moment, and keeps the second seed", async () => {
@@ -142,7 +153,7 @@ describe("picking", () => {
     const want = bedYield("ann", { bed: 0, plantedAt: T0 }) + bedYield("ann", { bed: 1, plantedAt: T0 + 1000, wateredBy: "Bo" });
     const res = await pickGarden(db, "ann");
     if (typeof res === "string") throw new Error(res);
-    expect(res).toMatchObject({ herbs: want, beds: 2 });
+    expect(res).toMatchObject({ herbs: want, mushrooms: 0, beds: 2 });
     expect(res.xp?.granted).toBe(HARBOR_XP.gardenBed * 2);
     expect(want).toBeGreaterThanOrEqual(GARDEN_YIELD[0] * 2 + 1);
     expect(qty("herbs")).toBe(want);
@@ -151,12 +162,49 @@ describe("picking", () => {
     expect(await pickGarden(db, "ann")).toMatch(/Nothing is ready/);
   });
 
+  it("picks herbs and mushrooms together, each to its own stock", async () => {
+    sql.prepare("UPDATE huts SET tier = 2 WHERE player_id = 'ann'").run();
+    give("mushrooms", 1);
+    expect(await plantBed(db, "ann", 2, "mushrooms")).toBeNull();
+    // The herbs are ready long before the mushrooms: only they are picked.
+    vi.setSystemTime(T0 + GROW_MS + 1000);
+    const first = await pickGarden(db, "ann");
+    if (typeof first === "string") throw new Error(first);
+    expect(first).toMatchObject({ mushrooms: 0, beds: 2 });
+    expect(bedRow(2)?.crop).toBe("mushrooms");
+    // Then the mushrooms, and a herb bed planted alongside them.
+    give("seeds", 1);
+    expect(await plantBed(db, "ann", 0, "seeds")).toBeNull();
+    vi.setSystemTime(T0 + 1000 + CROP_GROW_MS.mushrooms + GROW_MS);
+    const herbsBefore = qty("herbs");
+    const res = await pickGarden(db, "ann");
+    if (typeof res === "string") throw new Error(res);
+    const mushrooms = bedYield("ann", { bed: 2, plantedAt: T0 + 1000 });
+    expect(res).toMatchObject({ mushrooms, beds: 2 });
+    expect(res.herbs).toBeGreaterThanOrEqual(GARDEN_YIELD[0]);
+    expect(qty("mushrooms")).toBe(mushrooms);
+    expect(qty("herbs")).toBe(herbsBefore + res.herbs);
+  });
+
   it("pays once when picked twice at the same moment", async () => {
     vi.setSystemTime(T0 + GROW_MS * 3);
     const both = await Promise.all([pickGarden(db, "ann"), pickGarden(db, "ann")]);
     const paid = both.filter((r) => typeof r !== "string");
     expect(paid).toHaveLength(1);
     expect(qty("herbs")).toBe((paid[0] as { herbs: number }).herbs);
+  });
+
+  it("pays once for herbs and mushrooms when picked twice at the same moment", async () => {
+    sql.prepare("UPDATE huts SET tier = 2 WHERE player_id = 'ann'").run();
+    give("mushrooms", 1);
+    expect(await plantBed(db, "ann", 2, "mushrooms")).toBeNull();
+    vi.setSystemTime(T0 + CROP_GROW_MS.mushrooms * 2);
+    const both = await Promise.all([pickGarden(db, "ann"), pickGarden(db, "ann")]);
+    const paid = both.filter((r) => typeof r !== "string") as { herbs: number; mushrooms: number }[];
+    expect(paid).toHaveLength(1);
+    expect(paid[0].mushrooms).toBeGreaterThan(0);
+    expect(qty("herbs")).toBe(paid[0].herbs);
+    expect(qty("mushrooms")).toBe(paid[0].mushrooms);
   });
 });
 
@@ -196,7 +244,7 @@ describe("the Harbor's board", () => {
     give("seeds", 1);
     expect(await plantBed(db, "ann", 1, "seeds")).toBeNull();
     const board = await harborBoard(db, CREW);
-    expect(board.members.find((m) => m.id === "ann")?.garden).toEqual([{ bed: 1, plantedAt: T0, readyAt: T0 + GROW_MS }]);
+    expect(board.members.find((m) => m.id === "ann")?.garden).toEqual([{ bed: 1, crop: "herbs", plantedAt: T0, readyAt: T0 + GROW_MS }]);
     expect(board.members.find((m) => m.id === "bo")?.garden).toBeUndefined();
     await leaveCrew(db, "ann");
     expect(bedRow(1)).toBeUndefined();

@@ -4,11 +4,12 @@
 //
 // It draws only what tending adds to the garden: a glowing frame round the bed under the pointer and the one
 // picked, and what each thing done looks like as it happens (a watering can's shower, a scatter of bonemeal,
-// seed dropping into the furrows, herbs leaping up out of a picked bed with a burst of glints). The beds
+// seed dropping into the furrows, herbs (or mushroom caps) leaping up out of a picked bed with a burst of glints). The beds
 // themselves grow in the place's model, which the Harbor redraws as the board says what grows. The view
 // (Garden.tsx) asks where each bed is on the screen to hang its tag there.
 
 import * as THREE from "three";
+import type { Crop } from "@gantt-quest/world";
 import { bedLayout, PATCH } from "./places/garden";
 import type { WorldMinigame, WorldRenderer } from "./WorldRenderer";
 
@@ -190,8 +191,8 @@ export class GardenStage implements WorldMinigame {
 
   // ---------- what tending looks like ----------
 
-  /** Play what was just done to a bed. */
-  play(effect: GardenEffect, bed: number) {
+  /** Play what was just done to a bed (`crop`: what grew in it, for picking). */
+  play(effect: GardenEffect, bed: number, crop: Crop = "herbs") {
     const { bw, bd, cx } = bedLayout(this.count);
     const x0 = cx(bed);
     const r = () => Math.random() - 0.5;
@@ -223,9 +224,10 @@ export class GardenStage implements WorldMinigame {
       }
       for (let i = 0; i < 10; i++) add(new THREE.BoxGeometry(0.014, 0.014, 0.014), "#6b5238", new THREE.Vector3(x0 + r() * bw * 0.6, PATCH.top + 0.01, r() * bd * 0.6), new THREE.Vector3(r() * 0.5, 0.45 + Math.random() * 0.3, r() * 0.5), { wait: 0.7, life: 0.55, spin: 8 });
     } else {
-      // Picked: sprigs of herb leap up out of the bed and away toward you, with a burst of glints.
+      // Picked: sprigs of herb (or mushroom caps) leap up out of the bed and away toward you, with a burst of glints.
+      const colors = crop === "mushrooms" ? ["#efe3c6", "#b8452f", "#c98a4b"] : ["#c9a3e6", "#7cc24f", "#5ea53f"];
       for (let i = 0; i < 12; i++) {
-        add(new THREE.IcosahedronGeometry(0.015, 0), i % 3 === 0 ? "#c9a3e6" : i % 2 ? "#7cc24f" : "#5ea53f", new THREE.Vector3(x0 + r() * bw * 0.6, PATCH.top + 0.06, r() * bd * 0.6), new THREE.Vector3(r() * 0.4, 1.0 + Math.random() * 0.5, 0.45 + Math.random() * 0.4), { wait: i * 0.03, life: 1.1, grav: 1.6, spin: 7, floor: -1 });
+        add(new THREE.IcosahedronGeometry(0.015, 0), i % 3 === 0 ? colors[0] : i % 2 ? colors[1] : colors[2], new THREE.Vector3(x0 + r() * bw * 0.6, PATCH.top + 0.06, r() * bd * 0.6), new THREE.Vector3(r() * 0.4, 1.0 + Math.random() * 0.5, 0.45 + Math.random() * 0.4), { wait: i * 0.03, life: 1.1, grav: 1.6, spin: 7, floor: -1 });
       }
       for (let i = 0; i < 14; i++) {
         add(new THREE.OctahedronGeometry(0.016, 0), i % 2 ? "#fff3b0" : "#d9ffb8", new THREE.Vector3(x0 + r() * bw * 0.8, PATCH.top + 0.1 + Math.random() * 0.12, r() * bd * 0.7), new THREE.Vector3(r() * 0.3, 0.35 + Math.random() * 0.3, r() * 0.3), { wait: Math.random() * 0.25, life: 0.9, grav: 0, spin: 9, glow: true, floor: -1 });

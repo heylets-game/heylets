@@ -1,8 +1,9 @@
-// A hut's herb garden, in the corner of its doorstep: a patch of turned earth behind a run of pickets, split into
+// A hut's garden, in the corner of its doorstep: a patch of turned earth behind a run of pickets, split into
 // beds (two by a Shack, three by a Cottage, four by a Lodge). Each bed is drawn as it has grown (garden.ts in the
 // world says how): bare tilled earth, seed just in with a marker stick, the first shoots, young plants, a full
-// bush, and a bush in flower with glints over it when it is ready to pick. A watered bed's earth is dark and wet;
-// a fed one is flecked with bonemeal. A garden nobody tends (no hut on the plot yet) is the old patch of greens.
+// bush, and a bush in flower with glints over it when it is ready to pick. A bed of mushrooms is dark bark mulch
+// instead, with pale buttons pushing up through it that open into clusters of red-brown caps. A watered bed's
+// earth is dark and wet; a fed one is flecked with bonemeal. A garden nobody tends (no hut on the plot yet) is the old patch of greens.
 //
 // The model is set down on the doorstep's corner (PLACE.garden: back 1, turned the corner's way), and laid out
 // here a further third of a turn round, as the town's dressing laid the patch out before it was a place.
@@ -23,6 +24,13 @@ const LEAF_LIGHT = "#6fae4a";
 const LEAF_RIPE = "#7cc24f";
 const BLOOMS = ["#c9a3e6", "#e9e3cf", "#e8c14a", "#b06fd0"];
 const BONEMEAL = "#efe8d4";
+const MULCH = "#3e2c1f";
+const MULCH_WET = "#2a1c12";
+const BARK = "#7a5a3a";
+const STEM = "#efe3c6";
+const GILLS = "#dcc9a2";
+const CAPS = ["#c94f31", "#b97a44", "#d56a3c"];
+const CAP_SPOT = "#f6efe0";
 const CAN = "#8fa3ad";
 
 /** A fixed 0..1 value for a garden and an index, so each garden is drawn the same every time. */
@@ -35,6 +43,8 @@ function noise(id: string, i: number): number {
 
 const cone = (r: number, h: number, seg = 5) => new THREE.ConeGeometry(r, h, seg).translate(0, h / 2, 0);
 const blob = (r: number) => new THREE.IcosahedronGeometry(r, 0);
+/** A mushroom's cap: the top half of a ball, its rim at y = 0. */
+const capShape = (r: number) => new THREE.SphereGeometry(r, 8, 3, 0, Math.PI * 2, 0, Math.PI / 2);
 const sparkleShape = new THREE.OctahedronGeometry(1, 0);
 /** Not pointed at: a glint over a bed is light, and pointing there means the ground behind it. */
 const unpickable = <T extends THREE.Object3D>(o: T): T => {
@@ -98,12 +108,78 @@ export const garden: PlaceModel = (poi, kit) => {
     beds.forEach((bed, b) => {
       const cx = middle(b);
       const wet = bed.watered && bed.stage !== "empty" && bed.stage !== "ready";
+      const shrooms = bed.crop === "mushrooms";
       box(EDGE, bw, 0.06, 0.02, cx, 0.02, -bd / 2);
       box(EDGE, bw, 0.06, 0.02, cx, 0.02, bd / 2);
       box(EDGE, 0.02, 0.06, bd, cx - bw / 2, 0.02, 0);
       box(EDGE, 0.02, 0.06, bd, cx + bw / 2, 0.02, 0);
-      box(wet ? SOIL_WET : SOIL, bw - 0.03, 0.055, bd - 0.03, cx, 0.02, 0);
+      box(shrooms ? (wet ? MULCH_WET : MULCH) : wet ? SOIL_WET : SOIL, bw - 0.03, 0.055, bd - 0.03, cx, 0.02, 0);
       const top = PATCH.top;
+      /** Glints over a bed ready to pick: the renderer turns and pulses them, each on its own beat. */
+      const glints = () => {
+        for (let s = 0; s < cols + 1; s++) {
+          const m = unpickable(new THREE.Mesh(sparkleShape, new THREE.MeshBasicMaterial({ color: s % 2 ? "#fff3b0" : "#d9ffb8", transparent: true, opacity: 0.95, depthWrite: false, blending: THREE.AdditiveBlending })));
+          const size = 0.024 + n(b * 9 + s) * 0.01;
+          m.position.set(cx + (n(b * 9 + s + 3) - 0.5) * bw * 0.8, top + 0.2 + n(b * 9 + s + 5) * 0.1, (n(b * 9 + s + 6) - 0.5) * bd * 0.7);
+          m.scale.setScalar(size);
+          m.userData.twinkle = b * 1.7 + s * 2.3;
+          m.userData.size = size;
+          m.userData.glow = true;
+          patch.add(m);
+        }
+      };
+      if (shrooms) {
+        // Chips of bark through the mulch.
+        for (let f = 0; f < 7; f++) box(BARK, 0.026, 0.008, 0.012, cx + (n(b * 30 + f) - 0.5) * (bw - 0.07), top, (n(b * 30 + f + 9) - 0.5) * (bd - 0.07), n(b * 30 + f + 4) * Math.PI);
+        if (bed.fed) for (let f = 0; f < 6; f++) box(BONEMEAL, 0.014, 0.008, 0.014, cx + (n(b * 20 + f) - 0.5) * (bw - 0.06), top, (n(b * 20 + f + 7) - 0.5) * (bd - 0.06));
+        if (bed.stage === "sown") {
+          // A marker stick with a russet tag, and pale threads of spawn worked into the mulch.
+          box(TIMBER, 0.012, 0.11, 0.012, cx + bw / 2 - 0.035, top, bd / 2 - 0.035);
+          box(CAPS[0], 0.045, 0.03, 0.006, cx + bw / 2 - 0.035, top + 0.07, bd / 2 - 0.028);
+          for (let f = 0; f < 8; f++) box(STEM, 0.02, 0.006, 0.006, cx + (n(b * 50 + f) - 0.5) * (bw - 0.08), top + 0.004, (n(b * 50 + f + 3) - 0.5) * (bd - 0.08), n(b * 50 + f + 6) * Math.PI);
+          return;
+        }
+        // Clusters of mushrooms in a grid on the bed, three to a cluster, each a little different.
+        const grow = { sprout: 0.35, young: 0.6, leafy: 0.85, ready: 1 }[bed.stage as "sprout" | "young" | "leafy" | "ready"];
+        for (let rr = 0; rr < 3; rr++) {
+          for (let cc = 0; cc < cols; cc++) {
+            const k = b * 40 + rr * 4 + cc;
+            const px = cx + (cols === 1 ? 0 : (cc - 0.5) * (bw / 2)) + (n(k) - 0.5) * 0.02;
+            const pz = -bd / 3 + (rr * bd) / 3 + (n(k + 1) - 0.5) * 0.02;
+            for (let m = 0; m < 3; m++) {
+              const a = n(k + 5 + m) * Math.PI * 2;
+              const off = m === 0 ? 0 : 0.022 + n(k + 8 + m) * 0.01;
+              const x = px + Math.cos(a) * off, z = pz + Math.sin(a) * off;
+              const s = grow * (m === 0 ? 1 : 0.62 + n(k + 11 + m) * 0.2) * (cols === 1 ? 1 : 0.85);
+              const cap = CAPS[Math.floor(n(k + 14 + m) * CAPS.length) % CAPS.length];
+              if (bed.stage === "sprout") {
+                // Pale buttons just pushing up through the mulch.
+                const btn = put(blob(0.016 * s / 0.35), STEM, x, top + 0.004, z);
+                btn.scale.y = 0.8;
+                continue;
+              }
+              const r = 0.034 * s, h = 0.062 * s;
+              put(new THREE.CylinderGeometry(r * 0.28, r * 0.36, h, 6).translate(0, h / 2, 0), STEM, x, top, z);
+              // A young cap is still closed round its stem; an open one shows its gills underneath.
+              const c = put(capShape(r), cap, x, top + h * 0.92, z);
+              c.scale.y = bed.stage === "young" ? 1.05 : 0.68;
+              if (bed.stage !== "young") {
+                const g = put(new THREE.CylinderGeometry(r * 0.96, r * 0.4, 0.004, 8), GILLS, x, top + h * 0.9, z);
+                g.rotation.y = a;
+              }
+              if (bed.stage === "ready" && m === 0) {
+                // Pale flecks on the big cap of each cluster.
+                for (let f = 0; f < 3; f++) {
+                  const fa = a + (f * 2 * Math.PI) / 3, up = 0.55 + f * 0.1;
+                  put(blob(r * 0.16), CAP_SPOT, x + Math.cos(fa) * r * Math.cos(up), top + h * 0.92 + r * 0.68 * Math.sin(up), z + Math.sin(fa) * r * Math.cos(up));
+                }
+              }
+            }
+          }
+        }
+        if (bed.stage === "ready") glints();
+        return;
+      }
       // Furrows in the earth: three ridges along each bed.
       if (bed.stage === "empty" || bed.stage === "sown") {
         for (let f = 0; f < 3; f++) box(wet ? "#4a3522" : TILTH, bw - 0.06, 0.012, 0.022, cx, top, -bd / 3 + (f * bd) / 3);
@@ -161,19 +237,7 @@ export const garden: PlaceModel = (poi, kit) => {
           }
         }
       }
-      if (bed.stage === "ready") {
-        // Glints over a bed ready to pick: the renderer turns and pulses them, each on its own beat.
-        for (let s = 0; s < cols + 1; s++) {
-          const m = unpickable(new THREE.Mesh(sparkleShape, new THREE.MeshBasicMaterial({ color: s % 2 ? "#fff3b0" : "#d9ffb8", transparent: true, opacity: 0.95, depthWrite: false, blending: THREE.AdditiveBlending })));
-          const size = 0.024 + n(b * 9 + s) * 0.01;
-          m.position.set(cx + (n(b * 9 + s + 3) - 0.5) * bw * 0.8, top + 0.2 + n(b * 9 + s + 5) * 0.1, (n(b * 9 + s + 6) - 0.5) * bd * 0.7);
-          m.scale.setScalar(size);
-          m.userData.twinkle = b * 1.7 + s * 2.3;
-          m.userData.size = size;
-          m.userData.glow = true;
-          patch.add(m);
-        }
-      }
+      if (bed.stage === "ready") glints();
     });
     // A watering can left by the gate, its spout toward the beds.
     put(new THREE.CylinderGeometry(0.045, 0.05, 0.08, 10).translate(0, 0.04, 0), CAN, W / 2 + 0.08, 0, 0.16);
@@ -192,4 +256,4 @@ export const garden: PlaceModel = (poi, kit) => {
 };
 
 /** The beds as they look, as one short string: what the renderer compares to know when to draw a garden again. */
-export const bedsSig = (beds: readonly BedLook[] | undefined): string => (beds ? beds.map((b) => `${b.stage[0]}${b.stage[1]}${b.watered ? "w" : ""}${b.fed ? "f" : ""}`).join(",") : "");
+export const bedsSig = (beds: readonly BedLook[] | undefined): string => (beds ? beds.map((b) => `${b.crop[0]}${b.stage[0]}${b.stage[1]}${b.watered ? "w" : ""}${b.fed ? "f" : ""}`).join(",") : "");
