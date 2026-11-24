@@ -56,6 +56,8 @@ export interface CharacterRow {
   gold: number;
   /** JSON list of the class abilities chosen for the hero's slots (parse with parseAbilityLoadout). */
   ability_loadout: string;
+  /** 1 once its class ability slots have been filled for it (fillAbilitySlots). */
+  ability_loadout_filled?: number;
   /** JSON Appearance (appearance.ts), or null if they never chose one. */
   appearance?: string | null;
 }

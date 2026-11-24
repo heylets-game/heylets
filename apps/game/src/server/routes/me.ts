@@ -3,7 +3,7 @@
 
 import { consumablesOf } from "../consumables";
 import { isAdmin } from "../content";
-import { carryState, crewFor, ensureLook, getCharacter, getInventory } from "../db";
+import { carryState, crewFor, ensureLook, fillAbilitySlots, getCharacter, getInventory } from "../db";
 import { isDev } from "../dev";
 import { harborXpFor } from "../harbor-xp";
 import { lodestonesOf } from "../lodestones";
@@ -30,6 +30,8 @@ export function meRoutes(app: GameApp): void {
     // come in (see ensureLook). Whether that is still to do shows in the character just read, so nobody else
     // waits on a question about it; for the one it is done for, everything is read again with the clothes on.
     if (all[0]?.status === "active" && all[0].appearance == null && (await ensureLook(c.env.DB, player.id))) all = await read();
+    // Likewise a hero from before heroes started with their class ability slots filled (see fillAbilitySlots).
+    if (all[0]?.status === "active" && !all[0].ability_loadout_filled && (await fillAbilitySlots(c.env.DB, player.id))) all = await read();
     const [character, inventory, crew, carry, harborXp, seen, held, consumables, lodestones] = all;
     // `materials` is what is in the pack, in stacks beside the gear; `consumables` the potions and flasks there with
     // them, and `lodestones` the stones that open a place on the atlas.

@@ -8,6 +8,7 @@ import {
   HAIR_COLORS,
   SKIN_TONES,
   abilitySlotError,
+  filledLoadout,
   heroClass,
   parseAbilityLoadout,
   parseAppearance,
@@ -58,7 +59,7 @@ export async function saveDraft(db: D1Database, playerId: string, name: string, 
     .run();
 }
 
-/** Lock in the draft and hand out the class's starting weapon. */
+/** Lock in the draft, fill its class ability slots and hand out the class's starting weapon. */
 export async function confirmCharacter(db: D1Database, playerId: string): Promise<boolean> {
   const c = await getCharacter(db, playerId);
   if (!c || c.status !== "draft") return false;
@@ -68,7 +69,9 @@ export async function confirmCharacter(db: D1Database, playerId: string): Promis
   // A hero who chose how they look starts in their class's clothes as items they can take off.
   const garb = parseAppearance(c.appearance ?? null) ? starterGarb(c.class_id) : [];
   await db.batch([
-    db.prepare("UPDATE characters SET status = 'active' WHERE player_id = ?").bind(playerId),
+    db
+      .prepare("UPDATE characters SET status = 'active', ability_loadout = ?, ability_loadout_filled = 1 WHERE player_id = ?")
+      .bind(JSON.stringify(filledLoadout(c.class_id, c.level, parseAbilityLoadout(c.ability_loadout))), playerId),
     insertItem(db, playerId, weapon, true),
     ...garb.map((item) => insertItem(db, playerId, item, true)),
     // And the potions and flasks every hero starts out with.
@@ -151,6 +154,25 @@ export async function dressInGarb(db: D1Database, playerId: string, classId: str
         .bind(playerId, item.kind, item.ref, item.name, item.rarity, item.slot, item.power, item.levelReq, item.icon, JSON.stringify(item.statBonus), now),
     ),
   );
+}
+
+/**
+ * Fill the empty class ability slots of an active hero from before heroes started with them filled
+ * (filledLoadout). Done once, the first time they are loaded after that came in; true if it was done now.
+ */
+export async function fillAbilitySlots(db: D1Database, playerId: string): Promise<boolean> {
+  const c = await db
+    .prepare("SELECT class_id, level, ability_loadout FROM characters WHERE player_id = ? AND status = 'active' AND ability_loadout_filled = 0")
+    .bind(playerId)
+    .first<{ class_id: string; level: number; ability_loadout: string }>();
+  if (!c) return false;
+  const next = JSON.stringify(filledLoadout(c.class_id, c.level, parseAbilityLoadout(c.ability_loadout)));
+  // Only if the loadout is still what was read, as in setAbilitySlot.
+  const res = await db
+    .prepare("UPDATE characters SET ability_loadout = ?, ability_loadout_filled = 1 WHERE player_id = ? AND status = 'active' AND ability_loadout_filled = 0 AND ability_loadout = ?")
+    .bind(next, playerId, c.ability_loadout)
+    .run();
+  return res.meta.changes > 0;
 }
 
 /** Re-roll: the character and everything it owns is discarded. */

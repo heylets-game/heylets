@@ -15,6 +15,7 @@ export {
   deleteCharacter,
   dressInGarb,
   ensureLook,
+  fillAbilitySlots,
   getCharacter,
   renameCharacter,
   saveAppearance,

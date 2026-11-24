@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { STARTING_STATS } from "@gantt-quest/core";
-import { ABILITY_POOLS, ABILITY_SLOTS, abilitySlotError, classAbilitiesOf, parseAbilityLoadout, withAbilityInSlot, withClassAbilities, type AbilityPools } from "./classabilities";
+import { ABILITY_POOLS, ABILITY_SLOTS, abilitySlotError, classAbilitiesOf, filledLoadout, parseAbilityLoadout, withAbilityInSlot, withClassAbilities, type AbilityPools } from "./classabilities";
 import { ABILITIES, HERO_CLASSES } from "./content";
 import { TACTICS } from "./zone/kit";
 import type { HeroSheet } from "./hero";
@@ -28,6 +28,23 @@ describe("class ability pools", () => {
   });
   it("has a pool for every class", () => {
     for (const c of HERO_CLASSES) expect(ABILITY_POOLS[c.id]?.length, c.id).toBeGreaterThan(0);
+  });
+});
+
+describe("filledLoadout", () => {
+  it("fills an empty loadout with the first opened abilities in the pool", () => {
+    expect(filledLoadout("qa_paladin", 1, [], pools)).toEqual(["bash", "cleave", "flail_strike"]);
+  });
+  it("keeps what is slotted where it is and does not slot anything twice", () => {
+    expect(filledLoadout("qa_paladin", 1, [null, "bash", null], pools)).toEqual(["cleave", "bash", "flail_strike"]);
+    expect(filledLoadout("qa_paladin", 1, ["flail_strike", "bash", "cleave"], pools)).toEqual(["flail_strike", "bash", "cleave"]);
+  });
+  it("only fills from what the hero's level has opened, leaving the rest empty", () => {
+    expect(filledLoadout("qa_paladin", 1, ["bash", "cleave", null], { qa_paladin: pools.qa_paladin.filter((e) => e.id !== "flail_strike") })).toEqual(["bash", "cleave", null]);
+    expect(filledLoadout("nobody", 1, [])).toEqual([null, null, null]);
+  });
+  it("fills every slot for every class's new hero", () => {
+    for (const c of HERO_CLASSES) expect(classAbilitiesOf(c.id, 1, filledLoadout(c.id, 1, [])), c.id).toHaveLength(ABILITY_SLOTS);
   });
 });
 
