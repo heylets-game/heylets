@@ -64,6 +64,9 @@ import type { AttackStyle, Fighter } from "../audio/names";
 import { PUFFS, footfalls, stepGround, worldToHex, type PuffLook } from "./footsteps";
 import { badgeTexture, badgesKey, bubbleTexture, fxTexture, labelTexture, lookFor, plateKey, sleepZTexture, spriteKey, textTexture, type Badge, type FxKind, type PlateStats } from "./sprites";
 
+/** What `setGlow` lights: a place by id, a waygate by its hex, or a prop by id. */
+type GlowTarget = string | HexPos | { prop: string | number } | null;
+
 /** Spells fly as a coloured bolt; these are their colours, by ability name. */
 const SPELL_COLOR: Record<string, string> = {
   Shock: "#c4b5fd",
@@ -1021,7 +1024,7 @@ export class WorldRenderer {
   private hoveredPlace: string | null = null;
   /** The glow round a structure the view says can be gone into with a click (see `setGlow`), and which structure that is. */
   private hoverGlow = new HoverGlow();
-  private glowWhat: string | HexPos | null = null;
+  private glowWhat: GlowTarget = null;
   private glowAt = new THREE.Vector3();
   private sea: THREE.Mesh;
   private unitGroup = new THREE.Group();
@@ -3462,11 +3465,11 @@ export class WorldRenderer {
 
   /**
    * Light a structure up with a glowing outline, and show a hand for the pointer: the view calls this while the
-   * pointer is on something a click goes into, and with null when it is not. `what` is a place's id, or the hex a
-   * battle map's waygate hangs over. One structure at a time; nothing is drawn for it while none is lit.
+   * pointer is on something a click goes into, and with null when it is not. `what` is a place's id, the hex a
+   * battle map's waygate hangs over, or a prop (`{ prop: id }`). One structure at a time; nothing is drawn for it while none is lit.
    */
-  setGlow(what: string | HexPos | null) {
-    const name = (w: string | HexPos | null) => (w === null ? "" : typeof w === "string" ? `place ${w}` : `gate ${key(w)}`);
+  setGlow(what: GlowTarget) {
+    const name = (w: GlowTarget) => (w === null ? "" : typeof w === "string" ? `place ${w}` : "prop" in w ? `prop ${w.prop}` : `gate ${key(w)}`);
     if (name(what) === name(this.glowWhat)) return;
     this.glowWhat = what;
     this.renderer.domElement.style.cursor = what === null ? "" : "pointer";
@@ -3478,6 +3481,7 @@ export class WorldRenderer {
     const what = this.glowWhat;
     if (what === null) return null;
     if (typeof what === "string") return this.poiObject(what) ?? null;
+    if ("prop" in what) return this.propModels.get(what.prop) ?? null;
     const at = hexToWorld(what);
     for (const pick of this.scenery?.picks ?? []) {
       const p = pick.getWorldPosition(this.glowAt);
@@ -3869,6 +3873,8 @@ export class WorldRenderer {
       }
     }
     this.hideLoweredWallProps();
+    // A lit prop was just rebuilt: light the new model.
+    if (this.glowWhat !== null && typeof this.glowWhat === "object" && "prop" in this.glowWhat) this.hoverGlow.set(this.glowRoot());
     this.ambience.setLights(lights, flames);
     this.earLights = lights.map((l) => ({ kind: l.kind, x: l.pos.x, z: l.pos.z }));
     this.ear.lights(this.earLights);
@@ -5084,6 +5090,7 @@ export class WorldRenderer {
     this.pointer.inside = false;
     this.setHovered(null);
     this.setHoveredPlace(null);
+    if (this.hoverProp !== null) this.callbacks.onPropHover?.((this.hoverProp = null));
   };
 
   private onWheel = (e: WheelEvent) => {
