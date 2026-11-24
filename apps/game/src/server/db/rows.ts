@@ -135,3 +135,24 @@ export const statsOf = (c: CharacterRow): Stats => ({ str: c.str, int_stat: c.in
  */
 export const currentCrewSql = (param: string) =>
   `(SELECT m.crew_id FROM crew_members m LEFT JOIN players p ON p.id = m.player_id WHERE m.player_id = ${param} ORDER BY m.crew_id = p.current_crew_id DESC, m.joined_at DESC LIMIT 1)`;
+
+// ---------- a home in each world ----------
+// A hero's hut, its furniture (and so what its chests hold) and its garden are theirs in one world (huts.crew_id,
+// furnishings.crew_id, garden_beds.crew_id): a hero acting on their own home acts on the one in the world they are in
+// now. The boats kept at the pier are the exception: furnishings with no crew_id, the hero's in every world.
+
+/** Furnishings that are the hero's in every world, not in one world's hut: the boats kept at the pier. */
+export const HERO_WIDE_FURNISHINGS: readonly string[] = ["rowboat", "float_barrel"];
+const HERO_WIDE_SQL = `(${HERO_WIDE_FURNISHINGS.map((d) => `'${d}'`).join(", ")})`;
+
+/** SQL for the world hero `who` is in now, as a home's key: '' (a home nobody can reach) if they are in none. */
+export const homeCrewSql = (who: string) => `COALESCE(${currentCrewSql(who)}, '')`;
+
+/** SQL for the crew_id of a new furnishing of def `def` for hero `who`: none for a boat (every world), else the world they are in now. */
+export const newFurnishingCrewSql = (who: string, def: string) => `CASE WHEN ${def} IN ${HERO_WIDE_SQL} THEN NULL ELSE ${homeCrewSql(who)} END`;
+
+/** SQL, true for a furnishing (columns prefixed `f`, as "f.") that is in its owner's home in world `crew`: that world's hut's, or a boat. */
+export const inHomeSql = (crew: string, f = "") => `(${f}crew_id = ${crew} OR ${f}crew_id IS NULL)`;
+
+/** SQL for the ids of hero `who`'s furnishings in their home in world `crew`: what a stash row or kept gear must point at to be there. */
+export const homeFurnishingIdsSql = (who: string, crew: string) => `(SELECT id FROM furnishings WHERE player_id = ${who} AND ${inHomeSql(crew)})`;

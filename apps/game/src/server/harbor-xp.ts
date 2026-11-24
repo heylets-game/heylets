@@ -18,7 +18,7 @@
 // cap: it goes to the character but not into the day's record.
 
 import { HARBOR_XP_DAILY_CAP, gatherDay, harborXpAward, harborXpStatus, harborXpText, type HarborXpRecord, type HarborPlayer, type HarborXpStatus, type XpMessage } from "@gantt-quest/world";
-import { crewFor, getCharacter, statsOf, type Env } from "./db";
+import { crewFor, getCharacter, hutHeaders, hutRoomOf, statsOf, type Env } from "./db";
 
 /** What the client is told about an award, and what the rooms broadcast. */
 export interface XpResult {
@@ -130,7 +130,8 @@ export async function announceXp(env: Env, playerId: string, r: XpResult): Promi
   await Promise.all([
     crew ? post(env.HARBOR_ROOM.get(env.HARBOR_ROOM.idFromName(crew.id)), "https://harbor/xp", { "x-crew-id": crew.id }) : null,
     crew ? post(env.PUB_ROOM.get(env.PUB_ROOM.idFromName(crew.id)), "https://pub/xp", {}) : null,
-    post(env.HUT_ROOM.get(env.HUT_ROOM.idFromName(playerId)), "https://hut/xp", { "x-hut-owner": playerId }),
+    // Their own hut in the world they are in now (crewFor's world, or none: '').
+    post(hutRoomOf(env, playerId, crew?.id ?? ""), "https://hut/xp", hutHeaders(playerId, crew?.id ?? "")),
   ]);
 }
 

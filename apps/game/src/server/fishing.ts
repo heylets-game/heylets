@@ -27,6 +27,7 @@ import {
   type Resources,
 } from "@gantt-quest/world";
 import { crewFor } from "./db";
+import { newFurnishingCrewSql } from "./db/rows";
 import { boardFor, iceboxGrams } from "./fishmarket";
 import { prepareXp, xpOutcome, type XpResult } from "./harbor-xp";
 
@@ -147,13 +148,13 @@ export async function closeSitting(db: D1Database, playerId: string, before: str
         .bind(playerId, crew!.id, f.species),
       db.prepare(`DELETE FROM pub_mounts WHERE crew_id = ?2 AND species = ?3 AND ${guard}`).bind(playerId, crew!.id, f.species),
     ]),
-    // A finished page: its wall piece, once ever, in storage at home.
+    // A finished page: its wall piece, once ever, in storage at home (the hut of the world they are in now).
     ...book.pages.flatMap((page) => [
       db
         .prepare(`INSERT INTO book_rewards (player_id, page, claimed_at) SELECT ?1, ?2, ?3 WHERE ${guard} AND NOT EXISTS (SELECT 1 FROM book_rewards WHERE player_id = ?1 AND page = ?2)`)
         .bind(playerId, page, now),
       db
-        .prepare("INSERT INTO furnishings (player_id, def_id, label, meta_json, created_at) SELECT ?1, ?2, ?3, '{}', ?4 WHERE changes() > 0")
+        .prepare(`INSERT INTO furnishings (player_id, def_id, label, meta_json, created_at, crew_id) SELECT ?1, ?2, ?3, '{}', ?4, ${newFurnishingCrewSql("?1", "?2")} WHERE changes() > 0`)
         .bind(playerId, PAGE_REWARD[page], FURNISHINGS[PAGE_REWARD[page]].name, now),
     ]),
     // The whole book: the title.

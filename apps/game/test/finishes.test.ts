@@ -14,7 +14,7 @@ let db: D1Database;
 
 const gold = (id = "ann") => (sql.prepare("SELECT gold FROM characters WHERE player_id = ?").get(id) as { gold: number }).gold;
 const setGold = (n: number, id = "ann") => sql.prepare("UPDATE characters SET gold = ? WHERE player_id = ?").run(n, id);
-const shack = (id: string, plot: number) => sql.prepare("INSERT INTO huts (player_id, tier, plot, bin_json, plot_crew_id) VALUES (?1, 1, ?2, NULL, (SELECT crew_id FROM crew_members WHERE player_id = ?1))").run(id, plot);
+const shack = (id: string, plot: number) => sql.prepare("INSERT INTO huts (player_id, tier, plot, bin_json, crew_id) VALUES (?1, 1, ?2, NULL, (SELECT crew_id FROM crew_members WHERE player_id = ?1))").run(id, plot);
 const price = (id: string) => finishById(id)!.price;
 /** Noon on the Harbor's clock (its days are ten minutes, from the epoch), when Nell is at her stall. */
 const T0 = Date.UTC(2026, 10, 23, 12, 5);

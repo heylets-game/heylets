@@ -19,7 +19,7 @@ import {
   type CarryState,
 } from "@gantt-quest/world";
 import { getCharacter } from "./characters";
-import { getItem, rowToItem, statsOf, type CharacterRow, type InventoryRow } from "./rows";
+import { getItem, homeCrewSql, homeFurnishingIdsSql, rowToItem, statsOf, type CharacterRow, type InventoryRow } from "./rows";
 
 /** Everything the player has with them: worn gear and the pack. Not what is in storage at home. */
 export async function getInventory(db: D1Database, playerId: string): Promise<InventoryRow[]> {
@@ -52,20 +52,22 @@ export const CARRIED_SQL = carriedSql("?1");
  * rules, never a request. For the `alsoIf` of `spendStatements`.
  */
 export const packHasRoomSql = (limit: number, cells = 1) => `${CARRIED_SQL} + ${Math.max(1, Math.floor(cells))} <= ${Math.max(0, Math.floor(limit))}`;
-/** SQL that is true if player ?1 has a hut standing, and so somewhere to keep things. */
-const HAS_HOME_SQL = "EXISTS (SELECT 1 FROM huts WHERE player_id = ?1 AND plot IS NOT NULL AND bin_json IS NULL)";
+/** SQL that is true if player ?1 has a hut standing in the world they are in now, and so somewhere to keep things. */
+const HAS_HOME_SQL = `EXISTS (SELECT 1 FROM huts WHERE player_id = ?1 AND crew_id = ${homeCrewSql("?1")} AND plot IS NOT NULL AND bin_json IS NULL)`;
+/** SQL for the ids of player ?1's furnishings in their hut in the world they are in now. */
+const HOME_IDS_SQL = homeFurnishingIdsSql("?1", homeCrewSql("?1"));
 /** SQL for the squares used in container `box` of player ?1: a square a decoration, gear by its footprint, a square a stack of material (as `containerUsed`). */
 export const usedSql = (box: string) => `((SELECT COUNT(*) FROM furnishings WHERE in_id = ${box} AND player_id = ?1)
   + (SELECT COALESCE(SUM(${CELLS_SQL}), 0) FROM inventory WHERE stored_in = ${box} AND player_id = ?1)
   + (SELECT ${STACKS_SQL} FROM stash WHERE furnishing_id = ${box} AND player_id = ?1 AND qty > 0))`;
 
 /**
- * The player's containers with a free square, best first: the free Storage
- * Chest, then whichever has the most room.
+ * The player's containers with a free square, in their hut in the world they
+ * are in now, best first: the free Storage Chest, then whichever has the most room.
  */
 export async function containersWithRoom(db: D1Database, playerId: string): Promise<{ id: number; defId: string; free: number }[]> {
   const rows = await db
-    .prepare(`SELECT f.id, f.def_id AS defId, ${usedSql("f.id")} AS used FROM furnishings f WHERE f.player_id = ?1`)
+    .prepare(`SELECT f.id, f.def_id AS defId, ${usedSql("f.id")} AS used FROM furnishings f WHERE f.player_id = ?1 AND f.id IN ${HOME_IDS_SQL}`)
     .bind(playerId)
     .all<{ id: number; defId: string; used: number }>();
   return rows.results
@@ -85,7 +87,7 @@ export async function carryState(db: D1Database, playerId: string): Promise<Carr
     db.batch([
       db.prepare("SELECT * FROM characters WHERE player_id = ?1").bind(playerId),
       db.prepare("SELECT * FROM inventory WHERE player_id = ?1 AND equipped = 1").bind(playerId),
-      db.prepare(`SELECT ${CARRIED_SQL} AS carried, (SELECT COUNT(*) FROM inventory WHERE player_id = ?1 AND stored_in IS NOT NULL) AS stored`).bind(playerId),
+      db.prepare(`SELECT ${CARRIED_SQL} AS carried, (SELECT COUNT(*) FROM inventory WHERE player_id = ?1 AND stored_in IN ${HOME_IDS_SQL}) AS stored`).bind(playerId),
       db.prepare(`SELECT ${HAS_HOME_SQL} AS yes`).bind(playerId),
     ]),
     containersWithRoom(db, playerId),
@@ -111,7 +113,7 @@ export async function carryState(db: D1Database, playerId: string): Promise<Carr
  */
 export const keepStatement = (db: D1Database, playerId: string, itemId: number, boxId: number, squares: number) =>
   db
-    .prepare(`UPDATE inventory SET stored_in = ?3 WHERE id = ?2 AND player_id = ?1 AND equipped = 0 AND stored_in IS NULL AND ${HAS_HOME_SQL} AND ${usedSql("?3")} + ${CELLS_SQL} <= ?4`)
+    .prepare(`UPDATE inventory SET stored_in = ?3 WHERE id = ?2 AND player_id = ?1 AND equipped = 0 AND stored_in IS NULL AND ${HAS_HOME_SQL} AND ?3 IN ${HOME_IDS_SQL} AND ${usedSql("?3")} + ${CELLS_SQL} <= ?4`)
     .bind(playerId, itemId, boxId, squares);
 
 /**

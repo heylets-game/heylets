@@ -4,6 +4,10 @@
 
 import { BARE_FINISH, DECORATOR_SHUT, cleanFinish, decoratorOpen, finishBuyProblem, finishById, finishDay, finishSetProblem, finishStock, nextFinishDay, type FinishKind, type HutFinish } from "@gantt-quest/world";
 import { getCharacter } from "./db";
+import { homeCrewSql } from "./db/rows";
+
+/** SQL: player ?1's hut in the world they are in now. Each world's hut is dressed on its own; the finishes bought are theirs in every world. */
+const HERE = `player_id = ?1 AND crew_id = ${homeCrewSql("?1")}`;
 
 /** The finishes a player owns, in the order they bought them. */
 export async function ownedFinishes(db: D1Database, playerId: string): Promise<string[]> {
@@ -11,9 +15,9 @@ export async function ownedFinishes(db: D1Database, playerId: string): Promise<s
   return rows.results.map((r) => r.finish_id);
 }
 
-/** What a player's hut is dressed in. A player with no hut row has a bare one. */
+/** What a player's hut (in the world they are in now) is dressed in. A player with no hut row has a bare one. */
 export async function hutFinish(db: D1Database, playerId: string): Promise<HutFinish> {
-  const row = await db.prepare("SELECT wall, floor, roof FROM huts WHERE player_id = ?").bind(playerId).first<HutFinish>();
+  const row = await db.prepare(`SELECT wall, floor, roof FROM huts WHERE ${HERE}`).bind(playerId).first<HutFinish>();
   return row ? cleanFinish(row) : { ...BARE_FINISH };
 }
 
@@ -34,7 +38,7 @@ export async function finishesView(db: D1Database, playerId: string): Promise<Fi
     ownedFinishes(db, playerId),
     hutFinish(db, playerId),
     getCharacter(db, playerId),
-    db.prepare("SELECT 1 AS yes FROM huts WHERE player_id = ? AND plot IS NOT NULL AND bin_json IS NULL").bind(playerId).first<{ yes: number }>(),
+    db.prepare(`SELECT 1 AS yes FROM huts WHERE ${HERE} AND plot IS NOT NULL AND bin_json IS NULL`).bind(playerId).first<{ yes: number }>(),
   ]);
   const now = Date.now();
   return { owned, finish, gold: c?.gold ?? 0, hut: !!hut, stock: finishStock(finishDay(now)), restock: nextFinishDay(now) };
@@ -65,7 +69,7 @@ export async function setFinish(db: D1Database, playerId: string, kind: unknown,
   if (problem) return problem;
   // The column is one of three fixed names, checked just above: never taken from the request as written.
   const column = ({ wall: "wall", floor: "floor", roof: "roof" } as const)[kind as FinishKind];
-  const set = await db.prepare(`UPDATE huts SET ${column} = ?2 WHERE player_id = ?1 AND plot IS NOT NULL AND bin_json IS NULL`).bind(playerId, id ?? null).run();
+  const set = await db.prepare(`UPDATE huts SET ${column} = ?2 WHERE ${HERE} AND plot IS NOT NULL AND bin_json IS NULL`).bind(playerId, id ?? null).run();
   if (set.meta.changes === 0) return "You have no hut standing to dress yet.";
   return hutFinish(db, playerId);
 }

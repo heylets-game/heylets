@@ -30,6 +30,6 @@ export { orderAtPub } from "./db/pub";
 export { applyZoneGrant } from "./db/rewards";
 export { createCrew, crewFor, getCrew, harborBoard, joinCrew, leaveCrew, refreshHarbor, worldsOfAccount, type AccountWorld, type Crew } from "./db/crews";
 export { buyPlot, fillBin, hasShack, homeOf, plotOf } from "./db/plots";
-export { blueprintStatement, furnishingStatement, getHut, refreshHut, resourceStatements } from "./db/huts";
+export { blueprintStatement, furnishingStatement, getHut, homeCrewOf, hutHeaders, hutRoomOf, refreshHut, resourceStatements } from "./db/huts";
 export { containerUsed, stashMaterial, stowGear, unstowGear } from "./db/containers";
 export { atHome, buyFurniture, craftFurnishing, paidFurnishingStatement, sellFurniture, spendStatements, upgradeHut } from "./db/spending";

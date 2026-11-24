@@ -97,7 +97,7 @@ A tab left open on an older build is told when a newer one is out (`src/client/N
 | `apps/game/src/server/zone-room.ts`, `zones.ts`, `atlas.ts` | One Durable Object per map: persist, broadcast, timers; maps and the crew's chart in D1 |
 | `apps/game/src/server/walk-room.ts` | What every walk-in room shares: who is here, walking, looking, chat, taking over an older tab. A new room builds on it |
 | `apps/game/src/server/harbor-room.ts` | One Durable Object per crew: presence, walking, chat and the muster |
-| `apps/game/src/server/hut-room.ts` | One Durable Object per hut owner: presence, walking, chat and furniture |
+| `apps/game/src/server/hut-room.ts` | One Durable Object per hut (its owner in one world: each world is its own home): presence, walking, chat and furniture |
 | `apps/game/src/server/pub-room.ts` | One Durable Object per crew for the pub: presence, walking, chat and the game tables |
 | `apps/game/src/server/stake-table.ts` | A game table for any stake game: antes, prize, per-player views, forfeits |
 | `apps/game/src/server/gather.ts`, `fishing.ts`, `bait.ts`, `projects.ts`, `trade.ts`, `workshops.ts`, `lapidary.ts`, `townchest.ts`, `lodestones.ts` | D1 work for each of those |

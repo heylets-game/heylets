@@ -32,8 +32,8 @@ function fillPack(n: number) {
 /** A built shack, with the free Storage Chest standing in it. Returns the chest's id. */
 const CHEST_SLOTS = FURNISHINGS[STORAGE_CHEST].storage!;
 function buildShack(): number {
-  sql.prepare("INSERT INTO huts (player_id, tier, plot, bin_json) VALUES ('ann', 1, 0, NULL)").run();
-  return Number(sql.prepare("INSERT INTO furnishings (player_id, def_id, label, q, r, created_at) VALUES ('ann', 'storage_chest', 'Storage Chest', 1, 1, 0)").run().lastInsertRowid);
+  sql.prepare("INSERT INTO huts (player_id, crew_id, tier, plot, bin_json) VALUES ('ann', 'CREWAA', 1, 0, NULL)").run();
+  return Number(sql.prepare("INSERT INTO furnishings (player_id, crew_id, def_id, label, q, r, created_at) VALUES ('ann', 'CREWAA', 'storage_chest', 'Storage Chest', 1, 1, 0)").run().lastInsertRowid);
 }
 
 beforeEach(() => {
@@ -91,7 +91,7 @@ describe("carryState", () => {
   });
 
   it("knows a bought plot is not a home until its shack stands", async () => {
-    sql.prepare("INSERT INTO huts (player_id, tier, plot, bin_json) VALUES ('ann', 1, 0, '{}')").run();
+    sql.prepare("INSERT INTO huts (player_id, crew_id, tier, plot, bin_json) VALUES ('ann', 'CREWAA', 1, 0, '{}')").run();
     expect((await carryState(db, "ann"))!.hasHome).toBe(false);
     sql.prepare("UPDATE huts SET bin_json = NULL WHERE player_id = 'ann'").run();
     expect((await carryState(db, "ann"))!.hasHome).toBe(true);
@@ -184,7 +184,7 @@ describe("the storage chest", () => {
 
   it("goes into the free chest first, and refuses once every container is full", async () => {
     const chest = buildShack();
-    const crate = Number(sql.prepare("INSERT INTO furnishings (player_id, def_id, label, created_at) VALUES ('ann', 'crate', 'Crate', 0)").run().lastInsertRowid);
+    const crate = Number(sql.prepare("INSERT INTO furnishings (player_id, crew_id, def_id, label, created_at) VALUES ('ann', 'CREWAA', 'crate', 'Crate', 0)").run().lastInsertRowid);
     fillPack(CHEST_SLOTS + FURNISHINGS.crate.storage! + 1);
     await storeItem(db, "ann", packIds()[0]);
     expect(one<{ stored_in: number }>("SELECT stored_in FROM inventory WHERE stored_in IS NOT NULL").stored_in).toBe(chest);

@@ -2,20 +2,25 @@
 // gold, and the resource bin on it that is filled to raise the shack.
 
 import { PLOT_PRICE, RESOURCE_KINDS, RESOURCE_LABEL, SHACK_COST, binDeposit, binNeeds, type Resources } from "@gantt-quest/world";
-import { getHut } from "./huts";
+import { getHut, homeWorld } from "./huts";
+import { homeCrewSql } from "./rows";
 
 /**
- * A player's plot and, while their shack is still to be raised, what is in the
- * resource bin on it. `bin` is null once the shack stands.
+ * A player's plot in world `crewId` (by default the one they are in now) and, while their shack is still to be
+ * raised, what is in the resource bin on it. `bin` is null once the shack stands.
  */
-export async function homeOf(db: D1Database, playerId: string): Promise<{ plot: number | null; bin: Resources | null }> {
-  const row = await db.prepare("SELECT plot, bin_json FROM huts WHERE player_id = ?").bind(playerId).first<{ plot: number | null; bin_json: string | null }>();
+export async function homeOf(db: D1Database, playerId: string, crewId?: string | null): Promise<{ plot: number | null; bin: Resources | null }> {
+  const world = homeWorld(crewId);
+  const row = await db
+    .prepare(`SELECT plot, bin_json FROM huts WHERE player_id = ?1 AND crew_id = ${world.sql}`)
+    .bind(playerId, ...world.bind)
+    .first<{ plot: number | null; bin_json: string | null }>();
   return { plot: row?.plot ?? null, bin: row?.plot != null && row.bin_json !== null ? parseBin(row.bin_json) : null };
 }
 
-/** True if the player has a plot with a shack standing on it: a hut to walk into and rest in. */
-export async function hasShack(db: D1Database, playerId: string): Promise<boolean> {
-  const home = await homeOf(db, playerId);
+/** True if the player has a plot with a shack standing on it in world `crewId` (by default the one they are in now): a hut to walk into and rest in. */
+export async function hasShack(db: D1Database, playerId: string, crewId?: string | null): Promise<boolean> {
+  const home = await homeOf(db, playerId, crewId);
   return home.plot !== null && home.bin === null;
 }
 
@@ -51,17 +56,19 @@ export async function fillBin(db: D1Database, playerId: string): Promise<string 
     return `The bin still wants ${RESOURCE_KINDS.filter((k) => need[k]).map((k) => `${need[k]} ${RESOURCE_LABEL[k].toLowerCase()}`).join(" and ")}, and you have none to put in.`;
   }
   const inBin = (k: string) => `COALESCE(json_extract(bin_json, '$.${k}'), 0)`;
+  // The bin on their plot in the world they are in now.
+  const here = `player_id = ?1 AND crew_id = ${homeCrewSql("?1")}`;
   const statements = kinds.flatMap((k) => [
     db
       .prepare(
         `UPDATE resources SET qty = qty - ?2 WHERE player_id = ?1 AND kind = '${k}' AND qty >= ?2
-         AND EXISTS (SELECT 1 FROM huts WHERE player_id = ?1 AND plot IS NOT NULL AND bin_json IS NOT NULL AND ${inBin(k)} + ?2 <= ?3)`,
+         AND EXISTS (SELECT 1 FROM huts WHERE ${here} AND plot IS NOT NULL AND bin_json IS NOT NULL AND ${inBin(k)} + ?2 <= ?3)`,
       )
       .bind(playerId, put[k], SHACK_COST[k] ?? 0),
-    db.prepare(`UPDATE huts SET bin_json = json_set(bin_json, '$.${k}', ${inBin(k)} + ?2) WHERE player_id = ?1 AND changes() > 0`).bind(playerId, put[k]),
+    db.prepare(`UPDATE huts SET bin_json = json_set(bin_json, '$.${k}', ${inBin(k)} + ?2) WHERE ${here} AND changes() > 0`).bind(playerId, put[k]),
   ]);
   const full = RESOURCE_KINDS.filter((k) => (SHACK_COST[k] ?? 0) > 0).map((k) => `${inBin(k)} >= ${Math.floor(SHACK_COST[k]!)}`);
-  statements.push(db.prepare(`UPDATE huts SET bin_json = NULL WHERE player_id = ?1 AND bin_json IS NOT NULL AND ${full.join(" AND ")}`).bind(playerId));
+  statements.push(db.prepare(`UPDATE huts SET bin_json = NULL WHERE ${here} AND bin_json IS NOT NULL AND ${full.join(" AND ")}`).bind(playerId));
   const res = await db.batch(statements);
   const moved: Resources = {};
   kinds.forEach((k, i) => {
@@ -71,16 +78,16 @@ export async function fillBin(db: D1Database, playerId: string): Promise<string 
   return { put: moved, bin: (await homeOf(db, playerId)).bin };
 }
 
-/** The plot a player's hut stands on, in whichever of their worlds it is, or null. */
+/** The plot a player's hut stands on in the world they are in now, or null. */
 export async function plotOf(db: D1Database, playerId: string): Promise<number | null> {
-  const row = await db.prepare("SELECT plot FROM huts WHERE player_id = ?").bind(playerId).first<{ plot: number | null }>();
-  return row?.plot ?? null;
+  return (await homeOf(db, playerId)).plot;
 }
 
 /**
- * Buy a plot in the crew's Harbor. One plot a player, one player a plot. The
- * gold only moves if the plot is still free and the buyer has none, and the
- * plot is only written if the gold moved.
+ * Buy a plot in the crew's Harbor. One plot a player in each world, one player
+ * a plot. The gold only moves if the plot is still free and the buyer has none
+ * in this world, and the plot is only written if the gold moved. Each world is
+ * its own home: a hero with a hut in another world starts here from bare ground.
  */
 export async function buyPlot(db: D1Database, crewId: string, playerId: string, plot: number, plots: number): Promise<string | null> {
   if (!Number.isInteger(plot) || plot < 0 || plot >= plots) return "There is no such plot.";
@@ -88,21 +95,20 @@ export async function buyPlot(db: D1Database, crewId: string, playerId: string, 
     db
       .prepare(
         `UPDATE characters SET gold = gold - ?1 WHERE player_id = ?2 AND status = 'active' AND gold >= ?1
-         AND NOT EXISTS (SELECT 1 FROM huts WHERE player_id = ?2 AND plot IS NOT NULL)
-         AND NOT EXISTS (SELECT 1 FROM huts h WHERE h.plot_crew_id = ?3 AND h.plot = ?4)`,
+         AND NOT EXISTS (SELECT 1 FROM huts WHERE player_id = ?2 AND crew_id = ?3 AND plot IS NOT NULL)
+         AND NOT EXISTS (SELECT 1 FROM huts WHERE crew_id = ?3 AND plot = ?4)`,
       )
       .bind(PLOT_PRICE, playerId, crewId, plot),
-    // New ground has only a resource bin on it; the shack goes up once the bin is filled.
+    // New ground has only a resource bin on it; the shack goes up once the bin is filled. A hut kept from an earlier
+    // stay in this world (its plot given up on leaving) keeps its size, finishes and furniture, and is raised again.
     db
       .prepare(
-        "INSERT INTO huts (player_id, tier, plot, plot_crew_id, bin_json) SELECT ?1, 1, ?2, ?3, '{}' WHERE changes() > 0 ON CONFLICT (player_id) DO UPDATE SET plot = excluded.plot, plot_crew_id = excluded.plot_crew_id, bin_json = '{}'",
+        "INSERT INTO huts (player_id, crew_id, tier, plot, bin_json) SELECT ?1, ?3, 1, ?2, '{}' WHERE changes() > 0 ON CONFLICT (player_id, crew_id) DO UPDATE SET plot = excluded.plot, bin_json = '{}'",
       )
       .bind(playerId, plot, crewId),
   ]);
   if (paid.meta.changes > 0) return null;
-  const own = await db.prepare("SELECT h.plot_crew_id AS crewId, c.name FROM huts h LEFT JOIN crews c ON c.id = h.plot_crew_id WHERE h.player_id = ? AND h.plot IS NOT NULL").bind(playerId).first<{ crewId: string | null; name: string | null }>();
-  // A hero has one hut, standing in one of their worlds.
-  if (own) return own.crewId && own.crewId !== crewId && own.name ? `Your hut already stands in ${own.name}.` : "You already own a plot.";
-  const taken = await db.prepare("SELECT 1 FROM huts WHERE plot_crew_id = ? AND plot = ?").bind(crewId, plot).first();
+  if (await db.prepare("SELECT 1 FROM huts WHERE player_id = ? AND crew_id = ? AND plot IS NOT NULL").bind(playerId, crewId).first()) return "You already own a plot.";
+  const taken = await db.prepare("SELECT 1 FROM huts WHERE crew_id = ? AND plot = ?").bind(crewId, plot).first();
   return taken ? "Someone has already bought that plot." : `A plot costs ${PLOT_PRICE} gold.`;
 }
