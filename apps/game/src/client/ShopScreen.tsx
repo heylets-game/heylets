@@ -92,7 +92,7 @@ export function ShopScreen({ me, refresh, onClose }: { me: Me; refresh(): Promis
       tag: price(SEED_PRICE),
       corner: <span className="ss-ribbon">You have {seeds}</span>,
       facts: [`You have ${seeds}`, "A packet a bed"],
-      brief: `A packet plants one bed of your hut's herb garden, ready to pick in ${GROW_MS / 3_600_000} hours: two or three herbs a bed. Bonemeal makes it grow faster: grind it from bones at the garden, ${BONEMEAL_PER_BONE} scoops a bone.`,
+      brief: `A packet plants one bed of your hut's garden with herbs, ready to pick in ${GROW_MS / 3_600_000} hours: two or three herbs a bed. Bonemeal makes it grow faster: grind it from bones at the garden, ${BONEMEAL_PER_BONE} scoops a bone.`,
       problem: short(SEED_PRICE),
       act: { label: `Buy 1 · ${SEED_PRICE}g`, disabled: busy || c.gold < SEED_PRICE, run: () => act(() => api.buySeeds(1), "A packet of herb seeds, bought.") },
       more: [5, 10].map((n) => (
@@ -108,7 +108,7 @@ export function ShopScreen({ me, refresh, onClose }: { me: Me; refresh(): Promis
       art: <Icon name="watering-can" color="#4f9fd6" size={68} />,
       tag: can != null ? `${can} of ${CAN_CAPACITY}` : price(CAN_PRICE),
       facts: [can != null ? `${can} of ${CAN_CAPACITY} waterings in it` : `Holds ${CAN_CAPACITY} waterings`],
-      brief: "Water a bed of your herb garden from it for one more herb. Fill it at the well on the green.",
+      brief: "Water a bed of your garden from it for one more herb or mushroom. Fill it at the well on the green.",
       stamp: can != null ? "Yours" : undefined,
       owned: can != null,
       problem: can === null ? short(CAN_PRICE) : null,

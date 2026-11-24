@@ -1,7 +1,7 @@
-// The herb garden by a hut's door, tended in the Harbor itself: the camera flies down over the beds
+// The garden by a hut's door, where herbs and mushrooms grow, tended in the Harbor itself: the camera flies down over the beds
 // (render/GardenStage.ts) and this is what is laid over them. A tag floats over each bed saying how far it has
 // grown, with a bar that fills and the time still to go; press a bed (or its tag) and its tag opens on what can be
-// done to it: sow it, plant a herb in it, water it, feed it bonemeal. A dock along the bottom holds what you have
+// done to it: sow it, plant a herb or a mushroom in it, water it, feed it bonemeal. A dock along the bottom holds what you have
 // to garden with, the quern to grind bone on, picking every ready bed, and the way back out.
 //
 // Its owner plants and picks; anyone in the crew may water and feed. What grows comes live from the Harbor's board
@@ -10,7 +10,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { HexPos } from "@gantt-quest/core";
-import { BONEMEAL_PER_BONE, CAN_CAPACITY, GROW_MS, SEED_PRICE, bedProgress, bedStage, growText, type BedStage, type GardenBed } from "@gantt-quest/world";
+import { BONEMEAL_PER_BONE, CAN_CAPACITY, CROP_GROW_MS, SEED_PRICE, bedProgress, bedStage, growText, harvestText, type BedStage, type Crop, type GardenBed } from "@gantt-quest/world";
 import { api } from "./api";
 import { GardenStage, type GardenEffect } from "./render/GardenStage";
 import type { WorldRenderer } from "./render/WorldRenderer";
@@ -20,14 +20,27 @@ import { uiZoom } from "./uiScale";
 import type { GardenView } from "../server/garden";
 import "./garden.css";
 
-const STAGE_WORD: Record<BedStage, string> = {
-  empty: "Bare earth",
-  sown: "Just sown",
-  sprout: "Sprouting",
-  young: "Growing",
-  leafy: "Nearly there",
-  ready: "Ready to pick",
+const STAGE_WORD: Record<Crop, Record<BedStage, string>> = {
+  herbs: {
+    empty: "Bare earth",
+    sown: "Just sown",
+    sprout: "Sprouting",
+    young: "Growing",
+    leafy: "Nearly there",
+    ready: "Ready to pick",
+  },
+  mushrooms: {
+    empty: "Bare earth",
+    sown: "Planted",
+    sprout: "Tiny caps",
+    young: "Growing",
+    leafy: "Nearly there",
+    ready: "Ready to pick",
+  },
 };
+/** One of what a crop gives, for "+1 herb". */
+const ONE: Record<Crop, string> = { herbs: "herb", mushrooms: "mushroom" };
+const hours = (crop: Crop) => CROP_GROW_MS[crop] / 3_600_000;
 
 export function Garden({ world, owner, ownerName, you, door, beds: size, live, onClose, onPicked }: {
   world: WorldRenderer;
@@ -42,7 +55,7 @@ export function Garden({ world, owner, ownerName, you, door, beds: size, live, o
   /** What is growing, as the Harbor's board last told it. */
   live?: GardenBed[];
   onClose(): void;
-  /** Herbs were picked: the bag and the hero's XP have changed. */
+  /** Herbs or mushrooms were picked: the bag and the hero's XP have changed. */
   onPicked(): void;
 }) {
   const mine = owner === you;
@@ -151,9 +164,9 @@ export function Garden({ world, owner, ownerName, you, door, beds: size, live, o
   const pick = () =>
     act(async () => {
       const res = await api.gardenPick();
-      for (const b of ready) stage.current?.play("pick", b.bed);
+      for (const b of ready) stage.current?.play("pick", b.bed, b.crop);
       setPicked(null);
-      setSaid(`You pick ${res.herbs} herb${res.herbs === 1 ? "" : "s"} from ${res.beds} bed${res.beds === 1 ? "" : "s"}.${res.xp?.granted ? ` +${res.xp.granted} XP.` : ""}`);
+      setSaid(`You pick ${harvestText(res)} from ${res.beds} bed${res.beds === 1 ? "" : "s"}.${res.xp?.granted ? ` +${res.xp.granted} XP.` : ""}`);
       onPicked();
     });
 
@@ -164,31 +177,36 @@ export function Garden({ world, owner, ownerName, you, door, beds: size, live, o
         const stg = bedStage(bed, now);
         const p = bed ? bedProgress(bed, now) : 0;
         const open = picked === i;
+        const crop = bed?.crop ?? "herbs";
+        const word = STAGE_WORD[crop][stg];
         return (
           <div key={i} className="bed-tag-anchor" ref={(el) => void (tags.current[i] = el)}>
             <div
               className={`bed-card stage-${stg}${open ? " open" : ""}`}
               onClick={() => !open && setPicked(i)}
               role="group"
-              aria-label={`Bed ${i + 1}: ${STAGE_WORD[stg]}`}
+              aria-label={`Bed ${i + 1}: ${bed ? `${crop}, ` : ""}${word}`}
             >
               <div className="bed-card-head">
                 <strong>Bed {i + 1}</strong>
-                <span>{STAGE_WORD[stg]}</span>
+                <span>{word}</span>
                 {bed?.wateredBy && <i className="drop" title={`Watered by ${bed.wateredBy}`} />}
                 {bed?.fedBy && <span className="fed-mark" title={`Fed bonemeal by ${bed.fedBy}`}><ThingIcon icon={resourceIcon("bonemeal")} size={14} /></span>}
               </div>
               {bed && (
-                <div className={`bed-grow${stg === "ready" ? " ready" : ""}`} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(p * 100)}>
-                  <span style={{ width: `${Math.round(p * 1000) / 10}%` }} />
-                  <em>{stg === "ready" ? "Ready!" : growText(bed.readyAt, now)}</em>
+                <div className="bed-grow-row">
+                  <span className="bed-crop" title={crop === "mushrooms" ? "Mushrooms" : "Herbs"}><ThingIcon icon={resourceIcon(crop)} size={16} /></span>
+                  <div className={`bed-grow${stg === "ready" ? " ready" : ""}`} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(p * 100)}>
+                    <span style={{ width: `${Math.round(p * 1000) / 10}%` }} />
+                    <em>{stg === "ready" ? "Ready!" : growText(bed.readyAt, now)}</em>
+                  </div>
                 </div>
               )}
               {open && (
                 <div className="bed-actions">
                   {(bed?.wateredBy || bed?.fedBy) && (
                     <span className="bed-note">
-                      {bed.wateredBy && <span title="One more herb at picking"><i className="drop" /> {bed.wateredBy} · +1 herb</span>}
+                      {bed.wateredBy && <span title={`One more ${ONE[crop]} at picking`}><i className="drop" /> {bed.wateredBy} · +1 {ONE[crop]}</span>}
                       {bed.fedBy && <span title="Grows faster"><ThingIcon icon={resourceIcon("bonemeal")} size={12} /> {bed.fedBy}</span>}
                     </span>
                   )}
@@ -200,11 +218,18 @@ export function Garden({ world, owner, ownerName, you, door, beds: size, live, o
                       <button disabled={busy || !held?.herbs} onClick={() => void act(() => api.gardenPlant(i, "herbs"), ["plant", i], `A herb goes into bed ${i + 1}.`)}>
                         <ThingIcon icon={resourceIcon("herbs")} size={16} /> Plant a herb <small>{held?.herbs ?? 0}</small>
                       </button>
+                      <button
+                        disabled={busy || !held?.mushrooms}
+                        title={held?.mushrooms ? `Grows mushrooms, ready in ${hours("mushrooms")} hours` : "Pick mushrooms in the caverns to plant one here"}
+                        onClick={() => void act(() => api.gardenPlant(i, "mushrooms"), ["plant", i], `A mushroom goes into bed ${i + 1}.`)}
+                      >
+                        <ThingIcon icon={resourceIcon("mushrooms")} size={16} /> Plant a mushroom <small>{held?.mushrooms ?? 0}</small>
+                      </button>
                     </>
                   )}
                   {!bed && !mine && <span className="bed-note">Nothing planted yet.</span>}
                   {bed && stg !== "ready" && !bed.wateredBy && (
-                    <button className="primary" disabled={busy || !!dry} title={dry ?? "One more herb at picking"} onClick={() => void act(() => api.gardenWater(owner, i), ["water", i], `You water bed ${i + 1}.`)}>
+                    <button className="primary" disabled={busy || !!dry} title={dry ?? `One more ${ONE[crop]} at picking`} onClick={() => void act(() => api.gardenWater(owner, i), ["water", i], `You water bed ${i + 1}.`)}>
                       <i className="drop" /> Water {typeof water === "number" && <small>{water}/{CAN_CAPACITY}</small>}
                     </button>
                   )}
@@ -226,9 +251,11 @@ export function Garden({ world, owner, ownerName, you, door, beds: size, live, o
 
       <div className="garden-dock" ref={dock}>
         <div className="garden-dock-head">
-          <h2>{mine ? "Your herb garden" : `${ownerName}'s herb garden`}</h2>
+          <h2>{mine ? "Your garden" : `${ownerName}'s garden`}</h2>
           <span className="muted">
-            {mine ? `Ready ${GROW_MS / 3_600_000} hours after planting. Water for an extra herb; bonemeal grows it faster.` : "Water a bed and they pick an extra herb. Bonemeal grows it faster."}
+            {mine
+              ? `Herbs are ready ${hours("herbs")} hours after planting, mushrooms ${hours("mushrooms")}. Water for an extra one; bonemeal grows it faster.`
+              : "Water a bed and they pick an extra one. Bonemeal grows it faster."}
           </span>
         </div>
         {(error || said) && <div className={`garden-said ${error ? "bad" : "good"}`} key={error ?? said}>{error ?? said}</div>}
@@ -237,6 +264,7 @@ export function Garden({ world, owner, ownerName, you, door, beds: size, live, o
             <div className="shed-stock">
               <Stock kind="seeds" n={held.seeds ?? 0} />
               <Stock kind="herbs" n={held.herbs ?? 0} />
+              <Stock kind="mushrooms" n={held.mushrooms ?? 0} />
               <Stock kind="bonemeal" n={held.bonemeal ?? 0} />
               <Stock kind="bone" n={held.bone ?? 0} />
             </div>
@@ -275,8 +303,8 @@ function WateringCan({ water }: { water: number | null | undefined }) {
   );
 }
 
-function Stock({ kind, n }: { kind: "seeds" | "herbs" | "bonemeal" | "bone"; n: number }) {
-  const name = { seeds: "Seeds", herbs: "Herbs", bonemeal: "Bonemeal", bone: "Bone" }[kind];
+function Stock({ kind, n }: { kind: "seeds" | "herbs" | "mushrooms" | "bonemeal" | "bone"; n: number }) {
+  const name = { seeds: "Seeds", herbs: "Herbs", mushrooms: "Mushrooms", bonemeal: "Bonemeal", bone: "Bone" }[kind];
   return (
     <span className={`shed-item${n === 0 ? " none" : ""}`} title={`${name}: ${n}`}>
       <ThingIcon icon={resourceIcon(kind)} size={22} />

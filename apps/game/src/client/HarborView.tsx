@@ -518,12 +518,12 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
     const bare = gardenBeds(owner.hutTier ?? 1) - beds.length;
     if (ready > 0) return `${ready} bed${ready === 1 ? "" : "s"} ready to pick`;
     if (next) return `the next bed is ready in ${growText(next, clock)}${bare > 0 ? `, ${bare} bare` : ""}`;
-    return owner.id === you ? "plant its beds with herb seeds or herbs" : "nothing planted yet";
+    return owner.id === you ? "plant its beds with herb seeds, herbs or mushrooms" : "nothing planted yet";
   };
   const gardenTip = (owner: (typeof board.members)[number]) => {
     const thirsty = (owner.garden ?? []).some((b) => b.readyAt > clock && !b.wateredBy);
-    if (owner.id === you) return `Your herb garden: ${gardenStatus(owner)}`;
-    return `${owner.name}'s herb garden: ${thirsty ? "water a bed and they pick an extra herb" : gardenStatus(owner)}`;
+    if (owner.id === you) return `Your garden: ${gardenStatus(owner)}`;
+    return `${owner.name}'s garden: ${thirsty ? "water a bed and they pick an extra one" : gardenStatus(owner)}`;
   };
 
   const visitHere = salesmanNow.here;
@@ -588,7 +588,7 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
     : hoverPoi.kind === "lot" ? "Plot for Sale"
     : hoverPoi.kind === "site" ? (hoverPoi.id === `site:${you}` ? "Your Plot" : `${ownerOf("site")?.name ?? "Someone"}'s Plot`)
     : hoverPoi.kind === "plot" ? (hoverPoi.id === `plot:${you}` ? `Your ${hutTier(hoverPoi.tier ?? 1).name}` : `${ownerOf("plot")?.name ?? "Someone"}'s ${hutTier(hoverPoi.tier ?? 1).name}`)
-    : gardenOwner(hoverPoi) ? (hoverPoi.id === `garden:${you}` ? "Your Herb Garden" : `${gardenOwner(hoverPoi)!.name}'s Herb Garden`)
+    : gardenOwner(hoverPoi) ? (hoverPoi.id === `garden:${you}` ? "Your Garden" : `${gardenOwner(hoverPoi)!.name}'s Garden`)
     : null;
   const invite = harbor.crew ? `${location.origin}${location.pathname}#crew/${harbor.crew.id}` : "";
   const copy = async () => {
@@ -836,7 +836,7 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
         : shut(<>{DECORATOR.short}'s stall <span className="muted">· covered up for the night. She's back at first light, {nellBack()}</span></>))
     // Beside a hut's herb garden (once its shack stands): the camera goes down over the beds.
     : gardenHere ? {
-        title: <>{gardenHere.id === you ? "Your herb garden" : `${gardenHere.name}'s herb garden`} <span className="muted">· {gardenStatus(gardenHere)}</span></>,
+        title: <>{gardenHere.id === you ? "Your garden" : `${gardenHere.name}'s garden`} <span className="muted">· {gardenStatus(gardenHere)}</span></>,
         label: gardenHere.id === you ? "Tend the garden" : gardenHere.garden!.some((b) => b.readyAt > clock && !b.wateredBy) ? "Water the garden" : "Look over the garden",
         run: () => setGardenOf(gardenHere.id),
       }
@@ -918,7 +918,11 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
     const ready = m.garden.length - growing.length;
     const soonest = growing.sort((a, b) => a.readyAt - b.readyAt)[0];
     if (m.id === you) {
-      if (m.garden.length > 0) gardenMarks.push({ poiId: `garden:${m.id}`, kind: "mine", ready, next: soonest ? { at: soonest.readyAt, p: bedProgress(soonest, clock) } : undefined });
+      if (m.garden.length > 0) {
+        // The mark shows what is coming: the crop of a bed ready to pick, else of the next bed to be ready.
+        const crop = (m.garden.find((b: GardenBed) => b.readyAt <= clock) ?? soonest)?.crop ?? "herbs";
+        gardenMarks.push({ poiId: `garden:${m.id}`, kind: "mine", crop, ready, next: soonest ? { at: soonest.readyAt, p: bedProgress(soonest, clock) } : undefined });
+      }
     } else if (self && growing.some((b) => !b.wateredBy) && hexDistance(self.pos, HARBOR_PLOTS[m.plot]) <= 5) {
       gardenMarks.push({ poiId: `garden:${m.id}`, kind: "thirsty", ready });
     }

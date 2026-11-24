@@ -1,4 +1,4 @@
-// The herb garden by a hut's door in D1 (packages/world/src/garden.ts has the rules): a row per bed with something
+// The garden by a hut's door in D1 (packages/world/src/garden.ts has the rules): a row per bed with something
 // growing in it. Its owner plants and picks it; anyone in their crew may water it and feed it bonemeal. Every
 // change is one batch whose first statement re-checks what the rules checked on a read, so two requests at once
 // (a double click, two crewmates watering together) cannot both go through.
@@ -10,7 +10,10 @@ import {
   canBuyProblem,
   fillProblem,
   SEED_PRICE,
-  bedYield,
+  CROP_GROW_MS,
+  CROPS,
+  asCrop,
+  cropOf,
   feedProblem,
   fedReadyAt,
   gardenBeds,
@@ -18,7 +21,7 @@ import {
   plantProblem,
   seedBuyProblem,
   waterProblem,
-  GROW_MS,
+  gardenHarvest,
   HARBOR_XP,
   type GardenBed,
   type Resources,
@@ -32,13 +35,14 @@ const now = () => Date.now();
 interface BedRow {
   player_id: string;
   bed: number;
+  crop: string;
   planted_at: number;
   ready_at: number;
   watered_by: string | null;
   fed_by: string | null;
 }
 
-const toBed = (r: BedRow): GardenBed => ({ bed: r.bed, plantedAt: r.planted_at, readyAt: r.ready_at, ...(r.watered_by ? { wateredBy: r.watered_by } : {}), ...(r.fed_by ? { fedBy: r.fed_by } : {}) });
+const toBed = (r: BedRow): GardenBed => ({ bed: r.bed, crop: asCrop(r.crop), plantedAt: r.planted_at, readyAt: r.ready_at, ...(r.watered_by ? { wateredBy: r.watered_by } : {}), ...(r.fed_by ? { fedBy: r.fed_by } : {}) });
 
 /** What is growing in a player's garden, a bed at a time. */
 export async function gardenOf(db: D1Database, playerId: string): Promise<GardenBed[]> {
@@ -52,7 +56,7 @@ export interface GardenView {
   beds: number;
   growing: GardenBed[];
   /** The asker's own stock of what a garden takes. */
-  held: Pick<Resources, "seeds" | "herbs" | "bonemeal" | "bone">;
+  held: Pick<Resources, "seeds" | "herbs" | "mushrooms" | "bonemeal" | "bone">;
   /** The asker's watering can: how many waterings are in it (null: they have none). */
   can: number | null;
   gold: number;
@@ -70,10 +74,10 @@ export async function gardenView(db: D1Database, askerId: string, ownerId: strin
   const [size, growing, hut, c, can] = await Promise.all([gardenSize(db, ownerId), gardenOf(db, ownerId), getHut(db, askerId), getCharacter(db, askerId), canOf(db, askerId)]);
   if (typeof size === "string") return size;
   const r = hut.resources;
-  return { owner: ownerId, beds: size, growing, held: { seeds: r.seeds ?? 0, herbs: r.herbs ?? 0, bonemeal: r.bonemeal ?? 0, bone: r.bone ?? 0 }, can, gold: c?.gold ?? 0, now: now() };
+  return { owner: ownerId, beds: size, growing, held: { seeds: r.seeds ?? 0, herbs: r.herbs ?? 0, mushrooms: r.mushrooms ?? 0, bonemeal: r.bonemeal ?? 0, bone: r.bone ?? 0 }, can, gold: c?.gold ?? 0, now: now() };
 }
 
-/** Plant one of your own beds with a packet of seeds or a herb. */
+/** Plant one of your own beds with a packet of seeds or a herb (it grows herbs), or a mushroom (it grows mushrooms). */
 export async function plantBed(db: D1Database, playerId: string, bed: unknown, with_: unknown): Promise<string | null> {
   const [size, growing, hut] = await Promise.all([gardenSize(db, playerId), gardenOf(db, playerId), getHut(db, playerId)]);
   if (typeof size === "string") return "Your shack has to stand before there is a garden by its door.";
@@ -81,9 +85,12 @@ export async function plantBed(db: D1Database, playerId: string, bed: unknown, w
   if (problem) return problem;
   const t = now();
   const sow = with_ as SowWith;
+  const crop = cropOf(sow);
   const [took, planted] = await db.batch([
     db.prepare("UPDATE resources SET qty = qty - 1 WHERE player_id = ?1 AND kind = ?2 AND qty >= 1").bind(playerId, sow),
-    db.prepare("INSERT OR IGNORE INTO garden_beds (player_id, bed, planted_at, ready_at) SELECT ?1, ?2, ?3, ?4 WHERE changes() > 0").bind(playerId, bed as number, t, t + GROW_MS),
+    db
+      .prepare("INSERT OR IGNORE INTO garden_beds (player_id, bed, crop, planted_at, ready_at) SELECT ?1, ?2, ?5, ?3, ?4 WHERE changes() > 0")
+      .bind(playerId, bed as number, t, t + CROP_GROW_MS[crop], crop),
   ]).then((res) => res.map((r) => r.meta.changes));
   if (!took) return "You no longer have that to plant.";
   if (!planted) {
@@ -176,25 +183,32 @@ export async function feedBed(db: D1Database, playerId: string, ownerId: string,
   return null;
 }
 
-/** Pick every ready bed in your garden: the herbs go to you, the beds are bare again, and a little Harbor XP. */
-export async function pickGarden(db: D1Database, playerId: string): Promise<string | { herbs: number; beds: number; xp?: XpResult }> {
+/**
+ * Pick every ready bed in your garden: what grew in them (herbs, mushrooms) goes to you, the beds are bare again,
+ * and a little Harbor XP.
+ */
+export async function pickGarden(db: D1Database, playerId: string): Promise<string | { herbs: number; mushrooms: number; beds: number; xp?: XpResult }> {
   const t = now();
   const ready = (await gardenOf(db, playerId)).filter((b) => b.readyAt <= t);
   if (ready.length === 0) return "Nothing is ready to pick yet.";
-  const herbs = ready.reduce((n, b) => n + bedYield(playerId, b), 0);
+  const harvest = gardenHarvest(playerId, ready);
+  const crops = CROPS.filter((c) => (harvest[c] ?? 0) > 0);
   const xp = await prepareXp(db, playerId, HARBOR_XP.gardenBed * ready.length);
-  // The beds are cleared in one statement, only as they were read (the same plantings), and the herbs given only if
-  // every one of them was: a second pick at the same moment clears nothing and is paid nothing.
+  // The beds are cleared in one statement, only as they were read (the same plantings), and each crop given only if
+  // every one of them was (the first) or the crop before it was (the rest): a second pick at the same moment clears
+  // nothing and is paid nothing.
   const plantings = ready.map((b) => `'${b.bed}:${b.plantedAt}'`).join(",");
   const results = await db.batch([
     db.prepare(`DELETE FROM garden_beds WHERE player_id = ?1 AND ready_at <= ?2 AND (bed || ':' || planted_at) IN (${plantings})`).bind(playerId, t),
-    db
-      .prepare("INSERT INTO resources (player_id, kind, qty) SELECT ?1, 'herbs', ?2 WHERE changes() = ?3 ON CONFLICT(player_id, kind) DO UPDATE SET qty = qty + ?2")
-      .bind(playerId, herbs, ready.length),
+    ...crops.map((crop, i) =>
+      db
+        .prepare("INSERT INTO resources (player_id, kind, qty) SELECT ?1, ?2, ?3 WHERE changes() = ?4 ON CONFLICT(player_id, kind) DO UPDATE SET qty = qty + ?3")
+        .bind(playerId, crop, harvest[crop]!, i === 0 ? ready.length : 1),
+    ),
     ...(xp?.statements() ?? []),
   ]);
-  if (results[0].meta.changes !== ready.length || results[1].meta.changes === 0) return "Someone picked it just now.";
-  return { herbs, beds: ready.length, xp: xpOutcome(xp, results) };
+  if (results[0].meta.changes !== ready.length || crops.some((_, i) => results[1 + i].meta.changes === 0)) return "Someone picked it just now.";
+  return { herbs: harvest.herbs ?? 0, mushrooms: harvest.mushrooms ?? 0, beds: ready.length, xp: xpOutcome(xp, results) };
 }
 
 /** Grind bones into bonemeal: BONEMEAL_PER_BONE scoops a bone. */

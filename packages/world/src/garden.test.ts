@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   BONEMEAL_CUT,
   CAN_CAPACITY,
+  CROP_GROW_MS,
+  cropOf,
+  gardenHarvest,
+  harvestText,
   CAN_PRICE,
   canBuyProblem,
   fillProblem,
@@ -31,7 +35,7 @@ import { HARBOR_BUILDINGS, HARBOR_FIXTURES, HARBOR_PLOTS, HARBOR_SIDES, footing,
 import { tileAt } from "./map";
 
 const T0 = 1_700_000_000_000;
-const bed = (over: Partial<GardenBed> = {}): GardenBed => ({ bed: 0, plantedAt: T0, readyAt: T0 + GROW_MS, ...over });
+const bed = (over: Partial<GardenBed> = {}): GardenBed => ({ bed: 0, crop: "herbs", plantedAt: T0, readyAt: T0 + GROW_MS, ...over });
 
 describe("garden beds", () => {
   it("has more beds as the hut grows", () => {
@@ -53,11 +57,11 @@ describe("garden beds", () => {
   });
 
   it("looks for every bed, empty ones too", () => {
-    const looks = gardenLooks([bed({ bed: 1, wateredBy: "Ana" })], 3, T0 + GROW_MS);
+    const looks = gardenLooks([bed({ bed: 1, wateredBy: "Ana" }), bed({ bed: 2, crop: "mushrooms" })], 3, T0 + GROW_MS);
     expect(looks).toEqual([
-      { stage: "empty", watered: false, fed: false },
-      { stage: "ready", watered: true, fed: false },
-      { stage: "empty", watered: false, fed: false },
+      { stage: "empty", crop: "herbs", watered: false, fed: false },
+      { stage: "ready", crop: "herbs", watered: true, fed: false },
+      { stage: "ready", crop: "mushrooms", watered: false, fed: false },
     ]);
   });
 
@@ -83,10 +87,20 @@ describe("planting", () => {
     expect(plantProblem(ctx, 2, "seeds")).toMatch(/no such bed/);
     expect(plantProblem(ctx, 1.5, "seeds")).toMatch(/no such bed/);
     expect(plantProblem(ctx, 0, "herbs")).toMatch(/no herbs/);
-    expect(plantProblem(ctx, 0, "wood")).toMatch(/seeds or a herb/);
+    expect(plantProblem(ctx, 0, "wood")).toMatch(/seeds, a herb or a mushroom/);
+    expect(plantProblem(ctx, 0, "mushrooms")).toMatch(/caverns/);
+    expect(plantProblem({ ...ctx, resources: { mushrooms: 1 } }, 0, "mushrooms")).toBeNull();
     expect(plantProblem({ ...ctx, resources: {} }, 0, "seeds")).toMatch(/market stall/);
     expect(plantProblem({ ...ctx, beds: [bed()] }, 0, "seeds")).toMatch(/already growing/);
     expect(plantProblem({ ...ctx, tier: 3 }, 3, "seeds")).toBeNull();
+  });
+
+  it("grows herbs from seeds and herbs, and mushrooms from a mushroom, more slowly", () => {
+    expect(cropOf("seeds")).toBe("herbs");
+    expect(cropOf("herbs")).toBe("herbs");
+    expect(cropOf("mushrooms")).toBe("mushrooms");
+    expect(CROP_GROW_MS.herbs).toBe(GROW_MS);
+    expect(CROP_GROW_MS.mushrooms).toBeGreaterThan(GROW_MS);
   });
 });
 
@@ -148,6 +162,17 @@ describe("picking", () => {
       seen.add(n);
     }
     expect(seen.size).toBe(GARDEN_YIELD[1] - GARDEN_YIELD[0] + 1);
+  });
+
+  it("adds up a pick crop by crop", () => {
+    const beds = [bed(), bed({ bed: 1, crop: "mushrooms" }), bed({ bed: 2, crop: "mushrooms", wateredBy: "Ana" })];
+    const h = gardenHarvest("p1", beds);
+    expect(h.herbs).toBe(bedYield("p1", beds[0]));
+    expect(h.mushrooms).toBe(bedYield("p1", beds[1]) + bedYield("p1", beds[2]));
+    expect(gardenHarvest("p1", [bed()])).not.toHaveProperty("mushrooms");
+    expect(harvestText({ herbs: 3, mushrooms: 1 })).toBe("3 herbs and 1 mushroom");
+    expect(harvestText({ herbs: 1 })).toBe("1 herb");
+    expect(harvestText({ mushrooms: 4 })).toBe("4 mushrooms");
   });
 });
 
