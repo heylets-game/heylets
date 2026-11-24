@@ -8,11 +8,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode, type RefObject, useLayoutEffect } from "react";
 import { useAudioScene } from "./audio/useAudioScene";
 import { hexDistance, hexNeighbors, type HexPos } from "@gantt-quest/core";
-import { PUB_BARKEEP, PUB_BARKEEP_POS, PUB_COUNTER, PUB_DEALER, PUB_DEALER_POS, PUB_DEALER_STAND, PUB_FITTINGS, PUB_GRID, PUB_LEADERBOARD, PUB_MENU, PUB_SALESMAN_POS, PUB_SEATS, PUB_TRADER, dueIn, gatherDay, poiAt, pubMountSpots, pubPath, pubRoom, PUB_MOUNT_SLOTS, regularsOn, salesman, outfitOf, barkeepTalk, dealerTalk, regularTalk, salesmanTalk, type PubClientMessage, type RegularId, type XpMessage } from "@gantt-quest/world";
+import { PUB_BARKEEP, PUB_BARKEEP_POS, PUB_COUNTER, PUB_DEALER, PUB_DEALER_POS, PUB_DEALER_STAND, PUB_FITTINGS, PUB_GRID, PUB_LEADERBOARD, PUB_MENU, PUB_SALESMAN_POS, PUB_SEATS, PUB_TRADER, dueIn, gatherDay, poiAt, pubMountSpots, pubPath, pubRoom, PUB_MOUNT_SLOTS, ROOM_WALL_HEIGHT, regularsOn, salesman, outfitOf, barkeepTalk, dealerTalk, regularTalk, salesmanTalk, type PubClientMessage, type RegularId, type XpMessage } from "@gantt-quest/world";
 import { toOwned } from "./items";
 import { withLook } from "./render/sprites";
 import { CatchPanel } from "./CatchPanel";
-import { RecordBoard } from "./CatchBook";
+import { RecordBoard, WallFishCard } from "./CatchBook";
 import { ChatInput } from "./ChatInput";
 import { api, type Me, type PubWall, type RegularsView } from "./api";
 import { RegularPanel } from "./RegularPanel";
@@ -49,6 +49,11 @@ import "./pub.css";
 
 /** Where the record fish hang, by wall slot. */
 const MOUNT_SPOTS = pubMountSpots(PUB_MOUNT_SLOTS);
+/** How high they hang, to the middle of each board: in the top third of the wall, up over everyone's heads. */
+const MOUNT_Y = ROOM_WALL_HEIGHT * (5 / 6);
+/** A record fish's prop id, from its wall slot, and back. */
+const fishProp = (slot: number) => `fish-${slot}`;
+const fishSlot = (id: string | number | null): number | null => (typeof id === "string" && /^fish-\d+$/.test(id) ? Number(id.slice(5)) : null);
 
 const same = (a: HexPos, b: HexPos) => a.q === b.q && a.r === b.r;
 const ROOM = pubRoom();
@@ -163,6 +168,8 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
   /** The crew's record fish on the wall. Read when the pub opens, and again after the board is used. */
   const [wall, setWall] = useState<PubWall | null>(null);
   const loadWall = useCallback(() => void api.pubWall().then(setWall, () => undefined), []);
+  /** The wall slot of the record fish being read, after a click on it. */
+  const [readingFish, setReadingFish] = useState<number | null>(null);
   useEffect(loadWall, [loadWall]);
   // Opening a regular's panel reads the job again (a quest may have been done elsewhere since),
   // and brings them to the middle of the screen, clear of the panel.
@@ -257,7 +264,7 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
         // The crew's record fish, each on its board on the wall.
         ...(wall?.mounts ?? []).flatMap((m) => {
           const spot = MOUNT_SPOTS[m.slot];
-          return spot ? [{ id: `fish-${m.slot}`, model: "mounted_fish", pos: spot.pos, facing: spot.side, mount: true, x: 0, y: 0.62, fish: { species: m.species, mm: m.mm } }] : [];
+          return spot ? [{ id: fishProp(m.slot), model: "mounted_fish", pos: spot.pos, facing: spot.side, mount: true, x: 0, y: MOUNT_Y, fish: { species: m.species, mm: m.mm } }] : [];
         }),
         // The leaderboard for the game tables, standing against the back wall. Pushed back into the notch between the two wall faces behind it.
         { id: "leaderboard", model: "tally_board", pos: PUB_LEADERBOARD.pos, facing: 0, z: -0.4 },
@@ -274,6 +281,12 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
   useEffect(() => {
     const r = new WorldRenderer(mount.current!, { onPropClick: (id) => {
         if (pinned.current) return false;
+        // A record fish on the wall: read its plaque, from wherever you are.
+        const slot = fishSlot(id);
+        if (slot !== null) {
+          setReadingFish(slot);
+          return true;
+        }
         // A stool, wherever on it the click landed: walk onto its hex, and sit (whoever is on a stool's hex is drawn sitting on it).
         const stool = PUB_FITTINGS.find((f) => f.id === id && PUB_SEATS.some((s) => same(s, f)));
         if (stool) {
@@ -312,7 +325,10 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
         // Clicking the salesman walks you up to their table, and a word with them once there.
         wantTrade.current = sellerHere.current && (same(to, PUB_SALESMAN_POS) || same(to, PUB_TRADER));
         send.current({ type: "move", to: wantTrade.current ? PUB_TRADER : to });
-      }, onHover: setHover }, { resting: born.current });
+      }, onHover: setHover,
+      // A record fish under the pointer is outlined, to say it can be clicked.
+      onPropHover: (id) => renderer.current?.setGlow(!pinned.current && fishSlot(id) !== null ? { prop: id! } : null),
+    }, { resting: born.current });
     renderer.current = r;
     if (latest.current) r.setState(latest.current);
     // With fancy graphics, the pub has windows onto the real Harbor outside: a second view of it, drawn off screen.
@@ -352,6 +368,7 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
     setStood(null);
     for (const close of [setSellingFish, setRecords, setReading, setBag, setBook, setBarOpen, setTrading]) close(false);
     setDealing(null);
+    setReadingFish(null);
     talk.close();
     heroSheet.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -567,6 +584,7 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
         </DragPanel>
       )}
 
+      {you && wall && readingFish !== null && <WallFishCard wall={wall} slot={readingFish} you={you} onWall={setWall} onClose={() => setReadingFish(null)} />}
       {you && records && <RecordBoard you={you} onClose={() => (setRecords(false), loadWall())} />}
       {you && sellingFish && <CatchPanel buyer="tam" onGold={() => void refresh()} onClose={() => setSellingFish(false)} />}
       {you && atTrader && seller && trading && <SalesmanPanel me={me} refresh={refresh} />}

@@ -169,3 +169,60 @@ export function RecordBoard({ you, onClose }: { you: string; onClose(): void }) 
     </div>
   );
 }
+
+/** One of the crew's record fish on the pub wall, clicked: what it is, who caught it and when. Its catcher can take it down from here. */
+export function WallFishCard({ wall, slot, you, onWall, onClose }: { wall: PubWall; slot: number; you: string; onWall(wall: PubWall): void; onClose(): void }) {
+  const u = useSyncExternalStore(units.subscribe, units.get);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const fish = wall.mounts.find((m) => m.slot === slot);
+  const def = fish ? FISH[fish.species] : undefined;
+  if (!fish || !def) return null;
+  const record = wall.records.find((r) => r.fishId === fish.fishId);
+  const mine = fish.playerId === you;
+  const takeDown = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      onWall(await api.wallFish(fish.fishId, true));
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="overlay" onClick={(ev) => ev.target === ev.currentTarget && onClose()}>
+      <DragPanel id="pub.wallfish" title={def.name} compact className="panel catch-panel" role="dialog" aria-label={`${def.name} on the wall`}>
+        <header className="gather-head">
+          <h2>{def.name}</h2>
+          <span className="tag wanted">Crew record</span>
+          <span className="spacer" />
+          <button className="small" onClick={onClose}>Close</button>
+        </header>
+        <div className="book-detail">
+          <img src={catchPicture(fish.species, 160, "three")} alt="" width={120} height={120} />
+          <div>
+            <p>
+              <strong>{formatWeight(fish.grams, u)}</strong>
+              {def.kind !== "haul" ? `, ${formatLength(fish.mm, u)}` : ""}
+              <span className="muted"> · {def.rarity}</span>
+            </p>
+            <p>
+              Caught by <strong>{mine ? "you" : fish.name}</strong>
+              {record?.caughtAt ? ` on ${day(record.caughtAt)}` : ""}.
+            </p>
+            <p className="muted">{def.blurb}</p>
+          </div>
+        </div>
+        {error && <p className="bad">{error}</p>}
+        {mine && (
+          <p className="row">
+            <span className="muted grow">It goes back in your trophy chest.</span>
+            <button className="small" disabled={busy} onClick={() => void takeDown()}>Take it down</button>
+          </p>
+        )}
+      </DragPanel>
+    </div>
+  );
+}
