@@ -57,7 +57,7 @@ const PAINT_ROUNDS = 6;
 // ---------- making a zone ----------
 
 function enemyUnit(state: ZoneState, kind: string, pos: HexPos, group: string): Unit {
-  const hp = Math.round(enemyHp(kind, state.options.level, state.options.threat) * modsOf(state.options).hp);
+  const hp = Math.round(enemyHp(kind, state.options.level) * modsOf(state.options).hp);
   return {
     id: `e${++state.seq}`,
     side: "enemy",

@@ -27,7 +27,7 @@ import { generateCaverns } from "../caverns";
 import type { Poi, WorldMap } from "../map";
 import { makeRng, seedFromString, type Rng } from "../rng";
 import { CRATE_HP } from "./crates";
-import { threatExtras } from "./kit";
+import { GROUP_EXTRAS } from "./kit";
 import { modsOf } from "./mods";
 import type { ZoneOptions } from "./types";
 import type { ZonePlan } from "./gen";
@@ -183,8 +183,8 @@ export function generateDelve(seed: string, options: ZoneOptions): ZonePlan {
   const groups: ZonePlan["groups"] = [];
   for (const camp of map.pois.filter((p) => p.kind === "camp" || p.kind === "lair")) {
     const kinds = camp.kind === "lair" ? guardsFor(camp.enemies, options.party) : bandFor(camp.enemies, options.party);
-    // A more dangerous cave puts more in each band (not round the haunt, nor with a troll that lives alone).
-    if (camp.kind === "camp" && kinds[0] !== "troll") for (let n = 0; n < threatExtras(options.threat) + modsOf(options).extras; n++) kinds.push(kinds[kinds.length - 1]);
+    // Each band has more than its leader would bring (not round the haunt, nor with a troll that lives alone).
+    if (camp.kind === "camp" && kinds[0] !== "troll") for (let n = 0; n < GROUP_EXTRAS + modsOf(options).extras; n++) kinds.push(kinds[kinds.length - 1]);
     // They stand in their chamber: on its middle and the open floor nearest it.
     const posts = map.tiles
       .filter((t) => t.biome === "cave" && hexDistance(t, camp.pos) <= 3 && !taken.has(posKey(t)))

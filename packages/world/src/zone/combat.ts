@@ -11,7 +11,7 @@ import { tileAt, type Poi } from "../map";
 import { DEBUFFS, addCondition, addShield, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, kindle, removeCondition, saveBonus, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
 import { cratesOn, crateById, hurtCrate, isCrateId } from "./crates";
 import { HEX_DIRS, close, blast, blockerAt, courseShare, directionToward, elevOf, flies, heldAgainst, inFight, lineFrom, pathIn, pitAt, reachFrom, roomAt, sameHex, sees, seesFor, solid, stepCost, strikes, unitById, zoneReach, type Course, type Pit } from "./geometry";
-import { ACTION_AP, CHART, COMMON_ACTIONS, CORAL_ARMOR, RALLY, SHANTY, SUMMON_CALLS, ENEMY_BURST, FLEE_RANGE, JUMP_DOWN, JUMP_UP, POTION_EDGE, SAVE_STAT, SMUGGLED, THROWABLES, TORCH_GROUND_ROUNDS, abilityDice, enemySave, enemyShove, unitStrikes, healDice, jumpRange, reactionStrike, tacticOf, throwRange, type EnemyStrike, type Tactic } from "./kit";
+import { ACTION_AP, CHART, COMMON_ACTIONS, CORAL_ARMOR, ENEMY_EDGE, RALLY, SHANTY, SUMMON_CALLS, ENEMY_BURST, FLEE_RANGE, JUMP_DOWN, JUMP_UP, POTION_EDGE, SAVE_STAT, SMUGGLED, THROWABLES, TORCH_GROUND_ROUNDS, abilityDice, enemySave, enemyShove, unitStrikes, healDice, jumpRange, reactionStrike, tacticOf, throwRange, type EnemyStrike, type Tactic } from "./kit";
 import { modsOf } from "./mods";
 import { d20, diceFor, hitChance, mod, proficiency, rollDice, rollShown, statOf } from "./rules";
 import { seenByHeroes } from "./light";
@@ -191,10 +191,10 @@ export function tumble(ctx: Ctx, unit: Unit, from: HexPos, by: string | null, sa
 export const EDGE_DC = 12;
 
 /** What whoever `by` shoves must roll to catch the edge of a drop or a pit: harder against the strong, and against a boss's shove. */
-export function edgeDc(state: ZoneState, by: Unit | undefined): number {
+export function edgeDc(by: Unit | undefined): number {
   if (!by) return EDGE_DC;
   if (by.side === "hero") return 10 + Math.max(0, mod(statOf(by, "str"))) + Math.floor(proficiency(by.level) / 2);
-  return 10 + enemySave(by.kind) + (Math.max(1, Math.min(3, state.options.threat ?? 2)) - 1);
+  return 10 + enemySave(by.kind) + ENEMY_EDGE;
 }
 
 /** How a unit made to move a hex fared: it went, it went over an edge and fell, it caught the edge and stayed, something was in the way, or it is lost to a pit. */
@@ -228,7 +228,7 @@ export function shift(ctx: Ctx, target: Unit, dest: HexPos, by: string, dc?: num
   const was = target.pos;
   if (into.how !== "open") {
     const boss = target.side === "enemy" && !!ENEMIES[target.kind]?.boss;
-    const vs = dc ?? edgeDc(state, unitById(state, by));
+    const vs = dc ?? edgeDc(unitById(state, by));
     const roll = d20(ctx.rng, { kind: "save", id: target.id, label: "Catch the edge", bonus: saveBonus(target, "agi"), vs, adv: has(target, "prone") || has(target, "stunned") ? (boss ? 0 : -1) : boss ? 1 : 0 });
     ctx.events.push({ t: "roll", roll });
     if (roll.ok) {

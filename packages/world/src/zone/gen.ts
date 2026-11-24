@@ -9,7 +9,7 @@ import { ENEMIES, bandKinds, cavernBand, type CavernLead, type RoamerLead } from
 import { BASE_HEIGHT, CLIMES, type Biome, type Clime, type Tile, type WorldMap } from "../map";
 import { makeRng, seedFromString } from "../rng";
 import { hexesBetween, solid } from "./geometry";
-import { threatExtras } from "./kit";
+import { GROUP_EXTRAS } from "./kit";
 import { cleanMods, modsOf } from "./mods";
 import { layZone } from "./lay";
 import { SITES } from "./sites";
@@ -31,7 +31,7 @@ export const ALERT_RANGE = 1;
 /** How near a fight a hero has to be to be drawn into it. */
 export const JOIN_RANGE = 6;
 
-export const DEFAULT_ZONE_OPTIONS: ZoneOptions = { size: "medium", biome: "meadow", groups: 2, kinds: [], elevation: 1, obstacles: 1, clear: 4, party: 2, level: 1, threat: 2 };
+export const DEFAULT_ZONE_OPTIONS: ZoneOptions = { size: "medium", biome: "meadow", groups: 2, kinds: [], elevation: 1, obstacles: 1, clear: 4, party: 2, level: 1 };
 
 /** What tends to lead a group in each kind of place. */
 export const BIOME_LEADS: Record<ZoneBiome, string[]> = {
@@ -61,7 +61,6 @@ export function zoneOptions(raw: unknown): ZoneOptions {
     clear: whole(o.clear, 2, 8, d.clear),
     party: whole(o.party, 1, 4, d.party),
     level: whole(o.level, 1, 40, d.level),
-    threat: whole(o.threat, 1, 3, d.threat ?? 2),
     ...(o.delve === true ? { delve: true } : {}),
     ...(cleanMods(o.mods).length > 0 ? { mods: cleanMods(o.mods) } : {}),
     ...(typeof o.tier === "number" && Number.isFinite(o.tier) && o.tier >= 1 ? { tier: Math.min(ATLAS_TIERS, Math.round(o.tier)) } : {}),
@@ -222,8 +221,8 @@ function generateCaveFloor(seed: string, asked: ZoneOptions): ZonePlan {
   const taken = new Set<string>();
   const groups = centres.map((c, i) => {
     const kinds = groupKinds(options.kinds.length > 0 ? leads[i % leads.length] : rng.pick(leads), options.party);
-    // A more dangerous zone has more of them in each group: another of whoever came with the leader. A boss still stands alone.
-    if (!ENEMIES[kinds[0]]?.boss && kinds[0] !== "dummy") for (let n = 0; n < threatExtras(options.threat) + mods.extras; n++) kinds.push(kinds[kinds.length - 1]);
+    // Each group has more than its leader would bring: another of whoever came with it. A boss still stands alone.
+    if (!ENEMIES[kinds[0]]?.boss && kinds[0] !== "dummy") for (let n = 0; n < GROUP_EXTRAS + mods.extras; n++) kinds.push(kinds[kinds.length - 1]);
     const posts = inner
       .filter((p) => hexDistance(p, c) <= 3 && open.has(posKey(p)) && !taken.has(posKey(p)))
       .sort((a, b) => hexDistance(a, c) - hexDistance(b, c) || a.q - b.q || a.r - b.r)

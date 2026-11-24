@@ -765,19 +765,16 @@ export interface EnemyStrike {
   kit: EnemyAttackKit;
 }
 
-/** The threat a zone was made at, for one made before there was such a thing. */
-export const DEFAULT_THREAT = 2;
-const clampThreat = (threat: number | undefined) => Math.max(1, Math.min(3, Math.round(threat ?? DEFAULT_THREAT)));
-/** How much more an enemy can take, by threat. */
-const THREAT_HP = [1, 1.9, 2.7];
+/** What every enemy adds to the damage and the to-hit of its abilities, and to the saves against what it does. */
+export const ENEMY_EDGE = 0;
 
 /**
- * Enemy abilities (by id) as they work on the tiles, for an enemy of this level and at this threat. `more` is what
+ * Enemy abilities (by id) as they work on the tiles, for an enemy of this level. `more` is what
  * the map's modifiers add to every attack's damage and its bonus to hit (zone/mods.ts). An id the pool does not
  * have is passed over.
  */
-export function abilityStrikes(ids: readonly string[], level: number, threat?: number, more = 0): EnemyStrike[] {
-  const edge = clampThreat(threat) - 1 + more;
+export function abilityStrikes(ids: readonly string[], level: number, more = 0): EnemyStrike[] {
+  const edge = ENEMY_EDGE + more;
   return ids.flatMap((id) => {
     const a = ENEMY_ABILITIES[id];
     if (!a) return [];
@@ -789,7 +786,6 @@ export function abilityStrikes(ids: readonly string[], level: number, threat?: n
         range: burst ? ENEMY_BURST : (a.range ?? 1),
         burst,
         dice: diceFor(a.damage + Math.floor(level / 2) + edge),
-        // Threat sharpens it.
         bonus: a.toHit + Math.floor((Math.max(1, level) - 1) / 4) + edge,
         perfect: a.perfect,
         weight: a.weight,
@@ -803,11 +799,11 @@ export function abilityStrikes(ids: readonly string[], level: number, threat?: n
 }
 
 /** What an enemy kind starts with, as abilityStrikes makes them. */
-export const enemyStrikes = (kind: string, level: number, threat?: number, more = 0): EnemyStrike[] => abilityStrikes(ENEMIES[kind]?.abilities ?? [], level, threat, more);
+export const enemyStrikes = (kind: string, level: number, more = 0): EnemyStrike[] => abilityStrikes(ENEMIES[kind]?.abilities ?? [], level, more);
 
 /** What this enemy can do just now: its own abilities, those that are ready, on this map. */
 export const unitStrikes = (state: Pick<ZoneState, "options">, unit: Unit): EnemyStrike[] =>
-  abilityStrikes(unit.abilities, unit.level, state.options.threat, modsOf(state.options).edge).filter((s) => !(unit.cooldowns[s.id] > 0));
+  abilityStrikes(unit.abilities, unit.level, modsOf(state.options).edge).filter((s) => !(unit.cooldowns[s.id] > 0));
 
 /** The quick are hard to hit: 10, one more for every 30 of speed, one more for a boss. */
 export const enemyDefence = (kind: string): number => 10 + Math.floor((ENEMIES[kind]?.speed ?? 0) / 30) + (ENEMIES[kind]?.boss ? 1 : 0);
@@ -834,11 +830,11 @@ export const enemyShove = (kind: string): number => 1 + enemySave(kind);
 /** What an enemy adds to a saving throw: bosses and the big are harder to shake. */
 export const enemySave = (kind: string): number => (ENEMIES[kind]?.boss ? 3 : (ENEMIES[kind]?.hp ?? 0) >= 18 ? 2 : 0);
 
-/** Every enemy's hit points, at every level, against what its entry and the level and threat give. */
+/** Every enemy's hit points, at every level, against what its entry and the level give. */
 export const ENEMY_HP_SCALE = 1.1;
 
-/** Hit points for a party of this level (half again as much by level 4), scaled by threat. */
-export const enemyHp = (kind: string, level: number, threat?: number): number => Math.round((ENEMIES[kind]?.hp ?? 1) * (1 + 0.15 * Math.max(0, level - 1)) * THREAT_HP[clampThreat(threat) - 1] * ENEMY_HP_SCALE);
+/** Hit points for a party of this level (half again as much by level 4). */
+export const enemyHp = (kind: string, level: number): number => Math.round((ENEMIES[kind]?.hp ?? 1) * (1 + 0.15 * Math.max(0, level - 1)) * ENEMY_HP_SCALE);
 
-/** How many more stand with a group than its leader would bring, by threat. */
-export const threatExtras = (threat?: number): number => clampThreat(threat) - 1;
+/** How many more stand with a group than its leader would bring. */
+export const GROUP_EXTRAS = 0;

@@ -2,8 +2,8 @@
 // ABILITIES). An enemy kind starts with a list of them (content.ts ENEMIES `abilities`), and each enemy carries its
 // own copy (`Unit.abilities`), so one enemy can be given more, or fewer, than the rest of its kind.
 //
-// An ability's numbers are its own: how hard it hits and how sure it is, before the enemy's level and the map's
-// threat are added (kit.ts enemyStrikes). Nothing about it is tied to a kind, so any enemy can be given any of them.
+// An ability's numbers are its own: how hard it hits and how sure it is, before the enemy's level, the edge every
+// enemy has (kit.ts ENEMY_EDGE) and the map's modifiers are added (kit.ts enemyStrikes). Nothing about it is tied to a kind, so any enemy can be given any of them.
 
 import type { EffectKind } from "../content";
 import type { SurfaceKind } from "./types";
@@ -12,9 +12,9 @@ export interface EnemyAbilityDef {
   id: string;
   /** What it is called in the fight's log and on the enemy's card. */
   name: string;
-  /** How hard it hits, before level and threat: turned into dice (rules.ts diceFor). */
+  /** How hard it hits, before level and edge: turned into dice (rules.ts diceFor). */
   damage: number;
-  /** Added to its roll to hit, before level and threat. */
+  /** Added to its roll to hit, before level and edge. */
   toHit: number;
   /** `single`: one hero, in reach (`range`). `burst`: every hero round the enemy (ENEMY_BURST), each saving for half. */
   shape?: "single" | "burst";

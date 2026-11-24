@@ -221,7 +221,7 @@ describe("a fight under a roof or under ground", () => {
     let [came, stayed] = [0, 0];
     for (const site of INSIDE) {
       for (const size of SIZES) {
-        for (let seed = 0; seed < 3; seed++) {
+        for (let seed = 0; seed < 5; seed++) {
           const where = `${site} ${size} ${seed}`;
           let state = zone(site, size, seed);
           // Nobody moves (the enemy's AI is off, and Ann lets every turn of hers go by): who is within earshot of whom never changes.
@@ -274,11 +274,11 @@ describe("a fight under a roof or under ground", () => {
 
   it("is played through by the enemy on its own, in a citadel and in a cavern, without breaking the rules: room on every hex, nobody in a wall or off the floor, and it ends", () => {
     const STURDY_HP = 300;
-    let [fights, rounds] = [0, 0];
+    let [fights, rounds, walked] = [0, 0, 0];
     for (const site of ["citadel", "cavern"] as const) {
       for (let seed = 0; seed < 6; seed++) {
         const where = `${site} ${seed}`;
-        let state = zone(site, SIZES[seed % 3], seed, { groups: 3, threat: (seed % 3) + 1 });
+        let state = zone(site, SIZES[seed % 3], seed, { groups: 3 });
         expect(state.aiOff, where).toBeFalsy();
         state = must(state, { type: "join", hero: standInHero("refactor_rogue", "ann", 3)! });
         state = must(state, { type: "join", hero: standInHero("qa_paladin", "bo", 3)! });
@@ -350,9 +350,9 @@ describe("a fight under a roof or under ground", () => {
         expect(state.encounter, `${where}: still fighting after ${turns} turns`).toBeNull();
         expect(got(events, "fight_end").map((e) => e.outcome), where).toEqual(["defeat"]);
         for (const h of state.units.filter((u) => u.side === "hero")) if (events.some((e) => e.t === "down" && e.id === h.id)) expect(h, where).toMatchObject({ down: false, hp: 1 });
-        // It took the enemy rounds, and it had to come to them to do it.
+        // It took the enemy rounds, and (nearly always: a band that shoots may not need to) it had to come to them to do it.
         rounds += Math.max(0, ...got(events, "round").map((e) => e.n));
-        expect(got(events, "moved").some((e) => state.units.find((u) => u.id === e.id)?.side === "enemy"), where).toBe(true);
+        if (got(events, "moved").some((e) => state.units.find((u) => u.id === e.id)?.side === "enemy")) walked++;
         expect(got(events, "hit").some((e) => e.target === "ann" || e.target === "bo"), where).toBe(true);
         // No enemy walked further in a turn of its own than its two AP of movement take it.
         let [turn, steps]: [string | null, number] = [null, 0];
@@ -374,5 +374,6 @@ describe("a fight under a roof or under ground", () => {
     // Long fights, on the whole. (Whether a second band heard any of these twelve depends on where the fights fell:
     // that hearing works is the test above.)
     expect(rounds / fights).toBeGreaterThan(4);
+    expect(walked).toBeGreaterThanOrEqual(fights - 2);
   }, 60_000);
 });

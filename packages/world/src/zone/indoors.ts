@@ -30,7 +30,7 @@ import { ENEMIES } from "../content";
 import type { Clime, Poi, Tile } from "../map";
 import { makeRng, seedFromString, type Rng } from "../rng";
 import { HEX_DIRS, MAX_ELEV } from "./geometry";
-import { threatExtras } from "./kit";
+import { GROUP_EXTRAS } from "./kit";
 import type { Laid, LaidGroup } from "./lay";
 import { modsOf } from "./mods";
 import { propOf } from "./props";
@@ -600,7 +600,7 @@ export function layInside(seed: string, options: ZoneOptions, siteId: SiteId, gr
     for (const p of room.chests) chestKeys.add(posKey(p));
   }
   const standable = (p: HexPos) => walk(p) && at(p)!.prop !== "arch" && at(p)!.prop !== "stairs" && !at(p)!.ladder && !chestKeys.has(posKey(p)) && !taken.has(posKey(p)) && far(p) > Math.max(3, options.clear + 1);
-  const size = Math.max(2, Math.min(8, options.party + threatExtras(options.threat) + mods.extras + (options.party >= 3 ? 1 : 0)));
+  const size = Math.max(2, Math.min(8, options.party + GROUP_EXTRAS + mods.extras + (options.party >= 3 ? 1 : 0)));
   const factions = factionsOf(siteId, clime);
   const groups: (LaidGroup & { room: number })[] = [];
   const bandFor = (i: number): { kind: string; role: Role }[] => {

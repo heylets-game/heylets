@@ -819,7 +819,7 @@ describe("knocked toward a drop", () => {
     const any = seek(state, shove(foe), (o) => won(o.events));
     const [save] = rolls(any.events, "Catch the edge");
     expect(save).toMatchObject({ kind: "save", id: foe, vs: 10 + mod(ann.stats!.str) + Math.floor(proficiency(1) / 2), adv: 0 });
-    expect(save.vs).toBe(edgeDc(state, ann));
+    expect(save.vs).toBe(edgeDc(ann));
     expect(state.encounter!.budgets.ann.ap - any.state.encounter!.budgets.ann.ap).toBe(COMMON_ACTIONS.shove.cost);
   });
 
@@ -980,7 +980,7 @@ describe("knocked into a pit", () => {
       }
       expect(sunk, what).not.toBeNull();
       const [save] = rolls(sunk!.events, "Catch the edge");
-      expect(save, what).toMatchObject({ id: "ann", ok: false, vs: edgeDc(state, unit(state, foe)) });
+      expect(save, what).toMatchObject({ id: "ann", ok: false, vs: edgeDc(unit(state, foe)) });
       expect(sunk!.events, what).toContainEqual({ t: "sunk", id: "ann", by: foe, from: at(6, 6), into: pit, pit: what });
       const ann = unit(sunk!.state, "ann");
       expect(ann, what).toMatchObject({ down: true, hp: 0, pos: at(6, 6) });

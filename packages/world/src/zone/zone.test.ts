@@ -1207,29 +1207,21 @@ describe("items", () => {
 
 // ---------- the enemy ----------
 
-describe("threat", () => {
-  it("makes the enemy tougher, sharper and more numerous as it rises", () => {
-    expect(enemyHp("wolf", 1, 1)).toBe(Math.round(ENEMIES.wolf.hp * ENEMY_HP_SCALE));
-    expect(enemyHp("wolf", 1, 2)).toBeGreaterThan(enemyHp("wolf", 1, 1) * 1.5);
-    expect(enemyHp("wolf", 1, 3)).toBeGreaterThan(enemyHp("wolf", 1, 2));
-    expect(enemyStrikes("wolf", 1, 3)[0].bonus).toBe(enemyStrikes("wolf", 1, 1)[0].bonus + 2);
-    // A band is as many as the party (one more, for a party of three or four), and one more again for each step of
-    // threat past the first: never fewer than two.
-    const bands = (party: number, threat: number) => {
-      const zone = createZone("T", "threat", zoneOptions({ groups: 2, kinds: ["wolf"], party, threat }));
+describe("enemy strength", () => {
+  it("rises with level, and each band has as many as its leader would bring", () => {
+    expect(enemyHp("wolf", 1)).toBe(Math.round(ENEMIES.wolf.hp * ENEMY_HP_SCALE));
+    expect(enemyHp("wolf", 4)).toBeGreaterThan(enemyHp("wolf", 1));
+    expect(enemyStrikes("wolf", 5)[0].bonus).toBe(enemyStrikes("wolf", 1)[0].bonus + 1);
+    // A band is as many as the party (one more, for a party of three or four): never fewer than two.
+    const bands = (party: number) => {
+      const zone = createZone("T", "bands", zoneOptions({ groups: 2, kinds: ["wolf"], party }));
       return Object.keys(zone.groups).map((g) => zone.units.filter((u) => u.group === g).length);
     };
-    expect(bands(2, 1)).toEqual([2, 2]);
-    expect(bands(2, 2)).toEqual([3, 3]);
-    expect(bands(2, 3)).toEqual([4, 4]);
-    // A lone hero meets two at any ordinary threat; four heroes, five or six.
-    expect(bands(1, 1)).toEqual([2, 2]);
-    expect(bands(1, 2)).toEqual([2, 2]);
-    expect(bands(1, 3)).toEqual([3, 3]);
-    expect(bands(4, 1)).toEqual([5, 5]);
-    expect(bands(4, 2)).toEqual([6, 6]);
-    // A zone made before there was a threat is a fair fight.
-    expect(zoneOptions({}).threat).toBe(2);
+    expect(bands(1)).toEqual([2, 2]);
+    expect(bands(2)).toEqual([2, 2]);
+    expect(bands(4)).toEqual([5, 5]);
+    // A zone made when there was a threat setting is made the same, whatever it said.
+    expect(zoneOptions({ threat: 1 })).toEqual(zoneOptions({}));
   });
 });
 
@@ -1460,7 +1452,7 @@ describe("the end of a fight", () => {
   it("plays whole fights on generated maps without breaking its own rules", () => {
     let struck = 0;
     for (let seed = 0; seed < 9; seed++) {
-      let state = createZone("PLAY", `play-${seed}`, zoneOptions({ size: "small", biome: (["meadow", "woods", "caves", "shore"] as const)[seed % 4], groups: 2, party: 2, clear: 3, obstacles: 2, elevation: 2, threat: (seed % 3) + 1 }));
+      let state = createZone("PLAY", `play-${seed}`, zoneOptions({ size: "small", biome: (["meadow", "woods", "caves", "shore"] as const)[seed % 4], groups: 2, party: 2, clear: 3, obstacles: 2, elevation: 2 }));
       state = must(state, { type: "join", hero: standInHero("refactor_rogue", "ann", 3)! });
       state = must(state, { type: "join", hero: standInHero("devops_mage", "bo", 3)! });
       const kinds = new Map(state.units.map((u) => [u.id, u.kind]));
@@ -1935,7 +1927,7 @@ describe("fleeing", () => {
   it("keeps its own rules through whole fights where heroes run off and get caught again", () => {
     let ran = 0;
     for (let seed = 0; seed < 8; seed++) {
-      let state = createZone("RUN", `run-${seed}`, zoneOptions({ size: "small", biome: (["meadow", "caves"] as const)[seed % 2], groups: 2, party: 2, clear: 3, obstacles: 1, elevation: 1, threat: 1 }));
+      let state = createZone("RUN", `run-${seed}`, zoneOptions({ size: "small", biome: (["meadow", "caves"] as const)[seed % 2], groups: 2, party: 2, clear: 3, obstacles: 1, elevation: 1 }));
       state = must(state, { type: "join", hero: standInHero("refactor_rogue", "ann", 3)! });
       state = must(state, { type: "join", hero: standInHero("qa_paladin", "bo", 3)! });
       const dice = makeRng(seed + 1);

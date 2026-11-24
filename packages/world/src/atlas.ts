@@ -486,7 +486,7 @@ export const nodePlace = (seed: string, node: Pick<AtlasNode, "id" | "kind" | "l
 export function nodeOptions(seed: string, node: AtlasNode, party: number, more: readonly ZoneMod[] = [], stone?: number): ZoneOptions {
   const rng = rngFor(seed, "lay", node.id);
   const near = node.ring <= 1;
-  const base = { party, level: node.level, threat: near ? 1 : 2, mods: cleanMods([...node.mods, ...more]), tier: atlasTier(node), name: node.name, clime: node.clime, ...(stone !== undefined ? { stone } : {}) };
+  const base = { party, level: node.level, mods: cleanMods([...node.mods, ...more]), tier: atlasTier(node), name: node.name, clime: node.clime, ...(stone !== undefined ? { stone } : {}) };
   if (node.kind === "seacave") return zoneOptions({ ...base, size: "medium", biome: "caves", delve: true });
   const site = nodeSite(seed, node);
   const ground = LAND_GROUND[node.land];

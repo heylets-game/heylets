@@ -193,12 +193,12 @@ describe("a node's map", () => {
   it("is small and gentle beside the Harbor, and carries its level, tier and modifiers further out", () => {
     for (const seed of SEEDS) {
       for (const n of some(seed, (n) => n.ring === 1)) {
-        expect(nodeOptions(seed, n, 2)).toMatchObject({ size: "small", threat: 1, level: 1, tier: 1, party: 2, biome: n.biome });
+        expect(nodeOptions(seed, n, 2)).toMatchObject({ size: "small", level: 1, tier: 1, party: 2, biome: n.biome });
         expect(nodeOptions(seed, n, 2).mods).toBeUndefined();
       }
       for (const n of some(seed, (n) => n.ring >= 4 && n.kind === "landfall").slice(0, 12)) {
         const o = nodeOptions(seed, n, 3);
-        expect(o).toMatchObject({ threat: 2, level: n.level, tier: n.ring, party: 3, biome: n.biome });
+        expect(o).toMatchObject({ level: n.level, tier: n.ring, party: 3, biome: n.biome });
         expect(o.mods ?? []).toEqual(n.mods);
         expect(o.delve).toBeUndefined();
       }

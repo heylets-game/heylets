@@ -230,11 +230,6 @@ export interface ZoneOptions {
   /** How many heroes the groups are sized for, and their level. */
   party: number;
   level: number;
-  /**
-   * How dangerous the enemy is: 1 gentle, 2 a fair fight (the default), 3 hard. It sets how much
-   * they can take, how well they hit, and how many stand in a group. Absent on zones made before it: 2.
-   */
-  threat?: number;
   /** A delve into the caverns (zone/delve.ts): chambers, tunnels, chests and a hoard, not open ground. */
   delve?: boolean;
   /** What makes this map unlike the next (zone/mods.ts): changes to its ground and to whoever stands on it. */
