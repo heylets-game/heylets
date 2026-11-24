@@ -844,6 +844,8 @@ export type HarborServerMessage =
   | { type: "trades" }
   /** The crew's muster as it now stands (muster.ts): someone is setting out and asks who is coming. Null: there is none any more. */
   | { type: "muster"; muster: Muster | null }
+  /** A piece of flotsam (flotsam.ts) was taken by somebody in the crew: it is gone from the beach or the water. */
+  | { type: "flotsam"; id: string }
   | LookMessage
   | EmoteMessage
   | XpMessage;

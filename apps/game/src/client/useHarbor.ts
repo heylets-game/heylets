@@ -36,6 +36,8 @@ export interface HarborConnection {
   trades: number;
   /** The crew's muster as the room last told it (someone setting out for a place on the atlas, asking who is coming), or null. */
   muster: Muster | null;
+  /** Flotsam the room has said was taken since the connection opened (by id), and a count that goes up with every new connection: ask the server for what was taken again. */
+  flotsam: { gone: string[]; sync: number };
   send(message: HarborClientMessage): void;
 }
 
@@ -56,6 +58,7 @@ export function useHarbor(onMoved: (id: string, path: HexPos[]) => void, onXp?: 
   const [board, setBoard] = useState<HarborBoard>(EMPTY);
   const [trades, setTrades] = useState(0);
   const [muster, setMuster] = useState<Muster | null>(null);
+  const [flotsam, setFlotsam] = useState<{ gone: string[]; sync: number }>({ gone: [], sync: 0 });
   const awake = useAwake();
   const people = useRoomPeople(onMoved, onXp, onSaid);
   const { you, players, chat, setPlayers, walked } = people;
@@ -126,8 +129,11 @@ export function useHarbor(onMoved: (id: string, path: HexPos[]) => void, onXp?: 
         }
         setCrew(msg.crew);
         setBoard({ members: msg.members, works: msg.works, maps: msg.maps });
-        // A trade may have changed while there was no connection to hear of it.
+        // A trade may have changed while there was no connection to hear of it, and flotsam been taken.
         setTrades((n) => n + 1);
+        setFlotsam((f) => ({ gone: [], sync: f.sync + 1 }));
+      } else if (msg.type === "flotsam") {
+        setFlotsam((f) => (f.gone.includes(msg.id) ? f : { ...f, gone: [...f.gone.slice(-40), msg.id] }));
       } else if (msg.type === "trades") {
         setTrades((n) => n + 1);
       } else if (msg.type === "muster") {
@@ -201,5 +207,5 @@ export function useHarbor(onMoved: (id: string, path: HexPos[]) => void, onXp?: 
     showWalk(me.id, path);
   }, []);
   opening.current = here && awake && socket.status === "connecting";
-  return { you, crew, players, board, chat, status: socket.status, error: socket.error, trades, muster, send };
+  return { you, crew, players, board, chat, status: socket.status, error: socket.error, trades, muster, flotsam, send };
 }

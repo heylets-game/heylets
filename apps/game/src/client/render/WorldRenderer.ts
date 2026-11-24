@@ -25,6 +25,7 @@ import { waveFlag } from "./flag";
 import { OAK_SHAPES, Woods, tintOf, type BoulderSpot, type TreeSpot } from "./woods";
 import { Gulls, type GullSpot } from "./gulls";
 import { FishingHoleMarks, type HoleMark } from "./fishingHoles";
+import { FlotsamMarks, type FlotsamMark } from "./flotsam";
 import { OVERLAY_LAYER, PostFx, type Air } from "./post";
 import { fishMount } from "./catchArt";
 import { FRAME, OUTLINE, SITTING_DROP, inflate, makeFigure, type Figure } from "./figures";
@@ -926,6 +927,8 @@ export class WorldRenderer {
   private gulls = new Gulls();
   /** The crew's fishing holes on the Harbor's water (set by the Harbor view; none elsewhere). */
   private holes = new FishingHoleMarks();
+  /** Flotsam bobbing on the Harbor's water (set by the Harbor view; none elsewhere). */
+  private flotsam = new FlotsamMarks();
   /** Lightning in a storm. On the dev server, `__gqWorld.strike()` sets one off. */
   private storm = new Storm();
   /** How wet the ground is, 0 to 1: it follows the rain up quickly and down slowly. */
@@ -1212,7 +1215,7 @@ export class WorldRenderer {
 
     // Sky, sun and moon, shadows, and the moving decoration.
     this.ambience = new Ambience(this.scene, this.renderer);
-    this.scene.add(this.nightLife.group, this.gulls.group, this.holes.group, this.storm.bolt, this.panes, this.wallPanels);
+    this.scene.add(this.nightLife.group, this.gulls.group, this.holes.group, this.flotsam.group, this.storm.bolt, this.panes, this.wallPanels);
 
     // Far bigger than anything the camera can see the end of: it is kept under the camera (see frame), and its far
     // reaches are lost in the mist.
@@ -1466,6 +1469,7 @@ export class WorldRenderer {
     this.nightLife.dispose();
     this.gulls.dispose();
     this.holes.dispose();
+    this.flotsam.dispose();
     this.storm.dispose();
     this.outlookMap?.dispose();
     this.scenery?.dispose();
@@ -3300,6 +3304,11 @@ export class WorldRenderer {
   /** Where the fish are on the water: the crew's fishing holes as they are now (an empty list for none). */
   setFishingHoles(marks: HoleMark[]): void {
     this.holes.set(marks);
+  }
+
+  /** What the sea has brought in: the flotsam bobbing on the water now (an empty list for none). */
+  setFlotsam(marks: FlotsamMark[]): void {
+    this.flotsam.set(marks);
   }
 
     startMinigame<T extends WorldMinigame>(make: (group: THREE.Group) => T, at: HexPos, hidePoi?: string): T {
@@ -5438,6 +5447,7 @@ export class WorldRenderer {
     // Gulls keep to fair daylight: they are gone by night and in a storm.
     this.gulls.update(dt, walkers, openSky ? (1 - night) * (1 - this.ambience.storming) : 0);
     this.holes.update(dt, this.clock, night, this.ambience.storming, fancy.get());
+    this.flotsam.update(dt, this.clock, fancy.get());
     this.wake.setNight(openSky ? night : 0);
     const clearSky = lively * (1 - this.ambience.overcast);
     // The moon's reflection lies on the sea off the island's shore, on the side the moon is on.

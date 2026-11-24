@@ -87,6 +87,13 @@ export class HarborRoom extends DurableObject<Env> {
       return new Response("ok");
     }
 
+    // A piece of flotsam was taken: it goes from everyone's beach or water at once.
+    if (pathname === "/flotsam") {
+      const id = searchParams.get("id");
+      if (id) this.here.broadcast({ type: "flotsam", id });
+      return new Response("ok");
+    }
+
     // A trade changed: tell the player it concerns to look again, if they are here. Nobody else hears of it.
     if (pathname === "/trades") return tellTrades(this.ctx, searchParams.getAll("to"));
 

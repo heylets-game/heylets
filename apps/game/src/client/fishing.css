@@ -159,3 +159,13 @@ body.fishing .draggable:not(.gather), body.fishing .tip { display: none !importa
 .book-detail p { margin: 4px 0 0; font-size: 12px; }
 .book-shadow { image-rendering: pixelated; filter: brightness(0) opacity(0.45); }
 .book-shadow.lost { filter: brightness(0) opacity(0.6) drop-shadow(0 0 1px #8ac6e8); }
+
+/* A message from a bottle: a scrap of damp paper over the view. */
+.overlay.bottle-overlay { display: flex; align-items: center; justify-content: center; }
+.bottle-note {
+  max-width: 380px; width: 100%; padding: 18px 22px 14px; text-align: center;
+  background: #efe4c8; color: #3a2e1e; border-radius: 3px;
+  box-shadow: 0 6px 24px #0008, inset 0 0 30px #c9b48a; transform: rotate(-1.5deg);
+}
+.bottle-note .bottle-line { color: #7a6648; font-size: 0.85em; margin: 0 0 10px; }
+.bottle-note blockquote { margin: 0 0 14px; font-family: Georgia, "Times New Roman", serif; font-style: italic; font-size: 1.1em; line-height: 1.45; }
