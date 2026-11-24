@@ -290,15 +290,14 @@ export function push(ctx: Ctx, from: HexPos, target: Unit, by: string): Shift {
 }
 
 /**
- * Overwhelm: Strength against the target's footing (as a Shove). Won, it is driven straight back from the user, a hex at a time,
+ * Overwhelm: an attack with Strength that does no harm (as a Shove). On a hit, it is driven straight back from the user, a hex at a time,
  * up to `hexes`. Driven into what nobody can pass (rock, a wall, a chest, a cliff face) it is Stunned; into somebody (a hex its
  * enemies hold, or one full of its own side), it just stops; over an edge, it falls (unless it catches the edge), and that ends the
- * drive. Returns whether the contest was won.
+ * drive. Returns whether it hit.
  */
-function overwhelm(ctx: Ctx, unit: Unit, def: AbilityDef, target: Unit, opts: { hexes: number; stun: number }): boolean {
+function overwhelm(ctx: Ctx, unit: Unit, def: AbilityDef, target: Unit, opts: { hexes: number; stun: number }, focus?: boolean): boolean {
   const { state } = ctx;
-  const roll = d20(ctx.rng, { kind: "shove", id: unit.id, target: target.id, label: def.name, bonus: proficiency(unit.level) + mod(statOf(unit, "str")), vs: 10 + Math.max(saveBonus(target, "str"), saveBonus(target, "agi")), adv: unseen(unit) ? 1 : 0 });
-  ctx.events.push({ t: "roll", roll });
+  const roll = attackRoll(ctx, unit, target, { label: def.name, bonus: proficiency(unit.level) + mod(statOf(unit, def.stat)), melee: true, focus });
   if (!roll.ok) {
     ctx.events.push({ t: "miss", actor: unit.id, target: target.id, what: def.id });
     return false;
@@ -781,7 +780,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim &
     if (tactic.ward) addShield(ctx, unit, tactic.ward.shield + unit.level, tactic.ward.rounds);
     // A pocket picked unseen is no blow, just a quick hand.
     if (tactic.steal && wasUnseen) landed = true;
-    else if (tactic.overwhelm) landed = overwhelm(ctx, unit, def, target, tactic.overwhelm);
+    else if (tactic.overwhelm) landed = overwhelm(ctx, unit, def, target, tactic.overwhelm, aim.focus);
     else if (tactic.bind) landed = bind(ctx, unit, def, target, tactic.bind);
     else if (tactic.sure) {
       if (def.damage) {

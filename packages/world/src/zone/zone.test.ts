@@ -4241,7 +4241,7 @@ describe("the Warden's wall", () => {
     expect(shieldOf(unit(state, "ann"))).toBe(ENDURE.shield + 1);
   });
 
-  /** Overwhelm tried over seeds until the contest goes one way or the other. */
+  /** Overwhelm tried over seeds until it hits, or misses. */
   function overwhelmed(won: boolean, foes: HexPos[], opts: Parameters<typeof party>[1] = {}) {
     for (let seed = 1; seed < 80; seed++) {
       let { state, foes: ids } = party(foes, opts);
@@ -4251,11 +4251,15 @@ describe("the Warden's wall", () => {
       const lost = events.some((e) => e.t === "miss" && e.what === "overwhelm");
       if (lost !== won) return { state, ids, events };
     }
-    throw new Error("the contest never went that way");
+    throw new Error("it never went that way");
   }
 
   it("Overwhelm: a Bonus action, 2 turns to wait; won, the enemy beside you is driven 2 hexes straight back", () => {
-    const { state, ids } = overwhelmed(true, [at(6, 6)]);
+    const { state, ids, events } = overwhelmed(true, [at(6, 6)]);
+    // An attack against its Defence, that does no harm.
+    const roll = events.flatMap((e) => (e.t === "roll" && e.roll.label === "Overwhelm" ? [e.roll] : []))[0];
+    expect(roll).toMatchObject({ kind: "attack", id: "ann", target: ids[0] });
+    expect(events.filter((e) => e.t === "hit" && e.target === ids[0])).toEqual([]);
     expect(state.encounter!.budgets.ann).toMatchObject({ ap: AP_TURN - BONUS_AP });
     expect(unit(state, "ann").cooldowns.overwhelm).toBe(3);
     expect(unit(state, ids[0]).pos).toEqual(at(8, 6));
