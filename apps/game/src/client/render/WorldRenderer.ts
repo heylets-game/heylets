@@ -221,6 +221,11 @@ export interface RenderHero {
   asleep?: boolean;
   /** Holding a fishing rod (fishing off a pier). */
   rod?: boolean | "gilded";
+  /**
+   * Sat on the floor (the sit emote), kept by the room until they walk off. Left out where nobody keeps it (on a
+   * map): there the emote alone sits them down, until they walk.
+   */
+  floorSit?: boolean;
   /** Afloat: the boat drawn under them. */
   boat?: "barrel" | "rowboat";
   /** Drawn at this point of its hex instead of the middle, `y` above the floor: lying on a bed in a hut. */
@@ -596,6 +601,9 @@ interface Unit {
   seated?: boolean;
   seatTop?: number;
   sit?: number;
+  /** Sat on the floor (the sit emote) until it walks: `floorSat` is whether it is, and `floor` how far down it is, 0 (standing) to 1. */
+  floorSat?: boolean;
+  floor?: number;
   /** Holding a fishing rod: in a rowboat, the oars are shipped and the hands left for the rod. */
   rod?: boolean;
   /** Fishing from the shore: which way the water is from where they stand (worked out once per spot), or null for none beside them. */
@@ -722,6 +730,8 @@ interface Want {
   faceKey?: string;
   /** On a stool: how high its seat is off the floor. `pos` is then the stool's own spot. */
   seat?: number;
+  /** Sat on the floor, as the room keeps it (see RenderHero.floorSit). */
+  floorSit?: boolean;
   /** Unseen (Sneak): drawn thinned out, a ghost of itself. */
   unseen?: boolean;
 }
@@ -2104,10 +2114,15 @@ export class WorldRenderer {
     sounds.attack(name, "melee", this.fighter(actorId), this.spot(actorId));
   }
 
-  /** An emote (see EMOTES), where the unit stands. Not from one lying down; a dance stops when it walks. */
+  /**
+   * An emote (see EMOTES), where the unit stands. Not from one lying down; a dance stops when it walks. A sit is
+   * held until it walks; any other emote gets it up to do it.
+   */
   emote(unitId: string, emote: Emote) {
     const unit = this.units.get(unitId);
-    if (unit && !unit.lying) unit.figure.emote(emote);
+    if (!unit || unit.lying) return;
+    unit.floorSat = emote === "sit";
+    unit.figure.emote(emote);
   }
 
   /** A guard put up: the unit braces behind its shield, or what it has in hand. */
@@ -4345,7 +4360,7 @@ export class WorldRenderer {
       // A plate shows a first name only: full names run long over a crowd.
       const full = h.label ?? (plate ? h.name : undefined);
       const label = plate && full ? firstName(full) : full;
-      want.set(h.id, { kind: h.classId, pace: h.pace, outfit: h.outfit, pos, size: 1.5, label, plate: label ? plate : undefined, stack: i, ring: colorOf(h.id), through: colorOf(h.id), pulse: !!h.active, asleep: h.asleep, rod: h.rod, boat: h.boat, down: h.down, falls: true, prone: h.prone, effects: h.effects, seat: seat?.top, unseen: h.unseen });
+      want.set(h.id, { kind: h.classId, pace: h.pace, outfit: h.outfit, pos, size: 1.5, label, plate: label ? plate : undefined, stack: i, ring: colorOf(h.id), through: colorOf(h.id), pulse: !!h.active, asleep: h.asleep, rod: h.rod, boat: h.boat, down: h.down, falls: true, prone: h.prone, effects: h.effects, seat: seat?.top, floorSit: h.floorSit, unseen: h.unseen });
     }
     // A zone's enemies: beside whoever else is on their hex. The fallen lie in the middle of theirs.
     for (const u of state.units ?? []) {
@@ -4409,6 +4424,11 @@ export class WorldRenderer {
       unit.goal.copy(w.pos);
       unit.pace = w.pace;
       unit.seated = w.seat !== undefined;
+      // Where the room keeps who is sat on the floor, it says; found sat, they are drawn sat.
+      if (w.floorSit !== undefined) {
+        if (w.floorSit && !seen) unit.floor = 1;
+        unit.floorSat = w.floorSit;
+      }
       if (w.seat !== undefined) unit.seatTop = w.seat;
       if (w.asleep && !unit.asleep) unit.nextZ = this.clock + 0.4;
       unit.asleep = !!w.asleep;
@@ -5576,6 +5596,10 @@ export class WorldRenderer {
       unit.lean *= Math.exp(-dt * 8);
       /** On the ground: lying down, or knocked off their feet for now. */
       const flat = unit.lying || this.clock < (unit.floored ?? 0);
+      // Sat on the floor until they walk off: walking gets them up for good.
+      if (unit.path.length > 0) unit.floorSat = false;
+      const onFloor = !!unit.floorSat && !flat && !unit.seated && !unit.boat?.visible;
+      if (onFloor || unit.floor) unit.floor = onFloor ? Math.min(1, (unit.floor ?? 0) + dt / SIT_S) : Math.max(0, (unit.floor ?? 0) - dt / STAND_S);
       // Your own hero, standing idle, looks toward the pointer; with the bag open they turn to face you.
       if (id === this.state?.you && unit.path.length === 0 && !unit.asleep && !flat && !this.minigame) {
         if (this.faceFront) unit.turnGoal = this.yaw;
@@ -5615,7 +5639,7 @@ export class WorldRenderer {
       if (unit.dying !== undefined && this.clock >= unit.dying) this.topple(id);
       const rowing = this.rowingPose(unit, p, dt);
       if (rowing === undefined) unit.oarPull = undefined;
-      unit.figure.update({ time: this.clock, stride: unit.stride, walking: unit.path.length > 0 && !unit.rush && !unit.leap, lean: unit.lean, lying: flat, rowing, sitting: unit.boatKind === "rowboat" && unit.boat?.visible ? 1 : unit.sit || undefined, talking: this.talking.has(id) });
+      unit.figure.update({ time: this.clock, stride: unit.stride, walking: unit.path.length > 0 && !unit.rush && !unit.leap, lean: unit.lean, lying: flat, rowing, sitting: unit.boatKind === "rowboat" && unit.boat?.visible ? 1 : unit.sit || undefined, floor: unit.floor || undefined, talking: this.talking.has(id) });
       const ground = p.y;
       unit.feet.set(p.x, ground, p.z);
       if (touched) this.touchdown(unit);

@@ -247,7 +247,7 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
       you: you ?? me.player.id,
       map: ROOM,
       heroes: [
-        ...players.map((p) => ({ id: p.id, classId: p.classId, pos: p.pos, label: p.name, outfit: p.outfit, level: p.level, xp: p.xp })),
+        ...players.map((p) => ({ id: p.id, classId: p.classId, pos: p.pos, label: p.name, outfit: p.outfit, floorSit: !!p.sat, level: p.level, xp: p.xp })),
         // The barkeep stands behind his bar and is drawn like anyone else.
         { id: PUB_BARKEEP.id, classId: "npc", pos: PUB_BARKEEP_POS, label: PUB_BARKEEP.name },
         // The dealer, by the pillar at the end of the bar.

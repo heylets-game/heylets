@@ -109,7 +109,7 @@ export class PubRoom extends DurableObject<Env> {
     } else if (msg.type === "say") {
       this.here.say(player, msg.text);
     } else if (msg.type === "emote") {
-      this.here.emote(player, msg.emote);
+      this.here.emote(ws, player, msg.emote);
     } else {
       // Anything else is for a game table, by its game's name. One there is no table for is dropped.
       await this.tables.get(msg.type)?.handle(ws, player, msg.action);

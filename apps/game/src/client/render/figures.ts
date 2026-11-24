@@ -1420,6 +1420,8 @@ interface Anim {
   scale: number;
   /** On a seat, 0 (standing) to 1: the hips stay where they are, the thighs go forward and the shins hang from the knee. */
   sitting: number;
+  /** Sat on the floor, 0 (standing) to 1 (see FLOOR). */
+  floor: number;
   /** At the oars of a rowboat (seated): where the stroke is, 0 (reached forward) to 1 (pulled back). -1: not rowing. */
   oars: number;
   /** A stage of getting up off the ground, for a rig that has them (see Rig.getUp); null otherwise. */
@@ -2054,7 +2056,15 @@ const DAB = { over: 1.6, up: [[0, 0], [0.16, 1], [1.3, 1], [1.6, 0]] as Keys };
  * forward (`front`) before it reaches the body, so it never passes through it. All in the torso's frame.
  */
 const FLOSS = { over: 4.5, beat: 1.3, side: 8.5, across: 2.6, front: 4.4, hips: 1.5, up: [[0, 0], [0.25, 1], [4.2, 1], [4.5, 0]] as Keys };
-const EMOTE_OVER: Record<Emote, number> = { wave: WAVE.over, cheer: CHEER.over, bow: BOW.over, dab: DAB.over, floss: FLOSS.over, dance: DANCE.over, runningman: RUNNING.over, breakdance: BREAK.over };
+/**
+ * Sat on the floor (the sit emote; see FigurePose.floor): the hips just off it, both legs straight out in front and
+ * spread wide, toes up, the body leaning a little forward with a hand on each thigh. How high off the floor the hips
+ * are, how far each leg is spread from straight ahead (radians), the lean, and where the left hand rests, in the
+ * torso's frame (the right is its mirror).
+ */
+const FLOOR = { hips: 1.1, spread: 0.8, lean: 0.15 };
+const FLOOR_HAND = new THREE.Vector3(3.2, 1.1, 1.7);
+const EMOTE_OVER: Record<Emote, number> = { wave: WAVE.over, cheer: CHEER.over, bow: BOW.over, dab: DAB.over, floss: FLOSS.over, dance: DANCE.over, runningman: RUNNING.over, breakdance: BREAK.over, sit: 0 };
 /**
  * A jump from one tile to another. The figure only makes the shapes of it; whoever jumps it carries it through
  * the air (see WorldRenderer.leapUnit). A crouch with the arms drawn back (`coil`), and at `spring` the legs
@@ -3044,6 +3054,25 @@ function biped(top: THREE.Group, parts: Part[], drawnElbow = ELBOW) {
     // The other arm, if it carries nothing across the front, is thrown back and through for balance.
     if (levels.length === 0) armL.joint.rotation.x += along(k.off, t);
   };
+  /** Sat on the floor, `k` of the way down from however it stood (see FLOOR). */
+  const floorSit = (k: number) => {
+    top.position.y -= (hipY - FLOOR.hips) * k;
+    // Each leg out straight ahead and level (the shin in line with the thigh), turned out to its own side.
+    for (const [thigh, shin, foot, side] of [[thighL, shinL, footL, 1], [thighR, shinR, footR, -1]] as const) {
+      thigh.joint.rotation.x += (-HALF_PI - thigh.joint.rotation.x) * k;
+      thigh.joint.rotation.z += (side * FLOOR.spread - thigh.joint.rotation.z) * k;
+      shin.joint.rotation.x *= 1 - k;
+      foot.joint.rotation.x *= 1 - k;
+    }
+    torso.joint.rotation.x += FLOOR.lean * k;
+    // A hand on each thigh, the elbows out to the sides; what each holds stays upright.
+    for (const [arm, fore, held, side] of [[armL, foreL, heldL, 1], [armR, foreR, heldR, -1]] as const) {
+      sweep.grip.copy(FLOOR_HAND).setX(FLOOR_HAND.x * side);
+      reach(arm.joint, fore.joint, -elbow, elbow - fist, sweep.grip, sweep.lead.set(side, -0.3, 0), k);
+      sweep.hold.copy(arm.joint.quaternion).multiply(fore.joint.quaternion).invert();
+      held.joint.quaternion.slerp(sweep.hold, k);
+    }
+  };
   const animate = (a: Anim) => {
     pose(a);
     // A long gun is back at the port unless it is being fired (see blow).
@@ -3059,7 +3088,8 @@ function biped(top: THREE.Group, parts: Part[], drawnElbow = ELBOW) {
       }
       if (a.act?.kind !== "play" || a.lying || a.sitting !== 0) music.notes.hide();
     }
-    if (a.act && !a.lying && a.sitting === 0) blow(a.act, a.scale);
+    if (a.act && !a.lying && a.sitting === 0 && a.floor === 0) blow(a.act, a.scale);
+    if (a.floor > 0 && !a.lying && a.sitting === 0) floorSit(a.floor);
     if (strung) {
       // A shot asked for begins now, and plays out on its own clock.
       if (shot.asked) [shot.at, shot.asked] = [a.t, false];
@@ -3743,7 +3773,7 @@ function swingBraids(list: Braid[], a: Anim) {
   for (const b of list) {
     const dt = b.last < 0 ? 0 : Math.min(0.05, Math.max(0, a.t - b.last));
     b.last = a.t;
-    const still = a.lying || a.sitting > 0.5;
+    const still = a.lying || a.sitting > 0.5 || a.floor > 0.5;
     const s = b.side;
     // A ponytail swings back on the march; a braid over the shoulder is bounced up off it on each step.
     // Draped on the body, it is bounced off it on each step (forward off the chest, back off the back).
@@ -8004,6 +8034,11 @@ export interface FigurePose {
    */
   sitting?: boolean | number;
   /**
+   * Sat on the floor where it stands (the sit emote), legs straight out: how far into it, 0 (standing) to 1, for
+   * sitting down and getting up. Whoever draws it holds it until the hero walks off. Only people sit.
+   */
+  floor?: number;
+  /**
    * At the oars of a rowboat (a person, seated): where the stroke is, 0 (hands reached forward) to 1 (pulled back
    * in). Whatever the hands held is put down meanwhile, so they can take the oars (see Figure.hands).
    */
@@ -8259,7 +8294,7 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
     const want = p.walking ? Math.sin(p.stride * 3.6) : 0;
     swing += (want - swing) * Math.min(1, dt * 20);
     const rowing = p.rowing !== undefined && !!rig.hands && !p.lying;
-    const anim: Anim = { t: p.time, swing, breath: Math.sin(p.time * 2.2 + beat), strike: Math.min(1, Math.abs(p.lean) * 2), act: action && rig.acts ? { kind: action.kind, t: action.kind === "cast" ? since / pace : since, n: action.n, air: action.air } : null, scale: 1 / scaler.scale.x, lying: p.lying, sitting: rowing ? 1 : typeof p.sitting === "number" ? Math.max(0, Math.min(1, p.sitting)) : p.sitting ? 1 : 0, oars: rowing ? Math.max(0, Math.min(1, p.rowing!)) : -1, getUp: null };
+    const anim: Anim = { t: p.time, swing, breath: Math.sin(p.time * 2.2 + beat), strike: Math.min(1, Math.abs(p.lean) * 2), act: action && rig.acts ? { kind: action.kind, t: action.kind === "cast" ? since / pace : since, n: action.n, air: action.air } : null, scale: 1 / scaler.scale.x, lying: p.lying, sitting: rowing ? 1 : typeof p.sitting === "number" ? Math.max(0, Math.min(1, p.sitting)) : p.sitting ? 1 : 0, floor: rowing || p.lying ? 0 : Math.max(0, Math.min(1, p.floor ?? 0)), oars: rowing ? Math.max(0, Math.min(1, p.rowing!)) : -1, getUp: null };
     // A rig with no animations of its own is leant into a blow, and a little into a hit, easing off as it always has.
     if (action && !rig.acts) anim.strike = Math.max(anim.strike, Math.min(1, (action.kind === "hit" ? 0.5 : 1.8) * Math.exp(-8 * since)));
     if (sling) stow(sling, p.walking, Math.max(anim.strike, anim.act && anim.act.kind !== "hit" ? 1 : 0), dt);
@@ -8419,7 +8454,8 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
       return TAUNT.roar;
     },
     emote(emote) {
-      if (rig.acts) asked = emote;
+      // A sit is not played out but held, as a pose (FigurePose.floor).
+      if (rig.acts && emote !== "sit") asked = emote;
     },
     hit() {
       asked = "hit";

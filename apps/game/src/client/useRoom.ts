@@ -198,11 +198,12 @@ export function useRoomPeople(onMoved: (id: string, path: HexPos[]) => void, onX
       setPlayers((ps) => ps.filter((p) => p.id !== msg.id));
     } else if (msg.type === "placed") {
       // Put straight there (a stuck hero sent back): an empty walk stops any walk under way, and the unit slides over.
-      setPlayers((ps) => ps.map((p) => (p.id === msg.id ? { ...p, pos: msg.pos } : p)));
+      setPlayers((ps) => ps.map((p) => (p.id === msg.id ? { ...p, pos: msg.pos, sat: undefined } : p)));
       walked(msg.id, []);
     } else if (msg.type === "moved") {
       const end = msg.path[msg.path.length - 1];
-      setPlayers((ps) => ps.map((p) => (p.id === msg.id ? { ...p, pos: end } : p)));
+      // Walking off gets them up off the floor, as the room has it (Walkers.walk).
+      setPlayers((ps) => ps.map((p) => (p.id === msg.id ? { ...p, pos: end, sat: undefined } : p)));
       walked(msg.id, msg.path);
     } else if (msg.type === "xp") {
       // Someone here earned XP: their plate shows the new level and bar, then the sparkle plays.
@@ -211,6 +212,8 @@ export function useRoomPeople(onMoved: (id: string, path: HexPos[]) => void, onX
     } else if (msg.type === "looked") {
       gaze.looked(msg.id, msg.look);
     } else if (msg.type === "emoted") {
+      // A sit is kept until they walk off; any other emote gets them up (Walkers.emote).
+      setPlayers((ps) => ps.map((p) => (p.id === msg.id && !!p.sat !== (msg.emote === "sit") ? { ...p, sat: msg.emote === "sit" || undefined } : p)));
       emotes.emoted(msg.id, msg.emote);
     } else if (msg.type === "said") {
       setChat((c) => [...c, { name: msg.name, text: msg.text }].slice(-30));

@@ -750,6 +750,8 @@ export interface HarborPlayer {
   gilded?: boolean;
   /** In a hut: the bed (a furnishing id) they are lying on after a rest, until they walk off. */
   bed?: number;
+  /** Sat on the floor where they stand (the sit emote), until they walk off or do another emote. */
+  sat?: boolean;
   /**
    * In the Harbor: they are inside one of its buildings, not walking about. "pub", a keeper's house ("smithy",
    * "apothecary", "galley", "lapidary") or "hut:<owner id>". They are not drawn in the street; their portrait bobs
@@ -891,11 +893,12 @@ export function validLook(look: unknown): number | null {
 }
 
 /**
- * Emotes: a hero waves, cheers, bows, dabs, flosses, dances, does the running man or breakdances where they stand, for everyone in the same place to see. Only for
- * show, like a look: relayed to everyone there (the one emoting too) and never kept, at most one per EMOTE_MIN_MS.
+ * Emotes: a hero waves, cheers, bows, dabs, flosses, dances, does the running man, breakdances or sits down where they stand, for everyone in the same place to see. Only for
+ * show, like a look: relayed to everyone there (the one emoting too), at most one per EMOTE_MIN_MS. Only a sit is kept
+ * (HarborPlayer.sat, in the Harbor, a hut and the pub): they stay sat until they walk off or do another emote.
  * In the Harbor, a hut, the pub and on a map, in a fight too (free, taking no turn), though not while down.
  */
-export const EMOTES = ["wave", "cheer", "bow", "dab", "floss", "dance", "runningman", "breakdance"] as const;
+export const EMOTES = ["wave", "cheer", "bow", "dab", "floss", "dance", "runningman", "breakdance", "sit"] as const;
 export type Emote = (typeof EMOTES)[number];
 export const EMOTE_MIN_MS = 800;
 /** "I am waving" (or cheering, bowing, dancing). */
@@ -906,7 +909,7 @@ export type EmoteMessage = { type: "emoted"; id: string; emote: Emote };
 export function validEmote(emote: unknown): Emote | null {
   return (EMOTES as readonly unknown[]).includes(emote) ? (emote as Emote) : null;
 }
-/** The emote a line typed into chat asks for (`/wave`, `/cheer`, `/bow`, `/dab`, `/floss`, `/dance`, `/runningman`, `/breakdance`), or null for a line to say. */
+/** The emote a line typed into chat asks for (`/wave`, `/cheer`, `/bow`, `/dab`, `/floss`, `/dance`, `/runningman`, `/breakdance`, `/sit`), or null for a line to say. */
 export function emoteTyped(text: string): Emote | null {
   const m = /^\/(\w+)$/.exec(text.trim().toLowerCase());
   return m ? validEmote(m[1]) : null;

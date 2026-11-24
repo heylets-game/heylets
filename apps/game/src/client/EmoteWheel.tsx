@@ -1,4 +1,4 @@
-// The emote wheel: wave, cheer, bow, dab, floss, dance, the running man or a breakdance where your hero stands (see
+// The emote wheel: wave, cheer, bow, dab, floss, dance, the running man, a breakdance or a sit where your hero stands (see
 // EMOTES), for everyone in the same place to see. A button beside the chat (or
 // in a map's bar, or off the side of the hotbar in a fight) opens it round the
 // button; or hold G anywhere, point at a
@@ -153,6 +153,24 @@ export const EMOTE_INFO: Record<Emote, { name: string; icon: string[] }> = {
       ".#####.....",
       "######.....",
       ".####......",
+      "...........",
+      "###########",
+    ],
+  },
+  sit: {
+    name: "Sit",
+    // Someone sat on the floor, legs straight out, a hand on the thigh.
+    icon: [
+      "...###.....",
+      "...###.....",
+      "...###.....",
+      "....#......",
+      "...###.....",
+      "...####....",
+      "...##.#....",
+      "...##..#...",
+      "...########",
+      "...########",
       "...........",
       "###########",
     ],

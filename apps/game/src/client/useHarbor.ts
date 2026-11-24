@@ -84,8 +84,8 @@ export function useHarbor(onMoved: (id: string, path: HexPos[]) => void, onXp?: 
   /** A walk, as it is shown: the walker is at its end, and the renderer plays the way there. */
   const showWalk = (id: string, path: HexPos[]) => {
     const end = path[path.length - 1];
-    // Walking off rolls their bedroll back up.
-    setPlayers((ps) => ps.map((p) => (p.id === id ? { ...p, pos: end, bedroll: undefined, fishing: undefined } : p)));
+    // Walking off rolls their bedroll back up, and gets them up off the floor.
+    setPlayers((ps) => ps.map((p) => (p.id === id ? { ...p, pos: end, bedroll: undefined, fishing: undefined, sat: undefined } : p)));
     walked(id, path);
   };
 
@@ -161,14 +161,14 @@ export function useHarbor(onMoved: (id: string, path: HexPos[]) => void, onXp?: 
         const mine = believed.current?.id === msg.player.id;
         if (mine) believed.current = { id: msg.player.id, pos: ahead.current.length > 0 ? believed.current!.pos : msg.player.pos, vessel: msg.player.vessel };
         const held = mine && ahead.current.length > 0 ? believed.current!.pos : null;
-        setPlayers((ps) => [...ps.filter((p) => p.id !== msg.player.id), held ? { ...msg.player, pos: held, bedroll: undefined, fishing: undefined } : msg.player]);
+        setPlayers((ps) => [...ps.filter((p) => p.id !== msg.player.id), held ? { ...msg.player, pos: held, bedroll: undefined, fishing: undefined, sat: undefined } : msg.player]);
       } else if (msg.type === "placed") {
         // Put straight there (a stuck hero sent back): an empty walk stops any walk under way, and the unit slides over.
         if (believed.current?.id === msg.id) {
           ahead.current = [];
           believed.current = { ...believed.current, pos: msg.pos };
         }
-        setPlayers((ps) => ps.map((p) => (p.id === msg.id ? { ...p, pos: msg.pos, bedroll: undefined } : p)));
+        setPlayers((ps) => ps.map((p) => (p.id === msg.id ? { ...p, pos: msg.pos, bedroll: undefined, sat: undefined } : p)));
         walked(msg.id, []);
       } else if (msg.type === "stayed") {
         // The room made no walk of one you asked for. If none was shown either, the picture is right as it is.

@@ -746,6 +746,7 @@ describe("emotes", () => {
     expect(emoteTyped("/runningman")).toBe("runningman");
     expect(emoteTyped("/dab")).toBe("dab");
     expect(emoteTyped("/floss")).toBe("floss");
+    expect(emoteTyped("/sit")).toBe("sit");
     expect(emoteTyped("/bow please")).toBeNull();
     expect(emoteTyped("wave")).toBeNull();
     expect(emoteTyped("/shrug")).toBeNull();

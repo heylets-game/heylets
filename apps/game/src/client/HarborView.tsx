@@ -310,7 +310,7 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
       you,
       map: { ...base, pois },
       heroes: [
-        ...players.map((p): RenderHero => ({ id: p.id, classId: p.classId, pos: p.pos, label: p.name, outfit: p.id === you ? ownOutfit : p.outfit, asleep: !!p.bedroll && same(p.bedroll, p.pos), rod: p.fishing ? (p.gilded ? "gilded" : true) : false, boat: boatOf(base, p), level: p.level, xp: p.xp })),
+        ...players.map((p): RenderHero => ({ id: p.id, classId: p.classId, pos: p.pos, label: p.name, outfit: p.id === you ? ownOutfit : p.outfit, asleep: !!p.bedroll && same(p.bedroll, p.pos), rod: p.fishing ? (p.gilded ? "gilded" : true) : false, boat: boatOf(base, p), floorSit: !!p.sat, level: p.level, xp: p.xp })),
         ...about.map(regularHero),
         // Bram the fishmonger, at his shack by the pier, day and night.
         { id: FISHMONGER.id, classId: FISHMONGER.look, pos: FISHMONGER_POS, label: FISHMONGER.name },
