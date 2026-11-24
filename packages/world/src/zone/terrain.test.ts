@@ -11,10 +11,10 @@ import { hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/cor
 import { ENEMIES } from "../content";
 import type { Biome, Tile } from "../map";
 import { makeRng } from "../rng";
-import { abilityArea, checkAbility, checkCommon, edgeDc, leavesReach, moveLeft, push, shiftInto, shoveDest } from "./combat";
+import { abilityArea, checkAbility, checkCommon, edgeDc, leavesReach, moveLeft, push, shiftInto, shoveBonus, shoveDest } from "./combat";
 import { strikeReaches } from "./ai";
 import { ENEMY_ABILITIES } from "./enemyabilities";
-import { attackContext, type Ctx } from "./engine";
+import { attackContext, defenceOf, type Ctx } from "./engine";
 import { ALERT_RANGE } from "./gen";
 import { HEX_DIRS, HEX_ROOM, HIGH_REACH, MAX_ELEV, elevOf, heldAgainst, isDead, ladderBetween, pitAt, reachFrom, roomAt, sees, stepCost, strikes, unitsAt, solid, zoneReach } from "./geometry";
 import { ACTION_AP, AP_MAX, AP_TURN, SUMMON_AP_TURN, COMMON_ACTIONS, ENEMY_KIT, ENEMY_MOVE_AP, JUMP_DOWN, JUMP_UP, enemyMove, enemyStrikes, tacticOf } from "./kit";
@@ -806,7 +806,21 @@ describe("knocked toward a drop", () => {
     return { state, foe: foe.id };
   }
 
-  it("a shove first has to be won; then whoever is shoved rolls Agility to catch the edge, against the shover's strength", () => {
+  it("a shove is an attack that does no harm: a blow with Strength against the target's Defence, and on a hit it pushes a hex", () => {
+    const { state, foe } = atTheEdge(1);
+    const ann = unit(state, "ann");
+    expect(shoveBonus(state, ann)).toBe(proficiency(1) + mod(ann.stats!.str));
+    const hit = seek(state, shove(foe), (o) => won(o.events));
+    const [roll] = rolls(hit.events, "Shove");
+    expect(roll).toMatchObject({ kind: "attack", id: "ann", target: foe, bonus: shoveBonus(state, ann), vs: defenceOf(unit(state, foe), state) });
+    expect(got(hit.events, "hit").filter((e) => e.what !== "fall")).toEqual([]);
+    expect(unit(hit.state, foe).pos).toEqual(at(7, 6));
+    // An enemy shoves with the best to-hit of its own blows.
+    const blows = enemyStrikes(ENEMIES.bandit.kind, 1).filter((b) => b.range === 1 && !b.burst);
+    expect(shoveBonus(state, unit(state, foe))).toBe(Math.max(...blows.map((b) => b.bonus)));
+  });
+
+  it("a shove first has to hit; then whoever is shoved rolls Agility to catch the edge, against the shover's strength", () => {
     const { state, foe } = atTheEdge(2);
     const ann = unit(state, "ann");
     expect(shiftInto(state, at(6, 6), at(7, 6), unit(state, foe))).toEqual({ how: "drop", levels: 2 });

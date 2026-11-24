@@ -64,7 +64,6 @@ export {
   jumpRange,
   JUMP_UP,
   JUMP_DOWN,
-  enemyShove,
   AP_TURN,
   SUMMON_AP_TURN,
   AP_MAX,

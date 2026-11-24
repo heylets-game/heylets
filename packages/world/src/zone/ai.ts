@@ -37,10 +37,10 @@
 import { hexDistance, posKey, type HexPos } from "@gantt-quest/core";
 import { behaviourOf } from "./behaviours";
 import { BELL_AP, goesForBell, liveBell, ringBell, somethingToRouse } from "./bell";
-import { apForMove, checkCommon, doCommon, enemyAct, leavesReach, shiftInto, shoveDest, walk, walkAp } from "./combat";
-import { has, saveBonus, unseen, type Ctx } from "./engine";
+import { apForMove, checkCommon, doCommon, enemyAct, leavesReach, shiftInto, shoveBonus, shoveDest, walk, walkAp } from "./combat";
+import { defenceOf, has, unseen, type Ctx } from "./engine";
 import { blast, close, elevOf, flies, heldAgainst, inFight, pathIn, sameHex, stepCost, strikes, zoneReach, type Reached } from "./geometry";
-import { AP_MAX, COMMON_ACTIONS, ENEMY_KIT, enemyShove, jumpRange, mindOf, unitStrikes, type EnemyStrike, type Mind } from "./kit";
+import { AP_MAX, COMMON_ACTIONS, ENEMY_KIT, jumpRange, mindOf, unitStrikes, type EnemyStrike, type Mind } from "./kit";
 import { hitChance } from "./rules";
 import { HARMFUL } from "./surfaces";
 import type { Budget, Unit, ZoneState } from "./types";
@@ -84,8 +84,8 @@ function shoveWorth(state: ZoneState, enemy: Unit, hero: Unit): number {
   if (!strikes(state.map, enemy.pos, hero.pos) || has(hero, "prone")) return 0;
   const into = shiftInto(state, hero.pos, shoveDest(enemy.pos, hero.pos), hero);
   if (!into || into.how === "open") return 0;
-  // It has to win the shove, and then they have to fail to catch the edge (about an even chance).
-  const win = hitChance(enemyShove(enemy.kind), 10 + Math.max(saveBonus(hero, "str"), saveBonus(hero, "agi")), 0);
+  // It has to hit with the shove, and then they have to fail to catch the edge (about an even chance).
+  const win = hitChance(shoveBonus(state, enemy), defenceOf(hero, state), 0);
   const prize = into.how === "pit" ? Math.max(8, hero.hp) : 2.5 * (into.levels - 1) + 2;
   return win * 0.5 * prize;
 }

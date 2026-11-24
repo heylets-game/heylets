@@ -11,7 +11,7 @@ import { tileAt, type Poi } from "../map";
 import { DEBUFFS, addCondition, addShield, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, kindle, removeCondition, saveBonus, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
 import { cratesOn, crateById, hurtCrate, isCrateId } from "./crates";
 import { HEX_DIRS, close, blast, blockerAt, courseShare, directionToward, elevOf, flies, heldAgainst, inFight, lineFrom, pathIn, pitAt, reachFrom, roomAt, sameHex, sees, seesFor, solid, stepCost, strikes, unitById, zoneReach, type Course, type Pit } from "./geometry";
-import { ACTION_AP, CHART, COMMON_ACTIONS, CORAL_ARMOR, ENEMY_EDGE, RALLY, SHANTY, SUMMON_CALLS, ENEMY_BURST, FLEE_RANGE, JUMP_DOWN, JUMP_UP, POTION_EDGE, SAVE_STAT, SMUGGLED, THROWABLES, TORCH_GROUND_ROUNDS, abilityDice, enemySave, enemyShove, unitStrikes, healDice, jumpRange, reactionStrike, tacticOf, throwRange, type EnemyStrike, type Tactic } from "./kit";
+import { ACTION_AP, CHART, COMMON_ACTIONS, CORAL_ARMOR, ENEMY_EDGE, RALLY, SHANTY, SUMMON_CALLS, ENEMY_BURST, FLEE_RANGE, JUMP_DOWN, JUMP_UP, POTION_EDGE, SAVE_STAT, SMUGGLED, THROWABLES, TORCH_GROUND_ROUNDS, abilityDice, abilityStrikes, enemySave, unitStrikes, healDice, jumpRange, reactionStrike, tacticOf, throwRange, type EnemyStrike, type Tactic } from "./kit";
 import { modsOf } from "./mods";
 import { d20, diceFor, hitChance, mod, proficiency, rollDice, rollShown, statOf } from "./rules";
 import { seenByHeroes } from "./light";
@@ -1088,6 +1088,16 @@ export function checkCommon(state: ZoneState, unit: Unit, what: CommonAction, ai
   return null;
 }
 
+/**
+ * What a Shove adds to its roll to hit: for a hero, as a blow with Strength (proficiency and STR); for an enemy, the best
+ * to-hit of its own blows (its abilities that reach a hex and are no burst), ready or not, as the map has them.
+ */
+export function shoveBonus(state: Pick<ZoneState, "options">, unit: Unit): number {
+  if (unit.stats) return proficiency(unit.level) + mod(statOf(unit, "str"));
+  const blows = abilityStrikes(unit.abilities, unit.level, modsOf(state.options).edge).filter((s) => s.range === 1 && !s.burst);
+  return blows.length > 0 ? Math.max(...blows.map((s) => s.bonus)) : 0;
+}
+
 /** Take a common action that has passed its check. */
 export function doCommon(ctx: Ctx, unit: Unit, what: CommonAction, aim: Aim, budget: Budget | null): void {
   ctx.events.push({ t: "used", id: unit.id, what, name: COMMON_ACTIONS[what].name, target: aim.target, at: aim.at });
@@ -1101,8 +1111,7 @@ export function doCommon(ctx: Ctx, unit: Unit, what: CommonAction, aim: Aim, bud
     heal(ctx, target, 1, { actor: unit.id, what: "help" });
   } else if (what === "shove") {
     const target = unitById(ctx.state, aim.target!)!;
-    const roll = d20(ctx.rng, { kind: "shove", id: unit.id, target: target.id, label: "Shove", bonus: unit.side === "enemy" && !unit.stats ? enemyShove(unit.kind) : mod(statOf(unit, "str")), vs: 10 + Math.max(saveBonus(target, "str"), saveBonus(target, "agi")), adv: unseen(unit) ? 1 : 0 });
-    ctx.events.push({ t: "roll", roll });
+    const roll = attackRoll(ctx, unit, target, { label: "Shove", bonus: shoveBonus(ctx.state, unit), melee: true });
     giveAway(ctx, unit);
     if (roll.ok) push(ctx, unit.pos, target, unit.id);
     else ctx.events.push({ t: "miss", actor: unit.id, target: target.id, what: "shove" });
