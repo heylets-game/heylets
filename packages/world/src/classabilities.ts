@@ -121,6 +121,17 @@ export function classAbilitiesOf(classId: string, level: number, loadout: readon
   return out;
 }
 
+/**
+ * The loadout with every empty slot filled from the abilities the hero has opened, in pool order,
+ * skipping any already slotted. What is already there stays where it is. A new hero starts with
+ * this, so they have their class's first abilities without having to pick them.
+ */
+export function filledLoadout(classId: string, level: number, loadout: readonly (string | null)[], pools: AbilityPools = ABILITY_POOLS): AbilityLoadout {
+  const next = Array.from({ length: ABILITY_SLOTS }, (_, i) => loadout[i] ?? null);
+  const spare = unlockedFor(classId, level, pools).map((e) => e.id).filter((id) => !next.includes(id));
+  return next.map((id) => id ?? spare.shift() ?? null);
+}
+
 /** Why `id` (or nothing, `null`, to empty the slot) can't go in `slot` now, or null if it can. */
 export function abilitySlotError(classId: string, level: number, slot: number, id: string | null, pools: AbilityPools = ABILITY_POOLS): string | null {
   if (!Number.isInteger(slot) || slot < 0 || slot >= ABILITY_SLOTS) return "There is no such slot.";
