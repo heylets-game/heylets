@@ -829,8 +829,8 @@ export const ENEMY_MOVE_AP = 2;
 /** What an enemy adds to its roll when it shoves someone: the big shove hard. */
 export const enemyShove = (kind: string): number => 1 + enemySave(kind);
 
-/** What an enemy adds to a saving throw: bosses and the big are harder to shake. */
-export const enemySave = (kind: string): number => (ENEMIES[kind]?.boss ? 3 : (ENEMIES[kind]?.hp ?? 0) >= 18 ? 2 : 0);
+/** What an enemy adds to a saving throw, and to the DC of saves against what it does, as its entry sets it. */
+export const enemySave = (kind: string): number => ENEMIES[kind]?.save ?? 0;
 
 /** Hit points for a party of this level: its entry's at level 1, and 15% more of them for every level after. */
 export const enemyHp = (kind: string, level: number): number => Math.round((ENEMIES[kind]?.hp ?? 1) * (1 + 0.15 * Math.max(0, level - 1)));
