@@ -128,3 +128,10 @@ export async function getItem(db: D1Database, playerId: string, itemId: number):
 export const now = () => Date.now();
 
 export const statsOf = (c: CharacterRow): Stats => ({ str: c.str, int_stat: c.int_stat, vit: c.vit, agi: c.agi, dex: c.dex });
+
+/**
+ * SQL for the world (crew id) a player is in now, with `param` the placeholder for their id: the one they last went
+ * into (players.current_crew_id) while they still belong to it, else the one they joined most recently. Null if none.
+ */
+export const currentCrewSql = (param: string) =>
+  `(SELECT m.crew_id FROM crew_members m LEFT JOIN players p ON p.id = m.player_id WHERE m.player_id = ${param} ORDER BY m.crew_id = p.current_crew_id DESC, m.joined_at DESC LIMIT 1)`;

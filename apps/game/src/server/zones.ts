@@ -2,6 +2,7 @@
 // D1 is the system of record: the room's copy is a cache.
 
 import { zoneCleared, type ZoneOptions, type ZoneState } from "@gantt-quest/world";
+import { currentCrewSql } from "./db/rows";
 
 export interface ZoneRow {
   code: string;
@@ -88,12 +89,12 @@ export async function onAZone(db: D1Database, playerId: string): Promise<boolean
 
 /**
  * SQL for the crew a read is about. `THIS_CREW` is the crew whose id is bound; `CREW_OF_PLAYER` is the crew of the
- * player whose id is bound, for a read that starts from a player and would otherwise ask for their crew first. A
- * player is in one crew at most (crew_members.player_id is unique); in none, it names no crew and the read finds nobody.
+ * player whose id is bound, for a read that starts from a player and would otherwise ask for their crew first: the
+ * world they are in now (db/rows.ts currentCrewSql). In none, it names no crew and the read finds nobody.
  */
 const THIS_CREW = "?";
-const CREW_OF_PLAYER = "(SELECT crew_id FROM crew_members WHERE player_id = ?)";
-type WhichCrew = typeof THIS_CREW | typeof CREW_OF_PLAYER;
+const CREW_OF_PLAYER = currentCrewSql("?");
+type WhichCrew = string;
 
 async function presenceIn(db: D1Database, crew: WhichCrew, id: string): Promise<Map<string, { code: string; fighting: boolean }>> {
   const rows = await db

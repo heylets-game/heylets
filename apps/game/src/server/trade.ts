@@ -29,6 +29,7 @@
 
 import { RESOURCE_KINDS, TRADE_TTL_MS, emptySide, itemCells, readTradeSide, sideIsEmpty, sideProblem, tradeRoomProblem, upgradedName, type Resources, type Slot, type TradeHoldings, type TradeLoad, type TradeSide } from "@gantt-quest/world";
 import { CELLS_SQL, carriedSql, carryState, type Env, type InventoryRow } from "./db";
+import { currentCrewSql } from "./db/rows";
 
 /** How long a settled or cancelled trade stays in the list, so both sides hear how it ended. */
 const RECENT_MS = 60_000;
@@ -188,8 +189,8 @@ async function refusal(db: D1Database, terms: Terms, viewer: string, sides?: { g
 export async function openTrade(db: D1Database, playerId: string, to: unknown): Promise<{ error: string } | { id: number; crewId: string }> {
   if (typeof to !== "string" || to.length === 0 || to.length > 64) return { error: "Name the crewmate to trade with." };
   if (to === playerId) return { error: "You cannot trade with yourself." };
-  const crew = await db.prepare("SELECT crew_id FROM crew_members WHERE player_id = ?").bind(playerId).first<{ crew_id: string }>();
-  if (!crew) return { error: "Join a crew first." };
+  const crew = await db.prepare(`SELECT ${currentCrewSql("?")} AS crew_id`).bind(playerId).first<{ crew_id: string | null }>();
+  if (!crew?.crew_id) return { error: "Join a crew first." };
   const at = Date.now();
   const refused = await refusal(db, { crewId: crew.crew_id, from: playerId, to }, playerId);
   if (refused) return { error: refused.error };

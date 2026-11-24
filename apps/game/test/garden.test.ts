@@ -21,7 +21,7 @@ const bedRow = (bed: number, id = "ann") => one<Row | undefined>("SELECT * FROM 
 /** A hut standing on plot `plot`, of `tier`. */
 /** A watering can holding `water`. */
 const can = (id: string, water = CAN_CAPACITY) => sql.prepare("INSERT OR REPLACE INTO watering_cans (player_id, water) VALUES (?, ?)").run(id, water);
-const shack = (id: string, plot: number, tier = 1) => sql.prepare("INSERT INTO huts (player_id, tier, plot, bin_json) VALUES (?, ?, ?, NULL)").run(id, tier, plot);
+const shack = (id: string, plot: number, tier = 1) => sql.prepare("INSERT INTO huts (player_id, tier, plot, bin_json, plot_crew_id) VALUES (?1, ?2, ?3, NULL, (SELECT crew_id FROM crew_members WHERE player_id = ?1))").run(id, tier, plot);
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });

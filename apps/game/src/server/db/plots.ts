@@ -71,7 +71,7 @@ export async function fillBin(db: D1Database, playerId: string): Promise<string 
   return { put: moved, bin: (await homeOf(db, playerId)).bin };
 }
 
-/** The plot a player owns in their crew's Harbor, or null. */
+/** The plot a player's hut stands on, in whichever of their worlds it is, or null. */
 export async function plotOf(db: D1Database, playerId: string): Promise<number | null> {
   const row = await db.prepare("SELECT plot FROM huts WHERE player_id = ?").bind(playerId).first<{ plot: number | null }>();
   return row?.plot ?? null;
@@ -89,16 +89,20 @@ export async function buyPlot(db: D1Database, crewId: string, playerId: string, 
       .prepare(
         `UPDATE characters SET gold = gold - ?1 WHERE player_id = ?2 AND status = 'active' AND gold >= ?1
          AND NOT EXISTS (SELECT 1 FROM huts WHERE player_id = ?2 AND plot IS NOT NULL)
-         AND NOT EXISTS (SELECT 1 FROM huts h JOIN crew_members m ON m.player_id = h.player_id WHERE m.crew_id = ?3 AND h.plot = ?4)`,
+         AND NOT EXISTS (SELECT 1 FROM huts h WHERE h.plot_crew_id = ?3 AND h.plot = ?4)`,
       )
       .bind(PLOT_PRICE, playerId, crewId, plot),
     // New ground has only a resource bin on it; the shack goes up once the bin is filled.
     db
-      .prepare("INSERT INTO huts (player_id, tier, plot, bin_json) SELECT ?1, 1, ?2, '{}' WHERE changes() > 0 ON CONFLICT (player_id) DO UPDATE SET plot = excluded.plot, bin_json = '{}'")
-      .bind(playerId, plot),
+      .prepare(
+        "INSERT INTO huts (player_id, tier, plot, plot_crew_id, bin_json) SELECT ?1, 1, ?2, ?3, '{}' WHERE changes() > 0 ON CONFLICT (player_id) DO UPDATE SET plot = excluded.plot, plot_crew_id = excluded.plot_crew_id, bin_json = '{}'",
+      )
+      .bind(playerId, plot, crewId),
   ]);
   if (paid.meta.changes > 0) return null;
-  if ((await plotOf(db, playerId)) !== null) return "You already own a plot.";
-  const taken = await db.prepare("SELECT 1 FROM huts h JOIN crew_members m ON m.player_id = h.player_id WHERE m.crew_id = ? AND h.plot = ?").bind(crewId, plot).first();
+  const own = await db.prepare("SELECT h.plot_crew_id AS crewId, c.name FROM huts h LEFT JOIN crews c ON c.id = h.plot_crew_id WHERE h.player_id = ? AND h.plot IS NOT NULL").bind(playerId).first<{ crewId: string | null; name: string | null }>();
+  // A hero has one hut, standing in one of their worlds.
+  if (own) return own.crewId && own.crewId !== crewId && own.name ? `Your hut already stands in ${own.name}.` : "You already own a plot.";
+  const taken = await db.prepare("SELECT 1 FROM huts WHERE plot_crew_id = ? AND plot = ?").bind(crewId, plot).first();
   return taken ? "Someone has already bought that plot." : `A plot costs ${PLOT_PRICE} gold.`;
 }

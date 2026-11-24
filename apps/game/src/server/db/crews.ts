@@ -6,7 +6,7 @@ import { asCrop, atlasNodeById, roofColor, type GardenBed, type HarborBoard } fr
 import { crewWorks } from "../projects";
 import { crewPresence } from "../zones";
 import { parseBin } from "./plots";
-import { now, type Env } from "./rows";
+import { currentCrewSql, now, type Env } from "./rows";
 
 // ---------- crews and the Harbor ----------
 
@@ -21,26 +21,54 @@ function randomCode(length: number): string {
   return [...crypto.getRandomValues(new Uint8Array(length))].map((b) => alphabet[b % alphabet.length]).join("");
 }
 
+/** The world (crew) a hero is in now: one of the worlds they belong to (rows.ts currentCrewSql). */
 export async function crewFor(db: D1Database, playerId: string): Promise<Crew | null> {
-  return db
-    .prepare("SELECT c.id, c.name FROM crew_members m JOIN crews c ON c.id = m.crew_id WHERE m.player_id = ?")
-    .bind(playerId)
-    .first<Crew>();
+  return db.prepare(`SELECT id, name FROM crews WHERE id = ${currentCrewSql("?1")}`).bind(playerId).first<Crew>();
+}
+
+/** A world one of an account's heroes belongs to, as Join world lists it: which of the heroes are in it. */
+export interface AccountWorld extends Crew {
+  heroes: { id: string; name: string }[];
+  members: number;
+}
+
+/** Every world an account's heroes belong to, the most recently joined first. */
+export async function worldsOfAccount(db: D1Database, userId: string): Promise<AccountWorld[]> {
+  const rows = await db
+    .prepare(
+      `SELECT cr.id, cr.name, m.player_id AS heroId, ch.name AS heroName, m.joined_at AS joinedAt,
+              (SELECT COUNT(*) FROM crew_members x WHERE x.crew_id = cr.id) AS members
+         FROM players p
+         JOIN crew_members m ON m.player_id = p.id
+         JOIN crews cr ON cr.id = m.crew_id
+         LEFT JOIN characters ch ON ch.player_id = p.id AND ch.status = 'active'
+        WHERE p.user_id = ?
+        ORDER BY m.joined_at DESC`,
+    )
+    .bind(userId)
+    .all<{ id: string; name: string; heroId: string; heroName: string | null; joinedAt: number; members: number }>();
+  const worlds = new Map<string, AccountWorld>();
+  for (const r of rows.results) {
+    const w = worlds.get(r.id) ?? { id: r.id, name: r.name, heroes: [], members: r.members };
+    if (r.heroName) w.heroes.push({ id: r.heroId, name: r.heroName });
+    worlds.set(r.id, w);
+  }
+  return [...worlds.values()];
 }
 
 export async function getCrew(db: D1Database, crewId: string): Promise<Crew | null> {
   return db.prepare("SELECT id, name FROM crews WHERE id = ?").bind(crewId).first<Crew>();
 }
 
-/** Found a crew and make the founder its first member. Leaves any crew they were in. */
+/** Found a crew, make the founder its first member, and put them in it. They stay in any other worlds they belong to. */
 export async function createCrew(db: D1Database, playerId: string, name: string): Promise<Crew> {
   for (let attempt = 0; attempt < 5; attempt++) {
     const id = randomCode(6);
     try {
       await db.batch([
         db.prepare("INSERT INTO crews (id, name, created_by, created_at) VALUES (?, ?, ?, ?)").bind(id, name, playerId, now()),
-        db.prepare("DELETE FROM crew_members WHERE player_id = ?").bind(playerId),
         db.prepare("INSERT INTO crew_members (crew_id, player_id, joined_at) VALUES (?, ?, ?)").bind(id, playerId, now()),
+        db.prepare("UPDATE players SET current_crew_id = ? WHERE id = ?").bind(id, playerId),
       ]);
       return { id, name };
     } catch {
@@ -50,28 +78,40 @@ export async function createCrew(db: D1Database, playerId: string, name: string)
   throw new Error("could not allocate a crew code");
 }
 
-/** Join a crew by its invite code, leaving any other crew. Returns null if there is no such crew or it is full. */
-export async function joinCrew(db: D1Database, playerId: string, crewId: string, maxMembers: number): Promise<Crew | null> {
+/**
+ * Go into a world by its code: join it if the hero does not belong to it yet, and make it the one they are in. They
+ * stay in their other worlds. `joined` is false if they already belonged. Null if there is no such world, or it is
+ * full and they are not in it.
+ */
+export async function joinCrew(db: D1Database, playerId: string, crewId: string, maxMembers: number): Promise<(Crew & { joined: boolean }) | null> {
   const crew = await getCrew(db, crewId);
   if (!crew) return null;
-  const count = await db.prepare("SELECT COUNT(*) AS n FROM crew_members WHERE crew_id = ? AND player_id != ?").bind(crewId, playerId).first<{ n: number }>();
-  if ((count?.n ?? 0) >= maxMembers) return null;
+  const already = await db.prepare("SELECT 1 FROM crew_members WHERE crew_id = ? AND player_id = ?").bind(crewId, playerId).first();
+  if (!already) {
+    const count = await db.prepare("SELECT COUNT(*) AS n FROM crew_members WHERE crew_id = ?").bind(crewId).first<{ n: number }>();
+    if ((count?.n ?? 0) >= maxMembers) return null;
+  }
   await db.batch([
-    db.prepare("DELETE FROM crew_members WHERE player_id = ?").bind(playerId),
-    // Moving to another crew leaves the old Harbor's plot behind.
-    db.prepare("UPDATE huts SET plot = NULL WHERE player_id = ? AND NOT EXISTS (SELECT 1 FROM crew_members WHERE player_id = ?1 AND crew_id = ?2)").bind(playerId, crewId),
-    db.prepare("INSERT INTO crew_members (crew_id, player_id, joined_at) VALUES (?, ?, ?)").bind(crewId, playerId, now()),
+    db.prepare("INSERT OR IGNORE INTO crew_members (crew_id, player_id, joined_at) VALUES (?, ?, ?)").bind(crewId, playerId, now()),
+    db.prepare("UPDATE players SET current_crew_id = ? WHERE id = ?").bind(crewId, playerId),
   ]);
-  return crew;
+  return { ...crew, joined: !already };
 }
 
-export async function leaveCrew(db: D1Database, playerId: string): Promise<void> {
-  // A plot is land in one crew's Harbor: leaving the crew gives it up. The hut's contents stay with the player.
+/**
+ * Leave a world for good (the one they are in now, unless one is named). A plot is land in that world's Harbor, so
+ * a hut standing there gives it up, garden and all; the hut's contents stay with the hero. They are then in the
+ * next of their worlds, if any.
+ */
+export async function leaveCrew(db: D1Database, playerId: string, crewId?: string): Promise<void> {
+  const crew = crewId ?? (await crewFor(db, playerId))?.id;
+  if (!crew) return;
   await db.batch([
-    db.prepare("DELETE FROM crew_members WHERE player_id = ?").bind(playerId),
-    db.prepare("UPDATE huts SET plot = NULL WHERE player_id = ?").bind(playerId),
+    db.prepare("DELETE FROM crew_members WHERE player_id = ? AND crew_id = ?").bind(playerId, crew),
+    db.prepare("UPDATE players SET current_crew_id = NULL WHERE id = ? AND current_crew_id = ?").bind(playerId, crew),
     // The garden was by the hut's door on that plot: it goes with it.
-    db.prepare("DELETE FROM garden_beds WHERE player_id = ?").bind(playerId),
+    db.prepare("DELETE FROM garden_beds WHERE player_id = ? AND EXISTS (SELECT 1 FROM huts WHERE player_id = ?1 AND plot_crew_id = ?2)").bind(playerId, crew),
+    db.prepare("UPDATE huts SET plot = NULL, plot_crew_id = NULL WHERE player_id = ? AND plot_crew_id = ?").bind(playerId, crew),
   ]);
 }
 
@@ -87,7 +127,8 @@ export async function harborBoard(db: D1Database, crewId: string): Promise<Harbo
       .prepare(
         `SELECT m.player_id AS id, c.name, c.class_id AS classId, c.level, COALESCE(h.tier, 1) AS hutTier, h.plot AS plot, h.bin_json AS bin, h.roof AS roof
          FROM crew_members m JOIN characters c ON c.player_id = m.player_id AND c.status = 'active'
-         LEFT JOIN huts h ON h.player_id = m.player_id
+         -- A hut is drawn only in the world it stands in.
+         LEFT JOIN huts h ON h.player_id = m.player_id AND h.plot_crew_id = m.crew_id
          WHERE m.crew_id = ? ORDER BY m.joined_at, m.player_id`,
       )
       .bind(crewId)

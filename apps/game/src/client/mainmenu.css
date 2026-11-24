@@ -143,3 +143,9 @@
 .mm-hero-tag { flex: none; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; padding: 3px 6px; border: 1px solid currentColor; }
 .mm-new-hero { width: 100%; }
 .mm-as-hero { font-size: 13px; }
+
+/* The account's worlds in Join world: the one the hero is in now is marked. */
+.mm-worlds { display: flex; flex-direction: column; gap: 6px; }
+.mm-world.here { border-color: var(--gold); box-shadow: inset 0 0 0 1px rgba(227, 183, 87, 0.35); }
+.mm-world-actions { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.mm-world-actions .link { font-size: 12px; }
