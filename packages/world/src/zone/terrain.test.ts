@@ -1563,10 +1563,10 @@ describe("the alarm bell rouses the place", () => {
     expect(state.map.pois.find((p) => p.id === "bell")!.cleared).toBe(true);
     const roused = got(events, "roused");
     expect(roused).toHaveLength(1);
-    expect([...roused[0].groups].sort()).toEqual(["g2", "g3"]);
-    expect([...roused[0].units].sort()).toEqual([...made.second, made.third].sort());
-    expect([...state.encounter!.order].sort()).toEqual(["ann", made.first, made.mate, ...made.second, made.third].sort());
-    expect(state.groups).toMatchObject({ g1: { alerted: true }, g2: { alerted: true }, g3: { alerted: true } });
+    expect([...roused[0].groups].sort()).toEqual(["g2", "g3", "g4"]);
+    expect([...roused[0].units].sort()).toEqual([...made.second, made.third, ...made.den].sort());
+    expect([...state.encounter!.order].sort()).toEqual(["ann", made.first, made.mate, ...made.second, made.third, ...made.den].sort());
+    expect(state.groups).toMatchObject({ g1: { alerted: true }, g2: { alerted: true }, g3: { alerted: true }, g4: { alerted: true } });
     expect(got(events, "fight_join")).toEqual([]);
   });
 
@@ -1597,20 +1597,13 @@ describe("the alarm bell rouses the place", () => {
     expect(stayed.groups.g3.alerted).toBe(false);
   });
 
-  it("a band with a boss in it keeps its den, until the fight is near enough to hear", () => {
+  it("a band with a boss in it answers the bell as any other does", () => {
     const made = place();
-    let state = rung(made.state);
-    while (state.encounter!.round < 4) state = must(state, { type: "timeout" });
-    for (const id of made.den) expect(state.encounter!.order).not.toContain(id);
-    expect(state.groups.g4.alerted).toBe(false);
-    // Someone in the fight comes within earshot of the den (and stays there: the enemy stands still): at the next round they are in it.
-    state.aiOff = true;
-    unit(state, made.third).pos = at(14 - HEAR_RANGE, 1);
-    const round = state.encounter!.round;
     const events: ZoneEvent[] = [];
-    while (state.encounter!.round === round) state = must(state, { type: "timeout" }, events);
-    expect(events).toContainEqual({ t: "noise", group: "g4" });
+    const state = rung(made.state, events);
+    expect(got(events, "roused")[0].groups).toContain("g4");
     for (const id of made.den) expect(state.encounter!.order).toContain(id);
+    expect(state.groups.g4.alerted).toBe(true);
   });
 
   it("a band with no way to the fight stays where it is", () => {
@@ -1669,7 +1662,7 @@ describe("the alarm bell rouses the place", () => {
     for (const site of SITE_IDS.filter(siteOpen)) {
       const events: ZoneEvent[] = [];
       rung(place(undefined, [], site).state, events);
-      expect(got(events, "roused").map((e) => [...e.groups].sort()), site).toEqual([["g2", "g3"]]);
+      expect(got(events, "roused").map((e) => [...e.groups].sort()), site).toEqual([["g2", "g3", "g4"]]);
     }
     const events: ZoneEvent[] = [];
     must(place(undefined, [], "nowhere").state, { type: "dev", by: "ann", dev: { op: "start_fight" } }, events);

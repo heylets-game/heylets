@@ -351,9 +351,8 @@ const open = (state: ZoneState) => !!state.scene && siteOpen(state.scene.site);
 
 /**
  * The alarm bell (bell.ts), rung by an enemy, rouses the whole place: every band that has noticed nobody is in it from now on, and comes.
- * Two kinds stay where they are, because coming would make no sense: a band with no way to the fight on foot (shut
- * in behind a locked door, or on ground nothing joins to it), and a band with a boss in it, which keeps its den and
- * waits (it still comes if the fight is near enough to hear: reinforce). "A way" is a matter of the ground alone:
+ * A band with a boss in it comes too. Only a band with no way to the fight on foot stays where it is (shut in behind
+ * a locked door, or on ground nothing joins to it). "A way" is a matter of the ground alone:
  * whoever is standing in a doorway or on a bridge just now does not make it no way. Under a roof, or under ground, nothing is
  * roused: walls keep the noise in, and only those near enough to hear come. Called when the bell is rung, and by nothing else:
  * a fight no longer rouses the place of itself.
@@ -374,7 +373,6 @@ function rouse(ctx: Ctx): void {
   const near = new Set(fighters.flatMap((f) => [f.pos, ...hexNeighbors(f.pos, state.map.grid)]).map(posKey));
   const coming: string[] = [];
   for (const [group, members] of bands) {
-    if (members.some((m) => ENEMIES[m.kind]?.boss)) continue;
     // One of them that can get to anyone in the fight is enough: the rest follow. Over the ground as it lies, with nobody standing on it.
     const ground = { ...state, units: [] };
     const way = members.some((m) => {
