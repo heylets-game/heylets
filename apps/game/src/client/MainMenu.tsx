@@ -3,17 +3,23 @@
 // column of choices; each choice opens a small menu of its own in the same
 // panel, with a way back.
 //
-//   Continue           back to your world's town, when you have one
+//   (your hero)        who you are playing; Change hero lists the account's heroes and makes new ones
+//   Continue           back to your hero's world, when they have one
 //   Create world  ->   name it  ->  make a hero (if none yet)  ->  invite friends
 //   Join world    ->   your world, or an invite code  ->  make a hero (if none yet)
 //   Settings           sound and display (the same as in the game menu)
 //   Log in / Account
 //
-// A world is a crew: one Harbor and its atlas, shared with whoever joins.
+// A world is a crew: one Harbor and its atlas, shared with whoever joins. For
+// now each hero is in one world at a time: the one they made or joined last.
 
-import { useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { DEFAULT_APPEARANCE, parseAppearance } from "@gantt-quest/world";
 import { EmailSignIn } from "./Account";
-import { api, type Me } from "./api";
+import { api, type HeroSlot, type Me } from "./api";
+import { label } from "./labels";
+import { startingOutfit } from "./LookBuilder";
+import { spriteDataUrl } from "./render/sprites";
 import { SoundButton } from "./audio/SoundButton";
 import { useAudioScene } from "./audio/useAudioScene";
 import { CharacterCreation } from "./CharacterCreation";
@@ -26,8 +32,8 @@ import "./mainmenu.css";
 const GAME_TITLE = "The Harbor of Heylets";
 
 /** What a new hero is being made for, done the moment they are confirmed. */
-type Then = { kind: "create"; name: string } | { kind: "join"; code: string };
-type View = "home" | "create" | "join" | "settings" | "account" | "invite" | { hero: Then };
+type Then = { kind: "create"; name: string } | { kind: "join"; code: string } | { kind: "none" };
+type View = "home" | "create" | "join" | "settings" | "account" | "invite" | "heroes" | { hero: Then };
 
 interface Props {
   me: Me;
@@ -51,9 +57,52 @@ export function MainMenu({ me, refresh, invite, onContinue }: Props) {
     setView(next);
   };
 
+  // The account's heroes, read again whenever the hero being played changes.
+  const [heroes, setHeroes] = useState<{ heroes: HeroSlot[]; max: number } | null>(null);
+  const loadHeroes = useCallback(() => api.heroes().then(setHeroes, () => setHeroes(null)), []);
+  useEffect(() => {
+    void loadHeroes();
+  }, [loadHeroes, me.player.id, me.character?.status]);
+
+  /** Play another hero. The menu stays up: their world is one Continue away. */
+  const choose = async (id: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      if (id !== me.player.id) {
+        location.hash = MAIN_MENU_HASH;
+        await api.chooseHero(id);
+        await refresh();
+      }
+      go("home");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  /** Start a new hero in an empty slot, then make them. */
+  const newHero = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      location.hash = MAIN_MENU_HASH;
+      await api.newHero();
+      await refresh();
+      go({ hero: { kind: "none" } });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   /** Make or join the world: straight away with a hero, or after making one. */
   const carryOut = async (then: Then) => {
-    if (then.kind === "create") {
+    if (then.kind === "none") {
+      await refresh();
+      go("home");
+    } else if (then.kind === "create") {
       // Stay on the menu once there is a world, to hand out its invite before going in.
       location.hash = MAIN_MENU_HASH;
       await api.createCrew(then.name);
@@ -85,9 +134,9 @@ export function MainMenu({ me, refresh, invite, onContinue }: Props) {
         <CharacterCreation
           draft={me.character}
           refresh={refresh}
-          onBack={() => go(then.kind)}
+          onBack={() => go(then.kind === "none" ? "home" : then.kind)}
           onDone={() => carryOut(then)}
-          note={then.kind === "create" ? `Then your world, ${then.name}, is made.` : `Then you join the world ${then.code}.`}
+          note={then.kind === "create" ? `Then your world, ${then.name}, is made.` : then.kind === "join" ? `Then you join the world ${then.code}.` : undefined}
         />
       </Backdrop>
     );
@@ -95,8 +144,30 @@ export function MainMenu({ me, refresh, invite, onContinue }: Props) {
 
   const back = <button className="link mm-back" onClick={() => go("home")}>‹ Back</button>;
   let body: ReactNode;
+  const others = heroes?.heroes.filter((h) => h.id !== me.player.id) ?? [];
+  const changeHero = <button className="link" onClick={() => go("heroes")}>Change hero</button>;
   if (view === "home") {
     body = (
+      <>
+      {ready && me.character ? (
+        <div className="mm-hero">
+          <HeroFace classId={me.character.class_id} appearance={me.character.appearance ?? null} />
+          <span className="mm-hero-text">
+            <strong>{me.character.name}</strong>
+            <span className="muted">Lv {me.character.level} {label("class", me.character.class_id)}</span>
+            <span className="muted">{me.crew ? me.crew.name : "No world yet"}</span>
+          </span>
+          {changeHero}
+        </div>
+      ) : others.length > 0 ? (
+        <div className="mm-hero mm-hero-empty">
+          <span className="mm-hero-text">
+            <strong>No hero chosen</strong>
+            <span className="muted">Pick one of your heroes, or make a new one.</span>
+          </span>
+          <button className="small" onClick={() => go("heroes")}>Choose hero</button>
+        </div>
+      ) : null}
       <nav className="mm-choices" aria-label="Main menu">
         {onContinue && me.crew && (
           <button className="mm-choice primary" autoFocus onClick={onContinue}>
@@ -108,11 +179,41 @@ export function MainMenu({ me, refresh, invite, onContinue }: Props) {
         <button className="mm-choice" onClick={() => go("settings")}>Settings</button>
         <button className="mm-choice" onClick={() => go("account")}>{me.player.email ? "Account" : "Log in"}</button>
       </nav>
+      </>
+    );
+  } else if (view === "heroes") {
+    const all = heroes?.heroes ?? [];
+    const max = heroes?.max ?? 0;
+    body = (
+      <>
+        <header className="mm-sub-head">{back}<h2>Your heroes</h2></header>
+        <p className="muted">Each hero has their own gear, gold and hut, and is in one world at a time.</p>
+        <div className="mm-heroes" role="list">
+          {all.map((h) => {
+            const playing = h.id === me.player.id;
+            return (
+              <button key={h.id} role="listitem" className={`mm-hero-pick ${playing ? "selected" : ""}`} aria-current={playing || undefined} disabled={busy} onClick={() => void choose(h.id)}>
+                <HeroFace classId={h.classId} appearance={h.appearance} />
+                <span className="mm-hero-text">
+                  <strong>{h.name}</strong>
+                  <span>Lv {h.level} {label("class", h.classId)}</span>
+                  <span>{h.crew ? h.crew.name : "No world yet"}</span>
+                </span>
+                {playing && <span className="mm-hero-tag">Playing</span>}
+              </button>
+            );
+          })}
+        </div>
+        <button className="primary big mm-new-hero" disabled={busy || (max > 0 && all.length >= max)} onClick={() => void newHero()}>
+          New hero <span aria-hidden>▸</span>
+        </button>
+        <p className="muted small-print">{all.length} of {max || "?"} heroes. {max > 0 && all.length >= max ? "That is the most an account can have." : ""}</p>
+      </>
     );
   } else if (view === "create") {
-    body = <CreateWorld me={me} back={back} busy={busy} onCreate={(name) => void start({ kind: "create", name })} />;
+    body = <CreateWorld me={me} back={back} busy={busy} onHeroes={() => go("heroes")} onCreate={(name) => void start({ kind: "create", name })} />;
   } else if (view === "join") {
-    body = <JoinWorld me={me} back={back} busy={busy} invite={invite} ready={ready} onContinue={onContinue} onJoin={(code) => void start({ kind: "join", code })} />;
+    body = <JoinWorld me={me} back={back} busy={busy} invite={invite} ready={ready} onContinue={onContinue} onHeroes={() => go("heroes")} onJoin={(code) => void start({ kind: "join", code })} />;
   } else if (view === "invite") {
     body = <InviteFriends me={me} />;
   } else if (view === "settings") {
@@ -129,7 +230,7 @@ export function MainMenu({ me, refresh, invite, onContinue }: Props) {
         {me.player.email ? (
           <div className="mm-account">
             <p>Logged in as <strong>{me.player.email}</strong>.</p>
-            <p className="muted">Your hero, gear and world are saved to this account. Log in with it on any device.</p>
+            <p className="muted">Your heroes, their gear and their worlds are saved to this account. Log in with it on any device.</p>
             <button className="danger" onClick={() => void logOut()}>Log out</button>
           </div>
         ) : (
@@ -161,6 +262,26 @@ export function MainMenu({ me, refresh, invite, onContinue }: Props) {
   );
 }
 
+/** A hero's small portrait: their class in their starting clothes, with their own look. */
+function HeroFace({ classId, appearance }: { classId: string; appearance: string | null }) {
+  const src = useMemo(() => spriteDataUrl(classId, startingOutfit(classId, parseAppearance(appearance) ?? DEFAULT_APPEARANCE)), [classId, appearance]);
+  return (
+    <span className="mm-hero-face">
+      <img className="pixel-icon" src={src} alt="" width={36} height={44} />
+    </span>
+  );
+}
+
+/** Who a world will be made or joined with, and the way to pick another. */
+function AsHero({ me, onChange }: { me: Me; onChange(): void }) {
+  if (me.character?.status !== "active") return null;
+  return (
+    <p className="mm-as-hero muted">
+      As <strong>{me.character.name}</strong>, Lv {me.character.level} {label("class", me.character.class_id)} · <button type="button" className="link" onClick={onChange}>Change hero</button>
+    </p>
+  );
+}
+
 /** The dusk harbor behind every menu, and the sound button in the corner. */
 function Backdrop({ children }: { children: ReactNode }) {
   return (
@@ -180,7 +301,7 @@ async function logOut() {
   location.reload();
 }
 
-function CreateWorld({ me, back, busy, onCreate }: { me: Me; back: ReactNode; busy: boolean; onCreate(name: string): void }) {
+function CreateWorld({ me, back, busy, onHeroes, onCreate }: { me: Me; back: ReactNode; busy: boolean; onHeroes(): void; onCreate(name: string): void }) {
   const [name, setName] = useState("");
   const ok = name.trim().length >= 2;
   const ready = me.character?.status === "active";
@@ -188,11 +309,12 @@ function CreateWorld({ me, back, busy, onCreate }: { me: Me; back: ReactNode; bu
     <form className="mm-form" onSubmit={(e) => { e.preventDefault(); if (ok && !busy) onCreate(name.trim()); }}>
       <header className="mm-sub-head">{back}<h2>Create world</h2></header>
       <p className="muted">A world is one Harbor and its atlas, shared with the friends you invite.</p>
+      <AsHero me={me} onChange={onHeroes} />
       <label className="field">
         <span>World name</span>
         <input autoFocus value={name} maxLength={30} placeholder="The Salty Dogs" onChange={(e) => setName(e.target.value)} />
       </label>
-      {me.crew && <p className="muted small-print">You will leave {me.crew.name}. Your hero and what they carry come with you.</p>}
+      {me.crew && <p className="muted small-print">{me.character?.name ?? "Your hero"} will leave {me.crew.name}, with what they carry. To keep them there, make the world with another hero.</p>}
       <button className="primary big" type="submit" disabled={busy || !ok}>
         {ready ? "Create world" : "Next: your hero"} <span aria-hidden>▸</span>
       </button>
@@ -200,11 +322,12 @@ function CreateWorld({ me, back, busy, onCreate }: { me: Me; back: ReactNode; bu
   );
 }
 
-function JoinWorld({ me, back, busy, invite, ready, onContinue, onJoin }: { me: Me; back: ReactNode; busy: boolean; invite: string | null; ready: boolean; onContinue?(): void; onJoin(code: string): void }) {
+function JoinWorld({ me, back, busy, invite, ready, onContinue, onHeroes, onJoin }: { me: Me; back: ReactNode; busy: boolean; invite: string | null; ready: boolean; onContinue?(): void; onHeroes(): void; onJoin(code: string): void }) {
   const [code, setCode] = useState(invite && invite !== me.crew?.id ? invite : "");
   return (
     <form className="mm-form" onSubmit={(e) => { e.preventDefault(); if (code.length === 6 && !busy) onJoin(code); }}>
       <header className="mm-sub-head">{back}<h2>Join world</h2></header>
+      <AsHero me={me} onChange={onHeroes} />
       {me.crew && (
         <div className="mm-world">
           <span className="mm-world-name">
@@ -219,7 +342,7 @@ function JoinWorld({ me, back, busy, invite, ready, onContinue, onJoin }: { me: 
         <input autoFocus={!me.crew} className="mm-code" value={code} maxLength={6} placeholder="ABCDEF" autoCapitalize="characters" onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z]/g, ""))} />
       </label>
       <p className="muted small-print">
-        {me.crew ? `Joining another world leaves ${me.crew.name}. Your hero and what they carry come with you.` : "Ask a friend for their world's six-letter code, or open the invite link they sent."}
+        {me.crew ? `Joining another world takes ${me.character?.name ?? "your hero"} out of ${me.crew.name}, with what they carry. To keep them there, join with another hero.` : "Ask a friend for their world's six-letter code, or open the invite link they sent."}
       </p>
       <button className="primary big" type="submit" disabled={busy || code.length !== 6}>
         {ready ? "Join world" : "Next: your hero"} <span aria-hidden>▸</span>

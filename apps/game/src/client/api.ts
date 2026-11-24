@@ -131,6 +131,18 @@ export interface Me {
 
 export type { StatKey };
 
+/** One of the account's heroes, as the main menu lists them (server/routes/heroes.ts). */
+export interface HeroSlot {
+  id: string;
+  name: string;
+  classId: string;
+  level: number;
+  /** JSON Appearance (parse with parseAppearance), or null. */
+  appearance: string | null;
+  /** The world (crew) they are in, if any. */
+  crew: { id: string; name: string } | null;
+}
+
 async function request<T>(path: string, body?: unknown, extra: Record<string, string> = {}): Promise<T> {
   const res = await fetch(path, {
     method: body === undefined ? "GET" : "POST",
@@ -198,6 +210,12 @@ export const api = {
   /** Set a new password with the emailed code. Logs in nobody: follow it with `logIn`. */
   resetPassword: (email: string, otp: string, password: string) => request("/api/auth/email-otp/reset-password", { email, otp, password }),
   signOut: () => request("/api/auth/sign-out", {}),
+  /** The account's finished heroes, most recently played first, and how many an account may have. */
+  heroes: () => request<{ heroes: HeroSlot[]; max: number }>("/api/heroes"),
+  /** Play another of the account's heroes on this device. */
+  chooseHero: (id: string) => request("/api/heroes/choose", { id }),
+  /** An empty slot to make a new hero in, now the one this device plays. */
+  newHero: () => request<{ id: string }>("/api/heroes/new", {}),
   createCrew: (name: string) => request("/api/crew", { name }),
   joinCrew: (code: string) => request("/api/crew/join", { code }),
   leaveCrew: () => request("/api/crew/leave", {}),

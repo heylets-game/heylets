@@ -120,3 +120,26 @@
 .main-menu .look-swatch { box-shadow: 0 0 0 1px var(--line); }
 .main-menu .look-swatch.selected { box-shadow: 0 0 0 2px var(--out), 0 0 0 4px #f4c64e; }
 .main-menu .hero-name { background: var(--well, #1a130e); }
+
+/* -------------------------------------------------------------- heroes --- */
+
+/* The hero being played, at the head of the menu's choices. */
+.mm-hero { display: flex; align-items: center; gap: 10px; margin: 4px 8px 0; padding: 8px 10px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.25); }
+.mm-hero > .link { flex: none; font-size: 13px; }
+.mm-hero-face {
+  flex: none; display: grid; place-items: end center; width: 46px; height: 52px; padding-bottom: 2px; box-sizing: border-box;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.35) 0 74%, var(--brass-lo, #77582a) 74% 80%, rgba(0, 0, 0, 0.45) 80%);
+}
+.mm-hero-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; text-align: left; overflow-wrap: anywhere; }
+.mm-hero-text strong { font-family: var(--font-head); font-weight: normal; font-size: 17px; color: var(--gold); }
+.mm-hero-text span { font-size: 12px; }
+.mm-hero-empty .mm-hero-text strong { color: var(--text); }
+
+/* The account's heroes to pick from. */
+.mm-heroes { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 12px; }
+.mm-hero-pick { display: flex; align-items: center; gap: 10px; padding: 6px 10px; text-align: left; }
+.mm-hero-pick .mm-hero-text strong { color: inherit; }
+.mm-hero-pick.selected .mm-hero-text span { color: #3a1d20; }
+.mm-hero-tag { flex: none; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; padding: 3px 6px; border: 1px solid currentColor; }
+.mm-new-hero { width: 100%; }
+.mm-as-hero { font-size: 13px; }
