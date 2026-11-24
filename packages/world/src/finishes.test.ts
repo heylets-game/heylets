@@ -10,8 +10,14 @@ import {
   HARBOR_FINISHES,
   HARBOR_SHOP,
   TALK_VOICES,
+  DAWN,
+  DUSK,
+  GAME_DAY_MS,
   cleanFinish,
+  decoratorOpen,
+  decoratorOpensAt,
   decoratorTalk,
+  harborSky,
   finishBuyProblem,
   finishDay,
   finishStock,
@@ -149,5 +155,32 @@ describe("Nell's stall", () => {
     expect(talk.voice).toBe(TALK_VOICES[DECORATOR.id]);
     expect(talk.choices.find((c) => c.opens === "finishes")).toBeTruthy();
     expect(talk.choices.some((c) => c.bye)).toBe(true);
+  });
+});
+
+describe("Nell's hours", () => {
+  // A whole number of Harbor days from the epoch, so a time of day t is at day + t * GAME_DAY_MS.
+  const day = 1_000 * GAME_DAY_MS;
+  const at = (t: number) => day + Math.round(t * GAME_DAY_MS);
+
+  it("she is at her stall by day and gone at night, by the same line the sky is drawn by", () => {
+    expect(decoratorOpen(at(0.5))).toBe(true);
+    expect(decoratorOpen(at(DAWN + 0.01))).toBe(true);
+    expect(decoratorOpen(at(DUSK - 0.01))).toBe(true);
+    expect(decoratorOpen(at(DUSK + 0.01))).toBe(false);
+    expect(decoratorOpen(at(0))).toBe(false);
+    expect(decoratorOpen(at(DAWN - 0.01))).toBe(false);
+    for (let t = 0; t < 1; t += 0.01) expect(decoratorOpen(at(t))).toBe(!harborSky(at(t)).night);
+  });
+
+  it("she is back at the coming dawn: later the same Harbor day before it, the next one after dusk", () => {
+    expect(decoratorOpensAt(at(0.5))).toBe(at(0.5));
+    const before = decoratorOpensAt(at(0.05));
+    expect(Math.abs(before - (day + DAWN * GAME_DAY_MS))).toBeLessThanOrEqual(1);
+    const after = decoratorOpensAt(at(0.9));
+    expect(Math.abs(after - (day + (1 + DAWN) * GAME_DAY_MS))).toBeLessThanOrEqual(1);
+    // A moment after it she is there.
+    expect(decoratorOpen(after + 1000)).toBe(true);
+    expect(decoratorOpen(after - 1000)).toBe(false);
   });
 });

@@ -133,6 +133,8 @@ export interface Poi {
   find?: ResourceKind;
   /** For a bought plot whose shack is not up yet: how full its resource bin is, 0 to 1. */
   fill?: number;
+  /** For a keeper's stall in the Harbor (Nell's): covered up for the night, its keeper gone home. */
+  shut?: boolean;
   /** For a hut's herb garden: each bed as it looks now. Absent on a garden nobody tends (a plot with no hut standing). */
   beds?: BedLook[];
   /** For a chest in the caverns: an old chest, a strongbox behind a locked door, or the hoard in the deepest chamber. */

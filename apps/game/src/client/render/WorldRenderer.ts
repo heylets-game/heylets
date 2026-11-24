@@ -3667,7 +3667,7 @@ export class WorldRenderer {
   // ---------- points of interest ----------
 
   private buildPois(state: RenderState) {
-    const sig = state.map.pois.map((p) => `${p.id}:${p.cleared}:${p.tier ?? ""}:${p.roof ?? ""}:${p.fill ?? ""}:${p.hp ?? ""}:${bedsSig(p.beds)}`).join("|");
+    const sig = state.map.pois.map((p) => `${p.id}:${p.cleared}:${p.tier ?? ""}:${p.roof ?? ""}:${p.fill ?? ""}:${p.hp ?? ""}:${p.shut ? 1 : ""}:${bedsSig(p.beds)}`).join("|");
     if (sig === this.poiSig) return;
     this.poiSig = sig;
     // The old models' shapes are to go with them: the renderer holds a shape's buffers until told it is done with.

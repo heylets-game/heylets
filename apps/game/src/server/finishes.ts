@@ -2,7 +2,7 @@
 // Nell, theirs for good, and which of them their hut is dressed in. Buying is one batch whose first statement takes
 // the gold only if the finish is not owned yet and the gold is there, so a double click cannot pay twice.
 
-import { BARE_FINISH, cleanFinish, finishBuyProblem, finishById, finishDay, finishSetProblem, finishStock, nextFinishDay, type FinishKind, type HutFinish } from "@gantt-quest/world";
+import { BARE_FINISH, DECORATOR_SHUT, cleanFinish, decoratorOpen, finishBuyProblem, finishById, finishDay, finishSetProblem, finishStock, nextFinishDay, type FinishKind, type HutFinish } from "@gantt-quest/world";
 import { getCharacter } from "./db";
 
 /** The finishes a player owns, in the order they bought them. */
@@ -40,8 +40,9 @@ export async function finishesView(db: D1Database, playerId: string): Promise<Fi
   return { owned, finish, gold: c?.gold ?? 0, hut: !!hut, stock: finishStock(finishDay(now)), restock: nextFinishDay(now) };
 }
 
-/** Buy a finish from Nell, for good: one she has out today. */
+/** Buy a finish from Nell, for good: one she has out today, while she is at her stall (by day on the Harbor's clock). */
 export async function buyFinish(db: D1Database, playerId: string, id: unknown): Promise<string | { gold: number }> {
+  if (!decoratorOpen(Date.now())) return DECORATOR_SHUT;
   const [c, owned] = await Promise.all([getCharacter(db, playerId), ownedFinishes(db, playerId)]);
   if (c?.status !== "active") return "Create a character first.";
   const problem = finishBuyProblem(id, owned, c.gold, finishStock(finishDay(Date.now())));
