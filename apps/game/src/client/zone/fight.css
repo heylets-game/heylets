@@ -388,20 +388,23 @@
 .fo-face.mine .fo-pic { box-shadow: 0 0 0 1px var(--f-out), 0 0 0 3px var(--f-gold), 0 0 0 4px var(--f-out), inset 0 0 0 1px rgba(0, 0, 0, 0.5); margin: 3px 3px 0; }
 .fo-face:hover .fo-pic { box-shadow: 0 0 0 1px var(--f-out), 0 0 0 3px #fff6cf, inset 0 0 0 1px rgba(0, 0, 0, 0.5); }
 .fo-unseen { position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--font-title); font-size: calc(var(--w) * 0.6); color: #7d5b52; }
-.fo-hp { display: flex; height: 5px; background: #120908; border: 1px solid var(--f-out); box-shadow: 0 0 0 1px rgba(107, 53, 36, 0.6); }
-.fo-hp i { display: block; height: 100%; background: linear-gradient(180deg, #b6f09a, #5fbf4a); transition: width 0.3s; }
+.fo-hp { display: flex; flex-direction: column; align-items: flex-start; height: 5px; background: #120908; border: 1px solid var(--f-out); box-shadow: 0 0 0 1px rgba(107, 53, 36, 0.6); }
+.fo-hp i { display: block; flex: 1; background: linear-gradient(180deg, #b6f09a, #5fbf4a); transition: width 0.3s; }
 .fo-face.enemy .fo-hp i { background: linear-gradient(180deg, #ff9a86, #d8342a); }
-.fo-hp b { display: block; height: 100%; background: #d6dde8; transition: width 0.3s; }
+/* A shield: a steel bar of its own over the HP, a dark line between them (as on the plates over heads). */
+.fo-hp.shielded { height: 8px; }
+.fo-hp b { display: block; flex: none; height: 2px; margin-bottom: 1px; background: linear-gradient(180deg, #f4f8ff, #9fb4cf); box-shadow: 0 1px 0 var(--f-out); transition: width 0.3s; }
 .fo-face.mine .fo-hp { margin: 0 3px; }
 .fo-face.spent { opacity: 0.5; }
 .fo-face.down { opacity: 0.45; filter: grayscale(1) brightness(0.75); }
 .fo-face.down .fo-pic::after { content: ""; position: absolute; inset: 0; background: linear-gradient(to top right, transparent calc(50% - 2px), #b8443a calc(50% - 2px), #b8443a calc(50% + 2px), transparent calc(50% + 2px)); }
-.fo-face.down .fo-hp i { width: 0 !important; }
+.fo-face.down .fo-hp i, .fo-face.down .fo-hp b { width: 0 !important; }
 /* Whose turn it is. */
 .fight-ui button.fo-face.turn { --w: calc(var(--face) * 1.36); opacity: 1; margin: 0 3px; }
 .fo-face.turn .fo-pic { border-width: 3px; box-shadow: 0 0 0 1px var(--f-out), 0 0 0 3px color-mix(in srgb, var(--c) 55%, #fff), 0 0 18px 4px color-mix(in srgb, var(--c) 80%, transparent); animation: fo-turn 1.6s ease-in-out infinite; margin: 0; }
 @keyframes fo-turn { 50% { box-shadow: 0 0 0 1px var(--f-out), 0 0 0 3px #fff, 0 0 26px 8px var(--c); } }
 .fo-face.turn .fo-hp { margin: 0; height: 6px; }
+.fo-face.turn .fo-hp.shielded { height: 9px; }
 .fo-point { align-self: center; margin-top: 2px; border: 7px solid transparent; border-top: 0; border-bottom: 8px solid color-mix(in srgb, var(--c) 70%, #fff); filter: drop-shadow(0 0 4px var(--c)); animation: fo-point 0.9s ease-in-out infinite; }
 @keyframes fo-point { 50% { translate: 0 3px; } }
 .fo-face.turn { z-index: 3; }

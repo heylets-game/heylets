@@ -5,8 +5,10 @@
 // back and forth a pixel, brighter where it meets the air. The level eases
 // to its new value rather than jumping.
 //
-// A shield (Bolstered) on top of HP is a pale band after the liquid; should
-// the two come to more than the max, the channel stands for the two together.
+// A shield (Bolstered) is a steel band laid along the top of the channel,
+// over the liquid, as long as the shield is a share of the max: the same
+// steel bar the plates over heads and the turn order show, so it is never
+// read as HP. The liquid is the HP alone, as a share of the max.
 //
 // It redraws about fifteen times a second, and holds still for anyone who
 // has asked for less motion.
@@ -27,22 +29,67 @@ const LIQUID: Record<string, [RGB, RGB, RGB, RGB]> = {
   stamina: [[176, 112, 20], [238, 176, 40], [252, 220, 104], [255, 250, 214]],
 };
 
-/** A shield's band: in shadow, its body, lit. */
-const SHIELD: [RGB, RGB, RGB] = [[150, 160, 178], [204, 212, 226], [240, 244, 250]];
+/** A shield's steel: lit along its top, in shadow along its bottom and at its end. */
+const STEEL: { lit: RGB; shade: RGB; end: RGB } = { lit: [244, 248, 255], shade: [159, 180, 207], end: [112, 128, 152] };
+
+/**
+ * Paint one frame of a meter into `img` (its channel, a pixel each): the liquid to `level` (0 to 1), a shield's
+ * steel over its top rows to `shieldLevel`, at `t` seconds (0 holds the liquid still).
+ */
+export function paintLiquid(img: ImageData, kind: keyof typeof LIQUID, level: number, shieldLevel: number, t: number) {
+  const { width: w, height: h } = img;
+  const [deep, body, lit, glint] = LIQUID[kind];
+  const shieldEdge = shieldLevel > 0.002 ? Math.max(1, Math.round(shieldLevel * w)) : 0;
+  // The top half of the channel (one row in a thin one) carries the steel.
+  const steelRows = h >= 4 ? Math.floor(h / 2) : 1;
+  for (let y = 0; y < h; y++) {
+    // The leading edge laps: each row a little ahead of or behind the level, in its own time.
+    const edge = level >= 0.999 ? w : level * w + (level > 0.01 ? Math.sin(t * 2.4 + y * 1.7) * 0.7 : 0);
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      if (y < steelRows && x < shieldEdge) {
+        const s = x === shieldEdge - 1 && shieldEdge > 1 ? STEEL.end : y === 0 ? STEEL.lit : STEEL.shade;
+        img.data[i] = s[0];
+        img.data[i + 1] = s[1];
+        img.data[i + 2] = s[2];
+        img.data[i + 3] = 255;
+        continue;
+      }
+      if (x + 0.5 > edge) {
+        img.data[i + 3] = 0;
+        continue;
+      }
+      // Top row lit, bottom row in shadow, the body between.
+      let c: RGB = y === 0 ? mix(body, lit, 0.7) : y === h - 1 ? mix(body, deep, 0.75) : body;
+      // Swells: bands of brighter colour drifting along, leaning as they go.
+      const swell = 0.5 + 0.5 * Math.sin(x * 0.42 - t * 1.5 + y * 0.9 + Math.sin(t * 0.6 + x * 0.11) * 1.4);
+      c = mix(c, lit, swell * swell * 0.42);
+      // A glint now and then, mostly near the top.
+      if (hash(x + Math.floor(t * 5) * 7, y) > 0.975 + y * 0.006) c = mix(c, glint, 0.8);
+      // Where the liquid meets the air it is brightest.
+      if (level < 0.999 && edge - x < 1.5) c = mix(c, glint, 0.55);
+      // Under the steel, the liquid is in its shadow, so the two are told apart.
+      if (y === steelRows && x < shieldEdge) c = mix(c, deep, 0.6);
+      img.data[i] = c[0];
+      img.data[i + 1] = c[1];
+      img.data[i + 2] = c[2];
+      img.data[i + 3] = 255;
+    }
+  }
+}
 
 export function LiquidMeter({ kind, now, max, shield = 0, w, h }: { kind: keyof typeof LIQUID; now: number; max: number; shield?: number; w: number; h: number }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const goal = useRef(0);
   const shieldGoal = useRef(0);
-  const whole = Math.max(1, max, now + shield);
+  const whole = Math.max(1, max);
   goal.current = Math.max(0, Math.min(1, now / whole));
-  shieldGoal.current = Math.max(0, Math.min(1, (now + shield) / whole));
+  shieldGoal.current = Math.max(0, Math.min(1, shield / whole));
 
   useEffect(() => {
     const ctx = canvas.current?.getContext("2d");
     if (!ctx) return;
     const img = ctx.createImageData(w, h);
-    const [deep, body, lit, glint] = LIQUID[kind];
     const still = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
     let level = goal.current;
     let shieldLevel = shieldGoal.current;
@@ -55,38 +102,7 @@ export function LiquidMeter({ kind, now, max, shield = 0, w, h }: { kind: keyof 
       last = ms;
       level += (goal.current - level) * (1 - Math.exp(-dt * 6));
       shieldLevel += (shieldGoal.current - shieldLevel) * (1 - Math.exp(-dt * 6));
-      const shieldEdge = shieldLevel - level > 0.002 ? shieldLevel * w : 0;
-      const t = still ? 0 : ms / 1000;
-      for (let y = 0; y < h; y++) {
-        // The leading edge laps: each row a little ahead of or behind the level, in its own time.
-        const edge = level >= 0.999 ? w : level * w + (level > 0.01 ? Math.sin(t * 2.4 + y * 1.7) * 0.7 : 0);
-        for (let x = 0; x < w; x++) {
-          const i = (y * w + x) * 4;
-          if (x + 0.5 > edge) {
-            if (x + 0.5 <= shieldEdge) {
-              const s = y === 0 ? SHIELD[2] : y === h - 1 ? SHIELD[0] : SHIELD[1];
-              img.data[i] = s[0];
-              img.data[i + 1] = s[1];
-              img.data[i + 2] = s[2];
-              img.data[i + 3] = 255;
-            } else img.data[i + 3] = 0;
-            continue;
-          }
-          // Top row lit, bottom row in shadow, the body between.
-          let c: RGB = y === 0 ? mix(body, lit, 0.7) : y === h - 1 ? mix(body, deep, 0.75) : body;
-          // Swells: bands of brighter colour drifting along, leaning as they go.
-          const swell = 0.5 + 0.5 * Math.sin(x * 0.42 - t * 1.5 + y * 0.9 + Math.sin(t * 0.6 + x * 0.11) * 1.4);
-          c = mix(c, lit, swell * swell * 0.42);
-          // A glint now and then, mostly near the top.
-          if (hash(x + Math.floor(t * 5) * 7, y) > 0.975 + y * 0.006) c = mix(c, glint, 0.8);
-          // Where the liquid meets the air it is brightest.
-          if (level < 0.999 && edge - x < 1.5) c = mix(c, glint, 0.55);
-          img.data[i] = c[0];
-          img.data[i + 1] = c[1];
-          img.data[i + 2] = c[2];
-          img.data[i + 3] = 255;
-        }
-      }
+      paintLiquid(img, kind, level, shieldLevel, still ? 0 : ms / 1000);
       ctx.putImageData(img, 0, 0);
     };
     frame = requestAnimationFrame(draw);
