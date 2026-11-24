@@ -2500,9 +2500,10 @@ export class WorldRenderer {
   /**
    * What a hero just picked up, told over their head one thing at a time (gold, then XP, then the rest), each
    * rising off the plate and fading in about a second, a beat after the one before. XP is the Harbor's own pop,
-   * motes and all. Easier to take in than the feed.
+   * motes and all. Easier to take in than the feed. `clear`: screen pixels to leave free over the plate, for a
+   * button floating there, so the text rises above it rather than behind it.
    */
-  pickups(unitId: string, lines: { text: string; color: string; xp?: number }[]) {
+  pickups(unitId: string, lines: { text: string; color: string; xp?: number }[], opts: { clear?: number } = {}) {
     lines.forEach((line, i) =>
       this.pending.push({
         at: this.clock + i * PICKUP_GAP,
@@ -2511,7 +2512,7 @@ export class WorldRenderer {
           const unit = this.units.get(unitId);
           if (!unit) return;
           const head = unit.goal.clone().add(new THREE.Vector3(0, unit.size * 0.75, 0.05));
-          const top = Math.max(head.y + 0.4, this.plateTop(unit) ?? 0);
+          const top = Math.max(head.y + 0.4, this.plateTop(unit) ?? 0) + this.pixelsHigh(head, opts.clear ?? 0);
           this.float(unitId, line.text, line.color, { life: 1.05, rise: 0.6, height: 0.38, at: new THREE.Vector3(head.x, top + 0.3, head.z) });
         },
       }),
@@ -4520,6 +4521,17 @@ export class WorldRenderer {
         }
       }
     }
+  }
+
+  /** How much world height looks `px` screen pixels tall, straight up the screen at `at`. */
+  private pixelsHigh(at: THREE.Vector3, px: number): number {
+    if (!(px > 0)) return 0;
+    const depth = -this.plateSpot.copy(at).applyMatrix4(this.camera.matrixWorldInverse).z;
+    const height = this.container.clientHeight;
+    if (!(depth > 0) || !(height > 0)) return 0;
+    const perPx = (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) * depth) / height;
+    // A world-height rise looks shorter by the camera's tilt, as for the plate.
+    return (px * perPx) / Math.max(0.3, Math.cos(this.pitch));
   }
 
   /** Where the top of a unit's plate is, in world height, as it is drawn now. Null without a plate. */
