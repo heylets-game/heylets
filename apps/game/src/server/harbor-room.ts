@@ -17,12 +17,15 @@
 
 import { DurableObject } from "cloudflare:workers";
 import {
+  HARBOR_BUILDINGS,
   HARBOR_PLOTS,
   HARBOR_PUB,
   HARBOR_SPAWN,
+  isKeeperHouse,
   generateHarbor,
   fishFrom,
   harborPath,
+  type HarborBoard,
   type HarborClientMessage,
   type HarborPlayer,
   type HarborServerMessage,
@@ -63,6 +66,21 @@ function standingAt(at: string | null, vessel: Vessel | null): HexPos | undefine
   return harborPath(MAP, HARBOR_SPAWN, pos, vessel) ? pos : undefined;
 }
 
+/**
+ * The building a hero asked to be marked inside (`?inside=`), as everyone is told it, and its door: "pub", a keeper's
+ * house, or "hut:<owner id>" for a hut that stands. Null for anything else.
+ */
+function insideAt(asked: string | null, board: HarborBoard): { inside: string; door: HexPos } | null {
+  if (asked === "pub") return { inside: asked, door: HARBOR_PUB };
+  if (isKeeperHouse(asked)) {
+    const door = HARBOR_BUILDINGS.find((b) => b.id === asked)?.door;
+    return door ? { inside: asked, door } : null;
+  }
+  const owner = asked?.match(/^hut:([A-Za-z0-9-]{1,64})$/)?.[1];
+  const plot = owner ? board.members.find((m) => m.id === owner && !m.bin)?.plot : null;
+  return plot != null && HARBOR_PLOTS[plot] ? { inside: asked!, door: HARBOR_PLOTS[plot] } : null;
+}
+
 export class HarborRoom extends DurableObject<Env> {
   /** Who is here: presence, walking and chat. */
   private here: Walkers<HarborServerMessage>;
@@ -99,14 +117,14 @@ export class HarborRoom extends DurableObject<Env> {
 
     // Who is walking the Harbor right now: the crewmates who would go down into the caves together.
     if (pathname === "/present") {
-      return Response.json({ ids: this.here.players().map((p) => p.id) });
+      return Response.json({ ids: this.here.players().filter((p) => !p.inside).map((p) => p.id) });
     }
 
     // Where a hero is standing in the Harbor (or afloat), if they are here: a line is cast from where the hero is,
     // never from where their client says they are (server/gather.ts).
     if (pathname === "/where") {
       const who = searchParams.get("id");
-      const player = who ? this.here.players().find((p) => p.id === who) : undefined;
+      const player = who ? this.here.players().find((p) => p.id === who && !p.inside) : undefined;
       return Response.json({ pos: player?.pos ?? null });
     }
 
@@ -119,8 +137,9 @@ export class HarborRoom extends DurableObject<Env> {
       if (kept && musterOpen(kept.muster)) {
         return Response.json({ error: kept.muster.by.id === body.by.id ? "You are mustering already." : `${kept.muster.by.name} is mustering for ${kept.muster.place}: answer that first.` }, { status: 409 });
       }
-      // Nobody else in town: there is nobody to ask, and the worker makes the map at once.
-      const asked = this.here.players().filter((p) => p.id !== body.by!.id).map((p) => ({ id: p.id, name: p.name }));
+      // Nobody else in town: there is nobody to ask, and the worker makes the map at once. (Someone inside a building
+      // is not asked: they cannot see the muster from in there.)
+      const asked = this.here.players().filter((p) => p.id !== body.by!.id && !p.inside).map((p) => ({ id: p.id, name: p.name }));
       if (asked.length === 0) return Response.json({ alone: true });
       const muster = callMuster(crypto.randomUUID().slice(0, 8), { id: body.by.id, name: body.by.name }, body.to, asked, Date.now());
       await this.ctx.storage.put("muster", { crewId, stone: body.stone, muster } satisfies KeptMuster);
@@ -155,13 +174,23 @@ export class HarborRoom extends DurableObject<Env> {
     const [crew, vessel, hero, gilded] = await Promise.all([getCrew(db, crewId), ownedVessel(db, id), heroInitFor(db, id), gildedRod(db, id)]);
     if (!crew) return new Response("missing player or crew", { status: 400 });
 
+    // Here, so not out on a zone: whatever a room that went away without saying so left written down is cleared.
+    // (Before the board is read, so the board does not show them out on one.)
+    await clearPresence(this.env.DB, id);
+    const board = await harborBoard(this.env.DB, crewId);
+
     // One socket per player. A new tab takes over, standing where the old one stood.
     // Someone stepping out of a hut or the pub arrives at its door.
     // Someone back from being away (their socket was closed while idle) asks to stand where they stood.
+    // Someone inside one of the town's buildings (`inside`) is kept here, at its door and out of the street, so the
+    // crew can see where they are: their portrait over its roof.
     const at = searchParams.get("at");
     const asked = (at === "pub" ? HARBOR_PUB : at !== null && /^\d{1,2}$/.test(at) ? HARBOR_PLOTS[Number(at)] : standingAt(at, vessel)) ?? HARBOR_SPAWN;
-    const pos = this.here.takeOver(id, asked);
-    const player: HarborPlayer = { ...walkerFrom(request, id, hero, pos), vessel, gilded };
+    // (Inside somewhere this room cannot place, they are still kept out of the street, with no roof to show them over.)
+    const indoors = searchParams.has("inside") ? insideAt(searchParams.get("inside"), board) ?? { inside: "elsewhere", door: asked } : null;
+    const stood = this.here.takeOver(id, indoors?.door ?? asked);
+    const pos = indoors?.door ?? stood;
+    const player: HarborPlayer = { ...walkerFrom(request, id, hero, pos), vessel, gilded, ...(indoors ? { inside: indoors.inside } : {}) };
 
     // The muster as it stands, looked up before this socket is in the room: if looking drops one that has lapsed,
     // the room is told so once, and this socket once below.
@@ -169,9 +198,6 @@ export class HarborRoom extends DurableObject<Env> {
     const pair = new WebSocketPair();
     this.here.admit(pair[1], player);
 
-    // Here, so not out on a zone: whatever a room that went away without saying so left written down is cleared.
-    await clearPresence(this.env.DB, id);
-    const board = await harborBoard(this.env.DB, crewId);
     pair[1].send(JSON.stringify({ type: "snapshot", you: id, crew, players: this.here.players(), ...board } satisfies HarborServerMessage));
     // Someone is mustering: one who walks in while it is on is asked too. (And one who walks back in after it is
     // over is told there is none, so nothing they last heard is left showing.)
@@ -179,6 +205,8 @@ export class HarborRoom extends DurableObject<Env> {
     this.here.broadcast({ type: "joined", player }, pair[1]);
     // Their arrival may also be news for the roster (a brand-new member).
     this.here.broadcast({ type: "board", ...board }, pair[1]);
+    // Gone indoors, where the muster cannot be seen: it stops waiting for them, as for someone who left town.
+    if (indoors) await this.musterLeft(id);
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
 
@@ -254,6 +282,9 @@ export class HarborRoom extends DurableObject<Env> {
     const heard = this.here.read<HarborClientMessage>(ws, message);
     if (!heard) return;
     const { player, msg } = heard;
+    // Someone inside a building is only shown, over its roof: they do not walk, fish, talk or look about out here.
+    // (A change of gear still shows on their portrait.)
+    if (player.inside && msg.type !== "refresh") return;
 
     if (msg.type === "move") {
       const to = hexAsked(msg.to);

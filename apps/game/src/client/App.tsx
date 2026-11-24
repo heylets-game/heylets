@@ -133,7 +133,7 @@ function Screen({ me, refresh, zone, atlas, invite, hut, pub, keeper, admin, cat
   const inside = elsewhere ? null : pub ? "pub" : keeper ?? (hut ? "hut" : null);
   return (
     <>
-      <HarborView key="harbor" me={me} refresh={refresh} resting={!!elsewhere || !!inside} />
+      <HarborView key="harbor" me={me} refresh={refresh} resting={!!elsewhere || !!inside} inside={inside === "hut" ? `hut:${hut}` : inside} />
       <Buildings me={me} refresh={refresh} inside={inside} onLeave={leave} />
       {inside === "hut" && <HutView key={hut} ownerId={hut!} me={me} refresh={refresh} onLeave={leave} />}
       {elsewhere}
