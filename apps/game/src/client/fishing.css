@@ -122,6 +122,10 @@ body.fishing .draggable:not(.gather), body.fishing .tip { display: none !importa
 .bait-swatch.rod.cane { background: #d8bf7a; }
 .bait-swatch.rod.greenheart { background: #5f7a3a; }
 .bait-swatch.rod.split_cane { background: #b5762e; }
+/* A boat: a little hull, its wood's colour. */
+.bait-swatch.boat { width: 18px; height: 8px; border-radius: 0 0 9px 9px; }
+.bait-swatch.boat.float_barrel { width: 12px; height: 14px; border-radius: 4px; background: #8a5a2e; }
+.bait-swatch.boat.rowboat { background: #a8743e; }
 .bait-head { margin: 12px 0 2px; font-size: 1em; }
 .fish-bait { display: flex; align-items: center; gap: 4px; padding: 3px 6px; background: rgba(20, 18, 42, 0.75); font-size: 12px; pointer-events: auto; flex-wrap: wrap; justify-content: center; }
 .fish-bait button { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; font-size: 12px; }

@@ -2,8 +2,9 @@
 // rules (prices, how much is carried, what is used when) are in packages/world/src/fishing.ts, and the rods' in
 // packages/world/src/fishfight.ts.
 
-import { BAIT_SALE, RODS, baitBuyProblem, bestRod, isBaitId, isRodId, rodBuyProblem, type BaitCounts, type BaitId, type RodId } from "@gantt-quest/world";
-import { getCharacter } from "./db";
+import { BAIT_SALE, BOAT_SALE, RODS, baitBuyProblem, boatBuyProblem, bestRod, isBaitId, isBoatId, isRodId, rodBuyProblem, type BaitCounts, type BaitId, type RodId, type Vessel } from "@gantt-quest/world";
+import { getCharacter, paidFurnishingStatement } from "./db";
+import { ownedVessel } from "./fishmarket";
 
 /** How much of each kind of bait a player has. */
 export async function baitOf(db: D1Database, playerId: string): Promise<BaitCounts> {
@@ -25,13 +26,39 @@ export const ownedRod = async (db: D1Database, playerId: string): Promise<RodId>
 export interface BaitCounter {
   bait: BaitCounts;
   rods: RodId[];
+  /** The best boat they own (crafted or bought), or null. */
+  vessel: Vessel | null;
   gold: number;
 }
 
-/** What the counter shows: the bait and rods a player has, and their gold. */
+/** What the counter shows: the bait, rods and boat a player has, and their gold. */
 export async function baitCounter(db: D1Database, playerId: string): Promise<BaitCounter> {
-  const [bait, rods, c] = await Promise.all([baitOf(db, playerId), rodsOf(db, playerId), getCharacter(db, playerId)]);
-  return { bait, rods, gold: c?.gold ?? 0 };
+  const [bait, rods, vessel, c] = await Promise.all([baitOf(db, playerId), rodsOf(db, playerId), ownedVessel(db, playerId), getCharacter(db, playerId)]);
+  return { bait, rods, vessel, gold: c?.gold ?? 0 };
+}
+
+/**
+ * Buy a boat: the same furnishing as one crafted at home, kept at the pier. The gold is taken, and the boat given, only
+ * if the player can pay and has no such boat (nor a rowboat, for a barrel), in one batch.
+ */
+export async function buyBoat(db: D1Database, playerId: string, kind: unknown): Promise<BaitCounter | string> {
+  if (!isBoatId(kind)) return "He doesn't sell that.";
+  const [c, have] = await Promise.all([getCharacter(db, playerId), ownedVessel(db, playerId)]);
+  if (c?.status !== "active") return "Create a character first.";
+  const problem = boatBuyProblem(kind, have, c.gold);
+  if (problem) return problem;
+  const price = BOAT_SALE[kind].price;
+  const [paid] = await db.batch([
+    db
+      .prepare(
+        `UPDATE characters SET gold = gold - ?2 WHERE player_id = ?1 AND status = 'active' AND gold >= ?2
+         AND NOT EXISTS (SELECT 1 FROM furnishings WHERE player_id = ?1 AND (def_id = ?3 OR def_id = 'rowboat'))`,
+      )
+      .bind(playerId, price, kind),
+    paidFurnishingStatement(db, playerId, kind),
+  ]);
+  if (paid.meta.changes === 0) return "That didn't go through. Try again.";
+  return baitCounter(db, playerId);
 }
 
 /** Buy a rod. The gold is taken, and the rod given, only if the player can pay and has not got it, in one batch. */
@@ -49,7 +76,7 @@ export async function buyRod(db: D1Database, playerId: string, kind: unknown): P
     db.prepare("INSERT INTO rods (player_id, kind) SELECT ?1, ?2 WHERE changes() > 0 ON CONFLICT(player_id, kind) DO NOTHING").bind(playerId, kind),
   ]);
   if (paid.meta.changes === 0) return "That didn't go through. Try again.";
-  return { ...(await baitCounter(db, playerId)), gold: c.gold - price };
+  return baitCounter(db, playerId);
 }
 
 /**
@@ -75,7 +102,7 @@ export async function buyBait(db: D1Database, playerId: string, kind: unknown): 
       .bind(playerId, kind, sale.per),
   ]);
   if (paid.meta.changes === 0) return "That didn't go through. Try again.";
-  return { bait: await baitOf(db, playerId), rods: await rodsOf(db, playerId), gold: c.gold - sale.price };
+  return baitCounter(db, playerId);
 }
 
 /** Take one of `kind`, if the statement before it in the same batch changed a row (the cast that used it was saved). */

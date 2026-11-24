@@ -18,6 +18,28 @@ export const FISH_SPOT_IDS: FishSpot[] = ["west", "middle", "east", "shore", "co
 /** A boat a hero can take out: a barrel keeps to the coast; a rowboat goes anywhere, and out to sea. */
 export type Vessel = "barrel" | "rowboat";
 
+/**
+ * The boats the fishmonger sells, by their furnishing id (hut.ts), for gold: the same boats as are crafted at home, for
+ * those who would rather pay than build. A rowboat does everything a barrel does, so one is never sold to a hero who
+ * has the other the better way round.
+ */
+export type BoatId = "float_barrel" | "rowboat";
+export const BOAT_IDS: BoatId[] = ["float_barrel", "rowboat"];
+export const BOAT_SALE: Record<BoatId, { vessel: Vessel; price: number }> = {
+  float_barrel: { vessel: "barrel", price: 80 },
+  rowboat: { vessel: "rowboat", price: 300 },
+};
+export const isBoatId = (id: unknown): id is BoatId => BOAT_IDS.includes(id as BoatId);
+
+/** Why a hero whose best boat is `have` cannot buy `boat` with `gold`, or null if they can. */
+export function boatBuyProblem(boat: BoatId, have: Vessel | null, gold: number): string | null {
+  const vessel = BOAT_SALE[boat].vessel;
+  if (have === vessel) return vessel === "rowboat" ? "You have a rowboat already." : "You have a barrel already.";
+  if (have === "rowboat") return "You have a rowboat. A barrel would be a step down.";
+  if (gold < BOAT_SALE[boat].price) return `That costs ${BOAT_SALE[boat].price} gold.`;
+  return null;
+}
+
 /** Why `vessel` cannot take a hero to `spot`, or null if it can (or the spot is ashore). */
 export function vesselProblem(spot: FishSpot, vessel: Vessel | null | undefined): string | null {
   const need = FISH_SPOTS[spot]?.vessel;

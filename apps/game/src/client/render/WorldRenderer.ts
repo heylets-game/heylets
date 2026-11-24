@@ -31,6 +31,11 @@ import { FRAME, OUTLINE, SITTING_DROP, inflate, makeFigure, type Figure } from "
 import { HIDES, hidingMaterial } from "./silhouette";
 import { BOAT_SCALE, OARLOCKS, ROWER_SEAT, aimOar, rowboatModel, shipOar } from "./rowboat";
 import { BoatWake, WAKE_STEP } from "./wake";
+
+/** How much bigger the floating barrel is drawn than its model is built: a barrel a hero can sit down in. */
+const BARREL_SCALE = 1.6;
+/** How far a hero sinks into it, sat down: to the chest, the rim about their middle. */
+const BARREL_SIT = 0.3;
 import { Rise } from "./rise";
 import { gaze } from "../gaze";
 import { emotes } from "../emotes";
@@ -3492,17 +3497,21 @@ export class WorldRenderer {
       const wood = new THREE.MeshLambertMaterial({ color: "#7a5a3a" });
       const dark = new THREE.MeshLambertMaterial({ color: "#4a3322" });
       const iron = new THREE.MeshLambertMaterial({ color: "#5a5e66" });
-      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.21, 0.34, 10), wood);
+      // Built at the size it was first drawn, then grown (BARREL_SCALE): big enough to sit down in.
+      const barrel = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.21, 0.34, 12), wood);
       body.position.y = 0.05;
-      const top = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.01, 10), dark);
+      const top = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.01, 12), dark);
       top.position.y = 0.215;
-      g.add(body, top);
+      barrel.add(body, top);
       for (const y of [-0.04, 0.16]) {
-        const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.235, 0.012, 4, 14), iron);
+        const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.235, 0.012, 4, 16), iron);
         hoop.rotation.x = Math.PI / 2;
         hoop.position.y = y;
-        g.add(hoop);
+        barrel.add(hoop);
       }
+      barrel.scale.setScalar(BARREL_SCALE);
+      g.add(barrel);
     } else {
       // A proper little rowboat (see rowboat.ts): its oars are put in the rower's hands by rideBoat.
       const boat = rowboatModel();
@@ -3552,9 +3561,9 @@ export class WorldRenderer {
         boat.rotation.y = Math.atan2(to.x - p.x, to.z - p.z);
       }
       boat.rotation.z = Math.sin(this.clock * 1.1 + p.z) * 0.06;
-      this.churnWake(id, unit, p.x, ground!.top, p.z, boat.rotation.y, 0.3, 0.55);
+      this.churnWake(id, unit, p.x, ground!.top, p.z, boat.rotation.y, 0.3 * BARREL_SCALE, 0.55 * BARREL_SCALE);
       // Sat down in it, to the chest.
-      unit.sunk = 0.24 - swell;
+      unit.sunk = BARREL_SIT - swell;
       p.y -= unit.sunk;
       return;
     }

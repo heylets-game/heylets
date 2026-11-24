@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FISH } from "./fishcatalog";
-import { FISH_SPOTS, rollCatch, vesselProblem } from "./fishing";
+import { BOAT_IDS, BOAT_SALE, FISH_SPOTS, boatBuyProblem, rollCatch, vesselProblem } from "./fishing";
 import { gatherView, stepGather } from "./gather";
 import { HARBOR_BRIDGE, HARBOR_PIERS, HARBOR_ROCKS, HARBOR_SEA_REACH, HARBOR_WRECK, coastal, generateHarbor, harborPath, seaEdge, waterSpotAt } from "./harbor";
 import { VESSEL_OF, bestVessel, FURNISHINGS } from "./hut";
@@ -126,5 +126,27 @@ describe("boats", () => {
 
   it("will not be placed in a room", () => {
     expect(placeProblem(hutRoom(1), [], "rowboat", { q: 1, r: 1 })).toMatch(/pier/);
+  });
+});
+
+describe("boats at the fishmonger's", () => {
+  it("sells the very boats crafted at home, a rowboat dearer than a barrel, and still lets them be crafted", () => {
+    for (const id of BOAT_IDS) {
+      expect(FURNISHINGS[id].kind).toBe("vessel");
+      expect(VESSEL_OF[id]).toBe(BOAT_SALE[id].vessel);
+      expect(FURNISHINGS[id].recipe).toBeTruthy();
+      // Never at the stall: a bought boat cannot be sold back there for gold.
+      expect(FURNISHINGS[id].price).toBeUndefined();
+    }
+    expect(BOAT_SALE.rowboat.price).toBeGreaterThan(BOAT_SALE.float_barrel.price);
+  });
+
+  it("will not sell a boat a hero has, nor a barrel to one with a rowboat", () => {
+    expect(boatBuyProblem("float_barrel", null, 999)).toBeNull();
+    expect(boatBuyProblem("rowboat", "barrel", 999)).toBeNull();
+    expect(boatBuyProblem("float_barrel", "barrel", 999)).toMatch(/already/);
+    expect(boatBuyProblem("rowboat", "rowboat", 999)).toMatch(/already/);
+    expect(boatBuyProblem("float_barrel", "rowboat", 999)).toMatch(/step down/);
+    expect(boatBuyProblem("rowboat", null, BOAT_SALE.rowboat.price - 1)).toMatch(/gold/);
   });
 });

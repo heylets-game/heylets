@@ -206,7 +206,7 @@ export function fishmongerTalk(tip: string, advice: () => string): Conversation 
     greeting: pagesOf([FISHMONGER.hello, FISHMONGER.line]),
     choices: [
       { id: "fish", label: "I've fish to sell", opens: "fish" },
-      { id: "bait", label: "What have you got for bait and rods?", opens: "bait" },
+      { id: "bait", label: "What are you selling?", opens: "bait" },
       { id: "tip", label: "Where are they biting?", says: tip },
       { id: "advice", label: "Got any advice?", says: advice },
       BYE,
