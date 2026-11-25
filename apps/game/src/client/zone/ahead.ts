@@ -166,7 +166,10 @@ export function believe(view: ZoneView, ahead: readonly Ahead[]): ZoneView {
       if (budget) payMove(budget, a.cost);
     } else if (a.kind === "act") {
       if (budget && a.cost) budget.ap = Math.max(0, budget.ap - a.cost);
-      if (budget && a.gain === "disengage") budget.disengaged = true;
+      if (budget && a.gain === "disengage") {
+        budget.disengaged = true;
+        enc!.disengaged = [...(enc!.disengaged ?? []), a.unit];
+      }
     } else if (enc && enc.acting.includes(a.unit) && !enc.done.includes(a.unit)) {
       enc.done.push(a.unit);
     }

@@ -6,7 +6,7 @@ import { ENEMY_ABILITIES } from "./enemyabilities";
 import { ABILITIES, EFFECT_TICK, ENEMIES, HERO_CLASSES, SUNDERED_DEFENCE, WEAPONS, abilitiesFor } from "../content";
 import { CLIMES, type Tile } from "../map";
 import { makeRng } from "../rng";
-import { abilityArea, checkAbility, courseFor, crateBlow, enemyAct, moveLeft, walk, walkAp, wayBetween } from "./combat";
+import { abilityArea, checkAbility, checkCommon, courseFor, crateBlow, enemyAct, moveLeft, walk, walkAp, wayBetween } from "./combat";
 import { addCondition, attackContext, burnOf, damage, defenceOf, kindle, shieldOf, type Ctx } from "./engine";
 import { shantyOf, shantyRadius, songsOn } from "./song";
 import { chartOf, constellationLinks } from "./stars";
@@ -644,8 +644,7 @@ describe("attacks", () => {
     foe.conditions = [];
     expect(attackContext(state, ann, foe, far).adv).toBe(-1);
     ann.conditions = [];
-    // Focus is advantage; so is a Prone target, but only up close.
-    expect(attackContext(state, ann, foe, { melee: false, focus: true }).adv).toBe(1);
+    // A Prone target gives advantage, but only up close.
     foe.conditions = [{ kind: "prone", rounds: 1 }];
     expect(attackContext(state, ann, foe, { melee: true }).adv).toBe(1);
     expect(attackContext(state, ann, foe, far).adv).toBe(-1);
@@ -696,15 +695,6 @@ describe("attacks", () => {
     }
     for (const w of Object.values(WEAPONS)) for (const id of w.abilities.slice(1)) expect(tacticOf(id).cooldown, id).toBeGreaterThanOrEqual(1);
   });
-
-  it("spends Focus for advantage", () => {
-    let { state, foe } = duel("dummy", "qa_paladin", at(6, 6), at(8, 6));
-    const events: ZoneEvent[] = [];
-    state = must(state, { type: "use", by: "ann", unit: "ann", ability: "bash", target: foe, focus: true }, events);
-    expect(unit(state, "ann").focus).toBe(1);
-    const roll = events.find((e) => e.t === "roll" && e.roll.kind === "attack");
-    expect(roll && roll.t === "roll" && roll.roll.adv).toBe(1);
-  });
 });
 
 describe("opportunity attacks", () => {
@@ -732,6 +722,16 @@ describe("opportunity attacks", () => {
     const away: ZoneEvent[] = [];
     state = must(state, { type: "move", by: "ann", unit: "ann", to: at(5, 4) }, away);
     expect(away.some((e) => e.t === "reaction")).toBe(false);
+  });
+
+  it("lets a hero disengage only once a fight", () => {
+    let { state } = duel("bandit", "qa_paladin", at(6, 6), at(8, 6));
+    state = must(state, { type: "common", by: "ann", unit: "ann", what: "disengage" });
+    expect(state.encounter!.disengaged).toEqual(["ann"]);
+    expect(fails(state, { type: "common", by: "ann", unit: "ann", what: "disengage" })).toMatch(/already disengaged/);
+    // Nor on a later turn of the same fight.
+    state.encounter!.budgets.ann = { ap: AP_TURN, move: 0, stride: 2, disengaged: false };
+    expect(fails(state, { type: "common", by: "ann", unit: "ann", what: "disengage" })).toMatch(/already disengaged/);
   });
 
   it("lets a hero strike an enemy that walks away from them", () => {
@@ -1460,7 +1460,7 @@ describe("the end of a fight", () => {
         const spot = [...reach.values()].filter((r) => r.stop && adjacent(r.pos, target.pos)).sort((a, b) => a.cost - b.cost)[0];
         if (spot) state = must(state, { type: "move", by: "ann", unit: "ann", to: spot.pos }, events);
       }
-      const step = stepZone(state, { type: "use", by: "ann", unit: "ann", ability: "bash", target: foe.id, focus: unit(state, "ann").focus > 0 });
+      const step = stepZone(state, { type: "use", by: "ann", unit: "ann", ability: "bash", target: foe.id });
       if (step.ok) { state = step.state; events.push(...step.events); }
       if (state.encounter) state = must(state, { type: "end_turn", by: "ann", unit: "ann" }, events);
     }
@@ -2552,10 +2552,10 @@ describe("crates", () => {
     expect(unit(state, "ann").pos).toEqual(at(6, 6));
   });
 
-  it("always takes a hero's blow: no roll, no fight, no Focus spent, and the damage comes off", () => {
+  it("always takes a hero's blow: no roll, no fight, and the damage comes off", () => {
     const state = beside("qa_paladin", 60);
     const events: ZoneEvent[] = [];
-    const next = must(state, { type: "use", by: "ann", unit: "ann", ability: "bash", target: "crate1", focus: true }, events);
+    const next = must(state, { type: "use", by: "ann", unit: "ann", ability: "bash", target: "crate1" }, events);
     const [hit] = hits(events, "crate1");
     expect(hit).toMatchObject({ actor: "ann", what: "bash" });
     expect(hit.amount).toBeGreaterThan(0);
@@ -2563,7 +2563,6 @@ describe("crates", () => {
     expect(events.some((e) => e.t === "roll")).toBe(false);
     expect(events).toContainEqual({ t: "used", id: "ann", what: "bash", name: ABILITIES.bash.name, target: "crate1", at: undefined });
     expect(next.encounter).toBeNull();
-    expect(unit(next, "ann").focus).toBe(unit(state, "ann").focus);
   });
 
   it("breaks at 0 and pays whoever broke it: wood, maybe gold and a find, and no XP", () => {
@@ -4018,6 +4017,9 @@ describe("the Bard's shanties", () => {
     state = must(state, join("bo"));
     expect(state.encounter!.budgets.bo.disengaged).toBe(true);
     expect(state.encounter!.budgets.ann.disengaged).toBe(false);
+    // That was bo's one Disengage this fight.
+    expect(state.encounter!.disengaged).toEqual(["bo"]);
+    expect(checkCommon(state, unit(state, "bo"), "disengage", {}, state.encounter!.budgets.bo)).toMatch(/already disengaged/);
     expect(state.encounter!.budgets.bo.stride).toBe(boStride + 1);
     expect(state.encounter!.budgets.ann.stride).toBe(annStride + 1);
     state = nextTurn(state);

@@ -11,10 +11,7 @@ describe("rng and rollCheck", () => {
     expect([resumed.next(), resumed.next()]).toEqual(first.slice(1));
   });
 
-  it("guarantees focus rolls and reports perfect / fumble", () => {
-    const sure = rollCheck(makeRng(1), { label: "x", pct: 0, count: 3, focus: 2 });
-    expect(sure.rolls).toEqual([true, true, false]);
-    expect(sure.successes).toBe(2);
+  it("reports perfect / fumble", () => {
     expect(rollCheck(makeRng(1), { label: "x", pct: 100, count: 4 }).perfect).toBe(true);
     expect(rollCheck(makeRng(1), { label: "x", pct: 0, count: 4 }).fumble).toBe(true);
   });

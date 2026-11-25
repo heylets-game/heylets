@@ -25,7 +25,6 @@ const hash = (x: number, y: number) => {
 /** Each liquid's colours: in shadow, its body, lit, and its brightest glint. */
 const LIQUID: Record<string, [RGB, RGB, RGB, RGB]> = {
   hp: [[150, 26, 30], [214, 48, 40], [246, 110, 84], [255, 214, 196]],
-  focus: [[32, 88, 140], [58, 140, 196], [124, 198, 236], [226, 246, 255]],
   stamina: [[176, 112, 20], [238, 176, 40], [252, 220, 104], [255, 250, 214]],
 };
 

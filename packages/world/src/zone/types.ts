@@ -65,8 +65,6 @@ export interface Unit {
   pos: HexPos;
   hp: number;
   maxHp: number;
-  focus: number;
-  maxFocus: number;
   /** With gear, for heroes. Enemies have none: their numbers are derived from their kind (kit.ts). */
   stats?: Stats;
   armor: number;
@@ -204,6 +202,8 @@ export interface Encounter {
    * blow, flask or help for anyone in it until they are back.
    */
   fled?: string[];
+  /** Who has taken Disengage in this fight: once a fight each. Missing: nobody yet. */
+  disengaged?: string[];
   /** The alarm bell (bell.ts): which enemy is going to ring it, and the last round the enemy side rolled for one to. */
   bell?: { goer: string | null; rolled: number };
   /**
@@ -386,7 +386,6 @@ export interface ZoneHero {
   /** A lantern helm on the head, shown or hidden (HeroSheet.lantern). */
   lantern?: boolean;
   maxHp: number;
-  maxFocus: number;
   /** The class abilities they carry in, already checked against their class and level (classabilities.ts), on top of the weapon's. */
   classAbilities?: string[];
   /** What they carry to drink or throw, out of their own pack. A stand-in has no pack and is given the starting kit. */
@@ -426,7 +425,7 @@ export type ZoneAction =
    */
   | { type: "move"; by: string; unit: string; to: HexPos; from?: HexPos; now?: number }
   /** `target`: a unit's id, or a crate's (it is a poi on the map) for an ability that does damage. */
-  | { type: "use"; by: string; unit: string; ability: string; target?: string; at?: HexPos; focus?: boolean }
+  | { type: "use"; by: string; unit: string; ability: string; target?: string; at?: HexPos }
   | { type: "common"; by: string; unit: string; what: CommonAction; target?: string; at?: HexPos }
   | { type: "throw"; by: string; unit: string; item: Throwable; at: HexPos }
   | { type: "drink"; by: string; unit: string; item: Throwable }

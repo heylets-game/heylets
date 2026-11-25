@@ -77,7 +77,7 @@ import {
   diceText,
   healDice,
   isCrateId,
-  jumpRange,
+  JUMP_RANGE,
   previewAttack,
   sameHex,
   sees,
@@ -426,7 +426,6 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   /** A place on the crew's atlas has been cleared and its bounty paid: ask whether to go back to the atlas. */
   const [chartAsk, setChartAsk] = useState(false);
   const [pick, setPick] = useState<Pick | null>(null);
-  const [focus, setFocus] = useState(false);
   const [hover, setHover] = useState<HexPos | null>(null);
   // Whoever of the party was selected before coming onto the map is played first (party.ts).
   const [playAs, setPlayAs] = useState<string | null>(actingHero);
@@ -448,7 +447,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   /** Where the pointer last went down, on the screen: a menu opened by the click it began is put there. */
   const pointerAt = useRef({ x: 0, y: 0 });
   /** More than one there to aim at on the hex clicked: which of them is meant, asked in a little menu at the pointer. */
-  const [whichOne, setWhichOne] = useState<{ pos: HexPos; ids: string[]; x: number; y: number } | null>(null);
+  /** The which-one menu: `over` when x, y is the point above the figures' heads it hangs from, else the pointer it opens beside. */
+  const [whichOne, setWhichOne] = useState<{ pos: HexPos; ids: string[]; x: number; y: number; over?: boolean } | null>(null);
   useEffect(() => {
     let live = true;
     const ask = () => api.crewPlaces().then((r) => live && setCrew(r.members), () => undefined);
@@ -1908,7 +1908,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       }
     } else if (pick.what === "jump") {
       // Where a leap can land: up a ledge two levels high at most, with room to stand. Down more than two is a fall (marked in red).
-      const lands = within(jumpRange(statMod(act.stats?.str ?? 5)), true).filter((t) => !checkCommon(z, act, "jump", { at: t }, null));
+      const lands = within(JUMP_RANGE, true).filter((t) => !checkCommon(z, act, "jump", { at: t }, null));
       const drop = (t: HexPos) => (tileAt(state.map, act.pos)?.elev ?? 0) - (tileAt(state.map, t)?.elev ?? 0);
       out.push({ hexes: lands.filter((t) => drop(t) <= 2), color: "#8fd3ff", fill: 0.14, line: 0.8 });
       out.push({ hexes: lands.filter((t) => drop(t) > 2), color: "#ff6b6b", fill: 0.14, line: 0.8 });
@@ -1938,10 +1938,10 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     if (got.cost === 0) return null;
     const from = near ? reach : far!;
     const path = pathIn(from, hover) ?? [];
-    // Enemies whose reach the way out of here leaves, and who still have a blow to answer it with.
+    // Enemies whose reach the way out of here leaves, and who still have a blow to answer it with. Unseen, nobody strikes.
     const drawn = new Set<string>();
     let at = act.pos;
-    if (!budget.disengaged) {
+    if (!budget.disengaged && !act.conditions.some((c) => c.kind === "invisible")) {
       for (const step of path) {
         for (const u of state.units) {
           if (u.side !== act.side && !u.down && enc.order.includes(u.id) && !enc.reacted.includes(u.id) && leavesReach(state, u.pos, at, step)) drawn.add(u.id);
@@ -2077,11 +2077,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
 
   const use = (ability: string, aim: { target?: string; at?: HexPos } = {}) => {
     if (!act || !z) return;
-    const spend = focus && ABILITIES[ability]?.damage !== undefined;
     const sure = !checkAbility(z, act, ability, aim) && !(fighting && (act.cooldowns[ability] ?? 0) > 0);
-    declare({ type: "use", unit: act.id, ability, ...aim, focus: spend }, sure, { cost: tacticOf(ability).cost, slot: `ab:${ability}`, name: ABILITIES[ability]?.name, toward: aimedAt(aim) });
+    declare({ type: "use", unit: act.id, ability, ...aim }, sure, { cost: tacticOf(ability).cost, slot: `ab:${ability}`, name: ABILITIES[ability]?.name, toward: aimedAt(aim) });
     setPick(null);
-    setFocus(false);
   };
   const common = (what: CommonAction, aim: { target?: string; at?: HexPos } = {}) => {
     if (!act || !z) return;
@@ -2132,7 +2130,12 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         const ally = want === "friend" || (tactic?.blink && tactic.shape === "self");
         const suits = (u: Unit) => (ally ? u.side === act.side && !(tactic?.blink && u.id === act.id) : u.side !== act.side && !u.down);
         const ids = unitsAt(z, pos).filter((u) => !u.lost && !state.dark?.includes(u.id) && suits(u)).map((u) => u.id);
-        if (ids.length > 1) return setWhichOne({ pos, ids, ...pointerAt.current });
+        if (ids.length > 1) {
+          // The menu hangs over their heads, so both of them stay in sight; by the pointer if they are not on screen.
+          const above = renderer.current?.screenAboveUnits(ids);
+          const stage = mount.current?.getBoundingClientRect();
+          return setWhichOne({ pos, ids, ...(above && stage ? { x: stage.left + above.x, y: stage.top + above.y, over: true } : pointerAt.current) });
+        }
       }
     }
     const there = unitFor(pos, want, clicked);
@@ -2178,11 +2181,11 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         return;
       }
       // A click on something to search (a fallen enemy, a chest standing open, the spoils) looks into it from
-      // beside it, or walks up to it first and looks on getting there. Not in the middle of a fight.
-      const spot = lootOn(pos);
+      // beside it, or walks up to it first and looks on getting there. In the middle of a fight there is no
+      // searching at all: a click there is a click on the ground, and walks you onto it like any other.
+      const spot = fighting ? undefined : lootOn(pos);
       if (spot && !(there && !there.down && there.side === "enemy")) {
         if (act.id !== selfId) return setNote("Only your own hero can search it.");
-        if (fighting) return setNote("Not in the middle of a fight: it will keep.");
         if (hexDistance(spot.pos, act.pos) <= 1) return search(spot);
         const beside = [...reach.values()].filter((r) => r.stop && hexDistance(r.pos, spot.pos) <= 1).sort((a, b) => a.cost - b.cost)[0];
         if (beside) {
@@ -2262,6 +2265,10 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   useEffect(() => setPick(null), [act?.id, myTurn]);
   // Nor does the which-one menu outlive the pick it was asked for.
   useEffect(() => setWhichOne(null), [pick, act?.id, myTurn]);
+  // A figure lit from the menu goes dark with it.
+  useEffect(() => {
+    if (!whichOne) renderer.current?.setUnitGlow(null);
+  }, [whichOne]);
   // Walked up to something to search it: once there (and the walk answered), look into it. A fight breaking out calls it off.
   const ownAt = self?.pos;
   const ownFighting = !!state && !!enc?.order.includes(selfId);
@@ -2386,6 +2393,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   // Getting away: on your turn, with the AP for it (fewer for a Rogue), and no enemy in the fight within FLEE_RANGE.
   const fleeCost = commonCost("flee", act.kind);
   const fleeBlock = !fighting ? "That is for a fight." : !myTurn ? "Wait for your turn." : !canPay(fleeCost) ? short(fleeCost) : checkCommon(asState(state), act, "flee", {}, budget ?? null);
+  // Disengage is once a fight.
+  const disengaged = !!state.encounter?.disengaged?.includes(act.id);
   /** From the middle of a fight: flee it, then `go` once out of it. */
   const fleeThen = (go: () => void) => {
     zone.clearError();
@@ -2423,9 +2432,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       icon: { ...COMMON_ICON[what], flat: true },
       name: COMMON_ACTIONS[what].name,
       line: costName(cost),
-      more: what === "flee" && myTurn && fleeBlock ? `${COMMON_ACTIONS[what].blurb} ${fleeBlock}` : COMMON_ACTIONS[what].blurb,
+      more: what === "flee" && myTurn && fleeBlock ? `${COMMON_ACTIONS[what].blurb} ${fleeBlock}` : what === "disengage" && disengaged ? `${COMMON_ACTIONS[what].blurb} You have already disengaged this fight.` : COMMON_ACTIONS[what].blurb,
       picked: (pick?.kind === "common" && pick.what === what) || taken.has(`do:${what}`),
-      spent: !canPay(cost) || (needsFight && !fighting) || (what === "flee" && !!fleeBlock),
+      spent: !canPay(cost) || (needsFight && !fighting) || (what === "flee" && !!fleeBlock) || (what === "disengage" && disengaged),
       run: () => (needsFight ? common(what) : setPick((p) => (p?.kind === "common" && p.what === what ? null : { kind: "common", what }))),
     };
   }
@@ -2594,7 +2603,6 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
             Flee
           </button>
         )}
-        <button className={`small ${focus ? "primary" : ""}`} disabled={act.focus <= 0} aria-pressed={focus} title="Spend 1 Focus on your next attack to roll it with advantage" onClick={() => setFocus((f) => !f)}>Focus {act.focus}</button>
         {crateBeside && (!fighting || myTurn) && (
           <button className="small" disabled={!crateHit || !canPay(tacticOf(crateHit).cost)} title={crateHit ? `${ABILITIES[crateHit].name}${fighting ? `, for ${costName(tacticOf(crateHit).cost)}` : ""}: every blow at a crate lands` : "Nothing you have reaches it"} onClick={() => crateHit && use(crateHit, { target: crateBeside.id })}>
             Break the crate
@@ -2620,13 +2628,29 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
 
       {/* More than one there to aim at on the hex clicked: which of them is meant. */}
       {whichOne && (
-        <div className="zone-which panel" role="menu" aria-label="Which one?" style={{ left: Math.min(whichOne.x + 8, innerWidth - 190), top: Math.min(whichOne.y + 8, innerHeight - 30 - whichOne.ids.length * 30) }}>
+        <div
+          className="zone-which panel"
+          role="menu"
+          aria-label="Which one?"
+          style={whichOne.over
+            // Centred over the heads, its foot just above the highest, and kept on screen.
+            ? { left: Math.max(8, Math.min(whichOne.x - 95, innerWidth - 198)), top: Math.max(8, Math.min(whichOne.y - (34 + whichOne.ids.length * 30), innerHeight - 30 - whichOne.ids.length * 30)) }
+            : { left: Math.min(whichOne.x + 8, innerWidth - 190), top: Math.min(whichOne.y + 8, innerHeight - 30 - whichOne.ids.length * 30) }}
+          onPointerLeave={() => renderer.current?.setUnitGlow(null)}
+        >
           <div className="zone-which-head">Which one?</div>
           {whichOne.ids.map((id) => {
             const u = state.units.find((x) => x.id === id);
             if (!u) return null;
             return (
-              <button key={id} role="menuitem" className={`small zone-which-${u.side}`} onClick={() => click.current(whichOne.pos, id, true)}>
+              <button
+                key={id}
+                role="menuitem"
+                className={`small zone-which-${u.side}`}
+                onClick={() => click.current(whichOne.pos, id, true)}
+                onPointerEnter={() => renderer.current?.setUnitGlow(id)}
+                onFocus={() => renderer.current?.setUnitGlow(id)}
+              >
                 <span className="zone-which-name">{u.name}{u.id === act.id ? " (you)" : ""}</span>
                 <span className="zone-which-hp">{u.down ? "down" : `${u.hp}/${u.maxHp}`}</span>
               </button>
@@ -2917,7 +2941,6 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         me={me}
         place={enc && fighting ? undefined : place}
         hp={{ now: seen(act).hp, max: act.maxHp, shield: shieldOf(seen(act)) }}
-        meter={{ name: "Focus", note: "spend one to roll an attack with advantage", now: act.focus, max: act.maxFocus, kind: "focus" }}
         // The keys the party has found, on its one ring.
         chips={keys > 0 ? <span className="hud-chip" title="Keys to locked doors: any key opens any door">{keysText}</span> : undefined}
         slots={slots}

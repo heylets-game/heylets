@@ -100,7 +100,7 @@ export function zoneActionFrom(raw: unknown, by: string, dev: boolean): ZoneActi
   if (!text(a.unit)) return null;
   // `from`: where the hero has got to on a walk still being played, to call it off there (the reducer decides whether it may).
   if (a.type === "move") return isHex(a.to) ? { type: "move", by, unit: a.unit, to: hex(a.to)!, ...(isHex(a.from) ? { from: hex(a.from)! } : {}) } : null;
-  if (a.type === "use") return text(a.ability) ? { type: "use", by, unit: a.unit, ability: a.ability, target, at: hex(a.at), focus: !!a.focus } : null;
+  if (a.type === "use") return text(a.ability) ? { type: "use", by, unit: a.unit, ability: a.ability, target, at: hex(a.at) } : null;
   if (a.type === "common") return text(a.what) ? { type: "common", by, unit: a.unit, what: a.what as never, target, at: hex(a.at) } : null;
   if (a.type === "throw") return text(a.item) && isHex(a.at) ? { type: "throw", by, unit: a.unit, item: a.item as never, at: hex(a.at)! } : null;
   if (a.type === "drink") return text(a.item) ? { type: "drink", by, unit: a.unit, item: a.item as never } : null;

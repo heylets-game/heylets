@@ -18,7 +18,6 @@ import {
   poolFor,
   armorBlock,
   loadoutOf,
-  maxFocusFor,
   maxHpFor,
   outfitOf,
   statPct,
@@ -121,7 +120,6 @@ export function Logbook({ me, refresh, onClose, onIsland = false }: Props) {
             <div title="Hit points when you set out"><dt>Hit points</dt><dd>{maxHpFor(stats, c.level)}</dd></div>
             <div title={`Each enemy hit is reduced by ${armorBlock(loadout.armor)}, up to half the hit`}><dt>Armor</dt><dd>{loadout.armor} <small>blocks {armorBlock(loadout.armor)}</small></dd></div>
             <div title="Added to the damage of every ability"><dt>Weapon power</dt><dd>+{loadout.weaponPower}</dd></div>
-            <div title="Focus points when you set out"><dt>Focus</dt><dd>{maxFocusFor(c.level)}</dd></div>
           </dl>
           {cls && <p className="book-note"><em>{cls.blurb}</em></p>}
           {error && <p className="book-error">{error}</p>}

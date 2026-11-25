@@ -97,11 +97,6 @@ export function maxHpFor(stats: Stats, level: number): number {
   return HP_BASE + HP_PER_VIT * stats.vit + HP_PER_LEVEL * level;
 }
 
-/** Focus pool: 2, plus one per five levels. */
-export function maxFocusFor(level: number): number {
-  return 2 + Math.floor(level / 5);
-}
-
 /** How far through the current level a hero is, 0 to 1. For the XP bar over their head. */
 export function xpProgress(level: number, xp: number): number {
   const need = xpToNext(level);

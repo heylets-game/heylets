@@ -83,8 +83,6 @@ export function summonCall(ctx: Ctx, caller: Unit, call: SummonCall, at: HexPos)
       pos: { q: pos.q, r: pos.r },
       hp,
       maxHp: hp,
-      focus: 0,
-      maxFocus: 0,
       stats: { ...def.stats },
       armor: def.armor,
       power: 0,

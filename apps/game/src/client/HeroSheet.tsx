@@ -1,6 +1,6 @@
 // A hero's sheet, read-only: what opens on picking someone in the Crew
 // panel (a tap on the map is for walking, never for this). Their
-// level, HP, focus and XP, the five stats with what gear adds, what they wear
+// level, HP and XP, the five stats with what gear adds, what they wear
 // on the paper doll, their weapon's abilities, the class passive and what
 // their hut gives them. Works for anyone in your crew, and for yourself.
 
@@ -17,7 +17,6 @@ import {
   STAT_LABEL,
   armorBlock,
   healthBand,
-  maxFocusFor,
   maxHpFor,
   outfitOf,
   statPct,
@@ -146,11 +145,9 @@ export function HeroSheet({ id, you, onClose, logbook }: Props) {
   const worn = new Map<Slot, ItemDef>(hero.gear.map((g) => [g.slot, g]));
   const total = (k: StatKey) => hero.base[k] + (hero.bonus[k] ?? 0);
   const stats = { str: total("str"), int_stat: total("int_stat"), vit: total("vit"), agi: total("agi"), dex: total("dex") };
-  // Seen in town, everyone is rested: full HP and focus.
+  // Seen in town, everyone is rested: full HP.
   const maxHp = maxHpFor(stats, hero.level);
   const hp = maxHp;
-  const maxFocus = maxFocusFor(hero.level);
-  const focus = maxFocus;
   const need = xpToNext(hero.level);
   const cls = HERO_CLASSES.find((c) => c.id === hero.classId);
   const weapon = worn.get("main_hand");
@@ -244,10 +241,6 @@ export function HeroSheet({ id, you, onClose, logbook }: Props) {
         <div className="bar" title="Rested: every map starts at full HP">
           <div className={`bar-fill hs-hp ${healthBand(hp / maxHp)}`} style={{ width: `${(100 * hp) / maxHp}%` }} />
           <span>{hp} / {maxHp} HP</span>
-        </div>
-        <div className="bar" title="Rested: every map starts with full focus">
-          <div className="bar-fill hs-focus" style={{ width: `${(100 * focus) / Math.max(1, maxFocus)}%` }} />
-          <span>{focus} / {maxFocus} focus</span>
         </div>
         <div className="bar" title={`${need - hero.xp} XP to level ${hero.level + 1}`}>
           <div className="bar-fill xp" style={{ width: `${Math.min(100, (100 * hero.xp) / need)}%` }} />

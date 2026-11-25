@@ -244,6 +244,8 @@ export const api = {
   /** Every world the account's heroes belong to, the most recently joined first, with which heroes are in each. */
   worlds: () => request<{ worlds: AccountWorld[] }>("/api/worlds"),
   gather: () => request<GatherStatus & { sitting?: SittingPaid }>("/api/gather"),
+  /** Gathering outings left today: the energy meter on the bar. */
+  energy: () => request<{ left: number; max: number }>("/api/energy"),
   /** Kept fish: the icebox and the trophy chest, with today's prices. */
   fish: () => request<FishStock>("/api/fish"),
   /** The fishmonger's counter: the bait and rods you have, and your gold. */

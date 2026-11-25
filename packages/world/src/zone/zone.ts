@@ -24,7 +24,7 @@ import { ABILITIES, DRUID_REGEN, EFFECT_TICK, ENEMIES, HERO_CLASSES, WEAPONS, ab
 import { weaponItem } from "../gear";
 import { tileAt } from "../map";
 import type { HeroSheet } from "../hero";
-import { addStats, maxFocusFor, maxHpFor } from "../progression";
+import { addStats, maxHpFor } from "../progression";
 import { makeRng, seedFromString } from "../rng";
 import { enemyTurn } from "./ai";
 import { pickBellGoer, placeBell } from "./bell";
@@ -33,7 +33,6 @@ import { UNTIMED, burnOf, has, heal, regrow, removeCondition, tick, unseen, type
 import { ALERT_RANGE, JOIN_RANGE, freeHexNear, generateZone } from "./gen";
 import { generateDelve } from "./delve";
 import { checkLoot, checkOpen, leaveBody, look, lootFor, openChest, payBounty, take } from "./loot";
-import { isCrateId } from "./crates";
 import { PARTY_SIZES, siteOpen } from "./sites";
 import { FREE_WALK, blast, blockerAt, inFight, isDead, pathIn, roomAt, sameHex, sees, solid, unitAt, unitById, zoneReach } from "./geometry";
 import { AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, ENEMY_MOVE_AP, FLEE_RANGE, ITEM_AP, STROLL_GRACE_MS, STROLL_STEP_MS, SUMMONS, STARTING_ITEMS, THROWABLES, THROWABLE_KINDS, cleanItems, commonCost, enemyHp, enemyMove, tacticOf } from "./kit";
@@ -67,8 +66,6 @@ function enemyUnit(state: ZoneState, kind: string, pos: HexPos, group: string): 
     pos,
     hp,
     maxHp: hp,
-    focus: 0,
-    maxFocus: 0,
     armor: 0,
     power: 0,
     // Its own copy of what its kind starts with: one enemy can be given more, or fewer, than the rest.
@@ -206,8 +203,6 @@ function heroUnit(hero: ZoneHero, pos: HexPos, controller?: string): Unit {
     pos,
     hp: hero.maxHp,
     maxHp: hero.maxHp,
-    focus: hero.maxFocus,
-    maxFocus: hero.maxFocus,
     stats: hero.stats,
     armor: hero.armor,
     power: hero.weaponPower,
@@ -229,7 +224,7 @@ export function zoneHero(sheet: HeroSheet, items?: Partial<Record<Throwable, num
   return {
     id: sheet.id, name: sheet.name, classId: sheet.classId, level: sheet.level, stats, weapon: sheet.weapon, weaponPower: sheet.weaponPower ?? 0, armor: sheet.armor ?? 0, outfit: sheet.outfit,
     ...(sheet.lantern ? { lantern: true } : {}),
-    maxHp: maxHpFor(stats, sheet.level), maxFocus: maxFocusFor(sheet.level),
+    maxHp: maxHpFor(stats, sheet.level),
     classAbilities: classAbilitiesOf(sheet.classId, sheet.level, sheet.abilityLoadout),
     ...(items ? { items: cleanItems(items) } : {}),
     ...(luck > 0 ? { luck: Math.floor(luck) } : {}),
@@ -241,7 +236,7 @@ export function standInHero(classId: string, id: string, level: number): ZoneHer
   const cls = HERO_CLASSES.find((c) => c.id === classId);
   const stats = STARTING_STATS[classId];
   if (!cls || !stats) return null;
-  return { id, name: cls.name.split(" ").slice(-1)[0], classId, level, stats, weapon: cls.weapons[0], weaponPower: 0, armor: 0, maxHp: maxHpFor(stats, level), maxFocus: maxFocusFor(level) };
+  return { id, name: cls.name.split(" ").slice(-1)[0], classId, level, stats, weapon: cls.weapons[0], weaponPower: 0, armor: 0, maxHp: maxHpFor(stats, level) };
 }
 
 // ---------- fights ----------
@@ -830,7 +825,6 @@ function dev(ctx: Ctx, by: string, op: DevOp): string | null {
     for (const h of state.units.filter((u) => u.side === "hero")) {
       h.down = false;
       h.hp = h.maxHp;
-      h.focus = h.maxFocus;
       // Restocked: brought up to the starting kit, with anything more they carry left alone.
       for (const kind of THROWABLE_KINDS) if ((STARTING_ITEMS[kind] ?? 0) > (h.items[kind] ?? 0)) h.items[kind] = STARTING_ITEMS[kind];
       h.conditions = [];
@@ -859,7 +853,7 @@ function dev(ctx: Ctx, by: string, op: DevOp): string | null {
     const pool = new Set(poolFor(op.classId).map((e) => e.id));
     const abilities = withClassAbilities(weapon.abilities, op.abilities.filter((a) => pool.has(a)));
     const item = weaponItem(weapon.id);
-    Object.assign(u, { kind: op.classId, level, stats: sheet.stats, maxHp: sheet.maxHp, hp: sheet.maxHp, maxFocus: sheet.maxFocus, focus: sheet.maxFocus, cooldowns: {}, devKit: true });
+    Object.assign(u, { kind: op.classId, level, stats: sheet.stats, maxHp: sheet.maxHp, hp: sheet.maxHp, cooldowns: {}, devKit: true });
     u.outfit = { ...u.outfit, main_hand: { icon: item.icon, ref: item.ref, rarity: item.rarity } };
     // A torch swung in the main hand stays there: the new weapon is what is taken up when it goes.
     if (u.torchHand === "main") u.stowed = abilities;
@@ -944,7 +938,7 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
       // Back again, perhaps with different gear: the sheet is refreshed, and where they stand and how hurt they are is kept.
       // Not in a fight, though: that is fought in the gear it was started in. Nor a hero given a dev kit.
       if (inFight(state, here.id) || here.devKit) return null;
-      Object.assign(here, { name: hero.name, kind: hero.classId, level: hero.level, stats: hero.stats, armor: hero.armor, power: hero.weaponPower, outfit: hero.outfit, lantern: hero.lantern, maxHp: hero.maxHp, maxFocus: hero.maxFocus });
+      Object.assign(here, { name: hero.name, kind: hero.classId, level: hero.level, stats: hero.stats, armor: hero.armor, power: hero.weaponPower, outfit: hero.outfit, lantern: hero.lantern, maxHp: hero.maxHp });
       // A torch swung in the main hand stays there: the new weapon is what is taken up when it goes.
       if (here.torchHand === "main") here.stowed = heroAbilities(hero);
       else here.abilities = heroAbilities(hero);
@@ -1013,8 +1007,7 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
   if (action.type === "use") {
     const def = ABILITIES[action.ability];
     const tactic = tacticOf(action.ability);
-    // Focus is for a roll to hit: a blow at a crate always lands, so none is spent on it.
-    const aim = { target: action.target, at: action.at, focus: !!action.focus && !isCrateId(state, action.target) };
+    const aim = { target: action.target, at: action.at };
     const wrong = checkAbility(state, unit, action.ability, aim);
     if (wrong) return wrong;
     // Something that takes a shape can catch a group that had not noticed anyone: it has now. A mark on the map touches nobody.
@@ -1024,10 +1017,8 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
     if (back) return back;
     // Out of a fight too: there its cooldown runs down a round at a time on the clock (clock.ts).
     if ((unit.cooldowns[action.ability] ?? 0) > 0) return `${def.name} is not ready yet.`;
-    if (aim.focus && unit.focus <= 0) return "You have no Focus left.";
     const cost = spend(budget, tactic.cost);
     if (cost) return cost;
-    if (aim.focus) unit.focus -= 1;
     if (tactic.cooldown) unit.cooldowns[action.ability] = tactic.cooldown;
     // A heal splashed among enemies is a kindness, as a healing potion thrown is: it starts nothing.
     const struck = tactic.splash ? [] : touched.filter((u) => u.side === "enemy" && !u.down).map((u) => u.group!);

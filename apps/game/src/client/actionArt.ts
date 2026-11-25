@@ -788,15 +788,11 @@ export const ACTION_ART: Record<string, Art> = {
     p.r(3, 11, 3, 1, p.accent);
   },
   "act-disengage": (p) => {
-    p.l(13, 4, 6, 4, p.accent);
-    p.l(6, 4, 3, 7, p.accent);
-    p.l(3, 7, 3, 10, p.accent);
-    p.l(3, 10, 6, 13, p.accent);
-    p.l(6, 13, 10, 13, p.accent);
-    p.l(13, 4, 10, 1, p.accent);
-    p.l(13, 4, 10, 7, p.accent);
-    p.r(11, 10, 3, 3, C.steel);
-    p.r(12, 9, 1, 1, C.steel);
+    // A sign-style running figure, solid in the accent, heading left with speed lines behind.
+    spans(p, p.accent, [[0, 5, 6], [1, 4, 7], [2, 4, 7], [3, 5, 6], [4, 4, 8], [5, 2, 11], [6, 1, 2], [6, 5, 8], [6, 11, 11], [7, 1, 1], [7, 5, 8], [8, 5, 9], [9, 6, 10], [10, 4, 6], [10, 10, 11], [11, 3, 4], [11, 11, 12], [12, 3, 4], [12, 12, 13], [13, 2, 3], [13, 13, 13], [14, 2, 2], [14, 13, 14], [15, 1, 2]]);
+    p.r(11, 2, 5, 1, p.accent);
+    p.r(14, 6, 2, 1, p.accent);
+    p.r(12, 8, 4, 1, p.accent);
   },
   "act-jump": (p) => {
     p.l(2, 12, 4, 6, p.accent);
