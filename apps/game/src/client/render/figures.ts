@@ -38,6 +38,13 @@ const ONE = new THREE.Vector3(1, 1, 1);
 const HALF_PI = Math.PI / 2;
 
 /** A colour a little lighter (k > 0) or darker (k < 0). */
+/** A colour (#rrggbb) darkened to `k` of itself as it shows on screen, its hue kept. */
+function darker(hex: string, k: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = (shift: number) => Math.round(((n >> shift) & 255) * k);
+  return ((ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).padStart(6, "0");
+}
+
 function tone(hex: string, k: number): string {
   return `#${new THREE.Color(hex).offsetHSL(0, 0, k).getHexString()}`;
 }
@@ -252,8 +259,10 @@ interface Measures {
   /** The side (-1 right, 1 left) whose shin is a peg, and whose hand is a hook, or 0 for none. */
   peg: number;
   hook: number;
+  /** How much fuller the chest is: 1 for a female body, 0 for a male one (see chestRings). */
+  bust: number;
 }
-const USUAL: Measures = { legs: 1, girth: 1, shoulders: 1, hips: 1, head: 1, legGirth: 1, armLen: 1, armGirth: 1, peg: 0, hook: 0 };
+const USUAL: Measures = { legs: 1, girth: 1, shoulders: 1, hips: 1, head: 1, legGirth: 1, armLen: 1, armGirth: 1, peg: 0, hook: 0, bust: 0 };
 let m: Measures = USUAL;
 function measuresOf(look: Appearance | null): Measures {
   if (!look) return USUAL;
@@ -271,6 +280,7 @@ function measuresOf(look: Appearance | null): Measures {
     armGirth: arms.thick,
     peg: side(legs.side),
     hook: side(arms.side),
+    bust: look.body === "female" ? 1 : 0,
   };
 }
 
@@ -295,9 +305,11 @@ interface LoftShape {
   /**
    * Only the front of each ring, this far (in radians) either side of +z: a beard round the jaw, not the neck.
    * The rings keep the corners a whole loft's would have, so the piece lies evenly over a loft of the same
-   * sides, and are cut where they reach the arc; each cut end is closed to the rings' middles, a wedge.
+   * sides, and are cut where they reach the arc; each cut end is closed to the rings' middles, a wedge. A list
+   * gives each ring its own (in the order the rings are given): the first is the widest, and the corners of a
+   * narrower ring are drawn in toward +z in proportion, so every ring has the same corners.
    */
-  arc?: number;
+  arc?: number | readonly number[];
 }
 
 function loftGeometry(rings: readonly Ring[], sides: number, shape: LoftShape = {}): THREE.BufferGeometry {
@@ -339,8 +351,11 @@ function loftGeometry(rings: readonly Ring[], sides: number, shape: LoftShape = 
 }
 
 /** The front of a loft, `arc` either side of +z, closed to its middle at both cut ends and at top and bottom (see LoftShape). */
-function arcGeometry(rings: readonly Ring[], sides: number, arc: number): THREE.BufferGeometry {
-  const sorted = [...rings].sort((p, q) => p[0] - q[0]);
+function arcGeometry(rings: readonly Ring[], sides: number, arcs: number | readonly number[]): THREE.BufferGeometry {
+  const each = rings.map((r, i) => ({ r, arc: typeof arcs === "number" ? arcs : (arcs[i] ?? arcs[0]) }));
+  const arc = each[0].arc;
+  each.sort((p, q) => p.r[0] - q.r[0]);
+  const sorted = each.map((e) => e.r);
   const step = (Math.PI * 2) / sides;
   // The corners' angles from -arc to arc through +z: the cut ends, and between them each corner a whole loft has.
   const angles = [-arc];
@@ -349,8 +364,10 @@ function arcGeometry(rings: readonly Ring[], sides: number, arc: number): THREE.
     if (a > -arc && a < arc) angles.push(a);
   }
   angles.push(arc);
-  const loops = sorted.map(([y, rx, rz, dz = 0]) => {
+  const loops = sorted.map(([y, rx, rz, dz = 0], i) => {
     const corner = (a: number) => new THREE.Vector3(Math.sin(a) * rx, y, Math.cos(a) * rz + dz);
+    const narrow = each[i].arc / arc;
+    if (narrow !== 1) return angles.map((a) => corner(a * narrow));
     return angles.map((a) => {
       // A cut end lies on the side between the two corners either side of it, as the whole loft's would.
       const k = Math.floor(a / step + sides / 2 - 0.5);
@@ -378,6 +395,41 @@ function arcGeometry(rings: readonly Ring[], sides: number, arc: number): THREE.
     tri(middles[0], loops[0][k + 1], loops[0][k]);
     const top = loops.length - 1;
     tri(middles[top], loops[top][k], loops[top][k + 1]);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(out, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
+/**
+ * A thick sheet between two grids of points the same shape (rows of the same length): its outside `outer`, its
+ * inside `inner`, closed round its four edges, one solid. Each face looks away from the middle of its cell.
+ */
+function sheetGeometry(outer: readonly (readonly Pt[])[], inner: readonly (readonly Pt[])[]): THREE.BufferGeometry {
+  const out: number[] = [];
+  const v = (p: Pt) => new THREE.Vector3(...p);
+  const quad = (mid: THREE.Vector3, ps: Pt[]) => {
+    const [a, b, c, d] = ps.map(v);
+    const n = b.clone().sub(a).cross(c.clone().sub(a));
+    const away = n.dot(a.clone().add(c).multiplyScalar(0.5).sub(mid)) >= 0;
+    for (const [p, q, r] of [[a, b, c], [a, c, d]]) (away ? [p, q, r] : [p, r, q]).forEach((w) => out.push(w.x, w.y, w.z));
+  };
+  const rows = outer.length;
+  const cols = outer[0].length;
+  for (let i = 0; i + 1 < rows; i++) {
+    for (let j = 0; j + 1 < cols; j++) {
+      const o = [outer[i][j], outer[i][j + 1], outer[i + 1][j + 1], outer[i + 1][j]];
+      const n = [inner[i][j], inner[i][j + 1], inner[i + 1][j + 1], inner[i + 1][j]];
+      const mid = [...o, ...n].map(v).reduce((m, p) => m.add(p), new THREE.Vector3()).multiplyScalar(1 / 8);
+      quad(mid, o);
+      quad(mid, n);
+      // The edges of the sheet, where this cell is on one.
+      if (i === 0) quad(mid, [o[0], o[1], n[1], n[0]]);
+      if (i + 2 === rows) quad(mid, [o[3], o[2], n[2], n[3]]);
+      if (j === 0) quad(mid, [o[0], o[3], n[3], n[0]]);
+      if (j + 2 === cols) quad(mid, [o[1], o[2], n[2], n[1]]);
+    }
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute(out, 3));
@@ -719,9 +771,17 @@ class Part {
     return this.add(loftGeometry(rings, sides), color, x, y, z, rot, false, true);
   }
 
-  /** Only the front of a loft through `rings`, `arc` (radians) either side of +z: a beard (see LoftShape). */
-  frontLoft(color: string, rings: readonly Ring[], arc: number, sides = 8): this {
-    return this.add(loftGeometry(rings, sides, { arc }), color, 0, 0, 0, undefined, false, true);
+  /**
+   * Only the front of a loft through `rings`, `arc` (radians, or one for each ring) either side of +z: a beard
+   * (see LoftShape). Turned by `rot`: half a turn about y and it is the back, a fall of hair.
+   */
+  frontLoft(color: string, rings: readonly Ring[], arc: number | readonly number[], sides = 8, rot?: Rot): this {
+    return this.add(loftGeometry(rings, sides, { arc }), color, 0, 0, 0, rot, false, true);
+  }
+
+  /** A thick sheet between two grids of points (see sheetGeometry): hair lying on a face. */
+  sheet(color: string, outer: readonly (readonly Pt[])[], inner: readonly (readonly Pt[])[]): this {
+    return this.add(sheetGeometry(outer, inner), color, 0, 0, 0, undefined, false, true);
   }
 
   /**
@@ -2184,6 +2244,8 @@ interface Rig {
   clean?: boolean;
   /** A person's fists, right then left: where they hold things, and take hold of oars. */
   hands?: [THREE.Object3D, THREE.Object3D];
+  /** A person's head: where a portrait looks (see Figure.head). */
+  head?: THREE.Object3D;
   /** What the right hand carries on a hold of its own (an open book, a long gun): put down at the oars with the rest. */
   carried?: THREE.Object3D[];
   /** Draw and loose the bow carried, if one is (see Figure.loose). */
@@ -3475,7 +3537,17 @@ function lowHead(head: Part, look: Look, asleep: boolean, covered = false) {
   const mouthY = MOUTH_Y[shape] ?? 1.45;
   const earX = ringAt(rings, 3).rx * 0.97;
   lowEars(head, tone(skin, -0.05), (chosen ?? face)?.ears ?? "round", earX, covered);
-  lowNose(head, tone(skin, -0.05), chosen?.nose ?? look.nose ?? face?.nose ?? "pointy", faceAt(rings, 2.3));
+  {
+    // The nose on a part of its own, so it can be sized about where it meets the face (it grows out from the face,
+    // not off it) and set higher or lower, as the hero chose.
+    const k = chosen?.noseSize ?? 1;
+    const lift = chosen?.noseLift ?? 0;
+    const base = faceAt(rings, 2.3 + lift);
+    const nose = new Part(head.joint, 0, 2.3 * (1 - k) + lift, base * (1 - k));
+    nose.joint.scale.setScalar(k);
+    lowNose(nose, tone(skin, -0.05), chosen?.nose ?? look.nose ?? face?.nose ?? "pointy", base);
+    extraParts.push(nose);
+  }
   const eyes = chosen?.eyes ?? look.eyes ?? face?.eyes ?? "round";
   if (talkFace && !asleep) {
     // A townsperson's mouth and eyelids move as they talk to you: each is a part of its own on the head.
@@ -3497,11 +3569,11 @@ function lowHead(head: Part, look: Look, asleep: boolean, covered = false) {
       lids.push(lid.joint);
     }
   } else head.box(tone(skin, -0.25), 1, 0.24, 0.3, 0, mouthY, faceAt(rings, mouthY) + 0.03);
-  lowEyes(head, look.hair, eyes, asleep, rings, chosen?.hairStyle === "bald");
+  lowEyes(head, look.hair, eyes, asleep, rings, chosen?.hairStyle === "bald", chosen?.eyeColor, skin, chosen?.brows, eyePatchOf(chosen));
   if (look.glowEyes && !asleep) {
     // Alight over the eyes the face has: a glow in each (not under a patch). For a look whose eyes light only with
     // a spell, each is a part of its own, swelled and shrunk as the spell is cast (see castEyes).
-    const patch = eyePatchOf(eyes);
+    const patch = eyePatchOf(chosen);
     for (const s of [-1, 1]) {
       if ((patch === "right" && s < 0) || (patch === "left" && s > 0)) continue;
       const x = s * 1.15;
@@ -3561,26 +3633,59 @@ function hairCap(rings: readonly Ring[]): Ring[] {
   return [[4.35, cap(4, 0.2), capZ(4, 0.21), -0.05], [5.3, cap(4.9, 0.22), capZ(4.9, 0.22), -0.1], [6.3, cap(6, 0.35), capZ(6, 0.35), -0.15], [6.95, 1.25, 1.25, -0.15]];
 }
 
+/** How far down the face (the height its end reaches) each hair style's locks in front of the ears hang. */
+const SIDE_LOCK_END: Record<string, number> = { short: 3.3, ponytail: 2.9, bun: 2.9, braids: 2.6, frontBraids: 2.6, long: 1.85 };
+
+/**
+ * A lock of hair down each side of the face, from under the hair over the temple down to `end`, over the front
+ * of the ear: lying on the head's own facets (see surfaceAt), narrowing to its end, in short pieces. However
+ * long, it narrows in the same way.
+ */
+function lowSideLocks(head: Part, hair: string, rings: readonly Ring[], end: number) {
+  // Over the top of the ear the lock reaches back under the fall of hair behind it (see FALL_ARC), so no skin shows
+  // between them there; from there down, as a share of the rest of its length, it is in front of the ear. Each
+  // row: its height, its front and back edges (from +z toward the ear, degrees), and how far it stands off the head.
+  const over = 3.85;
+  const rows: [number, number, number, number][] = [
+    [4.6, 64, 98, 0.24],
+    [over, 66, 97, 0.28],
+    ...([
+      [0.3, 67, 85, 0.3],
+      [0.65, 69, 83, 0.28],
+      [1, 73, 79, 0.2],
+    ] as const).map(([t, front, back, lift]): [number, number, number, number] => [over - t * (over - end), front, back, lift]),
+  ];
+  const grid = rows.map(([y, front, back, lift]): FacePt[] => [[y, front, lift], [y, (front + back) / 2, lift + 0.03], [y, back, lift]]);
+  for (const s of [-1, 1]) lowFacePatch(head, hair, rings, s, 0.2, grid);
+}
+
+/** How far round the head the fall of hair at the back reaches from the middle of the back, either side: to behind the ears. */
+const FALL_ARC = (85 / 180) * Math.PI;
+
 function lowHair(head: Part, hair: string, style: string, rings: readonly Ring[], covered: boolean) {
   if (style === "bald") return;
   const cap = (y: number, by: number) => ringAt(rings, y).rx + by;
   const capZ = (y: number, by: number) => ringAt(rings, y).rz + by;
   head.loft(hair, hairCap(rings));
-  // The fall down the back: to the nape, or (long) on down between the shoulders, narrowing.
+  // The fall down the back: the back of a loft that comes out of the cap just under the crown and lies close over
+  // it down the back of the head, so the two are one head of hair with no ledge between them, then on to the
+  // nape, or (long) on down between the shoulders, narrowing. Built as the front of a loft (its middles' forward
+  // offsets turned round with it) and turned half about.
   const nape = ringAt(rings, 1.9);
-  const levels: [y: number, rx: number, rz: number, from: number, to: number][] = [
-    [4.9, cap(4.9, 0.3), capZ(4.9, 0.3), 95, 265],
-    [1.9, nape.rx + 0.36, nape.rz + 0.36, 95, 265],
+  const fall: Ring[] = [
+    [6.95, 1.1, 1.1, 0.15],
+    [6.3, cap(6, 0.39), capZ(6, 0.39), 0.15],
+    [5.3, cap(4.9, 0.27), capZ(4.9, 0.27), 0.1],
+    [4.35, cap(4, 0.25), capZ(4, 0.26), 0.05],
+    [1.9, nape.rx + 0.36, nape.rz + 0.36, 0.15],
   ];
-  if (style === "long") levels.push([-0.6, nape.rx + 0.15, nape.rz + 0.2, 110, 250], [-2.7, nape.rx - 0.45, nape.rz - 0.15, 125, 235]);
-  const fall: Pt[] = [];
-  for (const [y, rx, rz, from, to] of levels) {
-    for (let i = 0; i <= 6; i++) {
-      const a = ((from + ((to - from) * i) / 6) / 180) * Math.PI;
-      fall.push([Math.sin(a) * rx, y, Math.cos(a) * rz - 0.15]);
-    }
+  const arcs = fall.map(() => FALL_ARC);
+  if (style === "long") {
+    fall.push([-0.6, nape.rx + 0.15, nape.rz + 0.2, 0.15], [-2.7, nape.rx - 0.45, nape.rz - 0.15, 0.15]);
+    arcs.push((70 / 180) * Math.PI, (55 / 180) * Math.PI);
   }
-  head.shape(hair, fall);
+  head.frontLoft(hair, fall, arcs, 8, [0, Math.PI, 0]);
+  if (!covered) lowSideLocks(head, hair, rings, SIDE_LOCK_END[style] ?? SIDE_LOCK_END.short);
   const back = -capZ(4.5, 0.3);
   const tie = tone(hair, -0.18);
   if (style === "ponytail") {
@@ -3778,16 +3883,20 @@ function faceFor(key: string, colours: boolean): Face {
   };
   const pick = <T extends { id: string }>(list: readonly T[]): T["id"] => list[Math.floor(next() * list.length)].id;
   const o = APPEARANCE_OPTIONS;
+  // The eyes townsfolk are drawn with: the first six there were, so each keeps the eyes they had.
+  const TOWN_EYES: readonly string[] = ["round", "big", "beady", "narrow", "sleepy", "fierce"];
   const f: Face = {
     headShape: pick(o.headShape),
     ears: pick(o.ears),
     hairStyle: pick(o.hairStyle),
     // (Not a patch: that is a hero's choice. Picked from the same six as ever, so each keeps the eyes they had.)
-    eyes: pick(o.eyes.filter((e) => !eyePatchOf(e.id))),
-    nose: pick(o.nose),
+    eyes: pick(o.eyes.filter((e) => TOWN_EYES.includes(e.id))),
+    // (From the noses there were before the rounded one, so each keeps the nose they had.)
+    nose: pick(o.nose.filter((n) => n.id !== "rounded")),
     // A villager may have a mustache, a beard or both; a named townsperson has only what their look gives them.
     mustache: !colours || next() < 0.6 ? "none" : pick(o.mustache),
-    beard: !colours || next() < 0.65 ? "none" : pick(o.beard),
+    // (From the beards there were before big chops, so each keeps the beard they had.)
+    beard: !colours || next() < 0.65 ? "none" : pick(o.beard.filter((b) => b.id !== "bigChops")),
   };
   if (colours) {
     f.skin = TOWN_SKIN[Math.floor(next() * TOWN_SKIN.length)];
@@ -3959,61 +4068,397 @@ function inlayPoints(rings: readonly Ring[], cx: number, cy: number, rx: number,
  * the same way, each over a dark band that is its outline.
  */
 /** How wide and tall (half of each) each kind of eye is drawn by lowEyes: what a lid has to cover. */
-const EYE_SIZE: Record<string, [number, number]> = { big: [0.55, 0.8], beady: [0.3, 0.3], narrow: [0.5, 0.24], round: [0.42, 0.62], sleepy: [0.42, 0.62], fierce: [0.42, 0.62] };
+/** Each kind of eye's half-width and half-height, roughly: what a blinking lid has to cover. */
+const EYE_SIZE: Record<string, [number, number]> = {
+  big: [0.55, 0.8], beady: [0.3, 0.3], narrow: [0.5, 0.3], round: [0.42, 0.62], sleepy: [0.45, 0.5], fierce: [0.42, 0.62],
+  lashed: [0.45, 0.6], glancing: [0.45, 0.62], lashes: [0.4, 0.55], startled: [0.45, 0.47], drowsy: [0.37, 0.37], square: [0.49, 0.47],
+  almond: [0.5, 0.5], doe: [0.47, 0.57], arched: [0.45, 0.69], googly: [0.47, 0.5],
+};
 
-function lowEyes(head: Part, hair: string, kind: string, asleep: boolean, rings: readonly Ring[], bald = false) {
-  const y = 3.05;
-  // A patch over one eye (the right is s = -1), the other eye round.
-  const patch = eyePatchOf(kind);
-  const patched = patch === "right" ? -1 : patch === "left" ? 1 : 0;
-  if (patched) {
-    kind = "round";
-    lowEyePatch(head, rings, patched, bald);
+/**
+ * An eye with a colour: the plain dark eye's shape, its middle filled with the iris colour `iris` (a shade darker,
+ * to sit in the eye rather than glow on it), and a dark pupil in that, each a little prouder than the one under it
+ * (see inlayPoints). No whites: a white round a coloured middle reads as a stare. Every layer is cut to the eye
+ * (and by `clip`, a sleepy or fierce lid).
+ */
+function colouredEye(head: Part, rings: readonly Ring[], x: number, y: number, rx: number, ry: number, iris: string, clip?: (px: number, py: number) => number) {
+  const inEye = (px: number, py: number) => {
+    const u = Math.min(1, Math.abs(px - x) / rx);
+    const h = ry * Math.sqrt(1 - u * u) * 0.97;
+    const c = Math.max(y - h, Math.min(y + h, py));
+    return clip ? clip(px, c) : c;
+  };
+  const [ix, iy] = [rx - 0.09, ry - 0.09];
+  head.inlay(OUTLINE, inlayPoints(rings, x, y, rx, ry, 0.07, clip));
+  head.inlay(tone(iris, -0.06), inlayPoints(rings, x, y, ix, iy, 0.1, inEye));
+  head.inlay(OUTLINE, inlayPoints(rings, x, y - iy * 0.05, ix * 0.45, iy * 0.45, 0.13, inEye));
+}
+
+/** A point on the face's front, `x` across and `y` up (head units). */
+type P2 = [number, number];
+
+/** How an eye is outlined (see eyeOutline): half its width, its height above and below its middle, and how square it is. */
+interface EyeOutline {
+  rx: number;
+  up: number;
+  down: number;
+  /** 2 is an ellipse; more is squarer. */
+  sq?: number;
+  /** Turned this far (radians) so its outer corner is higher: an almond. */
+  tilt?: number;
+  /** Its bottom cut flat this far up from the lowest point, as a share of `down`. */
+  flat?: number;
+}
+
+/**
+ * The outline of an eye on side `s` round (`cx`, `cy`), counter-clockwise as seen from the front, grown by
+ * `grow` all round: `rx` out from its middle, `up` above and `down` below, squarer as `sq` rises past 2.
+ */
+function eyeOutline(o: EyeOutline, cx: number, cy: number, s: number, grow = 0): P2[] {
+  const e = 2 / (o.sq ?? 2);
+  const [rx, up, down] = [o.rx + grow, o.up + grow, o.down + grow];
+  const pts: P2[] = [];
+  for (let i = 0; i < 28; i++) {
+    const a = (i / 28) * Math.PI * 2;
+    const c = Math.cos(a);
+    const sn = Math.sin(a);
+    let px = rx * Math.sign(c) * Math.abs(c) ** e;
+    let py = (sn >= 0 ? up : down) * Math.sign(sn) * Math.abs(sn) ** e;
+    if (o.flat) py = Math.max(py, -down * (1 - o.flat));
+    if (o.tilt) [px, py] = [px * Math.cos(o.tilt) - py * Math.sin(o.tilt), px * Math.sin(o.tilt) + py * Math.cos(o.tilt)];
+    pts.push([cx + s * px, cy + py]);
   }
+  // Mirrored on the -x side, it runs clockwise: turned back.
+  return s < 0 ? pts.reverse() : pts;
+}
+
+/** A circle (or ellipse) as a polygon, counter-clockwise. */
+function ellipse2(cx: number, cy: number, rx: number, ry: number): P2[] {
+  return Array.from({ length: 24 }, (_, i): P2 => [cx + Math.cos((i / 24) * Math.PI * 2) * rx, cy + Math.sin((i / 24) * Math.PI * 2) * ry]);
+}
+
+/** `poly` cut to the side of a line where `side` is not negative (Sutherland–Hodgman, one edge). */
+function clipBy(poly: readonly P2[], side: (p: P2) => number): P2[] {
+  const out: P2[] = [];
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % poly.length];
+    const [da, db] = [side(a), side(b)];
+    if (da >= 0) out.push(a);
+    if (da >= 0 !== db >= 0) {
+      const t = da / (da - db);
+      out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+    }
+  }
+  return out;
+}
+
+/** `poly` cut to inside the convex, counter-clockwise `within`. */
+function clipTo(poly: readonly P2[], within: readonly P2[]): P2[] {
+  let out = [...poly];
+  for (let i = 0; i < within.length && out.length; i++) {
+    const [a, b] = [within[i], within[(i + 1) % within.length]];
+    out = clipBy(out, (p) => (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]));
+  }
+  return out;
+}
+
+/**
+ * A convex shape `poly` laid on the face `lift` proud of it (an inlay, no outline): its rim and rings inside it
+ * follow the head's facets, and its back is well inside the head so it is solid (as inlayPoints). Its edges are
+ * cut into short steps and it is pinned to the face at rings close together, so where it lies across a fold
+ * between two of the head's facets it bends there instead of sinking under the shape laid beneath it.
+ */
+function facePoly(head: Part, c: string, rings: readonly Ring[], shape: readonly P2[], lift: number) {
+  if (shape.length < 3) return;
+  const poly: P2[] = [];
+  for (let i = 0; i < shape.length; i++) {
+    const [a, b] = [shape[i], shape[(i + 1) % shape.length]];
+    const steps = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.06));
+    for (let j = 0; j < steps; j++) poly.push([a[0] + ((b[0] - a[0]) * j) / steps, a[1] + ((b[1] - a[1]) * j) / steps]);
+  }
+  const mx = poly.reduce((n, p) => n + p[0], 0) / poly.length;
+  const my = poly.reduce((n, p) => n + p[1], 0) / poly.length;
+  const pts: Pt[] = [[mx, my, faceZ(rings, mx, my) + lift]];
+  for (const k of [1, 0.8, 0.6, 0.4, 0.2]) {
+    for (const [px, py] of poly) {
+      const [x, y] = [mx + (px - mx) * k, my + (py - my) * k];
+      const z = faceZ(rings, x, y);
+      pts.push([x, y, z + lift]);
+      if (k === 1) pts.push([x, y, z - 0.3]);
+    }
+  }
+  head.inlay(c, pts);
+}
+
+/** A line along `path` on the face, `w` wide, `lift` proud: a lash, a lid's edge. */
+function faceStroke(head: Part, c: string, rings: readonly Ring[], path: readonly P2[], w: number, lift: number) {
+  for (let i = 0; i + 1 < path.length; i++) {
+    const [a, b] = [path[i], path[i + 1]];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    // Across it, and a little past each end so the pieces overlap at the bends.
+    const [nx, ny] = [(-(b[1] - a[1]) / len) * (w / 2), ((b[0] - a[0]) / len) * (w / 2)];
+    const [ex, ey] = [((b[0] - a[0]) / len) * (w / 3), ((b[1] - a[1]) / len) * (w / 3)];
+    facePoly(head, c, rings, [[a[0] - ex - nx, a[1] - ey - ny], [b[0] + ex - nx, b[1] + ey - ny], [b[0] + ex + nx, b[1] + ey + ny], [a[0] - ex + nx, a[1] - ey + ny]], lift);
+  }
+}
+
+/** The iris drawn when no eye colour is chosen: a dark brown. */
+const DARK_IRIS = "#3b2722";
+const EYE_WHITE = "#f7f3ec";
+
+/**
+ * The cartoon eyes, each kind on side `s` round (`x`, `y`): an outline, its white, an
+ * iris of `iris` (looking a little to the figure's left, both the same way), a pupil, and the lids and lashes the
+ * kind has. Returns false for a kind it does not draw.
+ */
+function sheetEye(head: Part, rings: readonly Ring[], kind: string, s: number, x: number, y: number, iris: string, skin: string): boolean {
+  // How proud of the face each layer lies: far enough apart that none shows through the one over it.
+  const L = { rim: 0.07, white: 0.1, iris: 0.13, pupil: 0.16, lid: 0.19, line: 0.21 };
+  const pupil = tone(iris, -0.2);
+  // Outward from the middle of the face, at angle `a` round the eye from its outer side (a = 0) over the top.
+  const round = (o: EyeOutline, a: number, by = 0): P2 => [x + s * Math.cos(a) * (o.rx + by), y + Math.sin(a) * ((Math.sin(a) >= 0 ? o.up : o.down) + by)];
+  const ticks = (o: EyeOutline, angles: number[], len = 0.17) => {
+    for (const a of angles) faceStroke(head, OUTLINE, rings, [round(o, a, 0.04), round(o, a, 0.04 + len)], 0.07, L.line);
+  };
+  // An eye with whites: its outline, white and iris (cut to the white), and a pupil in the iris.
+  const whiteEye = (o: EyeOutline, ix: number, iy: number, irx: number, iry: number, dot = 0.45) => {
+    const white = eyeOutline(o, x, y, s);
+    facePoly(head, OUTLINE, rings, eyeOutline(o, x, y, s, 0.07), L.rim);
+    facePoly(head, EYE_WHITE, rings, white, L.white);
+    facePoly(head, iris, rings, clipTo(ellipse2(x + ix, y + iy, irx, iry), white), L.iris);
+    if (dot) facePoly(head, pupil, rings, clipTo(ellipse2(x + ix, y + iy, irx * dot, iry * dot), white), L.pupil);
+    return white;
+  };
+  // A lid over the top of the eye down to a line through (x, `at`) dropping `slope` toward the outer corner, with
+  // a dark edge along it reaching `past` beyond the eye at each side.
+  const lid = (o: EyeOutline, at: number, slope: number, past: number, color: string) => {
+    const lineY = (px: number) => at - slope * (s * (px - x)) / o.rx;
+    facePoly(head, color, rings, clipBy(eyeOutline(o, x, y, s, 0.07), (p) => p[1] - lineY(p[0])), L.lid);
+    const ends = [x - (o.rx + 0.07 + past), x + (o.rx + 0.07 + past)];
+    faceStroke(head, OUTLINE, rings, [[ends[0], lineY(ends[0]) - (past ? 0.06 : 0)], [x, lineY(x)], [ends[1], lineY(ends[1]) - (past ? 0.06 : 0)]], 0.09, L.line);
+  };
+  // A single lash out from the eye at angle `a`, `len` long, swept `sweep` toward the outer corner at its tip.
+  const lash = (o: EyeOutline, a: number, len: number, sweep = 0) => {
+    const [bx, by] = round(o, a, 0.04);
+    const [tx, ty] = round(o, a, 0.04 + len);
+    faceStroke(head, OUTLINE, rings, [[bx, by], [tx + s * sweep, ty]], 0.07, L.line);
+  };
+  // Eyeliner: a thin line close under the eye the whole way from its inner corner to its outer.
+  const under = (o: EyeOutline) => {
+    const path: P2[] = [];
+    for (let i = 0; i <= 10; i++) path.push(round(o, -Math.PI + 0.12 + ((Math.PI - 0.24) * i) / 10, 0.1));
+    faceStroke(head, OUTLINE, rings, path, 0.055, L.line);
+  };
+  const glance = 0.09;
+  switch (kind) {
+    case "lashed": {
+      // All iris, no white, under a heavy lash line over the top that runs on down the outer side, ending in a
+      // lash swept out at the outer corner, and one short lash under it.
+      const o: EyeOutline = { rx: 0.4, up: 0.55, down: 0.5, sq: 2.3 };
+      facePoly(head, iris, rings, eyeOutline(o, x, y, s), L.iris);
+      facePoly(head, pupil, rings, ellipse2(x + glance, y + 0.04, 0.14, 0.19), L.pupil);
+      const arc: P2[] = [];
+      for (let a = Math.PI - 0.15; a >= -0.3; a -= 0.3) arc.push(round(o, a, 0.06));
+      faceStroke(head, OUTLINE, rings, arc, 0.11, L.line);
+      lash(o, 0.35, 0.2, 0.08);
+      lash(o, -0.75, 0.12, 0.04);
+      return true;
+    }
+    case "glancing": {
+      // A tall white with a big iris low and to one side of it, the white a crescent on the other; one lash out
+      // from the top of the outer corner.
+      const o: EyeOutline = { rx: 0.38, up: 0.55, down: 0.55 };
+      whiteEye(o, glance, -0.07, 0.28, 0.4);
+      lash(o, 0.55, 0.18, 0.07);
+      return true;
+    }
+    case "lashes": {
+      // Smaller than glancing, a rounder iris, two long lashes swept out over its outer half and a short one under.
+      const o: EyeOutline = { rx: 0.35, up: 0.47, down: 0.47 };
+      whiteEye(o, glance * 0.8, -0.03, 0.26, 0.31);
+      lash(o, 1.0, 0.22, 0.08);
+      lash(o, 0.55, 0.24, 0.1);
+      lash(o, -0.6, 0.12, 0.04);
+      return true;
+    }
+    case "startled": {
+      // Round, the iris a ring round the pupil, sitting a little low in the white; one lash at the outer top.
+      const o: EyeOutline = { rx: 0.38, up: 0.42, down: 0.4 };
+      whiteEye(o, 0, -0.05, 0.24, 0.24, 0.5);
+      lash(o, 0.6, 0.14, 0.05);
+      return true;
+    }
+    case "sleepy": {
+      // Round, half under a lid that drops toward the outer corner, two little lashes off the lid's outer end.
+      const o: EyeOutline = { rx: 0.42, up: 0.44, down: 0.44 };
+      whiteEye(o, glance * 0.5, -0.12, 0.29, 0.29);
+      lid(o, y + 0.08, 0.1, 0, tone(skin, -0.1));
+      const end: P2 = [x + s * (o.rx + 0.05), y + 0.08 - 0.12];
+      for (const [dx, dy] of [[0.16, -0.06], [0.12, -0.16]]) faceStroke(head, OUTLINE, rings, [end, [end[0] + s * dx, end[1] + dy]], 0.06, L.line);
+      return true;
+    }
+    case "drowsy": {
+      // Small, mostly under a lid whose edge reaches on past the outer corner only, eyeliner under it.
+      const o: EyeOutline = { rx: 0.3, up: 0.3, down: 0.3 };
+      whiteEye(o, 0.03, -0.1, 0.2, 0.2);
+      const lineY = y - 0.02;
+      facePoly(head, tone(skin, -0.12), rings, clipBy(eyeOutline(o, x, y, s, 0.07), (p) => p[1] - lineY), L.lid);
+      faceStroke(head, OUTLINE, rings, [[x - s * (o.rx + 0.07), lineY], [x + s * (o.rx + 0.17), lineY - 0.05]], 0.09, L.line);
+      under(o);
+      return true;
+    }
+    case "narrow": {
+      // Half shut: a lash line arched over the lower half of a round iris, ending in a short wing at the outer
+      // corner, with a lash under the outer corner.
+      const disc = ellipse2(x + glance * 0.6, y - 0.08, 0.27, 0.27);
+      facePoly(head, iris, rings, clipBy(disc, (p) => y + 0.02 - p[1]), L.iris);
+      facePoly(head, pupil, rings, clipBy(ellipse2(x + glance * 0.6, y - 0.1, 0.12, 0.12), (p) => y + 0.02 - p[1]), L.pupil);
+      const o: EyeOutline = { rx: 0.46, up: 0.16, down: 0.16 };
+      const arc: P2[] = [];
+      for (let a = Math.PI - 0.15; a >= 0.05; a -= 0.3) arc.push(round(o, a, 0));
+      faceStroke(head, OUTLINE, rings, [...arc, [x + s * 0.58, y + 0.12]], 0.11, L.line);
+      faceStroke(head, OUTLINE, rings, [[x + s * 0.3, y - 0.3], [x + s * 0.42, y - 0.4]], 0.06, L.line);
+      return true;
+    }
+    case "square": {
+      // A rounded square, the iris a little low and to one side, one lash up from its outer top corner.
+      const o: EyeOutline = { rx: 0.42, up: 0.4, down: 0.4, sq: 5 };
+      whiteEye(o, glance, -0.05, 0.25, 0.29);
+      lash(o, 0.65, 0.16, 0.06);
+      return true;
+    }
+    case "almond": {
+      // Tipped up at the outer corner, two short lashes off its top there, and eyeliner under it.
+      const o: EyeOutline = { rx: 0.43, up: 0.4, down: 0.36, tilt: 0.22 };
+      whiteEye(o, glance, -0.02, 0.27, 0.3);
+      lash(o, 0.75, 0.13, 0.05);
+      lash(o, 0.4, 0.15, 0.07);
+      under(o);
+      return true;
+    }
+    case "doe": {
+      // Round over a flatter bottom, mostly iris, lashes off its outer side, and eyeliner under it.
+      const o: EyeOutline = { rx: 0.4, up: 0.5, down: 0.46, sq: 2.4, flat: 0.25 };
+      whiteEye(o, glance * 0.7, -0.02, 0.31, 0.4);
+      lash(o, 0.5, 0.16, 0.05);
+      lash(o, 0.1, 0.15, 0.03);
+      under(o);
+      return true;
+    }
+    case "arched": {
+      // A tall arch over a flat bottom, the iris low in it, two lashes off the top of the arch's outer slope.
+      const o: EyeOutline = { rx: 0.38, up: 0.62, down: 0.3, sq: 2.2 };
+      whiteEye(o, glance, -0.06, 0.27, 0.32);
+      lash(o, 1.1, 0.15, 0.04);
+      lash(o, 0.7, 0.17, 0.07);
+      return true;
+    }
+    case "googly": {
+      // A round white with a small pupil of the eye's colour low and out toward its outer side, one lash on top.
+      const o: EyeOutline = { rx: 0.4, up: 0.43, down: 0.43 };
+      const white = eyeOutline(o, x, y, s);
+      facePoly(head, OUTLINE, rings, eyeOutline(o, x, y, s, 0.07), L.rim);
+      facePoly(head, EYE_WHITE, rings, white, L.white);
+      facePoly(head, iris === DARK_IRIS ? OUTLINE : iris, rings, ellipse2(x + s * 0.08, y - 0.1, 0.14, 0.14), L.iris);
+      lash(o, Math.PI / 2 - 0.2, 0.16, 0.05);
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * A brow's shape, from its inner end (u = 0) to its outer (u = 1): how much higher its outer end is than its inner
+ * (`rise`, negative lower), how far its middle bows up (`arch`), its half-thickness (`th`), what share of that is
+ * left at the outer end (`taper`), how much longer than the usual it is at each end (`len`), how far below the
+ * usual it sits (`drop`), and whether its inner end runs on to meet the other brow (`join`).
+ */
+interface BrowShape {
+  rise: number;
+  arch: number;
+  th: number;
+  taper?: number;
+  len?: number;
+  drop?: number;
+  join?: boolean;
+}
+const BROW_SHAPES: Record<string, BrowShape> = {
+  natural: { rise: -0.14, arch: 0, th: 0.16 },
+  arched: { rise: -0.12, arch: 0.17, th: 0.12, taper: 0.55 },
+  thick: { rise: -0.1, arch: 0.02, th: 0.24, len: 0.08 },
+  thin: { rise: -0.08, arch: 0.07, th: 0.075, taper: 0.7 },
+  angry: { rise: 0.43, arch: 0, th: 0.19, drop: 0.2 },
+  worried: { rise: -0.55, arch: 0.08, th: 0.14, drop: 0.02 },
+  bushy: { rise: -0.22, arch: 0.16, th: 0.32, len: 0.16, taper: 1.15 },
+  unibrow: { rise: -0.1, arch: 0.04, th: 0.17, join: true },
+};
+
+function lowEyes(head: Part, hair: string, kind: string, asleep: boolean, rings: readonly Ring[], bald = false, iris?: string, skin = "#f1c9a5", browKind = "natural", patch?: "right" | "left") {
+  const y = 3.05;
+  // A patch over one eye (the right is s = -1), the other eye as chosen.
+  const patched = patch === "right" ? -1 : patch === "left" ? 1 : 0;
+  if (patched) lowEyePatch(head, rings, patched, bald);
   const fierce = kind === "fierce";
   for (const s of [-1, 1]) {
     const x = s * (kind === "beady" ? 1.05 : 1.15);
     const glint = (gx: number, gy: number, r: number) => head.inlay("#ffffff", inlayPoints(rings, gx, gy, r, r, 0.1));
+    // Round and big eyes are all one colour (the chosen eye colour, else the dark of the outline) with glints.
+    const fill = iris ? tone(iris, -0.06) : OUTLINE;
     if (s === patched) {
       // Under the patch.
     } else if (asleep) {
       // Shut: a lid line, sagging a little in the middle.
       head.inlay(OUTLINE, inlayPoints(rings, x, y - 0.1, 0.5, 0.09, 0.07, (px, py) => py + 0.16 * ((px - x) / 0.5) ** 2));
+    } else if (sheetEye(head, rings, kind, s, x, y, iris ?? DARK_IRIS, skin)) {
+      // One of the cartoon eyes (see sheetEye).
+    } else if (fierce && iris) {
+      // A fierce eye with a colour: the colour round a dark pupil, cut level with the brow.
+      const [rx, ry] = EYE_SIZE.fierce;
+      colouredEye(head, rings, x, y, rx, ry, iris, (px: number, py: number) => Math.min(py, y + 0.3 + (s * px - 1.15) * 0.55));
     } else if (kind === "big") {
-      head.inlay(OUTLINE, inlayPoints(rings, x, y + 0.05, 0.55, 0.8, 0.07));
+      head.inlay(fill, inlayPoints(rings, x, y + 0.05, 0.55, 0.8, 0.07));
       glint(x + 0.18, y + 0.35, 0.21);
       glint(x - 0.15, y - 0.27, 0.1);
     } else if (kind === "beady") {
       head.inlay(OUTLINE, inlayPoints(rings, x, y, 0.3, 0.3, 0.07));
-    } else if (kind === "narrow") {
-      head.inlay(OUTLINE, inlayPoints(rings, x, y, 0.5, 0.24, 0.07));
     } else {
-      // Round, sleepy and fierce eyes. A fierce one is cut level with its brow, low at the inner corner; a
-      // sleepy one has heavy lids halfway down, so only its bottom half shows, under a level lid line.
-      const sleepy = kind === "sleepy";
-      const clip = fierce ? (px: number, py: number) => Math.min(py, y + 0.3 + (s * px - 1.15) * 0.55) : sleepy ? (_px: number, py: number) => Math.min(py, y + 0.04) : undefined;
-      head.inlay(OUTLINE, inlayPoints(rings, x, y, 0.42, 0.62, 0.07, clip));
-      if (!sleepy) glint(x + 0.12, y + (fierce ? 0.1 : 0.22), 0.16);
+      // Round and fierce eyes. A fierce one is cut level with its brow, low at the inner corner.
+      const clip = fierce ? (px: number, py: number) => Math.min(py, y + 0.3 + (s * px - 1.15) * 0.55) : undefined;
+      head.inlay(fill, inlayPoints(rings, x, y, 0.42, 0.62, 0.07, clip));
+      glint(x + 0.12, y + (fierce ? 0.1 : 0.22), 0.16);
     }
-    // The brow, along a line tipped at its inner end (down for a fierce one, a little up otherwise), laid on
-    // the face over a dark band a little larger all round: its outline, even on every side (an outline shell
-    // shows only on the side turned from the viewer, a bar at one end and nothing over the top).
-    const bx = s * 1.2;
-    const by = y + (kind === "big" ? 1.02 : fierce ? 0.7 : 0.9);
-    const tip = Math.sin(fierce ? 0.38 : -0.12);
-    const half = (fierce ? 0.38 : 0.32) / 2;
+    // The brow, in its shape (natural over fierce eyes is the angry one), laid on the face in short pieces
+    // along it so it can bow and taper, over a dark band a little larger all round: its outline, even on every
+    // side (an outline shell shows only on the side turned from the viewer, a bar at one end and nothing over
+    // the top).
+    if (browKind === "none") continue;
+    const b = browKind === "natural" && fierce ? BROW_SHAPES.angry : BROW_SHAPES[browKind] ?? BROW_SHAPES.natural;
+    const half = 0.575 + (b.len ?? 0);
+    const inner = b.join ? 0.02 : 1.2 - half;
+    const outer = 1.2 + half;
+    const by = y + (kind === "big" ? 1.02 : 0.9) - (b.drop ?? 0);
     const brow = (color: string, grow: number, lift: number) => {
-      const pts: Pt[] = [];
-      for (const t of [-1, -0.5, 0, 0.5, 1]) {
-        const px = bx + t * (0.575 + grow);
-        const py = by + s * (px - bx) * tip;
-        for (const dy of [-half - grow, 0, half + grow]) {
-          const z = faceZ(rings, px, py + dy);
-          pts.push([px, py + dy, z + lift]);
-          if (dy !== 0) pts.push([px, py + dy, z - 0.3]);
+      const n = b.join ? 12 : 8;
+      // Along it from a little past its inner end to a little past its outer (by `grow`): where it is and how thick.
+      const at = (i: number) => {
+        const u = (i / n) * (1 + (2 * grow) / (outer - inner)) - grow / (outer - inner);
+        const along = Math.min(1, Math.max(0, u));
+        const px = s * (inner + u * (outer - inner));
+        const py = by + b.rise * (along - 0.5) + b.arch * (1 - (2 * along - 1) ** 2);
+        return { px, py, th: b.th * (1 - (1 - (b.taper ?? 1)) * along) + grow };
+      };
+      for (let i = 0; i < n; i++) {
+        const pts: Pt[] = [];
+        for (const { px, py, th } of [at(i), at(i + 1)]) {
+          for (const dy of [-th, 0, th]) {
+            const z = faceZ(rings, px, py + dy);
+            pts.push([px, py + dy, z + lift]);
+            if (dy !== 0) pts.push([px, py + dy, z - 0.3]);
+          }
         }
+        head.inlay(color, pts);
       }
-      head.inlay(color, pts);
     };
     brow(OUTLINE, 0.09, 0.06);
     brow(hair, 0, 0.14);
@@ -4097,6 +4542,28 @@ function surfaceAt(rings: readonly Ring[], y: number, a: number): [number, numbe
   return [dx * best, dz * best];
 }
 
+/**
+ * A rounded nose: the smallest solid round a run of little rounded lumps, each `[y, z, rx, ry, rz]` (where it is,
+ * and how far it reaches across, up and down, and back and forth), from the bridge down to the tip, with a soft
+ * nostril wing either side at its base (`wing`: where the right one is, and how big). Many faces, so it reads as
+ * a nose, not a beak.
+ */
+function roundNose(head: Part, c: string, lumps: readonly (readonly [number, number, number, number, number])[], wing: readonly [x: number, y: number, z: number, r: number]) {
+  const pts: Pt[] = [];
+  for (const [y, z, rx, ry, rz] of lumps) {
+    for (const up of [-0.7, 0, 0.7]) {
+      const ring = Math.cos(up * (Math.PI / 2));
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2;
+        pts.push([Math.cos(a) * rx * ring, y + Math.sin(up * (Math.PI / 2)) * ry, z + Math.sin(a) * rz * ring]);
+      }
+    }
+  }
+  head.shape(c, pts);
+  const [wx, wy, wz, wr] = wing;
+  for (const s of [-1, 1]) head.ball(c, wr, s * wx, wy, wz, 1, [1, 0.8, 0.9]);
+}
+
 /** A nose of each kind, its bridge between the eyes, on a face whose front is at `z`. */
 function lowNose(head: Part, c: string, kind: string, z: number) {
   switch (kind) {
@@ -4107,10 +4574,18 @@ function lowNose(head: Part, c: string, kind: string, z: number) {
       head.shape(c, sym([[0.75, 1.9, z - 0.2], [0.5, 2.6, z - 0.15], [0.3, 3, z - 0.1], [0.62, 1.95, z + 0.35], [0, 1.95, z + 0.5], [0, 2.6, z + 0.3]]));
       return;
     case "long":
-      head.shape(c, sym([[0.38, 1.7, z - 0.2], [0, 3.1, z - 0.05], [0, 1.72, z + 0.95], [0.25, 1.78, z + 0.5]]));
+      // Long and straight, well out from the face, a rounded tip.
+      roundNose(head, c, [[3.05, z - 0.1, 0.13, 0.1, 0.1], [2.45, z + 0.38, 0.21, 0.14, 0.14], [1.84, z + 0.78, 0.2, 0.17, 0.17], [1.76, z + 0.15, 0.34, 0.1, 0.12]], [0.3, 1.8, z + 0.3, 0.19]);
       return;
     case "hooked":
-      head.shape(c, sym([[0.4, 1.85, z - 0.2], [0, 3, z - 0.05], [0, 2.5, z + 0.6], [0, 1.85, z + 0.78], [0.22, 2.1, z + 0.55]]));
+      // A hump along the bridge, the tip coming down over the nostrils.
+      roundNose(head, c, [[2.95, z - 0.1, 0.13, 0.1, 0.1], [2.5, z + 0.52, 0.2, 0.13, 0.13], [2.08, z + 0.7, 0.19, 0.16, 0.15], [1.86, z + 0.5, 0.13, 0.1, 0.1], [1.92, z + 0.08, 0.36, 0.1, 0.12]], [0.31, 1.97, z + 0.22, 0.19]);
+      return;
+    case "rounded":
+      // A soft bridge down from between the eyes to a smooth round tip, all the skin's own colour.
+      head.shape(c, sym([[0.36, 2.15, z - 0.2], [0, 2.95, z - 0.05], [0, 2.3, z + 0.45]]));
+      head.ball(c, 0.58, 0, 2.08, z + 0.38, 1, [1.15, 0.95, 1]);
+      for (const s of [-1, 1]) head.ball(c, 0.3, s * 0.5, 1.98, z + 0.15, 0, [1, 0.85, 0.9]);
       return;
     case "bulbous": {
       // A great round nose, ruddier than the face it is on, a wing to each side and a bridge up between the eyes.
@@ -4121,8 +4596,40 @@ function lowNose(head: Part, c: string, kind: string, z: number) {
       return;
     }
     default:
-      head.shape(c, sym([[0.42, 1.95, z - 0.2], [0, 2.95, z - 0.05], [0, 2.05, z + 0.65]]));
+      // Pointy: a straight bridge out to a small rounded tip.
+      roundNose(head, c, [[2.9, z - 0.1, 0.13, 0.1, 0.1], [2.45, z + 0.24, 0.22, 0.14, 0.14], [2.06, z + 0.5, 0.19, 0.16, 0.16], [1.97, z + 0.1, 0.36, 0.1, 0.12]], [0.32, 2.0, z + 0.22, 0.19]);
   }
+}
+
+/** A point on a face: its height, its angle round from the front toward the +x ear (degrees), and how far it stands off the face. */
+type FacePt = readonly [y: number, deg: number, lift: number];
+
+/**
+ * A patch of hair lying on the face, `th` thick, over a grid of points on it (rows of the same length), on the
+ * side `s` (-1 for the -x one): one sheet, its corners on the head's own facets (see surfaceAt), so it bends with
+ * them rather than bridging under them.
+ */
+function lowFacePatch(head: Part, c: string, rings: readonly Ring[], s: number, th: number, rows: readonly (readonly FacePt[])[]) {
+  // Each row and the next a third of the way apart, as well: a head bulges between them, and a piece reaching
+  // straight from one row to the next would sink into it.
+  const grid: FacePt[][] = [];
+  for (let i = 0; i < rows.length; i++) {
+    if (i === 0) {
+      grid.push([...rows[0]]);
+      continue;
+    }
+    for (const t of [1 / 3, 2 / 3, 1]) grid.push(rows[i].map((p, j) => p.map((v, k) => rows[i - 1][j][k] + (v - rows[i - 1][j][k]) * t) as unknown as FacePt));
+  }
+  const at = ([y, deg, lift]: FacePt, by: number): Pt => {
+    const [x, z] = surfaceAt(rings, y, (deg / 180) * Math.PI);
+    const k = 1 + by / Math.hypot(x, z);
+    return [s * x * k, y, z * k];
+  };
+  head.sheet(
+    c,
+    grid.map((row) => row.map((p) => at(p, p[2]))),
+    grid.map((row) => row.map((p) => at(p, Math.max(-0.05, p[2] - th)))),
+  );
 }
 
 /** How far round the head facial hair grows from the front of the face, either side: back to under the ears, not round the neck. */
@@ -4150,8 +4657,12 @@ function lowFacialHair(head: Part, beard: string, mustache: string, skin: string
   };
   switch (beard) {
     case "stubble": {
-      const shade = `#${new THREE.Color(skin).lerp(new THREE.Color(hair), 0.45).getHexString()}`;
-      head.frontLoft(shade, [out(chinY - 0.02, 0.05), out(chinY + 0.4, 0.06), out(mouthY - 0.22, 0.06)], JAW_ARC);
+      // Where a full beard grows (the jaw, the cheeks up to the sideburns, the upper lip and under the chin), but
+      // lying close on the skin: the skin itself, only darker (its own hue, none of the hair's, whatever colour that
+      // is). Darkened as the colour shows on screen, not in the renderer's linear light, where the same share
+      // looks hardly darker at all.
+      const shade = `#${darker(skin, 0.6)}`;
+      head.frontLoft(shade, [out(chinY - 0.04, 0.07), out(chinY + 0.1, 0.08), out(1.6, 0.08), out(2.5, 0.07)], JAW_ARC);
       break;
     }
     case "goatee": {
@@ -4182,6 +4693,24 @@ function lowFacialHair(head: Part, beard: string, mustache: string, skin: string
           }
         }
         head.shape(c, pts);
+      }
+      break;
+    case "bigChops":
+      // An old sailor's: great bushy chops from the sideburns down the cheeks and forward to the corners of the
+      // mouth, where a mustache (chosen on its own) runs into them. The chin and the jaw under the ears are shaved.
+      for (const s of [-1, 1]) {
+        const row = (y: number, front: number, back: number, lift: number): FacePt[] =>
+          [0, 1, 2, 3].map((i) => [y, front + ((back - front) * i) / 3, lift + (i === 0 ? -0.08 : 0)]);
+        // Each chop sweeps down from the sideburn and forward to the corner of the mouth: its back edge comes forward
+        // as it goes down, so the jaw under the ear is bare.
+        const low = Math.max(mouthY - 0.6, chinY + 0.1);
+        lowFacePatch(head, c, rings, s, 0.34, [
+          row(mouthY + 2.25, 70, 90, 0.16),
+          row(mouthY + 1.35, 48, 88, 0.3),
+          row(mouthY + 0.45, 26, 78, 0.38),
+          row(mouthY - 0.2, 20, 60, 0.34),
+          row(low, 24, 46, 0.26),
+        ]);
       }
       break;
   }
@@ -4821,11 +5350,23 @@ function lowChest(torso: Part, skin: string, cloth: string, sh: number, belt?: s
   return rings;
 }
 
-/** The low-poly chest's rings, hips to neck, for shoulders `sh` as broad as the girth (see lowChest). */
+/**
+ * The low-poly chest's rings, hips to neck, for shoulders `sh` as broad as the girth (see lowChest). A female
+ * body's chest is fuller: its front comes forward from just above the waist to a bust and back to the usual
+ * below the collarbone, the back as it was. Everything worn on the chest is built over these rings, so it fits.
+ */
 function chestRings(sh: number): Ring[] {
   const hip = m.hips;
   // Down at the hips the clothes come out over the tops of the thighs, so the legs don't poke through at the sides.
-  return [[-0.6, Math.max(2.85 * hip, thighReach(-0.6)), 1.95 + (hip - 1) * 0.6, 0], [0.4, Math.max(2.6 * hip, thighReach(0.4)), 1.8 + (hip - 1) * 0.5, 0], [1.6, 2.45 * (1 + hip) * 0.5, 1.7, 0.05], [3.6, 3.3 * (1 + sh) * 0.5, 2.05, 0.15], [5.3, 4.05 * sh, 2, 0.05], [6.1, 3.1 * sh, 1.6, -0.05], [6.5, 1.4, 1.2, 0]];
+  const rings: Ring[] = [[-0.6, Math.max(2.85 * hip, thighReach(-0.6)), 1.95 + (hip - 1) * 0.6, 0], [0.4, Math.max(2.6 * hip, thighReach(0.4)), 1.8 + (hip - 1) * 0.5, 0], [1.6, 2.45 * (1 + hip) * 0.5, 1.7, 0.05], [3.6, 3.3 * (1 + sh) * 0.5, 2.05, 0.15], [5.3, 4.05 * sh, 2, 0.05], [6.1, 3.1 * sh, 1.6, -0.05], [6.5, 1.4, 1.2, 0]];
+  if (!m.bust) return rings;
+  // Brought forward by `by` at `y`: half on its depth and half on its middle, so its back stays where it was.
+  const fuller = (y: number, by: number): Ring => {
+    const r = ringAt(rings, y);
+    return [y, r.rx, r.rz + by / 2, r.dz + by / 2];
+  };
+  const bust = 0.65 * m.bust;
+  return [...rings.slice(0, 4), fuller(4.15, bust), fuller(4.75, bust * 0.55), ...rings.slice(4)];
 }
 
 /**
@@ -4937,17 +5478,29 @@ function around(rings: readonly Ring[], y: number, by: number, dz = 0): Ring {
 
 /** The class's tunic, belted, with a placket down the front. */
 function lowTorso(torso: Part, look: Look, sh: number) {
-  lowChest(torso, look.skin, look.body, sh, look.accent);
-  torso.box(tone(look.body, 0.08), 0.8, 2.6, 0.3, 0, 4.1, 2.02);
+  const rings = lowChest(torso, look.skin, look.body, sh, look.accent);
+  placket(torso, tone(look.body, 0.08), rings, 0.4, 2.8, 5.4, 0.08);
   torso.shape(GEAR.gold, sym([[0.6, 0.85, 1.75], [0.6, 1.75, 1.8], [0.5, 0.95, 2.05], [0.5, 1.65, 2.08]]));
+}
+
+/**
+ * A strip down the front of the chest (`rings`), `w` either side of the middle, from `y0` up to `y1`, lying on it
+ * `lift` proud: a placket, following the chest's shape however full it is.
+ */
+function placket(torso: Part, c: string, rings: readonly Ring[], w: number, y0: number, y1: number, lift: number) {
+  const ys = Array.from({ length: 7 }, (_, i) => y0 + ((y1 - y0) * i) / 6);
+  const at = (by: number) => ys.map((y): Pt[] => [-w, 0, w].map((x): Pt => [x, y, faceAt(rings, y) + by]));
+  torso.sheet(c, at(lift), at(-0.12));
 }
 
 /** What is under the clothes: a plain linen vest, and short drawers on the hips. */
 const LINEN = "#e6dcc4";
 function lowUndershirt(torso: Part, skin: string, sh: number) {
   const rings = lowChest(torso, skin, LINEN, sh);
-  // Its neckline: the skin of the chest showing in a little V.
-  torso.shape(skin, sym([[0.75, 5.9, 1.62], [0, 4.9, 1.95], [0, 6.2, 1.5]]));
+  // Its neckline: the skin of the chest showing in a little V, laid flat on the chest's front face (an inlay,
+  // with no outline), not standing off it as a block.
+  const v: [number, number][] = [[-0.8, 5.95], [0.8, 5.95], [0, 4.65], [0, 6.3]];
+  torso.inlay(skin, v.flatMap(([x, y]): Pt[] => [[x, y, faceAt(rings, y) + 0.03], [x, y, faceAt(rings, y) - 0.12]]));
   // The drawers' waistband, round the hips.
   torso.loft(tone(LINEN, -0.06), [around(rings, -0.7, 0.06), around(rings, 0.3, 0.06)]);
 }
@@ -5211,7 +5764,7 @@ function lowHauberk(torso: Part, skin: string, sh: number, trim: string): number
   torso.loft(tone(GEAR.iron, -0.1), [around(rings, 0.55, 0.1), [-1.5, hip.rx + 0.35, hip.rz + 0.3, hip.dz]], 8);
   for (const back of [false, true]) {
     const pts: Pt[] = [];
-    for (const y of [2.3, 3.5, 4.6, 5.45]) {
+    for (const y of [2.3, 3.5, 4.15, 4.75, 5.45]) {
       const r = ringAt(rings, y);
       for (const deg of [-64, -32, 0, 32, 64]) {
         const a = (deg / 180) * Math.PI;
@@ -5235,7 +5788,7 @@ function lowGreatcoat(torso: Part, skin: string, oilskin: string, sh: number, tr
   const rings = lowChest(torso, skin, oilskin, sh, GEAR.dark);
   torso.loft(tone(oilskin, -0.1), [around(rings, 5.55, 0.18, -0.05), [6.55, 1.95, 1.75, -0.3]], 8);
   const front = (y: number) => ringAt(rings, y).rz * Math.cos(Math.PI / 8) + ringAt(rings, y).dz;
-  torso.box(tone(oilskin, 0.08), 0.9, 3.4, 0.3, 0, 3.85, front(3.85) + 0.08);
+  placket(torso, tone(oilskin, 0.08), rings, 0.45, 2.15, 5.55, 0.12);
   for (const y of [2.5, 3.6, 4.7]) torso.ball(GEAR.gold, 0.3, 0, y, front(y) + 0.25);
   torso.box(trim, 1.2, 1.1, 0.4, 0, 1.3, front(1.3) + 0.12);
   return front(4.5) + 0.1;
@@ -6549,7 +7102,7 @@ function person(top: THREE.Group, look: Look, outfit: Outfit | undefined, asleep
   // How what is in hand strikes: by the weapon (its own, or the one it is drawn as), its icon, or the stock look's.
   const main = outfit?.main_hand;
   const light = outfit ? (main ? (LIGHT[main.ref] ?? LIGHT[WEAPONS[main.ref]?.looksLike ?? ""] ?? LIGHT[main.icon]) : LIGHT.none) : LIGHT[look.weapon];
-  return { parts, animate: b.animate, hands: [b.heldR.joint, b.heldL.joint], carried: b.carried, loose: b.loose, acts: true, light, plays: b.plays(), twin: b.twin(), fires: b.fires(), long: b.longGun(), getUp: BIPED_GET_UP };
+  return { parts, animate: b.animate, hands: [b.heldR.joint, b.heldL.joint], head: b.head.joint, carried: b.carried, loose: b.loose, acts: true, light, plays: b.plays(), twin: b.twin(), fires: b.fires(), long: b.longGun(), getUp: BIPED_GET_UP };
 }
 
 /** A lute in its own part's frame: the belly at the origin facing +z, the neck up +y. Its icon's model, low-poly. */
@@ -8121,6 +8674,8 @@ export interface Figure {
   /** How tall the 22-unit frame is in world units: what a sprite's height used to be. */
   setSize(size: number): void;
   update(pose: FigurePose): void;
+  /** A person's head, for a portrait to look at; null for a creature. */
+  head(): THREE.Object3D | null;
   /** A person's fists, right then left, for putting oars in; null for a creature. */
   hands(): [THREE.Object3D, THREE.Object3D] | null;
   /**
@@ -8463,6 +9018,7 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
     root,
     setSize: (size) => scaler.scale.setScalar(size / FRAME),
     update,
+    head: () => rig.head ?? null,
     hands: () => rig.hands ?? null,
     loose: () => rig.loose?.() ?? 0,
     strike(how = "light") {

@@ -12,9 +12,9 @@
   border: 2px solid #1b1830;
 }
 .figure-preview { display: block; cursor: grab; touch-action: none; }
-.look-spin { position: absolute; right: 6px; bottom: 6px; font-size: 11px; padding: 4px 7px; min-height: 0; opacity: 0.85; }
+.look-zoom { position: absolute; right: 6px; bottom: 6px; font-size: 11px; padding: 4px 7px; min-height: 0; opacity: 0.85; }
 .look-walk { position: absolute; left: 6px; bottom: 6px; font-size: 11px; padding: 4px 7px; min-height: 0; opacity: 0.85; }
-.look-spin:hover, .look-spin:focus-visible, .look-walk:hover, .look-walk:focus-visible { opacity: 1; }
+.look-zoom:hover, .look-zoom:focus-visible, .look-walk:hover, .look-walk:focus-visible { opacity: 1; }
 .figure-preview:active { cursor: grabbing; }
 .look-stage-row { display: flex; gap: 6px; }
 .look-stage .hint { text-align: center; max-width: 250px; }
@@ -23,9 +23,15 @@
 .look-pickers { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .look-group { margin: 0; padding: 8px 12px 10px; border: 1px solid #37335a; background: rgba(20, 17, 42, 0.5); }
 .look-group legend { padding: 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--gold); }
-.look-row { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 8px; align-items: center; padding: 3px 0; }
+.look-row { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 8px; align-items: center; padding: 6px 0; }
+/* A rule between one choice and the next, so whose buttons are whose is plain at a glance. */
+.look-row + .look-row { border-top: 1px solid var(--line); }
 .look-label { font-size: 12px; color: var(--muted); }
 .look-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.look-slider { display: flex; align-items: center; gap: 8px; }
+.look-slider input[type="range"] { flex: 1; min-width: 0; accent-color: var(--gold); }
+.look-slider-end { font-size: 11px; color: var(--muted); }
+.look-slider-reset { font-size: 11px; padding: 3px 7px; min-height: 0; }
 .look-chip {
   font-size: 12px; line-height: 1; padding: 6px 8px; min-height: 28px;
   color: #e8e4f7; background: #2a2650; border: 1px solid #5a5490; box-shadow: 0 2px 0 rgba(0, 0, 0, 0.4);
@@ -50,10 +56,10 @@
   .look-dialog .look-stage { top: -14px; }
   .look-plinth { grid-row: 1 / span 2; width: 150px; height: 150px; }
   .look-plinth .figure-preview { width: 150px !important; height: 150px !important; }
-  .look-spin, .look-walk { font-size: 10px; padding: 3px 5px; bottom: 4px; }
+  .look-zoom, .look-walk { font-size: 10px; padding: 3px 5px; bottom: 4px; }
   .look-walk { left: 4px; }
-  .look-spin { right: 4px; }
-  .look-spin-word { display: none; }
+  .look-zoom { right: 4px; }
+  .look-zoom-word { display: none; }
   .look-stage-row { grid-column: 2; flex-direction: column; align-self: stretch; }
   .look-stage-row > button { width: 100%; }
   .look-dice { grid-column: 2; align-self: start; }
