@@ -1218,15 +1218,14 @@ describe("dice told with a blow or a heal", () => {
       const ann = hero(state, "ann", "qa_paladin", at(5, 6), ["bash", "block"]);
       ann.hp = ann.maxHp = 400;
       ann.hp = 200;
-      ann.focus = ann.maxFocus = 9;
       const foe = enemy(state, "bandit", at(6, 6), "g1", 400);
       state.rng = seed;
       const events: ZoneEvent[] = [];
       state = must(state, { type: "dev", by: "ann", dev: { op: "start_fight" } }, events);
       const plan: ZoneAction[][] = [
-        [{ type: "use", by: "ann", unit: "ann", ability: "bash", target: foe.id, focus: true }, { type: "drink", by: "ann", unit: "ann", item: "healing" }, { type: "use", by: "ann", unit: "ann", ability: "block" }],
-        [{ type: "throw", by: "ann", unit: "ann", item: "fire", at: at(6, 6) }, { type: "use", by: "ann", unit: "ann", ability: "bash", target: foe.id, focus: true }],
-        [{ type: "use", by: "ann", unit: "ann", ability: "bash", target: foe.id, focus: true }, { type: "use", by: "ann", unit: "ann", ability: "bash", target: foe.id, focus: true }],
+        [{ type: "use", by: "ann", unit: "ann", ability: "bash", target: foe.id }, { type: "drink", by: "ann", unit: "ann", item: "healing" }, { type: "use", by: "ann", unit: "ann", ability: "block" }],
+        [{ type: "throw", by: "ann", unit: "ann", item: "fire", at: at(6, 6) }, { type: "use", by: "ann", unit: "ann", ability: "bash", target: foe.id }],
+        [{ type: "use", by: "ann", unit: "ann", ability: "bash", target: foe.id }, { type: "use", by: "ann", unit: "ann", ability: "bash", target: foe.id }],
       ];
       for (const turn of plan) {
         state = turnOf(state, "ann", events);

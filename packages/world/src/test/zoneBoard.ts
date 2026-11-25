@@ -34,7 +34,7 @@ export function flatBoard(o: {
 export function standHero(state: ZoneState, id: string, pos: HexPos, o: { classId: string; level: number; armor: number; power: number; abilities: string[]; items: Unit["items"]; controller?: string }): Unit {
   const sheet = standInHero(o.classId, id, o.level)!;
   const unit: Unit = {
-    id, side: "hero", name: id, kind: o.classId, level: o.level, pos, hp: sheet.maxHp, maxHp: sheet.maxHp, focus: 2, maxFocus: 2,
+    id, side: "hero", name: id, kind: o.classId, level: o.level, pos, hp: sheet.maxHp, maxHp: sheet.maxHp,
     stats: STARTING_STATS[o.classId], armor: o.armor, power: o.power, abilities: o.abilities, conditions: [], down: false, cooldowns: {}, items: o.items,
     ...(o.controller ? { controller: o.controller } : {}),
   };
@@ -45,7 +45,7 @@ export function standHero(state: ZoneState, id: string, pos: HexPos, o: { classI
 /** Stand an enemy on the board, in a band (made, and not yet alerted, if it is new). `over`: whatever about it is not its kind's own. */
 export function standEnemy(state: ZoneState, kind: string, pos: HexPos, group = "g1", over: Partial<Unit> = {}): Unit {
   state.groups[group] ??= { alerted: false };
-  const unit: Unit = { id: `e${++state.seq}`, side: "enemy", name: ENEMIES[kind].name, kind, level: 1, pos, hp: ENEMIES[kind].hp, maxHp: ENEMIES[kind].hp, focus: 0, maxFocus: 0, armor: 0, power: 0, abilities: [...ENEMIES[kind].abilities], conditions: [], down: false, cooldowns: {}, items: {}, group, home: pos, ...over };
+  const unit: Unit = { id: `e${++state.seq}`, side: "enemy", name: ENEMIES[kind].name, kind, level: 1, pos, hp: ENEMIES[kind].hp, maxHp: ENEMIES[kind].hp, armor: 0, power: 0, abilities: [...ENEMIES[kind].abilities], conditions: [], down: false, cooldowns: {}, items: {}, group, home: pos, ...over };
   state.units.push(unit);
   return unit;
 }

@@ -134,6 +134,11 @@ async function status(db: D1Database, playerId: string, stats: Record<GatherSpot
   };
 }
 
+/** Outings left today, and the day's whole: for the energy meter on the bar. Reads only, so it settles no sitting. */
+export async function energyOf(db: D1Database, playerId: string): Promise<{ left: number; max: number }> {
+  return { left: outingsLeft(await readRow(db, playerId), Date.now()), max: GATHER_DAILY_OUTINGS };
+}
+
 export async function gatherStatus(db: D1Database, playerId: string): Promise<(GatherStatus & { sitting?: SittingPaid }) | string> {
   const stats = await gatherStats(db, playerId);
   if (!stats) return "Create a character first.";

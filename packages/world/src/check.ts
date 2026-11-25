@@ -10,9 +10,8 @@ export interface CheckResult {
   label: string;
   stat: StatKey | null;
   pct: number;
-  /** One entry per roll, in order. Focus-guaranteed rolls come first. */
+  /** One entry per roll, in order. */
   rolls: boolean[];
-  focus: number;
   successes: number;
   perfect: boolean;
   fumble: boolean;
@@ -32,14 +31,13 @@ export function statPct(stat: number, bonus = 0): number {
 
 export function rollCheck(
   rng: Rng,
-  opts: { label: string; stat?: StatKey | null; pct: number; count: number; focus?: number },
+  opts: { label: string; stat?: StatKey | null; pct: number; count: number },
 ): CheckResult {
   const count = Math.max(1, Math.floor(opts.count));
-  const focus = Math.max(0, Math.min(count, Math.floor(opts.focus ?? 0)));
   const pct = Math.max(0, Math.min(100, opts.pct));
   const rolls: boolean[] = [];
   for (let i = 0; i < count; i++) {
-    rolls.push(i < focus ? true : rng.next() * 100 < pct);
+    rolls.push(rng.next() * 100 < pct);
   }
   const successes = rolls.filter(Boolean).length;
   return {
@@ -47,7 +45,6 @@ export function rollCheck(
     stat: opts.stat ?? null,
     pct,
     rolls,
-    focus,
     successes,
     perfect: successes === count,
     fumble: successes === 0,

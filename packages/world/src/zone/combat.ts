@@ -63,7 +63,7 @@ function provoke(ctx: Ctx, unit: Unit, next: HexPos, budget: Budget | null, flus
     if (blow) enemyAct(ctx, foe, blow, unit);
     else {
       const ability = reactionStrike(foe.abilities);
-      strike(ctx, foe, ABILITIES[ability], tacticOf(ability), unit, {});
+      strike(ctx, foe, ABILITIES[ability], tacticOf(ability), unit);
       // A blow of opportunity is an attack too: a Rally goes into it.
       removeCondition(foe, "rallied");
     }
@@ -295,9 +295,9 @@ export function push(ctx: Ctx, from: HexPos, target: Unit, by: string): Shift {
  * enemies hold, or one full of its own side), it just stops; over an edge, it falls (unless it catches the edge), and that ends the
  * drive. Returns whether it hit.
  */
-function overwhelm(ctx: Ctx, unit: Unit, def: AbilityDef, target: Unit, opts: { hexes: number; stun: number }, focus?: boolean): boolean {
+function overwhelm(ctx: Ctx, unit: Unit, def: AbilityDef, target: Unit, opts: { hexes: number; stun: number }): boolean {
   const { state } = ctx;
-  const roll = attackRoll(ctx, unit, target, { label: def.name, bonus: proficiency(unit.level) + mod(statOf(unit, def.stat)), melee: true, focus });
+  const roll = attackRoll(ctx, unit, target, { label: def.name, bonus: proficiency(unit.level) + mod(statOf(unit, def.stat)), melee: true });
   if (!roll.ok) {
     ctx.events.push({ t: "miss", actor: unit.id, target: target.id, what: def.id });
     return false;
@@ -606,9 +606,9 @@ function give(ctx: Ctx, unit: Unit, target: Unit, effect: EffectKind, turns: num
 }
 
 /** One attack roll with an ability against one target. Returns whether it landed. */
-function strike(ctx: Ctx, unit: Unit, def: AbilityDef, tactic: Tactic, target: Unit, opts: { focus?: boolean }): boolean {
+function strike(ctx: Ctx, unit: Unit, def: AbilityDef, tactic: Tactic, target: Unit): boolean {
   const melee = tactic.reach === "melee";
-  const roll = attackRoll(ctx, unit, target, { label: def.name, bonus: proficiency(unit.level) + mod(statOf(unit, def.stat)) + (tactic.toHit ?? 0), melee, focus: opts.focus });
+  const roll = attackRoll(ctx, unit, target, { label: def.name, bonus: proficiency(unit.level) + mod(statOf(unit, def.stat)) + (tactic.toHit ?? 0), melee });
   if (!roll.ok) {
     ctx.events.push({ t: "miss", actor: unit.id, target: target.id, what: def.id });
     return false;
@@ -702,7 +702,7 @@ export function previewAttack(state: ZoneState, unit: Unit, ability: string, tar
 }
 
 /** Use an ability that has passed its check. Says what was used, then rolls and applies it. */
-export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim & { focus?: boolean }): void {
+export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim): void {
   const def = ABILITIES[ability];
   const tactic = tacticOf(ability);
   const { state } = ctx;
@@ -780,7 +780,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim &
     if (tactic.ward) addShield(ctx, unit, tactic.ward.shield + unit.level, tactic.ward.rounds);
     // A pocket picked unseen is no blow, just a quick hand.
     if (tactic.steal && wasUnseen) landed = true;
-    else if (tactic.overwhelm) landed = overwhelm(ctx, unit, def, target, tactic.overwhelm, aim.focus);
+    else if (tactic.overwhelm) landed = overwhelm(ctx, unit, def, target, tactic.overwhelm);
     else if (tactic.bind) landed = bind(ctx, unit, def, target, tactic.bind);
     else if (tactic.sure) {
       if (def.damage) {
@@ -790,7 +790,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim &
       // It lands without a roll to hit, but what it would leave on the target can still be saved against (Roar of Thunder's Stun).
       afflict(ctx, unit, def, target, true);
       landed = true;
-    } else landed = strike(ctx, unit, def, tactic, target, aim);
+    } else landed = strike(ctx, unit, def, tactic, target);
     // Knocked back unless it saves (Peal), or at once (Roar of Thunder).
     let shoved = landed && !!tactic.knockback && !target.down;
     if (shoved && tactic.knockSave) shoved = !saveRoll(ctx, target, "str", saveDc(unit, def), `Resist ${def.name}`).ok;
@@ -813,7 +813,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim &
     const dice = rollShown(ctx.rng, abilityDice(def), damageBonus(state, unit, def));
     const rolled = dice.total;
     for (const victim of caught) {
-      const saved = saveRoll(ctx, victim, "agi", saveDc(unit, def), def.name, aim.focus).ok;
+      const saved = saveRoll(ctx, victim, "agi", saveDc(unit, def), def.name).ok;
       let amount = rolled;
       if (tactic.vsWet && has(victim, "wet")) amount += tactic.vsWet;
       damage(ctx, victim, saved ? Math.floor(amount / 2) : amount, { actor: unit.id, what: def.id, dice, halved: saved });
@@ -824,7 +824,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim &
     if (tactic.surface) placeSurface(ctx, line, tactic.surface.kind, tactic.surface.rounds, unit.id);
     landed = true;
   } else if (tactic.shape === "adjacent") {
-    for (const foe of foes().filter((u) => strikes(state.map, unit.pos, u.pos))) landed = strike(ctx, unit, def, tactic, foe, aim) || landed;
+    for (const foe of foes().filter((u) => strikes(state.map, unit.pos, u.pos))) landed = strike(ctx, unit, def, tactic, foe) || landed;
     if (unit.side === "hero" && def.damage) {
       for (const box of cratesBeside(state, unit)) {
         smash(ctx, unit, def, tactic, box);
@@ -833,7 +833,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim &
     }
   } else if (tactic.shape === "arc") {
     const keys = new Set(arcHexes(state, unit.pos, aim.at!).map(posKey));
-    for (const foe of foes().filter((u) => keys.has(posKey(u.pos)) && strikes(state.map, unit.pos, u.pos))) landed = strike(ctx, unit, def, tactic, foe, aim) || landed;
+    for (const foe of foes().filter((u) => keys.has(posKey(u.pos)) && strikes(state.map, unit.pos, u.pos))) landed = strike(ctx, unit, def, tactic, foe) || landed;
     if (unit.side === "hero" && def.damage) {
       for (const box of cratesBeside(state, unit).filter((c) => keys.has(posKey(c.pos)))) {
         smash(ctx, unit, def, tactic, box);
@@ -850,7 +850,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim &
       if (!next) break;
       chain.push(next);
     }
-    for (const foe of chain) if (!foe.down) landed = strike(ctx, unit, def, tactic, foe, aim) || landed;
+    for (const foe of chain) if (!foe.down) landed = strike(ctx, unit, def, tactic, foe) || landed;
   } else if (tactic.shape === "blast" || tactic.shape === "burst" || tactic.shape === "line" || tactic.shape === "cone") {
     const area = abilityArea(state, unit, ability, aim.at);
     const keys = new Set(area.map(posKey));
@@ -861,7 +861,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim &
     const dice = rollShown(ctx.rng, abilityDice(def), damageBonus(state, unit, def) + (tactic.chorus ?? 0) * voices);
     const rolled = dice.total;
     for (const victim of caught) {
-      const saved = saveRoll(ctx, victim, "agi", saveDc(unit, def), def.name, aim.focus).ok;
+      const saved = saveRoll(ctx, victim, "agi", saveDc(unit, def), def.name).ok;
       let amount = rolled;
       if (tactic.vsWet && has(victim, "wet")) amount += tactic.vsWet;
       damage(ctx, victim, saved ? Math.floor(amount / 2) : amount, { actor: unit.id, what: def.id, dice, halved: saved });

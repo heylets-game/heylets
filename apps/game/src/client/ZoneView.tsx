@@ -426,7 +426,6 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   /** A place on the crew's atlas has been cleared and its bounty paid: ask whether to go back to the atlas. */
   const [chartAsk, setChartAsk] = useState(false);
   const [pick, setPick] = useState<Pick | null>(null);
-  const [focus, setFocus] = useState(false);
   const [hover, setHover] = useState<HexPos | null>(null);
   // Whoever of the party was selected before coming onto the map is played first (party.ts).
   const [playAs, setPlayAs] = useState<string | null>(actingHero);
@@ -2078,11 +2077,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
 
   const use = (ability: string, aim: { target?: string; at?: HexPos } = {}) => {
     if (!act || !z) return;
-    const spend = focus && ABILITIES[ability]?.damage !== undefined;
     const sure = !checkAbility(z, act, ability, aim) && !(fighting && (act.cooldowns[ability] ?? 0) > 0);
-    declare({ type: "use", unit: act.id, ability, ...aim, focus: spend }, sure, { cost: tacticOf(ability).cost, slot: `ab:${ability}`, name: ABILITIES[ability]?.name, toward: aimedAt(aim) });
+    declare({ type: "use", unit: act.id, ability, ...aim }, sure, { cost: tacticOf(ability).cost, slot: `ab:${ability}`, name: ABILITIES[ability]?.name, toward: aimedAt(aim) });
     setPick(null);
-    setFocus(false);
   };
   const common = (what: CommonAction, aim: { target?: string; at?: HexPos } = {}) => {
     if (!act || !z) return;
@@ -2606,7 +2603,6 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
             Flee
           </button>
         )}
-        <button className={`small ${focus ? "primary" : ""}`} disabled={act.focus <= 0} aria-pressed={focus} title="Spend 1 Focus on your next attack to roll it with advantage" onClick={() => setFocus((f) => !f)}>Focus {act.focus}</button>
         {crateBeside && (!fighting || myTurn) && (
           <button className="small" disabled={!crateHit || !canPay(tacticOf(crateHit).cost)} title={crateHit ? `${ABILITIES[crateHit].name}${fighting ? `, for ${costName(tacticOf(crateHit).cost)}` : ""}: every blow at a crate lands` : "Nothing you have reaches it"} onClick={() => crateHit && use(crateHit, { target: crateBeside.id })}>
             Break the crate
@@ -2945,7 +2941,6 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         me={me}
         place={enc && fighting ? undefined : place}
         hp={{ now: seen(act).hp, max: act.maxHp, shield: shieldOf(seen(act)) }}
-        meter={{ name: "Focus", note: "spend one to roll an attack with advantage", now: act.focus, max: act.maxFocus, kind: "focus" }}
         // The keys the party has found, on its one ring.
         chips={keys > 0 ? <span className="hud-chip" title="Keys to locked doors: any key opens any door">{keysText}</span> : undefined}
         slots={slots}

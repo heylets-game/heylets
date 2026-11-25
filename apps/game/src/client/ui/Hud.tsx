@@ -12,8 +12,8 @@
 // first: what is in each hand. Between them, the slots: what the hero can do
 // in a fight (see below). Right of the second: the bag. On the beam over it
 // runs the experience bar. Above that sit two meters, health on the left
-// and whatever else the view counts on the right (focus on a map,
-// gathering outings in the Harbor), with a plaque between them that shows
+// and energy (gathering outings left today) on the right, with a plaque
+// between them that shows
 // the hero's level and opens the logbook. A view may hand the bar a turn
 // instead (`turn`: the plaque is then its clock, pressed to end it) and
 // points to show as pips over the meters (`pips`); none does now, a fight
@@ -39,7 +39,7 @@
 import { Children, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { dragSource, useDropTarget } from "../dragDrop";
 import { ABILITIES, COMMON_ACTIONS, ITEM_AP, RARITY_COLOR, THROWABLES, abilitiesFor, classAbilitiesOf, commonCost, loadoutOf, maxHpFor, parseAbilityLoadout, tacticOf, withClassAbilities, xpToNext, type CommonAction, type Throwable } from "@gantt-quest/world";
-import type { Me } from "../api";
+import { api, type Me } from "../api";
 import { Icon, ItemDetail, toOwned } from "../items";
 import { blurb, label } from "../labels";
 import { PixelIcon } from "../PixelIcon";
@@ -59,7 +59,7 @@ export interface HudPips {
   label: string;
   now: number;
   max: number;
-  kind: "ap" | "move" | "focus" | "course";
+  kind: "ap" | "move" | "course";
   /** Said in the tooltip in place of "now of max left". */
   title?: string;
 }
@@ -84,7 +84,7 @@ export interface HudSlot {
   run?(): void;
 }
 
-/** The meter on the right, across from health. */
+/** The meter on the right, across from health. Energy unless a view says otherwise. */
 export interface HudMeter {
   /** What it counts, and (in `note`) a few words more, for its tooltip. */
   name: string;
@@ -102,7 +102,7 @@ interface Props {
   children?: ReactNode;
   /** Hit points right now; omitted anywhere but on a map, where the hero is whole. `shield`: points of shield (Bolstered), shown after the HP. */
   hp?: { now: number; max: number; shield?: number };
-  /** What the right-hand meter counts here. */
+  /** What the right-hand meter counts here. Left out, it is the hero's energy, read by the bar itself. */
   meter?: HudMeter;
   pips?: HudPips[];
   /** Small extras beside the points: "connecting…" while a place's connection is down, the keys held on a map. */
@@ -151,7 +151,7 @@ function Tip({ name, line, more, keys }: { name: string; line?: string; more?: s
   );
 }
 
-export function HudBar({ me, place, children, hp, meter, pips = [], chips, slots, onSlotMove, onSlotMenu, torch, turn, rest, emote, onBag, bagBlocked, onBook, menu }: Props) {
+export function HudBar({ me, place, children, hp, meter: given, pips = [], chips, slots, onSlotMove, onSlotMenu, torch, turn, rest, emote, onBag, bagBlocked, onBook, menu }: Props) {
   const c = me.character;
   // The pack is read out of its stored form (each row's JSON) when it changes, not every time the bar is drawn.
   const items = useMemo(() => me.inventory.map(toOwned), [me.inventory]);
@@ -168,6 +168,20 @@ export function HudBar({ me, place, children, hp, meter, pips = [], chips, slots
   const [tip, setTip] = useState<{ x: number; node: ReactNode } | null>(null);
   const hover = (x: number, node: ReactNode) => ({ onPointerEnter: () => setTip({ x, node }), onPointerLeave: () => setTip(null), onPointerDown: () => setTip(null) });
   const [hpAt, otherAt] = RACK.meters;
+
+  // Energy (gathering outings left today) is always on the right. A view that keeps its own count (the Harbor, a
+  // hut) hands it in, fresh after each outing or rest; anywhere else the bar reads it once, on the way in.
+  const [energy, setEnergy] = useState<{ left: number; max: number } | null>(null);
+  const heroId = me.character ? me.player.id : null;
+  useEffect(() => {
+    if (given || !heroId) return;
+    let live = true;
+    api.energy().then((e) => live && setEnergy(e)).catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [!!given, heroId]);
+  const meter: HudMeter | undefined = given ?? (energy ? { name: "Energy", note: "gathering outings left today", now: energy.left, max: energy.max, kind: "stamina" } : undefined);
   const plaqueX = RACK.plaque.x + RACK.plaque.w / 2;
 
   // The newest slots, for the key handler, which is not rebound each time they change.
@@ -327,8 +341,6 @@ export function HudBar({ me, place, children, hp, meter, pips = [], chips, slots
   const nowHp = hp?.now ?? maxHp;
   const next = xpToNext(c.level);
   const news = logbookNews(c);
-  const left = pips.filter((p) => p.kind !== "focus");
-  const right = pips.filter((p) => p.kind === "focus");
   const pipRow = (p: HudPips) => (
     <span key={p.label} className={`hud-pips ${p.kind}`} title={p.title ?? `${p.label}: ${p.now} of ${p.max} left`}>
       {Array.from({ length: Math.max(p.max, p.now) }, (_, i) => <i key={i} className={i < p.now ? "on" : ""} />)}
@@ -345,8 +357,8 @@ export function HudBar({ me, place, children, hp, meter, pips = [], chips, slots
       )}
 
       <div className="hud-points">
-        <span className="hud-points-side">{left.map(pipRow)}</span>
-        <span className="hud-points-side end">{right.map(pipRow)}{chips}</span>
+        <span className="hud-points-side">{pips.map(pipRow)}</span>
+        <span className="hud-points-side end">{chips}</span>
       </div>
 
       <div className="hud-rack" style={box(0, 0, RACK.w, RACK.h + (rackRows - 1) * RACK_ROW)} onPointerLeave={() => setTip(null)}>

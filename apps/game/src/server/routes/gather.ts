@@ -2,7 +2,7 @@
 // each choice in it), and the rest that gives stamina back.
 
 import { hasShack } from "../db";
-import { gatherStatus, rest, startOuting, stepOuting } from "../gather";
+import { energyOf, gatherStatus, rest, startOuting, stepOuting } from "../gather";
 import { announceXp } from "../harbor-xp";
 import { harborStanding, inOwnHut, type GameApp } from "./shared";
 
@@ -14,6 +14,9 @@ export function gatherRoutes(app: GameApp): void {
     const result = await gatherStatus(c.env.DB, c.get("player").id);
     return typeof result === "string" ? c.json({ error: result }, 409) : c.json(result);
   });
+
+  // Just the outings left today, for the energy meter on the bar wherever the hero is. Unlike the above, it settles nothing.
+  app.get("/api/energy", async (c) => c.json(await energyOf(c.env.DB, c.get("player").id)));
 
   app.post("/api/gather/start", async (c) => {
     const body = await c.req.json<{ spot?: string; pier?: string }>().catch(() => ({}) as { spot?: string; pier?: string });

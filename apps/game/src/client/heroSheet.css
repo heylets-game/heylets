@@ -33,7 +33,6 @@
 .hs-hp.good { background: #3f9a4a; }
 .hs-hp.hurt { background: #b8932a; }
 .hs-hp.low { background: #b9433d; }
-.hs-focus { background: #2f8f96; }
 
 .hs-doll { display: flex; justify-content: center; align-items: center; gap: 8px; margin: 8px 0 4px; }
 .hs-col { display: flex; flex-direction: column; gap: 4px; }

@@ -230,13 +230,13 @@ export interface AttackContext {
 /**
  * What bears on an attack besides the attacker's skill.
  *
- * Advantage: the target is Exposed or Stunned, or Prone and struck in melee; Focus was spent; a pack
+ * Advantage: the target is Exposed or Stunned, or Prone and struck in melee; a pack
  * animal has one of its own beside the target; the attacker is Unseen. Disadvantage: the attacker is Poisoned or Fumbling, carries the Black Spot or a Red Sky, is
  * shooting with an enemy beside them (or on their own hex), or is shooting at something Prone. Shots also get +2 from
  * higher ground, -2 from lower, and -2 at a target standing among trees. A blow by hand down a ladder gets
  * +2, and one struck up it -2.
  */
-export function attackContext(state: ZoneState, attacker: Unit, target: Unit, opts: { melee: boolean; focus?: boolean }): AttackContext {
+export function attackContext(state: ZoneState, attacker: Unit, target: Unit, opts: { melee: boolean }): AttackContext {
   const notes: string[] = [];
   let advantage = false;
   let disadvantage = false;
@@ -245,7 +245,6 @@ export function attackContext(state: ZoneState, attacker: Unit, target: Unit, op
   if (has(target, "exposed")) adv("the target is Exposed");
   if (has(target, "stunned")) adv("the target is Stunned");
   if (has(target, "prone") && opts.melee) adv("the target is Prone");
-  if (opts.focus) adv("Focus");
   if (has(attacker, "invisible")) adv("you are Unseen");
   if (has(attacker, "inspired")) adv("you are Inspired");
   if (has(attacker, "lucky")) adv("you are Lucky");
@@ -283,7 +282,7 @@ export function attackContext(state: ZoneState, attacker: Unit, target: Unit, op
 }
 
 /** Roll an attack and say so. A Fumbling attacker's next attack is the one that suffers: it clears here. */
-export function attackRoll(ctx: Ctx, attacker: Unit, target: Unit, opts: { label: string; bonus: number; melee: boolean; focus?: boolean }): Roll {
+export function attackRoll(ctx: Ctx, attacker: Unit, target: Unit, opts: { label: string; bonus: number; melee: boolean }): Roll {
   const c = attackContext(ctx.state, attacker, target, opts);
   const roll = d20(ctx.rng, { kind: "attack", id: attacker.id, target: target.id, label: opts.label, bonus: opts.bonus + c.mods, vs: defenceOf(target, ctx.state), adv: c.adv });
   removeCondition(attacker, "glitched");
