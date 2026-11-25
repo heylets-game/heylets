@@ -439,6 +439,10 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const [watching, setWatching] = useState(false);
   /** The label that rides beside the pointer: moved by hand, so the whole view is not drawn again for every pixel. */
   const cursor = useRef<HTMLDivElement>(null);
+  /** Where the pointer last went down, on the screen: a menu opened by the click it began is put there. */
+  const pointerAt = useRef({ x: 0, y: 0 });
+  /** More than one there to aim at on the hex clicked: which of them is meant, asked in a little menu at the pointer. */
+  const [whichOne, setWhichOne] = useState<{ pos: HexPos; ids: string[]; x: number; y: number } | null>(null);
   useEffect(() => {
     let live = true;
     const ask = () => api.crewPlaces().then((r) => live && setCrew(r.members), () => undefined);
@@ -1668,7 +1672,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
 
   // ---------- the renderer ----------
 
-  const click = useRef<(pos: HexPos, unit?: string) => void>(() => {});
+  /** A click on a hex, on the figure `unit` if one was clicked; `chosen` when the figure was picked from the which-one menu. */
+  const click = useRef<(pos: HexPos, unit?: string, chosen?: boolean) => void>(() => {});
   useEffect(() => {
     const view = new WorldRenderer(mount.current!, { onHexClick: (pos, _place, unit) => click.current(pos, unit), onHover: setHover }, { grow: true });
     renderer.current = view;
@@ -2054,11 +2059,26 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     zone.send({ type: "loot", unit: state.you, spot: spot.id });
   };
 
-  click.current = (pos, clicked) => {
+  click.current = (pos, clicked, chosen) => {
     // Any click is a new order: a walk up to the waygate that was under way no longer ends in going through it.
     gateNext.current = null;
+    setWhichOne(null);
     if (!state || !act) return;
     const want = pick?.kind === "ability" ? (tacticOf(pick.id).shape === "ally" ? "friend" : "foe") : pick?.kind === "common" ? (pick.what === "help" ? "friend" : "foe") : "any";
+    // Aiming at someone on a hex where more than one could be meant: ask which, rather than guess.
+    if (!chosen && z && !dev.tool) {
+      const tactic = pick?.kind === "ability" ? tacticOf(pick.id) : null;
+      const atUnit = pick?.kind === "ability"
+        ? tactic!.blink ? !pick.first : !tactic!.summon && (tactic!.shape === "single" || tactic!.shape === "chain" || tactic!.shape === "ally")
+        : pick?.kind === "common" && pick.what !== "jump";
+      if (atUnit) {
+        // (A blink that carries someone along takes an ally first, never yourself; one that strikes takes an enemy.)
+        const ally = want === "friend" || (tactic?.blink && tactic.shape === "self");
+        const suits = (u: Unit) => (ally ? u.side === act.side && !(tactic?.blink && u.id === act.id) : u.side !== act.side && !u.down);
+        const ids = unitsAt(z, pos).filter((u) => !u.lost && !state.dark?.includes(u.id) && suits(u)).map((u) => u.id);
+        if (ids.length > 1) return setWhichOne({ pos, ids, ...pointerAt.current });
+      }
+    }
     const there = unitFor(pos, want, clicked);
     if (dev.tool?.tool === "spawn") return dev.open?.send({ op: "spawn", kinds: dev.tool.kinds, at: pos });
     if (dev.tool?.tool === "paint") return dev.open?.send({ op: "paint", kind: dev.tool.surface, hexes: dev.tool.wide ? zoneBlast(state.map, pos, 1) : [pos] });
@@ -2170,16 +2190,22 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && pick) {
+      // Escape shuts the which-one menu first, and only then lets go of the pick.
+      if (e.key === "Escape" && whichOne) {
+        e.stopPropagation();
+        setWhichOne(null);
+      } else if (e.key === "Escape" && pick) {
         e.stopPropagation();
         setPick(null);
       }
     };
     addEventListener("keydown", onKey, true);
     return () => removeEventListener("keydown", onKey, true);
-  }, [pick]);
+  }, [pick, whichOne]);
   // A pick does not outlive the turn it was made on, or the unit it was made for.
   useEffect(() => setPick(null), [act?.id, myTurn]);
+  // Nor does the which-one menu outlive the pick it was asked for.
+  useEffect(() => setWhichOne(null), [pick, act?.id, myTurn]);
   // Walked up to something to search it: once there (and the walk answered), look into it. A fight breaking out calls it off.
   const ownAt = state?.units.find((u) => u.id === state.you)?.pos;
   const ownFighting = !!state && !!enc?.order.includes(state.you);
@@ -2525,10 +2551,32 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       className={`run zone-view ${picking ? "picking" : ""} ${fighting ? "in-fight" : ""} ${myTurn ? "my-turn" : ""}`}
       onContextMenu={(e) => { if (pick) { e.preventDefault(); setPick(null); } }}
       onPointerMove={(e) => { if (cursor.current) cursor.current.style.transform = `translate(${e.clientX + 18}px, ${e.clientY + 14}px)`; }}
+      onPointerDownCapture={(e) => {
+        pointerAt.current = { x: e.clientX, y: e.clientY };
+        // A press anywhere but on the which-one menu lets it go (a click on the map then aims afresh).
+        if (whichOne && !(e.target as Element).closest?.(".zone-which")) setWhichOne(null);
+      }}
     >
       <div className="stage" ref={mount} />
       {/* The edge of the screen while a fight is on: red while you wait, gold when it is yours. */}
       <div className="zone-frame" aria-hidden />
+
+      {/* More than one there to aim at on the hex clicked: which of them is meant. */}
+      {whichOne && (
+        <div className="zone-which panel" role="menu" aria-label="Which one?" style={{ left: Math.min(whichOne.x + 8, innerWidth - 190), top: Math.min(whichOne.y + 8, innerHeight - 30 - whichOne.ids.length * 30) }}>
+          <div className="zone-which-head">Which one?</div>
+          {whichOne.ids.map((id) => {
+            const u = state.units.find((x) => x.id === id);
+            if (!u) return null;
+            return (
+              <button key={id} role="menuitem" className={`small zone-which-${u.side}`} onClick={() => click.current(whichOne.pos, id, true)}>
+                <span className="zone-which-name">{u.name}{u.id === act.id ? " (you)" : ""}</span>
+                <span className="zone-which-hp">{u.down ? "down" : `${u.hp}/${u.maxHp}`}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <TurnBanner show={bannerShow} />
 
