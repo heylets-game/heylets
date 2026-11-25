@@ -72,12 +72,12 @@ function stepSeen(state: ZoneState, action: ZoneAction, events: ZoneEvent[]): { 
 }
 
 describe("where everyone is", () => {
-  it("is told by an event whenever it changes: a fight in the open, every band roused, played for rounds", () => {
+  it("is told by an event whenever it changes: a fight in the open, bells rung and bands roused, played for rounds", () => {
     let roused = 0;
     let walks = 0;
     for (const site of ["keep", "wilds", "camp"] as const) {
       for (let seed = 0; seed < 4; seed++) {
-        let state = createZone("SEEN", `seen-${site}-${seed}`, zoneOptions({ size: "medium", biome: "meadow", site, groups: 5, party: 1, threat: 2 }));
+        let state = createZone("SEEN", `seen-${site}-${seed}`, zoneOptions({ size: "medium", biome: "meadow", site, groups: 5, party: 1 }));
         const joined = stepZone(state, { type: "join", hero: standInHero("qa_paladin", "ann", 3)! });
         if (!joined.ok) throw new Error(joined.error);
         state = joined.state;
@@ -123,7 +123,7 @@ describe("where everyone is", () => {
   }, 120_000);
 
   it("is given up only at the end of a fight nobody won, which says so", () => {
-    let state = createZone("LOST", "lost-keep", zoneOptions({ size: "medium", biome: "meadow", site: "keep", groups: 5, party: 1, threat: 2 }));
+    let state = createZone("LOST", "lost-keep", zoneOptions({ size: "medium", biome: "meadow", site: "keep", groups: 5, party: 1 }));
     const joined = stepZone(state, { type: "join", hero: standInHero("qa_paladin", "ann", 1)! });
     if (!joined.ok) throw new Error(joined.error);
     state = joined.state;

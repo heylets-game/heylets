@@ -159,7 +159,7 @@ export function Logbook({ me, refresh, onClose, onIsland = false }: Props) {
                     <span className="book-skill-n">{i + 1}</span>
                     <div>
                       <strong>{label("ability", id)}</strong>
-                      <small> {a.rolls} × {STAT_LABEL[a.stat]} · {statPct(total(a.stat))}% a roll</small>
+                      <small> {STAT_LABEL[a.stat]}</small>
                       <p>{blurb("ability", id)}</p>
                     </div>
                   </div>

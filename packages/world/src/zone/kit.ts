@@ -5,9 +5,12 @@
 // puts them on a map. A test fails if an ability or an enemy has no entry.
 
 import type { StatKey, Stats } from "@gantt-quest/core";
-import { ABILITIES, EFFECT_INFO, ENEMIES, SUNDERED_DEFENCE, type AbilityDef, type EffectKind, type EnemyAttack } from "../content";
+import { ABILITIES, EFFECT_INFO, ENEMIES, SUNDERED_DEFENCE, type AbilityDef, type EffectKind } from "../content";
+import type { BehaviourId } from "./behaviours";
+import { ENEMY_ABILITIES, type EnemyAbilityDef } from "./enemyabilities";
+import { modsOf } from "./mods";
 import { diceFor, type Dice } from "./rules";
-import type { CommonAction, Condition, ShantyKind, SurfaceKind, Throwable, WeatherKind } from "./types";
+import type { CommonAction, Condition, ShantyKind, SurfaceKind, Throwable, Unit, WeatherKind, ZoneState } from "./types";
 
 /**
  * - `single`: one enemy, an attack roll.
@@ -572,7 +575,7 @@ export const CONDITION_INFO: Record<Condition, { name: string; blurb: string; co
 export const COMMON_ACTIONS: Record<CommonAction, { name: string; cost: number; blurb: string }> = {
   disengage: { name: "Disengage", cost: 2, blurb: "Moving away from enemies draws no opportunity attacks this turn." },
   help: { name: "Help", cost: 2, blurb: "Get a fallen ally beside you back on their feet with 1 HP." },
-  shove: { name: "Shove", cost: 1, blurb: "Push an enemy beside you one hex away: into fire, out of reach, off a height (they fall: a d4 for each level past the first, and land flat), or into deep water, lava or off the edge of the land, where they are lost. Toward a drop or a pit they roll to catch the edge." },
+  shove: { name: "Shove", cost: 1, blurb: "An attack that does no harm: on a hit, push an enemy beside you one hex away: into fire, out of reach, off a height (they fall: a d4 for each level past the first, and land flat), or into deep water, lava or off the edge of the land, where they are lost. Toward a drop or a pit they roll to catch the edge." },
   jump: { name: "Jump", cost: 2, blurb: "Leap a few hexes, over whatever lies between: up a ledge two levels high, or down one. Further down than two levels is a fall." },
   join: { name: "Join the Song", cost: 1, blurb: "Join an ally's shanty you are standing in, once a shanty: it reaches a hex further, and you get its joining lift (Lively: advantage on your next attack; Dour: Guarded; Wind-god's: Disengaged), and everyone in it gets a little more of what it gives until the Bard's next turn." },
   flee: { name: "Flee", cost: 2, blurb: "Get out of the fight, once no enemy in it is within 2 hexes of you. You walk free and it goes on without you; an enemy coming that close again brings you back into it." },
@@ -663,28 +666,43 @@ export const jumpRange = (strMod: number): number => Math.max(2, 2 + strMod);
 
 // ---------- enemies ----------
 
-export interface EnemyAttackKit {
-  /** Hexes it reaches: 1 for a blow. */
-  range?: number;
-  /** Left under the target when it lands. */
-  surface?: { kind: SurfaceKind; rounds: number };
-  /** Knocks the target back a hex when it lands. */
-  push?: boolean;
-  /** Freezes water under the target. */
-  chills?: boolean;
+/** What an enemy's ability does besides its damage, when it lands. */
+export type EnemyAttackKit = Pick<EnemyAbilityDef, "surface" | "push" | "chills">;
+
+/**
+ * How an enemy likes to fight, whatever it carries: what the turn (ai.ts) and its abilities' behaviours
+ * (behaviours.ts) weigh, beside what an ability would do. Each kind's is DEFAULT_MIND with its own changes
+ * (EnemyKit `mind`).
+ */
+export interface Mind {
+  /** What each hex between it and the nearest hero is worth, up to 4 of them: room to shoot in. 0 does not care. */
+  spacing: number;
+  /** What each level it stands above its target is worth, up to 3: a shot looks down on what it is aimed at. */
+  height: number;
+  /** How much it minds harm on the way: fire and poison underfoot, and blows drawn by walking out of reach. 1 is the usual; 0 does not care. */
+  caution: number;
+  /** How much more a blow is worth at someone hurt: this share more against one who is all but down. */
+  hunter: number;
+  /** What it adds for a blow that would, on an average roll, finish someone. */
+  finisher: number;
+  /** What it adds for a blow at someone one of its own is already beside. */
+  flank: number;
 }
 
+export const DEFAULT_MIND: Mind = { spacing: 0, height: 0, caution: 1, hunter: 0.5, finisher: 3, flank: 1 };
+
+/** Those that shoot: they like room, and to look down on what they shoot at. */
+const SHOOTER: Partial<Mind> = { spacing: 0.4, height: 0.5 };
+
 export interface EnemyKit {
-  /** Keeps its distance and likes high ground. */
-  ranged?: boolean;
+  /** How it likes to fight, where that is not as DEFAULT_MIND says. */
+  mind?: Partial<Mind>;
   /** Ignores the ground: surfaces, rough going, water and cliffs. */
   fly?: boolean;
   /** Advantage on an attack when one of its own is next to the target. */
   pack?: boolean;
   /** It has the hands and the wit for it: it will shove someone beside it over a drop or into a pit (its bonus action). */
   shoves?: boolean;
-  /** Attacks that are not plain blows, by name. */
-  attacks?: Record<string, EnemyAttackKit>;
 }
 
 export const ENEMY_KIT: Record<string, EnemyKit> = {
@@ -695,84 +713,109 @@ export const ENEMY_KIT: Record<string, EnemyKit> = {
   // Its Stomp, like anything that strikes the whole crew, is a burst around it.
   ogre: { shoves: true },
   // It rakes up close, and will throw a rock at whoever keeps away. (Its wounds closing is in zone.ts, at the start of its turn.)
-  troll: { shoves: true, attacks: { "Hurl Rock": { range: 5 } } },
-  cultist: { ranged: true, attacks: { "Dark Bolt": { range: 5 }, Immolate: { range: 5, surface: { kind: "fire", rounds: 2 } } } },
-  brute: { shoves: true, attacks: { Shove: { push: true } } },
-  archer: { ranged: true, attacks: { Volley: { range: 7 }, "Barbed Arrow": { range: 7 } } },
+  troll: { shoves: true },
+  cultist: { mind: SHOOTER },
+  brute: { shoves: true },
+  archer: { mind: SHOOTER },
   alpha: { pack: true },
   great_bear: { shoves: true },
   guardian: { shoves: true },
-  shade: { attacks: { "Chill Touch": { chills: true } } },
+  shade: {},
   bat: { fly: true },
   skeleton: { shoves: true },
-  // Its acid eats into whoever it hits and is spent: it leaves no pool behind (that is poison's way).
-  slime: { attacks: { "Acid Splash": { range: 3 } } },
+  slime: {},
   haunt: {},
   villain: { shoves: true },
-  spider: { pack: true, attacks: { "Venomous Bite": { surface: { kind: "poison", rounds: 2 } }, "Web Spit": { range: 4, surface: { kind: "slime", rounds: 2 } } } },
-  broodmother: { attacks: { "Web Spit": { range: 5, surface: { kind: "slime", rounds: 2 } } } },
-  frost_wolf: { pack: true, attacks: { "Rime Bite": { chills: true } } },
+  spider: { pack: true },
+  broodmother: {},
+  frost_wolf: { pack: true },
   ember_hound: { pack: true },
   snow_bear: { shoves: true },
-  wraith: { ranged: true, attacks: { "Frost Lance": { range: 5, chills: true } } },
-  witch: { ranged: true, attacks: { "Thorn Hex": { range: 5 }, "Evil Eye": { range: 5 } } },
+  wraith: { mind: SHOOTER },
+  witch: { mind: SHOOTER },
 };
+
+const minds = new Map<string, Mind>();
+/** How an enemy of this kind likes to fight (worked out once a kind: it is asked of every hex an enemy looks at). */
+export function mindOf(kind: string): Mind {
+  let mind = minds.get(kind);
+  if (!mind) minds.set(kind, (mind = Object.freeze({ ...DEFAULT_MIND, ...ENEMY_KIT[kind]?.mind })));
+  return mind;
+}
 
 /** How far an attack on every hero reaches out from the enemy making it. */
 export const ENEMY_BURST = 2;
 
 export interface EnemyStrike {
+  /** The ability's id (enemyabilities.ts). */
+  id: string;
   name: string;
   /** 1 for a blow; more needs a clear line. An attack on every hero is a burst around the enemy. */
   range: number;
   burst: boolean;
   dice: Dice;
   bonus: number;
-  perfect?: EnemyAttack["perfect"];
+  perfect?: EnemyAbilityDef["perfect"];
   weight: number;
+  /** Which behaviour weighs it up (behaviours.ts BEHAVIOURS). */
+  behaviour: BehaviourId;
+  /** Action Points it takes, and the turns it is not ready for after. */
+  cost: number;
+  cooldown: number;
   kit: EnemyAttackKit;
 }
 
-/** The threat a zone was made at, for one made before there was such a thing. */
-export const DEFAULT_THREAT = 2;
-const clampThreat = (threat: number | undefined) => Math.max(1, Math.min(3, Math.round(threat ?? DEFAULT_THREAT)));
-/** How much more an enemy can take, by threat: the old fights' numbers were for foes that fell in two blows. */
-const THREAT_HP = [1, 1.9, 2.7];
+/** What every enemy adds to the damage and the to-hit of its abilities, and to the saves against what it does. */
+export const ENEMY_EDGE = 0;
 
 /**
- * An enemy kind's attacks as they work on the tiles, for a party of this level and at this threat.
- * `more` is what the map's modifiers add to every attack's damage and its bonus to hit (zone/mods.ts).
+ * Enemy abilities (by id) as they work on the tiles, for an enemy of this level. `more` is what
+ * the map's modifiers add to every attack's damage and its bonus to hit (zone/mods.ts). An id the pool does not
+ * have is passed over.
  */
-export function enemyStrikes(kind: string, level: number, threat?: number, more = 0): EnemyStrike[] {
-  const edge = clampThreat(threat) - 1 + more;
-  const def = ENEMIES[kind];
-  if (!def) return [];
-  const kit = ENEMY_KIT[kind] ?? {};
-  return def.attacks.map((a) => {
-    const own = kit.attacks?.[a.name] ?? {};
-    return {
-      name: a.name,
-      range: a.target === "all_heroes" ? ENEMY_BURST : (own.range ?? 1),
-      burst: a.target === "all_heroes",
-      dice: diceFor(a.damage + Math.floor(level / 2) + edge),
-      // The old chance of a roll, turned into a bonus: 45% is +3, 57% is +5. Threat sharpens it.
-      bonus: Math.round((a.pct - 30) / 6) + Math.floor((Math.max(1, level) - 1) / 4) + edge,
-      perfect: a.perfect,
-      weight: a.weight,
-      kit: own,
-    };
+export function abilityStrikes(ids: readonly string[], level: number, more = 0): EnemyStrike[] {
+  const edge = ENEMY_EDGE + more;
+  return ids.flatMap((id) => {
+    const a = ENEMY_ABILITIES[id];
+    if (!a) return [];
+    const burst = a.shape === "burst";
+    return [
+      {
+        id,
+        name: a.name,
+        range: burst ? ENEMY_BURST : (a.range ?? 1),
+        burst,
+        dice: diceFor(a.damage + Math.floor(level / 2) + edge),
+        bonus: a.toHit + Math.floor((Math.max(1, level) - 1) / 4) + edge,
+        perfect: a.perfect,
+        weight: a.weight,
+        behaviour: (a.behaviour ?? (burst ? "burst" : "strike")) as BehaviourId,
+        cost: a.cost ?? ACTION_AP,
+        cooldown: a.cooldown ?? 0,
+        kit: { surface: a.surface, push: a.push, chills: a.chills },
+      },
+    ];
   });
 }
 
-/** The quick are hard to hit: 10, one more for every 30 of the old speed, one more for a boss. */
-export const enemyDefence = (kind: string): number => 10 + Math.floor((ENEMIES[kind]?.speed ?? 0) / 30) + (ENEMIES[kind]?.boss ? 1 : 0);
+/** What an enemy kind starts with, as abilityStrikes makes them. */
+export const enemyStrikes = (kind: string, level: number, more = 0): EnemyStrike[] => abilityStrikes(ENEMIES[kind]?.abilities ?? [], level, more);
+
+/** What this enemy can do just now: its own abilities, those that are ready, on this map. */
+export const unitStrikes = (state: Pick<ZoneState, "options">, unit: Unit): EnemyStrike[] =>
+  abilityStrikes(unit.abilities, unit.level, modsOf(state.options).edge).filter((s) => !(unit.cooldowns[s.id] > 0));
+
+/** What a hero's attack has to roll to hit this kind, as its entry sets it. */
+export const enemyDefence = (kind: string): number => ENEMIES[kind]?.defence ?? 10;
 
 /**
- * Steps 1 AP buys an enemy, and `more` for what the map's modifiers add: 2 for most of what goes on foot, as for an
- * ordinary hero (rules.ts heroMove), and 3 for the quick (a speed of 63 or more: wolves, hounds, spiders, archers,
- * shades, bats). Never more than 3 before `more`. A training dummy stays put.
+ * Steps 1 AP buys an enemy, as its entry sets it, and `more` for what the map's modifiers add. One whose entry says 0
+ * (a training dummy) stays put whatever the map says.
  */
-export const enemyMove = (kind: string, more = 0): number => (kind === "dummy" ? 0 : Math.max(1, Math.floor(Math.max(3, Math.min(7, 3 + Math.round((ENEMIES[kind]?.speed ?? 0) / 25))) / 2)) + more);
+export const enemyMove = (kind: string, more = 0): number => {
+  const move = ENEMIES[kind]?.move ?? 2;
+  return move > 0 ? move + more : 0;
+};
 
 /**
  * The most AP an enemy puts into movement in one turn, whether or not it also strikes: two strides, so 4 hexes of open
@@ -783,17 +826,12 @@ export const enemyMove = (kind: string, more = 0): number => (kind === "dummy" ?
  */
 export const ENEMY_MOVE_AP = 2;
 
-/** What an enemy adds to its roll when it shoves someone: the big shove hard. */
-export const enemyShove = (kind: string): number => 1 + enemySave(kind);
 
-/** What an enemy adds to a saving throw: bosses and the big are harder to shake. */
-export const enemySave = (kind: string): number => (ENEMIES[kind]?.boss ? 3 : (ENEMIES[kind]?.hp ?? 0) >= 18 ? 2 : 0);
+/** What an enemy adds to a saving throw, and to the DC of saves against what it does, as its entry sets it. */
+export const enemySave = (kind: string): number => ENEMIES[kind]?.save ?? 0;
 
-/** Every enemy's hit points, at every level, against what its entry and the level and threat give. */
-export const ENEMY_HP_SCALE = 1.1;
+/** Hit points for a party of this level: its entry's at level 1, and 15% more of them for every level after. */
+export const enemyHp = (kind: string, level: number): number => Math.round((ENEMIES[kind]?.hp ?? 1) * (1 + 0.15 * Math.max(0, level - 1)));
 
-/** Hit points for a party of this level (half again as much by level 4, as in the old fights), scaled by threat. */
-export const enemyHp = (kind: string, level: number, threat?: number): number => Math.round((ENEMIES[kind]?.hp ?? 1) * (1 + 0.15 * Math.max(0, level - 1)) * THREAT_HP[clampThreat(threat) - 1] * ENEMY_HP_SCALE);
-
-/** How many more stand with a group than its leader would bring, by threat. */
-export const threatExtras = (threat?: number): number => clampThreat(threat) - 1;
+/** How many more stand with a group than its leader would bring. */
+export const GROUP_EXTRAS = 0;

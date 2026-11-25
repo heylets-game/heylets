@@ -36,6 +36,7 @@ import {
   CONDITION_INFO,
   CRATE_HP,
   ENEMIES,
+  ENEMY_ABILITIES,
   FLEE_RANGE,
   FREE_WALK,
   pathIn,
@@ -281,6 +282,7 @@ function dwell(ev: ZoneEvent, many: boolean, next: ZoneEvent | undefined, carrie
     case "blinked": return 450;
     case "seen": return 200;
     case "fight_start": return 1300;
+    case "bell": return 900;
     case "roused": return 600;
     case "fight_end": return 700;
     case "fled": return 420;
@@ -437,6 +439,10 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const [watching, setWatching] = useState(false);
   /** The label that rides beside the pointer: moved by hand, so the whole view is not drawn again for every pixel. */
   const cursor = useRef<HTMLDivElement>(null);
+  /** Where the pointer last went down, on the screen: a menu opened by the click it began is put there. */
+  const pointerAt = useRef({ x: 0, y: 0 });
+  /** More than one there to aim at on the hex clicked: which of them is meant, asked in a little menu at the pointer. */
+  const [whichOne, setWhichOne] = useState<{ pos: HexPos; ids: string[]; x: number; y: number } | null>(null);
   useEffect(() => {
     let live = true;
     const ask = () => api.crewPlaces().then((r) => live && setCrew(r.members), () => undefined);
@@ -1465,8 +1471,14 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         say(`${name(ev.id)} picks the glowing mushrooms.`);
       } else if (ev.t === "door") {
         say(ev.how === "key" ? `${name(ev.id)} unlocks the door.` : ev.how === "forced" ? `${name(ev.id)} forces the door: it gives way with a crash.` : `${name(ev.id)} throws a shoulder at the door: it holds.`);
+      } else if (ev.t === "bell_goer") {
+        say(`${name(ev.id)} makes for the alarm bell! Stop it before it rings.`, "bad");
+      } else if (ev.t === "bell") {
+        const bell = draft.pois.find((p) => p.id === ev.poi);
+        if (bell) bell.cleared = true;
+        say(`${name(ev.id)} rings the alarm bell!`, "bad");
       } else if (ev.t === "roused") {
-        // A fight in the open: the rest of the place has heard it and is on its way.
+        // The bell has rung: the rest of the place has heard it and is on its way.
         say(`The alarm is up. The whole place is roused: ${ev.units.length} more ${ev.units.length === 1 ? "is" : "are"} coming.`, "bad");
       } else if (ev.t === "noise") {
         say(next.options.biome === "caves" ? "The noise carries through the tunnels. Something is coming." : "The fight is heard. More of them are coming.", "bad");
@@ -1660,7 +1672,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
 
   // ---------- the renderer ----------
 
-  const click = useRef<(pos: HexPos, unit?: string) => void>(() => {});
+  /** A click on a hex, on the figure `unit` if one was clicked; `chosen` when the figure was picked from the which-one menu. */
+  const click = useRef<(pos: HexPos, unit?: string, chosen?: boolean) => void>(() => {});
   useEffect(() => {
     const view = new WorldRenderer(mount.current!, { onHexClick: (pos, _place, unit) => click.current(pos, unit), onHover: setHover }, { grow: true });
     renderer.current = view;
@@ -1726,7 +1739,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       // One lost to a pit is not drawn at all.
       units: [
         ...(state.loot ?? []).filter((s) => s.kind === "body" && s.unit && !picture.units.some((u) => u.id === s.id)).map((s) => ({ id: s.id, kind: s.unit!, pos: s.pos, name: s.name, down: true })),
-        ...picture.units.filter((u) => u.side === "enemy" && !u.lost && !state.dark?.includes(u.id)).map((u) => ({ id: u.id, kind: u.kind, pos: u.pos, name: u.name, hp: inFight(u.id) || u.hp < u.maxHp ? u.hp / u.maxHp : undefined, down: u.down, prone: u.conditions.some((c) => c.kind === "prone"), active: u.id === spot, hostile: inFight(u.id), effects: badgesOf(u) })),
+        ...picture.units.filter((u) => u.side === "enemy" && !u.lost && !state.dark?.includes(u.id)).map((u) => ({ id: u.id, kind: u.kind, pos: u.pos, name: u.name, hp: inFight(u.id) || u.hp < u.maxHp ? u.hp / u.maxHp : undefined, down: u.down, prone: u.conditions.some((c) => c.kind === "prone"), active: u.id === spot, hostile: inFight(u.id), effects: [...badgesOf(u), ...(state.encounter?.bell?.goer === u.id && !state.map.pois.some((p) => p.kind === "bell" && p.cleared) ? [{ kind: "bell", color: "#ffd34e", rounds: 0 }] : [])] })),
       ],
       // Lit tiles are a turn's movement; walking freely, nothing is lit.
       freeRoam: !fighting,
@@ -1781,12 +1794,14 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const overlays = useMemo<Overlay[]>(() => {
     const out: Overlay[] = [];
     if (!state || !z || !act) return out;
-    if (dev.showAlert) {
-      for (const group of Object.keys(state.groups)) {
-        if (state.groups[group].alerted) continue;
-        const members = state.units.filter((u) => u.group === group && !u.down);
-        out.push({ hexes: state.map.tiles.filter((t) => members.some((m) => hexDistance(m.pos, t) <= ALERT_RANGE && sees(state.map, m.pos, t))), color: "#ff3b3b", fill: 0.08, line: 0.7 });
-      }
+    // Where each band that has noticed nobody can see: a thin red outline, its dashes crawling round, so the way past
+    // it can be told. Walk into it in plain sight and the band turns on you. The dev toolbox fills it in as well.
+    for (const group of Object.keys(state.groups)) {
+      if (state.groups[group].alerted) continue;
+      const members = state.units.filter((u) => u.group === group && !u.down);
+      if (members.length === 0) continue;
+      const seen = state.map.tiles.filter((t) => members.some((m) => hexDistance(m.pos, t) <= ALERT_RANGE && sees(state.map, m.pos, t)));
+      out.push({ hexes: seen, color: "#ff3b3b", line: 0.7, march: true, ...(dev.showAlert ? { fill: 0.08 } : {}) });
     }
     if (dev.tool?.tool === "paint" && hover) out.push({ hexes: dev.tool.wide ? zoneBlast(state.map, hover, 1) : [hover], color: dev.tool.surface ? SURFACE_INFO[dev.tool.surface].color : "#ffffff", fill: 0.35, line: 0.9 });
     if (dev.tool?.tool === "spawn" && hover) out.push({ hexes: [hover], color: "#ff3b3b", fill: 0.35, line: 0.9 });
@@ -2046,11 +2061,26 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     zone.send({ type: "loot", unit: state.you, spot: spot.id });
   };
 
-  click.current = (pos, clicked) => {
+  click.current = (pos, clicked, chosen) => {
     // Any click is a new order: a walk up to the waygate that was under way no longer ends in going through it.
     gateNext.current = null;
+    setWhichOne(null);
     if (!state || !act) return;
     const want = pick?.kind === "ability" ? (tacticOf(pick.id).shape === "ally" ? "friend" : "foe") : pick?.kind === "common" ? (pick.what === "help" ? "friend" : "foe") : "any";
+    // Aiming at someone on a hex where more than one could be meant: ask which, rather than guess.
+    if (!chosen && z && !dev.tool) {
+      const tactic = pick?.kind === "ability" ? tacticOf(pick.id) : null;
+      const atUnit = pick?.kind === "ability"
+        ? tactic!.blink ? !pick.first : !tactic!.summon && (tactic!.shape === "single" || tactic!.shape === "chain" || tactic!.shape === "ally")
+        : pick?.kind === "common" && pick.what !== "jump";
+      if (atUnit) {
+        // (A blink that carries someone along takes an ally first, never yourself; one that strikes takes an enemy.)
+        const ally = want === "friend" || (tactic?.blink && tactic.shape === "self");
+        const suits = (u: Unit) => (ally ? u.side === act.side && !(tactic?.blink && u.id === act.id) : u.side !== act.side && !u.down);
+        const ids = unitsAt(z, pos).filter((u) => !u.lost && !state.dark?.includes(u.id) && suits(u)).map((u) => u.id);
+        if (ids.length > 1) return setWhichOne({ pos, ids, ...pointerAt.current });
+      }
+    }
     const there = unitFor(pos, want, clicked);
     if (dev.tool?.tool === "spawn") return dev.open?.send({ op: "spawn", kinds: dev.tool.kinds, at: pos });
     if (dev.tool?.tool === "paint") return dev.open?.send({ op: "paint", kind: dev.tool.surface, hexes: dev.tool.wide ? zoneBlast(state.map, pos, 1) : [pos] });
@@ -2162,16 +2192,22 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && pick) {
+      // Escape shuts the which-one menu first, and only then lets go of the pick.
+      if (e.key === "Escape" && whichOne) {
+        e.stopPropagation();
+        setWhichOne(null);
+      } else if (e.key === "Escape" && pick) {
         e.stopPropagation();
         setPick(null);
       }
     };
     addEventListener("keydown", onKey, true);
     return () => removeEventListener("keydown", onKey, true);
-  }, [pick]);
+  }, [pick, whichOne]);
   // A pick does not outlive the turn it was made on, or the unit it was made for.
   useEffect(() => setPick(null), [act?.id, myTurn]);
+  // Nor does the which-one menu outlive the pick it was asked for.
+  useEffect(() => setWhichOne(null), [pick, act?.id, myTurn]);
   // Walked up to something to search it: once there (and the walk answered), look into it. A fight breaking out calls it off.
   const ownAt = state?.units.find((u) => u.id === state.you)?.pos;
   const ownFighting = !!state && !!enc?.order.includes(state.you);
@@ -2517,10 +2553,32 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       className={`run zone-view ${picking ? "picking" : ""} ${fighting ? "in-fight" : ""} ${myTurn ? "my-turn" : ""}`}
       onContextMenu={(e) => { if (pick) { e.preventDefault(); setPick(null); } }}
       onPointerMove={(e) => { if (cursor.current) cursor.current.style.transform = `translate(${e.clientX + 18}px, ${e.clientY + 14}px)`; }}
+      onPointerDownCapture={(e) => {
+        pointerAt.current = { x: e.clientX, y: e.clientY };
+        // A press anywhere but on the which-one menu lets it go (a click on the map then aims afresh).
+        if (whichOne && !(e.target as Element).closest?.(".zone-which")) setWhichOne(null);
+      }}
     >
       <div className="stage" ref={mount} />
       {/* The edge of the screen while a fight is on: red while you wait, gold when it is yours. */}
       <div className="zone-frame" aria-hidden />
+
+      {/* More than one there to aim at on the hex clicked: which of them is meant. */}
+      {whichOne && (
+        <div className="zone-which panel" role="menu" aria-label="Which one?" style={{ left: Math.min(whichOne.x + 8, innerWidth - 190), top: Math.min(whichOne.y + 8, innerHeight - 30 - whichOne.ids.length * 30) }}>
+          <div className="zone-which-head">Which one?</div>
+          {whichOne.ids.map((id) => {
+            const u = state.units.find((x) => x.id === id);
+            if (!u) return null;
+            return (
+              <button key={id} role="menuitem" className={`small zone-which-${u.side}`} onClick={() => click.current(whichOne.pos, id, true)}>
+                <span className="zone-which-name">{u.name}{u.id === act.id ? " (you)" : ""}</span>
+                <span className="zone-which-hp">{u.down ? "down" : `${u.hp}/${u.maxHp}`}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <TurnBanner show={bannerShow} />
 
@@ -2630,10 +2688,10 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
             <>
               <strong>{under.name}</strong> <span className="muted">· {under.hp}/{under.maxHp} HP · Defence {defenceOf(under, state)}{under.down ? " · down" : ""}</span>
               {under.conditions.length > 0 && <div>{under.conditions.map((c) => <span key={c.kind} className="zone-cond" style={{ color: CONDITION_INFO[c.kind].color }} title={CONDITION_INFO[c.kind].blurb}>{CONDITION_INFO[c.kind].name}{stacksOf(c) > 1 ? ` ×${c.amount}` : ""} {c.rounds}</span>)}</div>}
-              {under.side === "enemy" && <div className="muted">{ENEMIES[under.kind]?.attacks.map((a) => a.name).join(", ")}</div>}
+              {under.side === "enemy" && <div className="muted">{under.abilities.map((id) => ENEMY_ABILITIES[id]?.name ?? id).join(", ")}</div>}
               {alsoHere.map((u) => <div key={u.id}><span className="muted">Sharing the hex:</span> <strong>{u.name}</strong> <span className="muted">· {u.hp}/{u.maxHp} HP{u.down ? " · down" : ""}</span></div>)}
               {/* Where a shove would send them: over an edge, into a pit, or only back a hex. */}
-              {shoveInto && <div style={{ color: shoveInto.how === "open" ? undefined : "#ffb070" }} className={shoveInto.how === "open" ? "muted" : ""}>{shoveInto.how === "pit" ? `Shoved from here they go ${shoveInto.pit === "lava" ? "into the lava" : shoveInto.pit === "water" ? "into deep water" : "off the edge of the land"}, and are lost, unless they catch the edge (they roll ${edgeDc(asState(state), act)} or better).` : shoveInto.how === "drop" ? `Shoved from here they go over a drop of ${shoveInto.levels} levels (${shoveInto.levels - 1}d4 and Prone), unless they catch the edge (they roll ${edgeDc(asState(state), act)} or better).` : "Shoved from here they go back a hex."}</div>}
+              {shoveInto && <div style={{ color: shoveInto.how === "open" ? undefined : "#ffb070" }} className={shoveInto.how === "open" ? "muted" : ""}>{shoveInto.how === "pit" ? `Shoved from here they go ${shoveInto.pit === "lava" ? "into the lava" : shoveInto.pit === "water" ? "into deep water" : "off the edge of the land"}, and are lost, unless they catch the edge (they roll ${edgeDc(act)} or better).` : shoveInto.how === "drop" ? `Shoved from here they go over a drop of ${shoveInto.levels} levels (${shoveInto.levels - 1}d4 and Prone), unless they catch the edge (they roll ${edgeDc(act)} or better).` : "Shoved from here they go back a hex."}</div>}
               {shoveBlocked && <div className="muted">Shoved from here they have nowhere to go{heldAgainst(asState(state), shoveDest(act.pos, under.pos), under.side) ? " (one of yours is in the way)" : ""}: a knock, and Prone.</div>}
               {preview && (
                 <div className="zone-chance">

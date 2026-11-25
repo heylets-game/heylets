@@ -11,7 +11,7 @@ import { CLIMES, MOVE_COST, type Clime } from "../map";
 import { makeRng } from "../rng";
 import { ALERT_RANGE, ZONE_GRIDS, generateZone, zoneOptions } from "./gen";
 import { HEX_DIRS, MAX_ELEV, ladderBetween, pitAt, solid } from "./geometry";
-import { threatExtras } from "./kit";
+import { GROUP_EXTRAS } from "./kit";
 import { LAY_GRIDS, layZone, type Laid } from "./lay";
 import { PROPS, propOf } from "./props";
 import { FACTIONS, LAIR_INSIDE, LOOKOUT_INSIDE, SITES, SITE_GROUNDS, SITE_IDS, backdropOf, bandOf, factionsOf, placeName, siteFor, siteInside, siteOpen, type Faction, type FactionId, type SiteDef, type SiteId } from "./sites";
@@ -26,7 +26,7 @@ const OPEN = SITE_IDS.filter(siteOpen);
 const INSIDE = SITE_IDS.filter(siteInside);
 /** Which kind of indoors a site is: walled halls, caves, or neither. */
 const kindOf = (site: SiteId) => (SITES[site] as SiteDef).inside;
-const base = { size: "medium", biome: "meadow", groups: 3, elevation: 2, obstacles: 1, clear: 4, party: 2, threat: 2 } as const;
+const base = { size: "medium", biome: "meadow", groups: 3, elevation: 2, obstacles: 1, clear: 4, party: 2 } as const;
 const options = (more: Record<string, unknown> = {}): ZoneOptions => zoneOptions({ ...base, ...more });
 const lay = (seed: string, more: Record<string, unknown> = {}): Laid => layZone(seed, options(more));
 const tilesOf = (plan: Laid) => new Map(plan.map.tiles.map((t) => [posKey(t), t]));
@@ -39,8 +39,8 @@ const ranks = (id: FactionId): string[] => {
   const f: Faction = FACTIONS[id];
   return [...f.front, ...f.shot, ...(f.heavy ?? [])];
 };
-/** How many stand in a band, for a party of this size at this threat (`more`: what a map's perils add). */
-const bandSize = (party: number, threat: number, more = 0) => Math.max(2, Math.min(8, party + threatExtras(threat) + more + (party >= 3 ? 1 : 0)));
+/** How many stand in a band, for a party of this size (`more`: what a map's perils add). */
+const bandSize = (party: number, more = 0) => Math.max(2, Math.min(8, party + GROUP_EXTRAS + more + (party >= 3 ? 1 : 0)));
 const count = <T>(list: T[], ok: (x: T) => boolean) => list.filter(ok).length;
 
 // ---------- the grid, and the land on it ----------
@@ -355,16 +355,16 @@ describe("the bands", () => {
     // (A few hundred maps laid: a second or two here, several times that on a busy CI runner.)
   }, 30_000);
 
-  it("are each as many as the party (one more for three or four), one more for each step of threat, and one more again where a peril says so: two to eight", () => {
-    expect([bandSize(1, 1), bandSize(1, 2), bandSize(2, 1), bandSize(2, 2), bandSize(2, 3), bandSize(3, 2), bandSize(4, 1), bandSize(4, 2), bandSize(4, 3)]).toEqual([2, 2, 2, 3, 4, 5, 5, 6, 7]);
+  it("are each as many as the party (one more for three or four), and one more again where a peril says so: two to eight", () => {
+    expect([bandSize(1), bandSize(2), bandSize(3), bandSize(4), bandSize(4, 1)]).toEqual([2, 2, 4, 5, 6]);
     for (const party of [1, 2, 3, 4]) {
-      for (const threat of [1, 2, 3]) {
+      // Each site comes round several times, under a roof or under ground as well as in the open.
+      for (const turn of [0, 1, 2]) {
         for (const mods of [[], ["numerous"]]) {
-          // Every open-air site comes round, and with each a place under a roof or under ground.
-          for (const site of [OPEN[(party * 3 + threat) % OPEN.length], INSIDE[(party * 3 + threat) % INSIDE.length]]) {
-            const plan = lay(`size-${party}-${threat}`, { party, threat, mods, size: "large", site });
-            const want = bandSize(party, threat, mods.length);
-            const where = `${site} party ${party} threat ${threat} ${mods}`;
+          for (const site of [OPEN[(party * 3 + turn) % OPEN.length], INSIDE[(party * 3 + turn) % INSIDE.length]]) {
+            const plan = lay(`size-${party}-${turn}`, { party, mods, size: "large", site });
+            const want = bandSize(party, mods.length);
+            const where = `${site} party ${party} turn ${turn} ${mods}`;
             expect(plan.groups.length, where).toBe(base.groups);
             // (In a cave one may now and then be left out of a band: a chamber has only so much floor, and no post is kept that cannot be walked to.)
             if (kindOf(site) === "caves") {
@@ -376,7 +376,7 @@ describe("the bands", () => {
       }
     }
     // However many are piled on, a band is eight at the most.
-    for (const g of lay("size-most", { party: 4, threat: 3, mods: ["numerous3"], size: "large" }).groups) expect(g.kinds.length).toBeLessThanOrEqual(8);
+    for (const g of lay("size-most", { party: 4, mods: ["numerous3"], size: "large" }).groups) expect(g.kinds.length).toBeLessThanOrEqual(8);
   });
 
   it("are whoever lives at that kind of place in that climate, and nobody else", () => {
@@ -397,7 +397,7 @@ describe("the bands", () => {
 
   it("stand clear of where the party arrives, each on a hex of their own", () => {
     for (const site of SITE_IDS) {
-      const plan = lay(`posts-${site}`, { site, groups: 5, party: 4, threat: 3 });
+      const plan = lay(`posts-${site}`, { site, groups: 5, party: 4 });
       const posts = plan.groups.flatMap((g) => g.posts);
       expect(new Set(posts.map(posKey)).size, site).toBe(posts.length);
       // Out in the open, well clear of it. Under a roof or under ground the party arrives in a room of its own, which
@@ -424,12 +424,12 @@ describe("the bands", () => {
   it("with a leader named: a boss stands in the first band, once, with the place's own behind it; a dummy stands alone; anything else brings a band of its own kind", () => {
     const lair = lay("named", { kinds: ["broodmother"], site: "den", groups: 3 });
     expect(lair.groups.map((g) => count(g.kinds, (k) => k === "broodmother"))).toEqual([1, 0, 0]);
-    expect(lair.groups[0].kinds.length).toBe(bandSize(2, 2));
+    expect(lair.groups[0].kinds.length).toBe(bandSize(2));
     const local = factionsOf("den", undefined);
     lair.groups.forEach((g, i) => { for (const kind of g.kinds) if (kind !== "broodmother") expect(ranks(local[i % local.length])).toContain(kind); });
     const yard = lay("named", { kinds: ["dummy"], groups: 2 });
     expect(yard.groups.map((g) => g.kinds)).toEqual([["dummy"], ["dummy"]]);
-    const pack = lay("named", { kinds: ["wolf", "skeleton"], groups: 3, party: 4, threat: 1 });
+    const pack = lay("named", { kinds: ["wolf", "skeleton"], groups: 3, party: 4 });
     expect(pack.groups.map((g) => g.kinds)).toEqual([Array(5).fill("wolf"), Array(5).fill("skeleton"), Array(5).fill("wolf")]);
   });
 });
@@ -543,7 +543,7 @@ describe("the chests", () => {
   // band1 (above). In a cave, and most of all a hollow, whose last chamber has bones on every free hex, there is often
   // no hex left for it in the last chamber, and it is stood in whichever other chamber is furthest from the start,
   // still guarded by band1. For one:
-  //   layZone("probe-hollow-small-9", zoneOptions({ size: "small", biome: "meadow", groups: 3, elevation: 2, obstacles: 1, clear: 4, party: 2, threat: 2, site: "hollow", clime: "ash" }))
+  //   layZone("probe-hollow-small-9", zoneOptions({ size: "small", biome: "meadow", groups: 3, elevation: 2, obstacles: 1, clear: 4, party: 2, site: "hollow", clime: "ash" }))
   // has its strongbox at 14,18 and band1 posted at 19,4 17,4 20,3: fourteen hexes and more from what it guards.
   it.todo("under ground the strongbox stands in the last chamber, with the band that guards it");
 

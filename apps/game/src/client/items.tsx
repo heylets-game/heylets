@@ -146,7 +146,7 @@ export function ItemDetail({ item, current, equipped, classId, level, children }
         <ul className="abilities">
           {abilities.map((id) => {
             const a = ABILITIES[id];
-            return <li key={id}><strong>{label("ability", id)}</strong> <span className="muted">{a.rolls} × {STAT_LABEL[a.stat]} · {blurb("ability", id)}</span></li>;
+            return <li key={id}><strong>{label("ability", id)}</strong> <span className="muted">{STAT_LABEL[a.stat]} · {blurb("ability", id)}</span></li>;
           })}
         </ul>
       )}

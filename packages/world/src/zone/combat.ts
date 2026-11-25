@@ -11,7 +11,7 @@ import { tileAt, type Poi } from "../map";
 import { DEBUFFS, addCondition, addShield, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, kindle, removeCondition, saveBonus, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
 import { cratesOn, crateById, hurtCrate, isCrateId } from "./crates";
 import { HEX_DIRS, close, blast, blockerAt, courseShare, directionToward, elevOf, flies, heldAgainst, inFight, lineFrom, pathIn, pitAt, reachFrom, roomAt, sameHex, sees, seesFor, solid, stepCost, strikes, unitById, zoneReach, type Course, type Pit } from "./geometry";
-import { ACTION_AP, CHART, COMMON_ACTIONS, CORAL_ARMOR, RALLY, SHANTY, SUMMON_CALLS, ENEMY_BURST, FLEE_RANGE, JUMP_DOWN, JUMP_UP, POTION_EDGE, SAVE_STAT, SMUGGLED, THROWABLES, TORCH_GROUND_ROUNDS, abilityDice, enemySave, enemyShove, enemyStrikes, healDice, jumpRange, reactionStrike, tacticOf, throwRange, type EnemyStrike, type Tactic } from "./kit";
+import { ACTION_AP, CHART, COMMON_ACTIONS, CORAL_ARMOR, ENEMY_EDGE, RALLY, SHANTY, SUMMON_CALLS, ENEMY_BURST, FLEE_RANGE, JUMP_DOWN, JUMP_UP, POTION_EDGE, SAVE_STAT, SMUGGLED, THROWABLES, TORCH_GROUND_ROUNDS, abilityDice, abilityStrikes, enemySave, unitStrikes, healDice, jumpRange, reactionStrike, tacticOf, throwRange, type EnemyStrike, type Tactic } from "./kit";
 import { modsOf } from "./mods";
 import { d20, diceFor, hitChance, mod, proficiency, rollDice, rollShown, statOf } from "./rules";
 import { seenByHeroes } from "./light";
@@ -55,7 +55,7 @@ function provoke(ctx: Ctx, unit: Unit, next: HexPos, budget: Budget | null, flus
     if (foe.side === unit.side || foe.down || !inFight(ctx.state, foe.id)) continue;
     if (!leavesReach(ctx.state, foe.pos, unit.pos, next)) continue;
     if (enc.reacted.includes(foe.id) || has(foe, "stunned") || has(foe, "prone")) continue;
-    const blow = foe.side === "enemy" ? enemyStrikes(foe.kind, foe.level, ctx.state.options.threat, modsOf(ctx.state.options).edge).find((s) => s.range === 1 && !s.burst) : undefined;
+    const blow = foe.side === "enemy" ? unitStrikes(ctx.state, foe).find((s) => s.range === 1 && !s.burst) : undefined;
     if (foe.side === "enemy" && !blow) continue;
     flush();
     enc.reacted.push(foe.id);
@@ -191,10 +191,10 @@ export function tumble(ctx: Ctx, unit: Unit, from: HexPos, by: string | null, sa
 export const EDGE_DC = 12;
 
 /** What whoever `by` shoves must roll to catch the edge of a drop or a pit: harder against the strong, and against a boss's shove. */
-export function edgeDc(state: ZoneState, by: Unit | undefined): number {
+export function edgeDc(by: Unit | undefined): number {
   if (!by) return EDGE_DC;
   if (by.side === "hero") return 10 + Math.max(0, mod(statOf(by, "str"))) + Math.floor(proficiency(by.level) / 2);
-  return 10 + enemySave(by.kind) + (Math.max(1, Math.min(3, state.options.threat ?? 2)) - 1);
+  return 10 + enemySave(by.kind) + ENEMY_EDGE;
 }
 
 /** How a unit made to move a hex fared: it went, it went over an edge and fell, it caught the edge and stayed, something was in the way, or it is lost to a pit. */
@@ -228,7 +228,7 @@ export function shift(ctx: Ctx, target: Unit, dest: HexPos, by: string, dc?: num
   const was = target.pos;
   if (into.how !== "open") {
     const boss = target.side === "enemy" && !!ENEMIES[target.kind]?.boss;
-    const vs = dc ?? edgeDc(state, unitById(state, by));
+    const vs = dc ?? edgeDc(unitById(state, by));
     const roll = d20(ctx.rng, { kind: "save", id: target.id, label: "Catch the edge", bonus: saveBonus(target, "agi"), vs, adv: has(target, "prone") || has(target, "stunned") ? (boss ? 0 : -1) : boss ? 1 : 0 });
     ctx.events.push({ t: "roll", roll });
     if (roll.ok) {
@@ -290,15 +290,14 @@ export function push(ctx: Ctx, from: HexPos, target: Unit, by: string): Shift {
 }
 
 /**
- * Overwhelm: Strength against the target's footing (as a Shove). Won, it is driven straight back from the user, a hex at a time,
+ * Overwhelm: an attack with Strength that does no harm (as a Shove). On a hit, it is driven straight back from the user, a hex at a time,
  * up to `hexes`. Driven into what nobody can pass (rock, a wall, a chest, a cliff face) it is Stunned; into somebody (a hex its
  * enemies hold, or one full of its own side), it just stops; over an edge, it falls (unless it catches the edge), and that ends the
- * drive. Returns whether the contest was won.
+ * drive. Returns whether it hit.
  */
-function overwhelm(ctx: Ctx, unit: Unit, def: AbilityDef, target: Unit, opts: { hexes: number; stun: number }): boolean {
+function overwhelm(ctx: Ctx, unit: Unit, def: AbilityDef, target: Unit, opts: { hexes: number; stun: number }, focus?: boolean): boolean {
   const { state } = ctx;
-  const roll = d20(ctx.rng, { kind: "shove", id: unit.id, target: target.id, label: def.name, bonus: proficiency(unit.level) + mod(statOf(unit, "str")), vs: 10 + Math.max(saveBonus(target, "str"), saveBonus(target, "agi")), adv: unseen(unit) ? 1 : 0 });
-  ctx.events.push({ t: "roll", roll });
+  const roll = attackRoll(ctx, unit, target, { label: def.name, bonus: proficiency(unit.level) + mod(statOf(unit, def.stat)), melee: true, focus });
   if (!roll.ok) {
     ctx.events.push({ t: "miss", actor: unit.id, target: target.id, what: def.id });
     return false;
@@ -781,7 +780,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim &
     if (tactic.ward) addShield(ctx, unit, tactic.ward.shield + unit.level, tactic.ward.rounds);
     // A pocket picked unseen is no blow, just a quick hand.
     if (tactic.steal && wasUnseen) landed = true;
-    else if (tactic.overwhelm) landed = overwhelm(ctx, unit, def, target, tactic.overwhelm);
+    else if (tactic.overwhelm) landed = overwhelm(ctx, unit, def, target, tactic.overwhelm, aim.focus);
     else if (tactic.bind) landed = bind(ctx, unit, def, target, tactic.bind);
     else if (tactic.sure) {
       if (def.damage) {
@@ -1088,6 +1087,16 @@ export function checkCommon(state: ZoneState, unit: Unit, what: CommonAction, ai
   return null;
 }
 
+/**
+ * What a Shove adds to its roll to hit: for a hero, as a blow with Strength (proficiency and STR); for an enemy, the best
+ * to-hit of its own blows (its abilities that reach a hex and are no burst), ready or not, as the map has them.
+ */
+export function shoveBonus(state: Pick<ZoneState, "options">, unit: Unit): number {
+  if (unit.stats) return proficiency(unit.level) + mod(statOf(unit, "str"));
+  const blows = abilityStrikes(unit.abilities, unit.level, modsOf(state.options).edge).filter((s) => s.range === 1 && !s.burst);
+  return blows.length > 0 ? Math.max(...blows.map((s) => s.bonus)) : 0;
+}
+
 /** Take a common action that has passed its check. */
 export function doCommon(ctx: Ctx, unit: Unit, what: CommonAction, aim: Aim, budget: Budget | null): void {
   ctx.events.push({ t: "used", id: unit.id, what, name: COMMON_ACTIONS[what].name, target: aim.target, at: aim.at });
@@ -1101,8 +1110,7 @@ export function doCommon(ctx: Ctx, unit: Unit, what: CommonAction, aim: Aim, bud
     heal(ctx, target, 1, { actor: unit.id, what: "help" });
   } else if (what === "shove") {
     const target = unitById(ctx.state, aim.target!)!;
-    const roll = d20(ctx.rng, { kind: "shove", id: unit.id, target: target.id, label: "Shove", bonus: unit.side === "enemy" && !unit.stats ? enemyShove(unit.kind) : mod(statOf(unit, "str")), vs: 10 + Math.max(saveBonus(target, "str"), saveBonus(target, "agi")), adv: unseen(unit) ? 1 : 0 });
-    ctx.events.push({ t: "roll", roll });
+    const roll = attackRoll(ctx, unit, target, { label: "Shove", bonus: shoveBonus(ctx.state, unit), melee: true });
     giveAway(ctx, unit);
     if (roll.ok) push(ctx, unit.pos, target, unit.id);
     else ctx.events.push({ t: "miss", actor: unit.id, target: target.id, what: "shove" });

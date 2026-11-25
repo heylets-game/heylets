@@ -50,6 +50,15 @@
 .zone-cond { margin-right: 8px; font-weight: bold; }
 .zone-chance { margin-top: 4px; padding-top: 4px; border-top: 1px dashed var(--line); }
 
+/* Which one is meant, when more than one there could be aimed at on the hex clicked: a little menu at the pointer. */
+.zone-which { position: fixed; z-index: 30; display: flex; flex-direction: column; gap: 3px; min-width: 150px; max-width: 220px; padding: 5px; font-size: 12px; }
+.zone-which-head { padding: 0 2px 2px; color: var(--muted); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+.zone-which button { display: flex; justify-content: space-between; gap: 10px; text-align: left; }
+.zone-which-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zone-which-hp { flex: none; opacity: 0.75; }
+.zone-which-enemy { border-left: 3px solid #ff6b6b; }
+.zone-which-hero { border-left: 3px solid #7dff9a; }
+
 @media (max-width: 700px) {
   .zone-tip { top: 100px; }
 }

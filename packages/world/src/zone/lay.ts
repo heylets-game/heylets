@@ -35,7 +35,7 @@ import type { Biome, Clime, Poi, Tile } from "../map";
 import { makeRng, seedFromString, type Rng } from "../rng";
 import { HEX_DIRS, MAX_ELEV } from "./geometry";
 import { layInside } from "./indoors";
-import { threatExtras } from "./kit";
+import { GROUP_EXTRAS } from "./kit";
 import { modsOf } from "./mods";
 import { propOf } from "./props";
 import { SITES, backdropOf, bandOf, factionsOf, siteFor, type Backdrop, type PieceKind, type SiteDef, type SiteId } from "./sites";
@@ -49,7 +49,7 @@ export const LAY_GRIDS: Record<ZoneSize, HexGrid> = {
 };
 
 /** How near a hero has to come, in plain sight, for an enemy group to turn on them (as gen.ts has it). */
-const ALERT = 1;
+const ALERT = 3;
 /** Rounds written on ground that stays: it is never counted down. */
 const LASTING_ROUNDS = 99;
 const HAZARD_PATCHES = 6;
@@ -723,9 +723,9 @@ export function layZone(seed: string, asked: ZoneOptions): Laid {
     for (const p of piece.chests) chestKeys.add(posKey(p));
   }
   const standable = (p: HexPos) => !solidAt(p) && !chestKeys.has(posKey(p)) && !taken.has(posKey(p)) && far(p) > clear + ALERT + 1;
-  // How many stand in a band: about one to a hero (one more for a big party), more as the threat rises, never
+  // How many stand in a band: about one to a hero, and one more (another for a big party), never
   // fewer than two. What makes a map a long fight is how many bands there are, and that they come to each other's aid.
-  const size = Math.max(2, Math.min(8, options.party + threatExtras(options.threat) + mods.extras + (options.party >= 3 ? 1 : 0)));
+  const size = Math.max(2, Math.min(8, options.party + GROUP_EXTRAS + mods.extras + (options.party >= 3 ? 1 : 0)));
   const factions = factionsOf(siteId, clime);
   const groups: (LaidGroup & { centre: HexPos })[] = [];
   /** Post a band of `kinds` (each with its part) at a place: its own posts by part first, then whatever open ground is nearest. */

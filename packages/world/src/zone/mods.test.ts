@@ -121,7 +121,7 @@ describe("a map's modifiers", () => {
       expect(hardy.map).toEqual(plain.map);
       expect(foes(hardy).map((u) => [u.kind, u.pos])).toEqual(foes(plain).map((u) => [u.kind, u.pos]));
       for (const u of foes(hardy)) {
-        expect(u.maxHp).toBe(Math.round(enemyHp(u.kind, 3, 2) * 1.3));
+        expect(u.maxHp).toBe(Math.round(enemyHp(u.kind, 3) * 1.3));
         expect(u.hp).toBe(u.maxHp);
       }
     }
@@ -130,8 +130,8 @@ describe("a map's modifiers", () => {
   it("Savage: every attack does more and lands more often", () => {
     const more = modsOf({ mods: ["savage"] }).edge;
     for (const kind of ["wolf", "bandit", "ogre"]) {
-      const plain = enemyStrikes(kind, 3, 2);
-      const savage = enemyStrikes(kind, 3, 2, more);
+      const plain = enemyStrikes(kind, 3);
+      const savage = enemyStrikes(kind, 3, more);
       savage.forEach((s, i) => {
         expect(s.bonus).toBe(plain[i].bonus + 1);
         expect(diceAverage(s.dice)).toBeGreaterThan(diceAverage(plain[i].dice));

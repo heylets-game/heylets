@@ -8,7 +8,7 @@
 // specific first). You only need the general ones to start: "impact" covers
 // every blow until you add "impact.melee" or "impact.shock".
 
-import { ABILITIES, ENEMIES, type EffectKind } from "@gantt-quest/world";
+import { ABILITIES, ENEMIES, ENEMY_ABILITIES, type EffectKind } from "@gantt-quest/world";
 import { slug } from "./select";
 import type { AudioManifest, Follow, MusicByHour, SoundEvent } from "./types";
 
@@ -263,7 +263,7 @@ export const AUDIO: AudioManifest = {
 function bladeImpacts(): Record<string, SoundEvent> {
   /** Cutting and biting blows, heroes' and enemies': these land with a blade's bite rather than a thump. */
   const BLADE = new Set(["Cleave", "Stab", "Eviscerate", "Tear", "Slash", "Cheap Shot", "Bite", "Savage Bite", "Pounce", "Sweeping Ruin", "Rake"]);
-  const names = new Set([...Object.values(ABILITIES).map((a) => a.name), ...Object.values(ENEMIES).flatMap((e) => e.attacks.map((a) => a.name))]);
+  const names = new Set([...Object.values(ABILITIES).map((a) => a.name), ...Object.values(ENEMY_ABILITIES).map((a) => a.name)]);
   const out: Record<string, SoundEvent> = {};
   for (const name of names) {
     if (BLADE.has(name)) out[`impact.${slug(name)}`] = { files: "sfx/combat/hit_*", fallback: built("blade"), pitch: [-2, 2], volume: [-2, 0], reverb: -8 };

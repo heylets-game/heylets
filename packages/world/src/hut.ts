@@ -207,7 +207,7 @@ export const FURNISHINGS: Record<string, FurnishingDef> = {
   globe: { id: "globe", name: "Sea Globe", kind: "furniture", footprint: { w: 0.56, d: 0.56, round: true }, model: "globe", blurb: "Some of the coastlines are guesses." },
   ship_bottle: { id: "ship_bottle", name: "Ship in a Bottle", kind: "furniture", footprint: { w: 0.74, d: 0.36 }, model: "ship_bottle", blurb: "Nobody knows how it got in there." },
   shell_chimes: { id: "shell_chimes", name: "Shell Chimes", kind: "furniture", footprint: { w: 0.66, d: 0.36 }, model: "shell_chimes", blurb: "They ring when the wind is from the sea." },
-  // Trophies were the prize for finishing a voyage's story. Nothing awards one now; those already won stay in their huts.
+  // Trophies: nothing awards one now; those already won stay in their huts.
   trophy_relic: { id: "trophy_relic", name: "Recovered Relic", kind: "trophy", footprint: { w: 0.84, d: 0.84, round: true }, model: "trophy_relic", blurb: "A replica of what was won back." },
   trophy_token: { id: "trophy_token", name: "Keepsake of Thanks", kind: "trophy", footprint: { w: 0.84, d: 0.84, round: true }, model: "trophy_token", blurb: "Given by someone brought home." },
   trophy_pelt: { id: "trophy_pelt", name: "Beast's Pelt", kind: "trophy", footprint: { w: 0.84, d: 0.84, round: true }, model: "trophy_pelt", blurb: "It is bigger than it looked in the dark." },

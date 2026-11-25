@@ -12,7 +12,7 @@
 // stand in the sea (`buildPois`).
 
 import type { PoiKind } from "@gantt-quest/world";
-import { landing, cache, gate, cave, crate, glowcap } from "./maps";
+import { landing, cache, gate, cave, crate, glowcap, bell } from "./maps";
 import { lot, site, plot } from "./huts";
 import { garden } from "./garden";
 import { pub, shop, lapidary, finishes } from "./harborTown";
@@ -29,6 +29,7 @@ export const PLACE_MODELS: PlaceModels = new Map<PoiKind, PlaceModel>([
   ["gate", gate],
   ["cave", cave],
   ["crate", crate],
+  ["bell", bell],
   ["glowcap", glowcap],
   ["lot", lot],
   ["site", site],

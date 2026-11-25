@@ -27,6 +27,7 @@ import type { HeroSheet } from "../hero";
 import { addStats, maxFocusFor, maxHpFor } from "../progression";
 import { makeRng, seedFromString } from "../rng";
 import { enemyTurn } from "./ai";
+import { pickBellGoer, placeBell } from "./bell";
 import { abilityArea, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, doCommon, drinkItem, moveLeft, resolveAbility, throwItem, walk } from "./combat";
 import { UNTIMED, burnOf, has, heal, regrow, removeCondition, tick, unseen, type Ctx } from "./engine";
 import { ALERT_RANGE, JOIN_RANGE, freeHexNear, generateZone } from "./gen";
@@ -34,7 +35,7 @@ import { generateDelve } from "./delve";
 import { checkLoot, checkOpen, leaveBody, look, lootFor, openChest, payBounty, take } from "./loot";
 import { isCrateId } from "./crates";
 import { siteOpen } from "./sites";
-import { FREE_WALK, blast, blockerAt, inFight, pathIn, sameHex, sees, solid, unitAt, unitById, zoneReach } from "./geometry";
+import { FREE_WALK, blast, blockerAt, inFight, pathIn, roomAt, sameHex, sees, solid, unitAt, unitById, zoneReach } from "./geometry";
 import { AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, ENEMY_MOVE_AP, FLEE_RANGE, ITEM_AP, SUMMONS, STARTING_ITEMS, THROWABLES, THROWABLE_KINDS, cleanItems, commonCost, enemyHp, enemyMove, tacticOf } from "./kit";
 import { d20, heroMove, mod, rollDice, statOf } from "./rules";
 import { hiddenEnemies, sentToClient } from "./light";
@@ -56,7 +57,7 @@ const PAINT_ROUNDS = 6;
 // ---------- making a zone ----------
 
 function enemyUnit(state: ZoneState, kind: string, pos: HexPos, group: string): Unit {
-  const hp = Math.round(enemyHp(kind, state.options.level, state.options.threat) * modsOf(state.options).hp);
+  const hp = Math.round(enemyHp(kind, state.options.level) * modsOf(state.options).hp);
   return {
     id: `e${++state.seq}`,
     side: "enemy",
@@ -70,7 +71,8 @@ function enemyUnit(state: ZoneState, kind: string, pos: HexPos, group: string): 
     maxFocus: 0,
     armor: 0,
     power: 0,
-    abilities: [],
+    // Its own copy of what its kind starts with: one enemy can be given more, or fewer, than the rest.
+    abilities: [...(ENEMIES[kind].abilities ?? [])],
     conditions: [],
     down: false,
     cooldowns: {},
@@ -91,6 +93,18 @@ export function ensureMouth(state: ZoneState): ZoneState {
   return state;
 }
 
+/**
+ * An enemy saved before enemies carried their own abilities has none: it is given what its kind starts with. Run on
+ * every saved zone as it is loaded (loadZone). Returns the same state, changed in place.
+ */
+export function ensureEnemyAbilities(state: ZoneState): ZoneState {
+  for (const u of state.units) if (u.side === "enemy" && (u.abilities?.length ?? 0) === 0) u.abilities = [...(ENEMIES[u.kind]?.abilities ?? [])];
+  return state;
+}
+
+/** A saved zone, brought up to date as it is loaded: a way out of a cave (ensureMouth), and enemies' abilities (ensureEnemyAbilities). */
+export const loadZone = (state: ZoneState): ZoneState => ensureEnemyAbilities(ensureMouth(state));
+
 export function createZone(code: string, seed: string, options: ZoneOptions): ZoneState {
   const plan = options.delve ? generateDelve(seed, options) : generateZone(seed, options);
   const state: ZoneState = { v: 1, code, seed, rng: seedFromString(`zone-run|${seed}`), options, map: plan.map, start: plan.start, units: [], groups: {}, surfaces: { ...(plan.surfaces ?? {}) }, encounter: null, seq: 0 };
@@ -102,6 +116,7 @@ export function createZone(code: string, seed: string, options: ZoneOptions): Zo
     group.kinds.forEach((kind, i) => state.units.push(enemyUnit(state, kind, group.posts[i], id)));
   }
   ensureMouth(state);
+  if (!options.delve && open(state)) placeBell(state);
   return state;
 }
 
@@ -220,7 +235,7 @@ function rollOff(ctx: Ctx, enc: Encounter, unit: Unit): void {
 function enter(ctx: Ctx, enc: Encounter, unit: Unit): void {
   if (enc.order.includes(unit.id)) return;
   if (enc.init[unit.id] === undefined) {
-    const bonus = unit.side === "hero" ? mod(statOf(unit, "agi")) : Math.round(((ENEMIES[unit.kind]?.speed ?? 50) - 50) / 15);
+    const bonus = unit.side === "hero" ? mod(statOf(unit, "agi")) : (ENEMIES[unit.kind]?.init ?? 0);
     const roll = d20(ctx.rng, { kind: "initiative", id: unit.id, label: "Initiative", bonus, vs: 0, adv: 0 });
     ctx.events.push({ t: "roll", roll });
     enc.init[unit.id] = roll.total;
@@ -326,7 +341,6 @@ function engage(ctx: Ctx, groups: string[], by: Unit, quiet = false): void {
     if (!starting && !quiet) ctx.events.push({ t: "fight_join", id: u.id });
   }
   pullIn(ctx);
-  if (starting) rouse(ctx);
 }
 
 /** How far a band will come to a fight it was roused to, in movement: further than any map is across, short of for ever. */
@@ -336,13 +350,12 @@ const ROUSE_REACH = 400;
 const open = (state: ZoneState) => !!state.scene && siteOpen(state.scene.site);
 
 /**
- * A fight in the open rouses the whole place: every band that has noticed nobody is in it from now on, and comes.
- * Two kinds stay where they are, because coming would make no sense: a band with no way to the fight on foot (shut
- * in behind a locked door, or on ground nothing joins to it), and a band with a boss in it, which keeps its den and
- * waits (it still comes if the fight is near enough to hear: reinforce). "A way" is a matter of the ground alone:
+ * The alarm bell (bell.ts), rung by an enemy, rouses the whole place: every band that has noticed nobody is in it from now on, and comes.
+ * A band with a boss in it comes too. Only a band with no way to the fight on foot stays where it is (shut in behind
+ * a locked door, or on ground nothing joins to it). "A way" is a matter of the ground alone:
  * whoever is standing in a doorway or on a bridge just now does not make it no way. Under a roof, or under ground, nothing is
- * roused: walls keep the noise in, and only those near enough to hear come. Called when a fight starts and as each
- * round begins, so a band let out by an opened door comes then.
+ * roused: walls keep the noise in, and only those near enough to hear come. Called when the bell is rung, and by nothing else:
+ * a fight no longer rouses the place of itself.
  */
 function rouse(ctx: Ctx): void {
   const { state } = ctx;
@@ -360,7 +373,6 @@ function rouse(ctx: Ctx): void {
   const near = new Set(fighters.flatMap((f) => [f.pos, ...hexNeighbors(f.pos, state.map.grid)]).map(posKey));
   const coming: string[] = [];
   for (const [group, members] of bands) {
-    if (members.some((m) => ENEMIES[m.kind]?.boss)) continue;
     // One of them that can get to anyone in the fight is enough: the rest follow. Over the ground as it lies, with nobody standing on it.
     const ground = { ...state, units: [] };
     const way = members.some((m) => {
@@ -386,7 +398,6 @@ function reinforce(ctx: Ctx): void {
   const { state } = ctx;
   const enc = state.encounter;
   if (!enc) return;
-  rouse(ctx);
   const fighters = state.units.filter((u) => enc.order.includes(u.id) && !u.down);
   const hero = fighters.find((u) => u.side === "hero");
   if (!hero) return;
@@ -665,6 +676,8 @@ function advance(ctx: Ctx): void {
         tickLights(ctx);
         // The noise carries: whoever is near enough to hear the fight comes to it.
         reinforce(ctx);
+        // Perhaps one of them is sent to ring the alarm bell.
+        pickBellGoer(ctx);
       }
       // One back in after fleeing on their turn this round waits for the next.
       const waiting = (u: Unit | undefined) => !u || u.down || !!enc.waits?.includes(u.id);
@@ -690,7 +703,8 @@ function advance(ctx: Ctx): void {
     if (settle(ctx)) return;
     if (ready.length === 0) continue;
     if (next[0].side === "enemy") {
-      enemyTurn(ctx, next[0], enc.budgets[next[0].id]);
+      // The bell, rung: the whole place is roused.
+      if (enemyTurn(ctx, next[0], enc.budgets[next[0].id])) rouse(ctx);
       enc.done = [next[0].id];
       continue;
     }
@@ -742,10 +756,13 @@ function dev(ctx: Ctx, by: string, op: DevOp): string | null {
     if (kinds.length === 0 || solid(tileAt(state.map, op.at))) return "Nothing to put there.";
     const group = `g${++state.seq}`;
     state.groups[group] = { alerted: false };
-    for (const kind of kinds) {
-      const pos = free(op.at);
+    // The first goes on the hex clicked if the rules let it stand there (beside up to HEX_ROOM - 1 of its own side,
+    // never with a hero); the rest spread out, each on a hex of its own.
+    const first = roomAt(state, op.at, { id: "", side: "enemy" }) && !blockerAt(state, op.at) ? op.at : null;
+    kinds.forEach((kind, i) => {
+      const pos = (i === 0 && first) || free(op.at);
       if (pos) state.units.push(enemyUnit(state, kind, pos, group));
-    }
+    });
   } else if (op.op === "paint") {
     const hexes = op.hexes.filter((p) => tileAt(state.map, p)).slice(0, 60);
     if (op.kind) placeSurface(ctx, hexes, op.kind, PAINT_ROUNDS, null);

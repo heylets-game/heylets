@@ -4,7 +4,7 @@
 // stays inside.
 
 export * from "./types";
-export { createZone, ensureMouth, stepZone, zoneView, zoneAwaiting, zoneHero, standInHero } from "./zone";
+export { createZone, ensureEnemyAbilities, ensureMouth, loadZone, stepZone, zoneView, zoneAwaiting, zoneHero, standInHero } from "./zone";
 export { ZONE_GRIDS, ALERT_RANGE, JOIN_RANGE, DEFAULT_ZONE_OPTIONS, BIOME_LEADS, zoneOptions, generateZone, groupKinds, type ZonePlan } from "./gen";
 export {
   FREE_WALK, MAX_ELEV, HEX_ROOM, HIGH_REACH,
@@ -64,7 +64,6 @@ export {
   jumpRange,
   JUMP_UP,
   JUMP_DOWN,
-  enemyShove,
   AP_TURN,
   SUMMON_AP_TURN,
   AP_MAX,
@@ -75,12 +74,18 @@ export {
   POTION_EDGE,
   ENEMY_KIT,
   ENEMY_BURST,
+  abilityStrikes,
   enemyStrikes,
+  unitStrikes,
+  mindOf,
+  DEFAULT_MIND,
+  type Mind,
   enemyDefence,
   enemyMove,
   ENEMY_MOVE_AP,
   enemyHp,
-  DEFAULT_THREAT,
+  ENEMY_EDGE,
+  GROUP_EXTRAS,
   type Tactic,
   type SummonDef,
   type SummonCall,
@@ -105,5 +110,9 @@ export { HEAR_RANGE } from "./zone";
 export { FORCE_DC, NOISE_RANGE, checkUnlock, doorAt } from "./doors";
 export { GLOWCAP_LIGHT, GLOWCAP_MUSHROOMS, checkForage } from "./forage";
 export { CRATE_HP, CRATE_PAY, crateAt, crateById, crateHp, isCrateId } from "./crates";
+export { ENEMY_ABILITIES, type EnemyAbilityDef } from "./enemyabilities";
+export { TURN_STEPS, type Turn, type TurnStep } from "./ai";
+export { BEHAVIOURS, behaviourOf, type Behaviour, type BehaviourId, type Look, type Use } from "./behaviours";
+export { BELL_AP, BELL_CHANCE, BELL_RUSH, liveBell } from "./bell";
 export { DELVE_GRID, DELVE_CRATES, generateDelve } from "./delve";
 export { ZONE_MODS, ZONE_MOD_IDS, PERIL_IDS, BOON_IDS, MAX_MODS, MAX_BOONS, cleanMods, modsOf, modOf, modToken, modEffect, modName, modSide, modRanks, rollMod, type ZoneMod, type ZoneModId, type ZoneModDef, type ModSum } from "./mods";

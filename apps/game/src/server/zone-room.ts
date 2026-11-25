@@ -31,7 +31,7 @@
 // written on the socket itself, which outlives the room's hibernation.
 
 import { DurableObject } from "cloudflare:workers";
-import { EMOTE_MIN_MS, THROWABLE_KINDS, ZONE_CLIENT_ACTIONS, createZone, ensureMouth, hiddenEnemies, stepZone, zoneAwaiting, zoneHero, zoneOptions, zoneView, validEmote, type ZoneAction, type ZoneEvent, type ZoneState } from "@gantt-quest/world";
+import { EMOTE_MIN_MS, THROWABLE_KINDS, ZONE_CLIENT_ACTIONS, createZone, hiddenEnemies, loadZone, stepZone, zoneAwaiting, zoneHero, zoneOptions, zoneView, validEmote, type ZoneAction, type ZoneEvent, type ZoneState } from "@gantt-quest/world";
 import { consumablesOf, gainConsumables, kitStatements, spendConsumables, type Consumables } from "./consumables";
 import { returnLuck, takeLuck } from "./well";
 import { applyZoneGrant, crewFor, heroInitFor, refreshHarbor, type Env } from "./db";
@@ -150,8 +150,8 @@ export class ZoneRoom extends DurableObject<Env> {
     if (!zoneCode) throw new Error("zone room has no code");
     const row = await getZoneRow(this.env.DB, zoneCode);
     if (!row) throw new Error(`zone ${zoneCode} not found`);
-    // A cave saved before it had a mouth gets one now, so it can be left (ensureMouth).
-    this.zone = row.state_json ? ensureMouth(JSON.parse(row.state_json) as ZoneState) : createZone(row.code, row.seed, zoneOptions(JSON.parse(row.options_json)));
+    // A saved zone is brought up to date: a cave gets a mouth, an enemy its abilities (loadZone).
+    this.zone = row.state_json ? loadZone(JSON.parse(row.state_json) as ZoneState) : createZone(row.code, row.seed, zoneOptions(JSON.parse(row.options_json)));
     this.landfall = row.kind === "atlas" && row.crew_id && row.node ? { crewId: row.crew_id, node: row.node, told: row.status === "cleared" } : null;
     if (code) await this.ctx.storage.put("code", code);
     return this.zone;

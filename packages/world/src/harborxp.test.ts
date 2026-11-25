@@ -90,7 +90,7 @@ describe("the daily cap", () => {
 });
 
 describe("levelling from Harbor XP", () => {
-  it("levels up with stat points, as a voyage would", () => {
+  it("levels up with stat points", () => {
     const near = hero({ xp: xpToNext(1) - 2 });
     const a = harborXpAward(near, null, 5, NOON);
     expect(a.granted).toBe(5);

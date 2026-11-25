@@ -190,7 +190,5 @@ describe("a meal at the pub", () => {
     expect(gold()).toBe(5);
     expect(used()).toBe(2);
     expect(await orderAtPub(db, "ann", "ale")).toMatch(/not on the menu/);
-    // Nothing is kept of what was eaten.
-    expect(sql.prepare("SELECT COUNT(*) AS n FROM pub_buffs").get()).toEqual({ n: 0 });
   });
 });

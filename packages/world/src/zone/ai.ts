@@ -28,14 +28,20 @@
 // fight), it leaps over them, where there is ground beyond to land on.
 // Taunted, it looks only at the one who taunted it first, and at the rest
 // only if it can get no blow in on them this turn.
+//
+// How it is put together: a turn is a list of steps (TURN_STEPS: the bell,
+// a shove, the fight), each sharing one Turn. What it can use is its own
+// abilities (enemyabilities.ts), each weighed up by the behaviour it names
+// (behaviours.ts); how it likes to fight is its kind's Mind (kit.ts).
 
 import { hexDistance, posKey, type HexPos } from "@gantt-quest/core";
-import { apForMove, checkCommon, doCommon, enemyAct, leavesReach, shiftInto, shoveDest, walk, walkAp } from "./combat";
-import { attackContext, defenceOf, has, saveBonus, unseen, type Ctx } from "./engine";
-import { HIGH_REACH, blast, close, elevOf, flies, heldAgainst, inFight, pathIn, reachFrom, sameHex, seesFor, stepCost, strikes, zoneReach, type Reached } from "./geometry";
-import { AP_MAX, COMMON_ACTIONS, ENEMY_BURST, ENEMY_KIT, ITEM_AP, enemyShove, enemyStrikes, jumpRange, type EnemyStrike } from "./kit";
-import { modsOf } from "./mods";
-import { diceAverage, hitChance } from "./rules";
+import { behaviourOf } from "./behaviours";
+import { BELL_AP, goesForBell, liveBell, ringBell, somethingToRouse } from "./bell";
+import { apForMove, checkCommon, doCommon, enemyAct, leavesReach, shiftInto, shoveBonus, shoveDest, walk, walkAp } from "./combat";
+import { defenceOf, has, unseen, type Ctx } from "./engine";
+import { blast, close, elevOf, flies, heldAgainst, inFight, pathIn, sameHex, stepCost, strikes, zoneReach, type Reached } from "./geometry";
+import { AP_MAX, COMMON_ACTIONS, ENEMY_KIT, jumpRange, mindOf, unitStrikes, type EnemyStrike, type Mind } from "./kit";
+import { hitChance } from "./rules";
 import { HARMFUL } from "./surfaces";
 import type { Budget, Unit, ZoneState } from "./types";
 
@@ -45,43 +51,21 @@ interface Option {
   worth: number;
 }
 
-/** Whether an attack of an enemy's reaches from `pos` to a hero: a blow by hand, by the rules of reach (strikes); a shot, by its range (further from above) and a clear line. */
-export function strikeReaches(state: ZoneState, enemy: Unit, pos: HexPos, attack: EnemyStrike, hero: Unit): boolean {
-  if (attack.range === 1) return strikes(state.map, pos, hero.pos);
-  // The lie of the land is looked up only where it could settle it: height adds up to HIGH_REACH to a range and takes nothing from it.
-  const far = hexDistance(pos, hero.pos);
-  if (far > attack.range + HIGH_REACH) return false;
-  return (far <= attack.range || far <= reachFrom(state.map, pos, hero.pos, attack.range)) && seesFor(state, enemy.side, pos, hero.pos);
-}
+export { strikeReaches } from "./behaviours";
 
-/** The best attack an enemy could make standing on `pos`, and what it is worth, or null if it has none from there. */
-function bestAttack(state: ZoneState, enemy: Unit, pos: HexPos, blows: EnemyStrike[], heroes: Unit[]): Option | null {
-  const there = { ...enemy, pos };
-  const heaviest = Math.max(...blows.map((s) => s.weight));
+/**
+ * The best ability an enemy could use standing on `pos`, on whom, and what it is worth, or null if it has none to use
+ * from there. Each ability's behaviour (behaviours.ts) says what it is worth; the one the enemy favours (its
+ * `weight`, against the `heaviest` of all it has) gets the benefit of a close call.
+ */
+function bestAttack(state: ZoneState, enemy: Unit, pos: HexPos, blows: EnemyStrike[], heroes: Unit[], heaviest = Math.max(...blows.map((s) => s.weight))): Option | null {
+  const look = { state, enemy, mind: mindOf(enemy.kind) };
   let best: Option | null = null;
-  const consider = (attack: EnemyStrike, target: Unit | null, worth: number) => {
-    // An enemy's habits still count: the attack it favours gets the benefit of a close call.
-    const scored = worth * (0.75 + (0.25 * attack.weight) / heaviest);
-    if (!best || scored > best.worth) best = { attack, target, worth: scored };
-  };
   for (const attack of blows) {
-    const average = diceAverage(attack.dice);
-    if (attack.burst) {
-      const caught = heroes.filter((h) => hexDistance(pos, h.pos) <= ENEMY_BURST && seesFor(state, enemy.side, pos, h.pos));
-      // About half save for half: three quarters of the damage, to each one caught.
-      if (caught.length > 0) consider(attack, null, caught.length * average * 0.75);
-      continue;
-    }
-    for (const hero of heroes) {
-      if (!strikeReaches(state, enemy, pos, attack, hero)) continue;
-      const c = attackContext(state, there, hero, { melee: attack.range === 1 });
-      let worth = hitChance(attack.bonus + c.mods, defenceOf(hero, state), c.adv) * average * (has(hero, "guarded") ? 0.5 : 1);
-      // Go for the weak, finish the dying, and rise to a taunt.
-      worth *= 1 + 0.5 * (1 - hero.hp / hero.maxHp);
-      if (average >= hero.hp) worth += 3;
-      if (has(hero, "taunting")) worth *= 3;
-      consider(attack, hero, worth);
-    }
+    const use = behaviourOf(attack).value(look, pos, attack, heroes);
+    if (!use) continue;
+    const scored = use.worth * (0.75 + (0.25 * attack.weight) / heaviest);
+    if (!best || scored > best.worth) best = { attack, target: use.target, worth: scored };
   }
   return best;
 }
@@ -100,8 +84,8 @@ function shoveWorth(state: ZoneState, enemy: Unit, hero: Unit): number {
   if (!strikes(state.map, enemy.pos, hero.pos) || has(hero, "prone")) return 0;
   const into = shiftInto(state, hero.pos, shoveDest(enemy.pos, hero.pos), hero);
   if (!into || into.how === "open") return 0;
-  // It has to win the shove, and then they have to fail to catch the edge (about an even chance).
-  const win = hitChance(enemyShove(enemy.kind), 10 + Math.max(saveBonus(hero, "str"), saveBonus(hero, "agi")), 0);
+  // It has to hit with the shove, and then they have to fail to catch the edge (about an even chance).
+  const win = hitChance(shoveBonus(state, enemy), defenceOf(hero, state), 0);
   const prize = into.how === "pit" ? Math.max(8, hero.hp) : 2.5 * (into.levels - 1) + 2;
   return win * 0.5 * prize;
 }
@@ -135,26 +119,62 @@ interface Plan {
 }
 
 /**
- * Play one enemy's turn. Anyone beside it with their back to a drop is shoved first, if it is the shoving kind.
- * Then, while it has the AP for an attack: move to the best hex it can reach with the AP an attack leaves (leaping
- * a ledge, if that is the only way to a blow), and attack from it, again and again as its AP allow. With nothing
- * in reach, it goes toward where there would be (approach). Either way no more than ENEMY_MOVE_AP of its AP go on
- * movement in the turn (Budget.walk, which walkAp reckons with). What AP it has left over it keeps for its next turn.
+ * Play one enemy's turn: its steps in order (TURN_STEPS). No more than ENEMY_MOVE_AP of its AP go on movement in the
+ * turn (Budget.walk, which walkAp reckons with), and what AP it has left over it keeps for its next turn. True if it
+ * rang the alarm bell: its caller rouses the place.
  */
-export function enemyTurn(ctx: Ctx, enemy: Unit, budget: Budget): void {
+export function enemyTurn(ctx: Ctx, enemy: Unit, budget: Budget): boolean {
+  const rang = { done: false };
+  play(ctx, enemy, budget, rang);
+  return rang.done;
+}
+
+/**
+ * One enemy's turn as its steps see it (TURN_STEPS): who it is, what it has to use, who it can see, and the ways it
+ * has of finding where to go. Made fresh for each turn.
+ */
+export interface Turn {
+  ctx: Ctx;
+  state: ZoneState;
+  enemy: Unit;
+  budget: Budget;
+  mind: Mind;
+  /** Its own abilities that are ready: looked at again (`ready`) once one is used and has to wait (a cooldown). */
+  blows: EnemyStrike[];
+  /** The heroes in the fight it can see (the Unseen are not there, as far as it knows), and the one who taunted it, if any: looked at again with `look`. */
+  heroes: Unit[];
+  goaded: Unit | undefined;
+  /** It has shoved someone this turn: once a turn at the most. */
+  shoved: boolean;
+  /** It rang the alarm bell (bell.ts): its caller rouses the place. */
+  rang: boolean;
+  ready(): void;
+  look(): Unit[];
+  /** It can do nothing more: down, or knocked flat. */
+  out(): boolean;
+  /** The best place to end a move (with AP kept back for a blow from there, if `strike`), at the one who taunted it if a blow can be got in on them. */
+  choose(strike: boolean): Plan | null;
+  /** Nothing to strike: the way toward where there would be a blow at one of `targets`, and a leap at the end of it. */
+  approach(targets: Unit[]): { path: HexPos[]; leap?: HexPos } | null;
+  /** Walk toward the nearest hex `goal` likes, as far as this turn's movement goes. False if the ground gives no way, or it is there. */
+  toward(goal: (r: Reached) => boolean): boolean;
+}
+
+/** A step of an enemy's turn: it does its part, and says whether the turn goes on to the next step or is over. */
+export interface TurnStep {
+  id: string;
+  run(turn: Turn): "on" | "end";
+}
+
+function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): void {
   const { state } = ctx;
   if (state.aiOff) return;
-  const blows = enemyStrikes(enemy.kind, enemy.level, state.options.threat, modsOf(state.options).edge);
-  // The Unseen are not there, as far as it knows.
   const standing = () => state.units.filter((u) => u.side === "hero" && !u.down && !unseen(u) && inFight(state, u.id));
-  let heroes = standing();
-  if (blows.length === 0 || heroes.length === 0) return;
-  const kit = ENEMY_KIT[enemy.kind] ?? {};
+  const mind = mindOf(enemy.kind);
   const air = flies(enemy);
   const harmful = new Set(Object.entries(state.surfaces).filter(([, s]) => HARMFUL.has(s.kind)).map(([key]) => key));
   // The other side's coral cuts as well as fire does.
   for (const w of state.weather ?? []) if (w.kind === "coral" && w.side !== enemy.side) for (const p of w.hexes) harmful.add(posKey(p));
-  let goaded = taunter(enemy, heroes);
   const jumpAp = COMMON_ACTIONS.jump.cost;
 
   /**
@@ -163,35 +183,41 @@ export function enemyTurn(ctx: Ctx, enemy: Unit, budget: Budget): void {
    */
   const chooseAmong = (targets: Unit[], strike: boolean): Plan | null => {
     const nearest = (pos: HexPos) => Math.min(...targets.map((h) => hexDistance(pos, h.pos)));
-    const movement = budget.move + walkAp(budget, strike ? ITEM_AP.attack : 0) * budget.stride;
+    // How far it can walk and still have `keep` AP left: each ability keeps back its own cost (and a jump's, to leap first).
+    const reach = (keep: number) => budget.move + walkAp(budget, keep) * budget.stride;
+    const usable = strike ? t.blows.filter((b) => b.cost <= budget.ap) : [];
+    const heaviest = Math.max(...t.blows.map((b) => b.weight));
+    const room = new Map(usable.map((b) => [b.cost, reach(b.cost)]));
+    const movement = strike ? Math.max(0, ...room.values()) : reach(0);
+    /** The abilities it could still use after a walk costing `walked`, with `extra` AP spent besides (a jump). */
+    const fitting = (walked: number, extra: number): EnemyStrike[] =>
+      usable.filter((b) => b.cost + extra <= budget.ap && (extra ? reach(b.cost + extra) : room.get(b.cost)!) >= walked);
     // Two looks at the ground: one that will not set foot in fire or poison, and one that will.
     const clean = zoneReach(state, enemy, movement, air || harmful.size === 0 ? undefined : harmful);
     const any = air || harmful.size === 0 ? clean : zoneReach(state, enemy, movement);
-    /** What ending on `pos` is worth, come to by `path` at `cost`. */
-    const weigh = (pos: HexPos, path: HexPos[], cost: number): { score: number; attacks: boolean } => {
+    /** What ending on `pos` is worth, come to by `path` at `cost` (`walked` of it on foot, and `extra` AP besides). */
+    const weigh = (pos: HexPos, path: HexPos[], cost: number, walked = cost, extra = 0): { score: number; attacks: boolean } => {
       let score = -cost * 0.05;
       // The ground on the way, and where it would end up standing.
-      if (!air) score -= 4 * path.filter((p) => harmful.has(posKey(p))).length + (harmful.has(posKey(pos)) ? 2 : 0);
+      if (!air) score -= mind.caution * (4 * path.filter((p) => harmful.has(posKey(p))).length + (harmful.has(posKey(pos)) ? 2 : 0));
       // Blows drawn by walking out of reach.
       if (!budget.disengaged) {
         const drawn = new Set<string>();
         let from = enemy.pos;
         for (const step of path) {
-          for (const h of heroes) if (leavesReach(state, h.pos, from, step) && !state.encounter?.reacted.includes(h.id) && !has(h, "stunned") && !has(h, "prone")) drawn.add(h.id);
+          for (const h of t.heroes) if (leavesReach(state, h.pos, from, step) && !state.encounter?.reacted.includes(h.id) && !has(h, "stunned") && !has(h, "prone")) drawn.add(h.id);
           from = step;
         }
-        score -= 3 * drawn.size;
+        score -= mind.caution * 3 * drawn.size;
       }
-      const option = strike ? bestAttack(state, enemy, pos, blows, targets) : null;
+      const option = strike ? bestAttack(state, enemy, pos, fitting(walked, extra), targets, heaviest) : null;
       if (option) {
         score += option.worth;
         // Two on one: a blow lands better with a friend already at the target's side.
-        if (option.target && state.units.some((u) => u.id !== enemy.id && u.side === "enemy" && !u.down && close(u.pos, option.target!.pos))) score += 1;
-        if (kit.ranged) {
-          // Those that shoot like room, do not like company, and like to look down on what they shoot at.
-          score += Math.min(nearest(pos), 4) * 0.4;
-          if (option.target) score += Math.min(3, Math.max(0, elevOf(state.map, pos) - elevOf(state.map, option.target.pos))) * 0.5;
-        }
+        if (option.target && state.units.some((u) => u.id !== enemy.id && u.side === "enemy" && !u.down && close(u.pos, option.target!.pos))) score += mind.flank;
+        // Room, and high ground over its target, as much as it cares for them (those that shoot do).
+        if (mind.spacing) score += Math.min(nearest(pos), 4) * mind.spacing;
+        if (mind.height && option.target) score += Math.min(3, Math.max(0, elevOf(state.map, pos) - elevOf(state.map, option.target.pos))) * mind.height;
       }
       // Nothing to hit from there: at least get closer.
       else score -= 50 + nearest(pos);
@@ -206,8 +232,9 @@ export function enemyTurn(ctx: Ctx, enemy: Unit, budget: Budget): void {
       if (!best || w.score > best.score) best = { path, ...w };
     }
     // No blow to be had on foot: is there a ledge to leap that would give one? (A Jump, and the AP it takes.)
-    if (best && !best.attacks && strike && !air && budget.ap >= ITEM_AP.attack + jumpAp) {
-      const afoot = budget.move + walkAp(budget, ITEM_AP.attack + jumpAp) * budget.stride;
+    const leapable = usable.filter((b) => b.cost + jumpAp <= budget.ap);
+    if (best && !best.attacks && strike && !air && leapable.length > 0) {
+      const afoot = Math.max(...leapable.map((b) => reach(b.cost + jumpAp)));
       const range = jumpRange(0);
       for (const reached of clean.values()) {
         if (!reached.stop || reached.cost > afoot) continue;
@@ -217,7 +244,7 @@ export function enemyTurn(ctx: Ctx, enemy: Unit, budget: Budget): void {
         for (const land of blast(state.map, reached.pos, range)) {
           if (clean.has(posKey(land)) || checkCommon(state, from, "jump", { at: land }, budget)) continue;
           path ??= pathIn(clean, reached.pos) ?? [];
-          const w = weigh(land, path, reached.cost + 2);
+          const w = weigh(land, path, reached.cost + 2, reached.cost, jumpAp);
           if (w.attacks && w.score - 0.5 > best.score) best = { path, score: w.score - 0.5, attacks: true, leap: land };
         }
       }
@@ -226,8 +253,8 @@ export function enemyTurn(ctx: Ctx, enemy: Unit, budget: Budget): void {
   };
   /** Taunted: at the taunter if a blow can be got in on them, else as it would anyway. */
   const choose = (strike: boolean) => {
-    const forced = goaded ? chooseAmong([goaded], strike) : null;
-    return forced?.attacks ? forced : chooseAmong(heroes, strike);
+    const forced = t.goaded ? chooseAmong([t.goaded], strike) : null;
+    return forced?.attacks ? forced : chooseAmong(t.heroes, strike);
   };
 
   /**
@@ -281,7 +308,7 @@ export function enemyTurn(ctx: Ctx, enemy: Unit, budget: Budget): void {
       const key = posKey(pos);
       let can = blowAt.get(key);
       if (can === undefined) {
-        can = blows.some((a) => targets.some((h) => (a.burst ? hexDistance(pos, h.pos) <= ENEMY_BURST && seesFor(state, enemy.side, pos, h.pos) : strikeReaches(state, enemy, pos, a, h))));
+        can = t.blows.some((a) => behaviourOf(a).reaches({ state, enemy, mind }, pos, a, targets));
         blowAt.set(key, can);
       }
       return can;
@@ -312,51 +339,150 @@ export function enemyTurn(ctx: Ctx, enemy: Unit, budget: Budget): void {
     return null;
   };
 
-  // Someone with their back to a drop, right where it stands: over they go, before anything else.
-  // One shove a turn: a hero who catches the edge is not shoved at it again and again.
-  let shoved = tryShove(ctx, enemy, budget, heroes);
+  const toward = (goal: (r: Reached) => boolean): boolean => {
+    const movement = budget.move + walkAp(budget) * budget.stride;
+    const reach = zoneReach(state, enemy, APPROACH_LOOKS[APPROACH_LOOKS.length - 1], undefined, undefined, goal);
+    let best: Reached | undefined;
+    for (const r of reach.values()) if (goal(r) && (!best || r.cost < best.cost)) best = r;
+    if (!best) return false;
+    const walked = along(pathIn(reach, best.pos) ?? [], movement);
+    if (walked.path.length === 0) return false;
+    walk(ctx, enemy, walked.path, budget);
+    return true;
+  };
 
-  for (let attacks = 0; attacks <= AP_MAX; attacks++) {
-    if (enemy.down || has(enemy, "prone")) return;
-    heroes = standing();
-    if (heroes.length === 0) return;
-    goaded = taunter(enemy, heroes);
-    const plan = budget.ap >= ITEM_AP.attack ? choose(true) : null;
-    if (!plan?.attacks) {
-      // Nothing it can reach and still strike: before any blow, it goes toward where it could (at the one who taunted it, if
-      // there is a way to them); after one, it waits. With no way over the ground to anyone, it at least gets as near as it can.
-      if (attacks === 0) {
-        const way = (goaded ? approach([goaded]) : null) ?? approach(heroes) ?? { path: choose(false)?.path ?? [], leap: undefined };
-        const stand = way.path[way.path.length - 1] ?? enemy.pos;
-        if (way.path.length > 0) walk(ctx, enemy, way.path, budget);
-        // Over whoever holds the way and is not to be struck, if it got to where it meant to leap from. Then it may have a blow.
-        if (way.leap && !enemy.down && !has(enemy, "prone") && sameHex(enemy.pos, stand) && budget.ap >= jumpAp && !checkCommon(state, enemy, "jump", { at: way.leap }, budget)) {
-          budget.ap -= jumpAp;
-          doCommon(ctx, enemy, "jump", { at: way.leap }, budget);
-          continue;
-        }
-      }
-      return;
-    }
-    const wanted = plan.path.length > 0 ? plan.path[plan.path.length - 1] : enemy.pos;
-    if (plan.path.length > 0) walk(ctx, enemy, plan.path, budget);
-    if (enemy.down || has(enemy, "prone")) return;
-    // Over the ledge, if that was the plan and it got to where it meant to leap from.
-    if (plan.leap) {
-      if (enemy.pos.q !== wanted.q || enemy.pos.r !== wanted.r || budget.ap < jumpAp || checkCommon(state, enemy, "jump", { at: plan.leap }, budget)) return;
-      budget.ap -= jumpAp;
-      doCommon(ctx, enemy, "jump", { at: plan.leap }, budget);
-      if (enemy.down || has(enemy, "prone")) return;
-    }
-    // Someone it has come up beside may have their back to a drop.
-    if (!shoved) shoved = tryShove(ctx, enemy, budget, standing());
-    if (enemy.down || has(enemy, "prone") || budget.ap < ITEM_AP.attack) return;
-    // It may not have got where it meant to: look again from where it stands.
-    const still = standing();
-    const goadedNow = taunter(enemy, still);
-    const option = (goadedNow ? bestAttack(state, enemy, enemy.pos, blows, [goadedNow]) : null) ?? (still.length > 0 ? bestAttack(state, enemy, enemy.pos, blows, still) : null);
-    if (!option) return;
-    budget.ap -= ITEM_AP.attack;
-    enemyAct(ctx, enemy, option.attack, option.target);
-  }
+  const heroes = standing();
+  const t: Turn = {
+    ctx,
+    state,
+    enemy,
+    budget,
+    mind,
+    blows: unitStrikes(state, enemy),
+    heroes,
+    goaded: taunter(enemy, heroes),
+    shoved: false,
+    rang: false,
+    ready: () => {
+      t.blows = unitStrikes(state, enemy);
+    },
+    look: () => {
+      t.heroes = standing();
+      t.goaded = taunter(enemy, t.heroes);
+      return t.heroes;
+    },
+    out: () => enemy.down || has(enemy, "prone"),
+    choose,
+    approach,
+    toward,
+  };
+  if (t.blows.length === 0 || t.heroes.length === 0) return;
+  for (const step of TURN_STEPS) if (step.run(t) === "end") break;
+  rang.done = t.rang;
 }
+
+/**
+ * The alarm bell, if it is this one's to ring (picked at the start of a round: bell.ts pickBellGoer): beside it with
+ * the AP, it rings it, and that is the whole turn; else it goes toward it. With no way to it over the ground, it lets
+ * another go and plays on.
+ */
+const bellStep: TurnStep = {
+  id: "bell",
+  run(t) {
+    const { ctx, state, enemy, budget } = t;
+    if (has(enemy, "prone") || !goesForBell(state, enemy)) return "on";
+    const bell = liveBell(state)!;
+    if (ringBell(ctx, enemy, budget)) {
+      t.rang = true;
+      return "end";
+    }
+    if (somethingToRouse(state) && t.toward((r) => r.stop && hexDistance(r.pos, bell.pos) <= 1)) {
+      if (!t.out() && ringBell(ctx, enemy, budget)) t.rang = true;
+      return "end";
+    }
+    // Beside it, short of the AP: it waits there, and keeps what it has for the next turn.
+    if (hexDistance(enemy.pos, bell.pos) <= 1) return "end";
+    // No way to it over the ground: it lets another go.
+    state.encounter!.bell!.goer = null;
+    return "on";
+  },
+};
+
+/** Someone with their back to a drop, right where it stands: over they go, before anything else. */
+const shoveStep: TurnStep = {
+  id: "shove",
+  run(t) {
+    t.shoved = tryShove(t.ctx, t.enemy, t.budget, t.heroes);
+    return "on";
+  },
+};
+
+/**
+ * The fight: while it has the AP for an attack, move to the best hex it can reach with the AP an attack leaves
+ * (leaping a ledge, if that is the only way to a blow), and use the best of its abilities from there, again and
+ * again. With nothing in reach before its first, it goes toward where there would be (approach), over whoever is in
+ * the way if it must. Someone it comes up beside with their back to a drop is shoved, if it has not shoved yet.
+ */
+const fightStep: TurnStep = {
+  id: "fight",
+  run(t) {
+    const { ctx, state, enemy, budget } = t;
+    const jumpAp = COMMON_ACTIONS.jump.cost;
+    for (let attacks = 0; attacks <= AP_MAX; attacks++) {
+      if (t.out()) return "end";
+      if (t.look().length === 0) return "end";
+      // The cheapest thing it has to use: with less AP than that, there is no blow to plan for.
+      const cheapest = Math.min(...t.blows.map((b) => b.cost));
+      const plan = budget.ap >= cheapest ? t.choose(true) : null;
+      if (!plan?.attacks) {
+        // Nothing it can reach and still strike: before any blow, it goes toward where it could (at the one who taunted it, if
+        // there is a way to them); after one, it waits. With no way over the ground to anyone, it at least gets as near as it can.
+        if (attacks === 0) {
+          const way = (t.goaded ? t.approach([t.goaded]) : null) ?? t.approach(t.heroes) ?? { path: t.choose(false)?.path ?? [], leap: undefined };
+          const stand = way.path[way.path.length - 1] ?? enemy.pos;
+          if (way.path.length > 0) walk(ctx, enemy, way.path, budget);
+          // Over whoever holds the way and is not to be struck, if it got to where it meant to leap from. Then it may have a blow.
+          if (way.leap && !t.out() && sameHex(enemy.pos, stand) && budget.ap >= jumpAp && !checkCommon(state, enemy, "jump", { at: way.leap }, budget)) {
+            budget.ap -= jumpAp;
+            doCommon(ctx, enemy, "jump", { at: way.leap }, budget);
+            continue;
+          }
+        }
+        return "end";
+      }
+      const wanted = plan.path.length > 0 ? plan.path[plan.path.length - 1] : enemy.pos;
+      if (plan.path.length > 0) walk(ctx, enemy, plan.path, budget);
+      if (t.out()) return "end";
+      // Over the ledge, if that was the plan and it got to where it meant to leap from.
+      if (plan.leap) {
+        if (enemy.pos.q !== wanted.q || enemy.pos.r !== wanted.r || budget.ap < jumpAp || checkCommon(state, enemy, "jump", { at: plan.leap }, budget)) return "end";
+        budget.ap -= jumpAp;
+        doCommon(ctx, enemy, "jump", { at: plan.leap }, budget);
+        if (t.out()) return "end";
+      }
+      // Someone it has come up beside may have their back to a drop.
+      if (!t.shoved) t.shoved = tryShove(ctx, enemy, budget, t.look());
+      if (t.out() || budget.ap < Math.min(...t.blows.map((b) => b.cost))) return "end";
+      // It may not have got where it meant to: look again from where it stands.
+      const still = t.look();
+      const affordable = t.blows.filter((b) => b.cost <= budget.ap);
+      const heaviest = Math.max(...t.blows.map((b) => b.weight));
+      const option = (t.goaded ? bestAttack(state, enemy, enemy.pos, affordable, [t.goaded], heaviest) : null) ?? (still.length > 0 ? bestAttack(state, enemy, enemy.pos, affordable, still, heaviest) : null);
+      if (!option) return "end";
+      budget.ap -= option.attack.cost;
+      if (option.attack.cooldown > 0) {
+        enemy.cooldowns[option.attack.id] = option.attack.cooldown;
+        t.ready();
+      }
+      enemyAct(ctx, enemy, option.attack, option.target);
+    }
+    return "end";
+  },
+};
+
+/**
+ * The steps of every enemy's turn, in order (each can end it): the bell, if it is the one sent to ring it; a shove,
+ * for someone already at a drop; then the fight. A new kind of thing an enemy does on its turn, beside using its
+ * abilities, is a new step here.
+ */
+export const TURN_STEPS: readonly TurnStep[] = [bellStep, shoveStep, fightStep];

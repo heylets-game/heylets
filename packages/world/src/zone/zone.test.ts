@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { GRID, at, fails, flatBoard, has, must, standEnemy as enemy, standHero, unit } from "../test/zoneBoard";
 import { STARTING_STATS, hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/core";
+import { BEHAVIOURS } from "./behaviours";
+import { ENEMY_ABILITIES } from "./enemyabilities";
 import { ABILITIES, EFFECT_TICK, ENEMIES, HERO_CLASSES, SUNDERED_DEFENCE, WEAPONS, abilitiesFor } from "../content";
 import { CLIMES, type Tile } from "../map";
 import { makeRng } from "../rng";
@@ -9,13 +11,13 @@ import { addCondition, attackContext, burnOf, damage, defenceOf, kindle, shieldO
 import { shantyOf, shantyRadius, songsOn } from "./song";
 import { chartOf, constellationLinks } from "./stars";
 import { ALERT_RANGE, DEFAULT_ZONE_OPTIONS, JOIN_RANGE, generateZone, zoneOptions } from "./gen";
-import { HEX_ROOM, adjacent, blast, blockerAt, flies, isDead, seesFor, solid, stepCost, unitAt, zoneReach } from "./geometry";
+import { HEX_ROOM, adjacent, blast, blockerAt, flies, isDead, sameHex, seesFor, solid, stepCost, unitAt, zoneReach } from "./geometry";
 import { propOf } from "./props";
 import { SITE_IDS, backdropOf, siteInside, type SiteId } from "./sites";
-import { ACTION_AP, AP_MAX, AP_TURN, AQUEOUS, RALLY, SUMMON_AP_TURN, AURAS, CHART, COMMON_ACTIONS, BLOCK, BONUS_AP, BOLSTER, AGAINST_WAVES, ENDURE, STAND_STRONG, STURDY, ENEMY_BURST, ENEMY_HP_SCALE, ENEMY_KIT, ENEMY_MOVE_AP, EXPLORE_ROUND_MS, FLEE_RANGE, LIGHT_RADIUS, SHIELD_SET_ASIDE, TACTICS, TORCH_GROUND_ROUNDS, TORCH_HELD_ROUNDS, TORCH_ROUND_MS, abilityDice as abilityDiceFor, commonCost, enemyHp, enemyMove, enemyStrikes, tacticOf } from "./kit";
+import { ACTION_AP, AP_MAX, AP_TURN, AQUEOUS, RALLY, SUMMON_AP_TURN, AURAS, CHART, COMMON_ACTIONS, BLOCK, BONUS_AP, BOLSTER, AGAINST_WAVES, ENDURE, STAND_STRONG, STURDY, ENEMY_BURST, ENEMY_KIT, ENEMY_MOVE_AP, EXPLORE_ROUND_MS, FLEE_RANGE, LIGHT_RADIUS, SHIELD_SET_ASIDE, TACTICS, TORCH_GROUND_ROUNDS, TORCH_HELD_ROUNDS, TORCH_ROUND_MS, abilityDice as abilityDiceFor, commonCost, enemyHp, DEFAULT_MIND, abilityStrikes, enemyMove, enemyStrikes, mindOf, tacticOf, unitStrikes } from "./kit";
 import { MAX_CATCHUP_ROUNDS } from "./clock";
 import { d20, diceAverage, diceFor, heroMove, hitChance } from "./rules";
-import { createZone, ensureMouth, spentOut, standInHero, stepZone, zoneView } from "./zone";
+import { createZone, ensureMouth, loadZone, spentOut, standInHero, stepZone, zoneView } from "./zone";
 import { DELVE_CRATES, DELVE_GLOWCAPS as GLOWCAP_COUNT, generateDelve } from "./delve";
 import { litHexes } from "./light";
 import { poolFor } from "../classabilities";
@@ -131,11 +133,46 @@ describe("the kit", () => {
     for (const id of Object.keys(TACTICS)) expect(ABILITIES[id], id).toBeDefined();
   });
 
-  it("has an entry for every enemy, naming only attacks that enemy has", () => {
+  it("has an entry for every enemy, and every ability an enemy starts with is in the pool", () => {
     for (const kind of Object.keys(ENEMIES)) {
       expect(ENEMY_KIT[kind], kind).toBeDefined();
-      for (const name of Object.keys(ENEMY_KIT[kind].attacks ?? {})) expect(ENEMIES[kind].attacks.some((a) => a.name === name), `${kind}: ${name}`).toBe(true);
-      expect(enemyStrikes(kind, 1).length).toBe(ENEMIES[kind].attacks.length);
+      expect(ENEMIES[kind].abilities.length, kind).toBeGreaterThan(0);
+      for (const id of ENEMIES[kind].abilities) expect(ENEMY_ABILITIES[id], `${kind}: ${id}`).toBeDefined();
+      expect(enemyStrikes(kind, 1).length).toBe(ENEMIES[kind].abilities.length);
+    }
+  });
+
+  it("gives each enemy its own copy of its kind's abilities, so one can be given another, and fills in one saved without any", () => {
+    const state = createZone("ABL", "abilities", zoneOptions({ size: "small", biome: "meadow", groups: 2, party: 2 }));
+    const [a, b] = state.units.filter((u) => u.side === "enemy");
+    expect(a.abilities).toEqual(ENEMIES[a.kind].abilities);
+    expect(a.abilities).not.toBe(ENEMIES[a.kind].abilities);
+    a.abilities.push("frost_lance");
+    expect(unitStrikes(state, a).map((s) => s.id)).toContain("frost_lance");
+    expect(b.abilities).not.toContain("frost_lance");
+    expect(ENEMIES[a.kind].abilities).not.toContain("frost_lance");
+    // One that has to wait for an ability (a cooldown) does not have it to use.
+    a.cooldowns.frost_lance = 1;
+    expect(unitStrikes(state, a).map((s) => s.id)).not.toContain("frost_lance");
+    // Saved before enemies carried their own: given their kind's on load.
+    b.abilities = [];
+    expect(loadZone(state).units.find((u) => u.id === b.id)!.abilities).toEqual(ENEMIES[b.kind].abilities);
+  });
+
+  it("gives each kind a mind: the usual one, with those that shoot liking room and high ground", () => {
+    for (const kind of Object.keys(ENEMIES)) expect(Object.keys(mindOf(kind)).sort(), kind).toEqual(Object.keys(DEFAULT_MIND).sort());
+    expect(mindOf("archer").spacing).toBeGreaterThan(0);
+    expect(mindOf("archer").height).toBeGreaterThan(0);
+    expect(mindOf("bandit")).toEqual(DEFAULT_MIND);
+  });
+
+  it("has every ability in the pool named, and none an enemy cannot use", () => {
+    for (const [id, a] of Object.entries(ENEMY_ABILITIES)) {
+      expect(a.id, id).toBe(id);
+      expect(a.name.length, id).toBeGreaterThan(0);
+      expect(abilityStrikes([id], 1)).toHaveLength(1);
+      // Judged by a behaviour there is.
+      expect(BEHAVIOURS[abilityStrikes([id], 1)[0].behaviour], id).toBeDefined();
     }
   });
 
@@ -291,18 +328,18 @@ describe("free walking", () => {
 });
 
 describe("starting a fight", () => {
-  it("starts when a hero runs right up to an enemy, and not before", () => {
+  it("starts when a hero comes within an enemy's sight, and not before", () => {
     let state = board();
     state.aiOff = true;
     hero(state, "ann", "qa_paladin", at(1, 6));
     const wolf = enemy(state, "wolf", at(10, 6));
     const mate = enemy(state, "wolf", at(11, 6));
-    // Two hexes off, in plain sight: nothing.
-    state = must(state, { type: "move", by: "ann", unit: "ann", to: at(8, 6) });
+    // One hex further off than it sees, in plain sight: nothing.
+    state = must(state, { type: "move", by: "ann", unit: "ann", to: at(9 - ALERT_RANGE, 6) });
     expect(state.encounter).toBeNull();
-    expect(unit(state, "ann").pos).toEqual(at(8, 6));
+    expect(unit(state, "ann").pos).toEqual(at(9 - ALERT_RANGE, 6));
     const events: ZoneEvent[] = [];
-    state = must(state, { type: "move", by: "ann", unit: "ann", to: at(9, 6) }, events);
+    state = must(state, { type: "move", by: "ann", unit: "ann", to: at(10 - ALERT_RANGE, 6) }, events);
     expect(hexDistance(unit(state, "ann").pos, wolf.pos)).toBe(ALERT_RANGE);
     expect(state.encounter).not.toBeNull();
     expect(new Set(state.encounter!.order)).toEqual(new Set(["ann", wolf.id, mate.id]));
@@ -317,7 +354,7 @@ describe("starting a fight", () => {
     expect(new Set(places).size).toBe(3);
   });
 
-  it("stops a hero who walks past an enemy on the first hex beside it", () => {
+  it("stops a hero who walks past an enemy on the first hex it can see", () => {
     let state = board();
     state.aiOff = true;
     hero(state, "ann", "qa_paladin", at(3, 6));
@@ -325,7 +362,7 @@ describe("starting a fight", () => {
     // The straight way to the far side runs right under its nose.
     state = must(state, { type: "move", by: "ann", unit: "ann", to: at(12, 6) });
     expect(state.encounter).not.toBeNull();
-    expect(hexDistance(unit(state, "ann").pos, wolf.pos)).toBe(1);
+    expect(hexDistance(unit(state, "ann").pos, wolf.pos)).toBe(ALERT_RANGE);
     expect(unit(state, "ann").pos).not.toEqual(at(12, 6));
   });
 
@@ -353,7 +390,7 @@ describe("starting a fight", () => {
     state.aiOff = true;
     hero(state, "ann", "refactor_rogue", at(4, 2));
     enemy(state, "wolf", at(6, 2), "g1");
-    const far = enemy(state, "bandit", at(4, 4), "g2");
+    const far = enemy(state, "bandit", at(4, 3 + ALERT_RANGE), "g2");
     state = must(state, { type: "move", by: "ann", unit: "ann", to: at(5, 2) });
     expect(state.encounter!.order).not.toContain(far.id);
     while (state.encounter!.acting[0] !== "ann") state = must(state, { type: "timeout" });
@@ -374,7 +411,7 @@ describe("turns", () => {
     state.shareTurns = share;
     hero(state, "ann", "qa_paladin", at(5, 6));
     hero(state, "bo", "qa_paladin", at(5, 7));
-    const dummy = enemy(state, "dummy", at(9, 6));
+    const dummy = enemy(state, "dummy", at(7 + ALERT_RANGE, 6));
     state = provoke(must(state, { type: "move", by: "ann", unit: "ann", to: at(6, 6) }));
     Object.assign(state.encounter!, { order: ["ann", "bo", dummy.id], init: { ...init, [dummy.id]: 1 }, acting: [dummy.id], done: [dummy.id], budgets: {} });
     return must(state, { type: "timeout" });
@@ -492,7 +529,7 @@ describe("turns", () => {
     let state = board((t) => { tileEdit(at(7, 6), { biome: "forest" })(t); tileEdit(at(6, 5), { elev: 1 })(t); });
     state.aiOff = true;
     hero(state, "ann", "qa_paladin", at(5, 6));
-    enemy(state, "dummy", at(9, 6));
+    enemy(state, "dummy", at(7 + ALERT_RANGE, 6));
     state = provoke(must(state, { type: "move", by: "ann", unit: "ann", to: at(6, 6) }));
     const budget = () => state.encounter!.budgets.ann;
     budget().stride = 2;
@@ -825,7 +862,8 @@ describe("light and the dark", () => {
     expect(lit.has(posKey(at(3 + LIGHT_RADIUS, 6)))).toBe(true);
     expect(lit.has(posKey(at(4 + LIGHT_RADIUS, 6)))).toBe(false);
     expect(zoneView(state, "ann").units.map((u) => u.id)).toContain(wolf.id);
-    // Lit as it walks, with no torch in hand to burn down.
+    // Lit as it walks, with no torch in hand to burn down (the wolf gone, so the walk is not stopped by its seeing her).
+    state.units = state.units.filter((u) => u.id !== wolf.id);
     state = must(state, { type: "move", by: "ann", unit: "ann", to: at(5, 6) });
     lit = litHexes(state)!;
     expect(lit.has(posKey(at(5 + LIGHT_RADIUS, 6)))).toBe(true);
@@ -1170,29 +1208,21 @@ describe("items", () => {
 
 // ---------- the enemy ----------
 
-describe("threat", () => {
-  it("makes the enemy tougher, sharper and more numerous as it rises", () => {
-    expect(enemyHp("wolf", 1, 1)).toBe(Math.round(ENEMIES.wolf.hp * ENEMY_HP_SCALE));
-    expect(enemyHp("wolf", 1, 2)).toBeGreaterThan(enemyHp("wolf", 1, 1) * 1.5);
-    expect(enemyHp("wolf", 1, 3)).toBeGreaterThan(enemyHp("wolf", 1, 2));
-    expect(enemyStrikes("wolf", 1, 3)[0].bonus).toBe(enemyStrikes("wolf", 1, 1)[0].bonus + 2);
-    // A band is as many as the party (one more, for a party of three or four), and one more again for each step of
-    // threat past the first: never fewer than two.
-    const bands = (party: number, threat: number) => {
-      const zone = createZone("T", "threat", zoneOptions({ groups: 2, kinds: ["wolf"], party, threat }));
+describe("enemy strength", () => {
+  it("rises with level, and each band has as many as its leader would bring", () => {
+    expect(enemyHp("wolf", 1)).toBe(ENEMIES.wolf.hp);
+    expect(enemyHp("wolf", 4)).toBeGreaterThan(enemyHp("wolf", 1));
+    expect(enemyStrikes("wolf", 5)[0].bonus).toBe(enemyStrikes("wolf", 1)[0].bonus + 1);
+    // A band is as many as the party (one more, for a party of three or four): never fewer than two.
+    const bands = (party: number) => {
+      const zone = createZone("T", "bands", zoneOptions({ groups: 2, kinds: ["wolf"], party }));
       return Object.keys(zone.groups).map((g) => zone.units.filter((u) => u.group === g).length);
     };
-    expect(bands(2, 1)).toEqual([2, 2]);
-    expect(bands(2, 2)).toEqual([3, 3]);
-    expect(bands(2, 3)).toEqual([4, 4]);
-    // A lone hero meets two at any ordinary threat; four heroes, five or six.
-    expect(bands(1, 1)).toEqual([2, 2]);
-    expect(bands(1, 2)).toEqual([2, 2]);
-    expect(bands(1, 3)).toEqual([3, 3]);
-    expect(bands(4, 1)).toEqual([5, 5]);
-    expect(bands(4, 2)).toEqual([6, 6]);
-    // A zone made before there was a threat is a fair fight.
-    expect(zoneOptions({}).threat).toBe(2);
+    expect(bands(1)).toEqual([2, 2]);
+    expect(bands(2)).toEqual([2, 2]);
+    expect(bands(4)).toEqual([5, 5]);
+    // A zone made when there was a threat setting is made the same, whatever it said.
+    expect(zoneOptions({ threat: 1 })).toEqual(zoneOptions({}));
   });
 });
 
@@ -1201,8 +1231,8 @@ describe("the enemy's turn", () => {
     // What each of them covers for 1 AP on open ground. An ordinary hero covers 2 (rules.ts heroMove).
     const strides: Record<string, number> = {
       dummy: 0,
-      bandit: 2, skeleton: 2, cultist: 2, brute: 2, bear: 2, ogre: 2, troll: 2, slime: 2, snow_bear: 2, wraith: 2, witch: 2,
-      wolf: 3, frost_wolf: 3, ember_hound: 3, spider: 3, archer: 3, shade: 3, bat: 3,
+      bandit: 2, skeleton: 2, cultist: 2, brute: 2, bear: 2, ogre: 2, troll: 2, slime: 2, snow_bear: 2, wraith: 2, witch: 2, archer: 2,
+      wolf: 3, frost_wolf: 3, ember_hound: 3, spider: 3, shade: 3, bat: 3,
       alpha: 3, great_bear: 2, guardian: 2, haunt: 2, broodmother: 2, villain: 2,
     };
     expect(Object.keys(strides).sort()).toEqual(Object.keys(ENEMIES).sort());
@@ -1411,6 +1441,25 @@ describe("the end of a fight", () => {
     expect(events.some((e) => e.t === "cleared")).toBe(true);
   });
 
+  it("a dev spawn puts its first enemy on the hex clicked, beside an enemy if the rules allow, and spreads the rest", () => {
+    let state = board();
+    enemy(state, "wolf", at(7, 6));
+    hero(state, "ann", "qa_paladin", at(4, 6));
+    const spawn = (kinds: string[], pos: HexPos) => (state = must(state, { type: "dev", by: "ann", dev: { op: "spawn", kinds, at: pos } }));
+    const on = (pos: HexPos) => state.units.filter((u) => sameHex(u.pos, pos)).length;
+    const crowd = () => Math.max(...state.units.map((u) => on(u.pos)));
+    spawn(["wolf", "wolf", "wolf"], at(7, 6));
+    expect(on(at(7, 6))).toBe(HEX_ROOM);
+    expect(state.units.filter((u) => u.side === "enemy")).toHaveLength(4);
+    expect(crowd()).toBe(HEX_ROOM);
+    // A full hex, or a hero's, takes nobody more.
+    spawn(["wolf"], at(7, 6));
+    expect(on(at(7, 6))).toBe(HEX_ROOM);
+    spawn(["wolf"], at(4, 6));
+    expect(on(at(4, 6))).toBe(1);
+    expect(crowd()).toBe(HEX_ROOM);
+  });
+
   it("says nothing of a cleared map while another group still stands", () => {
     let { state, foe } = duel("skeleton");
     enemy(state, "bat", at(14, 2), "g2");
@@ -1423,7 +1472,7 @@ describe("the end of a fight", () => {
   it("plays whole fights on generated maps without breaking its own rules", () => {
     let struck = 0;
     for (let seed = 0; seed < 9; seed++) {
-      let state = createZone("PLAY", `play-${seed}`, zoneOptions({ size: "small", biome: (["meadow", "woods", "caves", "shore"] as const)[seed % 4], groups: 2, party: 2, clear: 3, obstacles: 2, elevation: 2, threat: (seed % 3) + 1 }));
+      let state = createZone("PLAY", `play-${seed}`, zoneOptions({ size: "small", biome: (["meadow", "woods", "caves", "shore"] as const)[seed % 4], groups: 2, party: 2, clear: 3, obstacles: 2, elevation: 2 }));
       state = must(state, { type: "join", hero: standInHero("refactor_rogue", "ann", 3)! });
       state = must(state, { type: "join", hero: standInHero("devops_mage", "bo", 3)! });
       const kinds = new Map(state.units.map((u) => [u.id, u.kind]));
@@ -1666,10 +1715,10 @@ describe("fleeing", () => {
     // The bandit is back at its post with its wounds bound, so fleeing is no way to wear it down, and has stopped looking.
     expect(unit(state, foe)).toMatchObject({ pos: at(9, 6), hp: bandit.maxHp, down: false, conditions: [] });
     expect(state.groups.g1.alerted).toBe(false);
-    // She walks free, and walking right up to it again starts a new fight.
-    state = must(state, { type: "move", by: "ann", unit: "ann", to: at(6, 6) });
+    // She walks free, and coming within its sight again starts a new fight.
+    state = must(state, { type: "move", by: "ann", unit: "ann", to: at(8 - ALERT_RANGE, 6) });
     expect(state.encounter).toBeNull();
-    state = must(state, { type: "move", by: "ann", unit: "ann", to: at(8, 6) });
+    state = must(state, { type: "move", by: "ann", unit: "ann", to: at(9 - ALERT_RANGE, 6) });
     expect(state.encounter?.order).toContain(foe);
   });
 
@@ -1898,7 +1947,7 @@ describe("fleeing", () => {
   it("keeps its own rules through whole fights where heroes run off and get caught again", () => {
     let ran = 0;
     for (let seed = 0; seed < 8; seed++) {
-      let state = createZone("RUN", `run-${seed}`, zoneOptions({ size: "small", biome: (["meadow", "caves"] as const)[seed % 2], groups: 2, party: 2, clear: 3, obstacles: 1, elevation: 1, threat: 1 }));
+      let state = createZone("RUN", `run-${seed}`, zoneOptions({ size: "small", biome: (["meadow", "caves"] as const)[seed % 2], groups: 2, party: 2, clear: 3, obstacles: 1, elevation: 1 }));
       state = must(state, { type: "join", hero: standInHero("refactor_rogue", "ann", 3)! });
       state = must(state, { type: "join", hero: standInHero("qa_paladin", "bo", 3)! });
       const dice = makeRng(seed + 1);
@@ -4212,7 +4261,7 @@ describe("the Warden's wall", () => {
     expect(shieldOf(unit(state, "ann"))).toBe(ENDURE.shield + 1);
   });
 
-  /** Overwhelm tried over seeds until the contest goes one way or the other. */
+  /** Overwhelm tried over seeds until it hits, or misses. */
   function overwhelmed(won: boolean, foes: HexPos[], opts: Parameters<typeof party>[1] = {}) {
     for (let seed = 1; seed < 80; seed++) {
       let { state, foes: ids } = party(foes, opts);
@@ -4222,11 +4271,15 @@ describe("the Warden's wall", () => {
       const lost = events.some((e) => e.t === "miss" && e.what === "overwhelm");
       if (lost !== won) return { state, ids, events };
     }
-    throw new Error("the contest never went that way");
+    throw new Error("it never went that way");
   }
 
   it("Overwhelm: a Bonus action, 2 turns to wait; won, the enemy beside you is driven 2 hexes straight back", () => {
-    const { state, ids } = overwhelmed(true, [at(6, 6)]);
+    const { state, ids, events } = overwhelmed(true, [at(6, 6)]);
+    // An attack against its Defence, that does no harm.
+    const roll = events.flatMap((e) => (e.t === "roll" && e.roll.label === "Overwhelm" ? [e.roll] : []))[0];
+    expect(roll).toMatchObject({ kind: "attack", id: "ann", target: ids[0] });
+    expect(events.filter((e) => e.t === "hit" && e.target === ids[0])).toEqual([]);
     expect(state.encounter!.budgets.ann).toMatchObject({ ap: AP_TURN - BONUS_AP });
     expect(unit(state, "ann").cooldowns.overwhelm).toBe(3);
     expect(unit(state, ids[0]).pos).toEqual(at(8, 6));
