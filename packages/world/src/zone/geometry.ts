@@ -9,6 +9,7 @@ import { crateAt } from "./crates";
 import { ENEMY_KIT } from "./kit";
 import { propOf } from "./props";
 import type { Side, Unit, Weather, ZoneState } from "./types";
+import type { GearPerk } from "../gear";
 
 /** The six neighbours of a hex, clockwise from the upper right. */
 export const HEX_DIRS: readonly HexPos[] = [
@@ -180,6 +181,15 @@ export const unitById = (state: ZoneState, id: string): Unit | undefined => stat
 
 export const flies = (unit: Unit): boolean => unit.side === "enemy" && !!ENEMY_KIT[unit.kind]?.fly;
 
+/** How strong a power from a hero's gear is on them (gear.ts GearPerk), or 0 when they don't have it. */
+export const perkOf = (unit: Unit, perk: GearPerk): number => unit.perks?.[perk] ?? 0;
+
+/** Whether a unit floats over the ground in Cloudstep Boots: nothing on it touches them but fire. Unlike flying, they still climb, fall and keep off water. */
+export const hovers = (unit: Unit): boolean => perkOf(unit, "hover") > 0;
+
+/** Whether oil and slime underfoot cost a unit nothing extra: they fly, hover, or have cleats on. */
+export const slickProof = (unit: Unit): boolean => flies(unit) || hovers(unit) || perkOf(unit, "sure_footed") > 0;
+
 export const inFight = (state: ZoneState, id: string): boolean => !!state.encounter?.order.includes(id);
 
 export interface Reached {
@@ -249,7 +259,8 @@ function footingFor(state: ZoneState, unit: Unit): Footing {
 
 /**
  * What one step costs `unit`, or Infinity if it cannot be made. Open ground is 1; forest and hills 2;
- * climbing a level 1 more; oil or slime underfoot 1 more. A drop or a climb of two levels or more is a cliff:
+ * climbing a level 1 more; oil or slime underfoot 1 more (not for one in cleats or Cloudstep Boots; forest and hills are
+ * open ground in Pathfinder's Breeches). A drop or a climb of two levels or more is a cliff:
  * it is crossed only where a ladder stands (a step more for each level climbed, one more to climb down).
  * The other side bars the way: a hex with any of them on it, on their feet or down (a hero who is down keeps
  * their place; a dead enemy takes up no room and bars nobody), cannot be stepped onto, so it is neither stopped on
@@ -267,6 +278,8 @@ export function stepCost(state: ZoneState, unit: Unit, from: HexPos, to: HexPos,
   if (!tile || tile.built || propOf(tile)?.blocks || shut?.has(toKey) || (footing ? footing.blocked.has(toKey) : blockerAt(state, to))) return none;
   let cost = air ? (SIGHT_BLOCKERS.has(tile.biome) ? Infinity : 1) : MOVE_COST[tile.biome];
   if (!Number.isFinite(cost)) return none;
+  // Pathfinder's Breeches: forest and hills are open ground to the wearer.
+  if (!air && cost > 1 && perkOf(unit, "trailblazer") > 0) cost = 1;
   if (!air) {
     const climb = (tile.elev ?? 0) - (fromElev ?? elevOf(state.map, from));
     if (Math.abs(climb) >= 2) {
@@ -274,7 +287,7 @@ export function stepCost(state: ZoneState, unit: Unit, from: HexPos, to: HexPos,
       cost += climb > 0 ? climb : 1;
     } else if (climb === 1) cost += 1;
     const underfoot = state.surfaces[toKey]?.kind;
-    if (underfoot === "oil" || underfoot === "slime") cost += 1;
+    if ((underfoot === "oil" || underfoot === "slime") && !slickProof(unit)) cost += 1;
   }
   if (footing) {
     const there = footing.held.get(toKey) ?? 0;

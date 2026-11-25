@@ -105,6 +105,7 @@ import {
   TOWN_STACK_MAX,
   TOWN_TAB_CELLS,
   gearPutProblem,
+  perkLine,
   stackPutProblem,
   stackSort,
   stoneItem,
@@ -404,6 +405,7 @@ function PackGrid({ zone, name, u, rows, baseRows, stacks, decor = [], spots, he
             {s.t === "gear" ? <Icon name={s.item.icon} color={color!} size={iconPx(w, h, u)} /> : <StackIcon stack={s} size={iconPx(1, 1, u)} />}
             {s.t !== "gear" && <span className="badge br qty">{s.qty}</span>}
             {s.t === "gear" && s.item.power > 0 && w > 1 && <span className="badge br">+{s.item.power}</span>}
+            {s.t === "gear" && perkLine(s.item) && <span className="badge tr" title={perkLine(s.item)!.name}>✦</span>}
           </button>
         );
       })}
@@ -1007,6 +1009,7 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
         {item ? <Icon name={item.icon} color={RARITY_COLOR[item.rarity]} size={iconPx(at.w, at.h, bu)} /> : <Icon name={SLOT_ICON[slot]} color="#4a4336" size={iconPx(at.w, Math.min(at.h, at.w), bu)} silhouette />}
         {!item && <span className="slot-name">{SLOT_LABEL[slot]}</span>}
         {item && item.power > 0 && <span className="badge br">+{item.power}</span>}
+        {item && perkLine(item) && <span className="badge tr" title={perkLine(item)!.name}>✦</span>}
       </button>
       {/* Over the slot, not in it (a button cannot hold a button): the lit torch held in this hand. A click puts it away. */}
       {lit && (

@@ -13,6 +13,7 @@ import {
   WEAPONS,
   armorBlock,
   equipProblem,
+  perkLine,
   type ItemDef,
 } from "@gantt-quest/world";
 import type { InventoryItem } from "./api";
@@ -38,6 +39,7 @@ export function toOwned(row: InventoryItem): OwnedItem {
     levelReq: row.level_req,
     icon: row.icon,
     ...(row.hidden ? { hidden: true } : {}),
+    ...(row.perk_amount != null ? { perkAmount: row.perk_amount } : {}),
   };
 }
 
@@ -83,6 +85,7 @@ export function ItemTile({ item, selected, locked, match, onClick, onDragStart, 
       <Icon name={item.icon} color={color} size={36} />
       {item.levelReq > 1 && <span className="badge tl">L{item.levelReq}</span>}
       {item.power > 0 && <span className="badge br">+{item.power}</span>}
+      {perkLine(item) && <span className="badge tr" title={perkLine(item)!.name}>✦</span>}
       {children}
     </button>
   );
@@ -101,11 +104,27 @@ export function compare(candidate: ItemDef, current: ItemDef | null): { rows: { 
   const shown = rows.filter((r) => r.from || r.to);
   const up = shown.some((r) => r.to > r.from);
   const down = shown.some((r) => r.to < r.from);
-  return { rows: shown, verdict: up && down ? "SIDEGRADE" : up ? "UPGRADE" : down ? "DOWNGRADE" : "SAME" };
+  // A power of its own is not weighed against stats: giving one up for better stats, or taking one for worse, is a sidegrade.
+  const [now, then] = [perkLine(candidate)?.blurb ?? "", (current && perkLine(current)?.blurb) ?? ""];
+  const gains = now !== then && !!now;
+  const loses = now !== then && !!then;
+  const verdict: Verdict = up && down ? "SIDEGRADE" : up ? (loses ? "SIDEGRADE" : "UPGRADE") : down ? (gains ? "SIDEGRADE" : "DOWNGRADE") : gains || loses ? "SIDEGRADE" : "SAME";
+  return { rows: shown, verdict };
 }
 
 export function VerdictTag({ verdict }: { verdict: Verdict }) {
   return <span className={`verdict ${verdict.toLowerCase()}`}>{verdict}</span>;
+}
+
+/** A piece's power of its own, as it reads on it: "✦ Spring heels: Jump reaches 2 hexes farther…". */
+export function PerkLine({ item }: { item: ItemDef }) {
+  const line = perkLine(item);
+  if (!line) return null;
+  return (
+    <p className="perk-line">
+      <strong>✦ {line.name}:</strong> {line.blurb}
+    </p>
+  );
 }
 
 interface DetailProps {
@@ -142,6 +161,7 @@ export function ItemDetail({ item, current, equipped, classId, level, children }
         {item.kind === "armor" && ` (blocks ${armorBlock(item.power)} on its own)`}
       </p>
       {bonusSummary(item) && <p className="good">{bonusSummary(item)}</p>}
+      <PerkLine item={item} />
       {abilities.length > 0 && (
         <ul className="abilities">
           {abilities.map((id) => {
@@ -150,7 +170,7 @@ export function ItemDetail({ item, current, equipped, classId, level, children }
           })}
         </ul>
       )}
-      {item.kind === "trinket" && !bonusSummary(item) && <p className="muted">A plain keepsake.</p>}
+      {item.kind === "trinket" && !bonusSummary(item) && !perkLine(item) && <p className="muted">A plain keepsake.</p>}
       {problem && <p className="bad">{problem}</p>}
       {diff && (
         <div className={`diff ${diff.verdict.toLowerCase()}`}>

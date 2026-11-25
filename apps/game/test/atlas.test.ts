@@ -357,6 +357,21 @@ describe("the town chest", () => {
     expect(gear("ann", "Another")).toBeGreaterThan(next);
   });
 
+  it("keeps how strong a piece's power is, through the chest and out to whoever takes it", async () => {
+    const at = Date.now();
+    const boots = Number(
+      sql
+        .prepare("INSERT INTO inventory (player_id, kind, ref, name, rarity, slot, power, level_req, icon, stat_bonus_json, equipped, created_at, perk_amount) VALUES ('ann', 'trinket', 'phase_treads', 'Mythic Phase Treads', 'legendary', 'boots', 0, 4, 'phase-treads', '{}', 0, ?, 7)")
+        .run(at).lastInsertRowid,
+    );
+    const chest = await tabOf("general");
+    expect(await chestPutGear(db, CREW, "ann", chest.id, boots)).toBeNull();
+    const [kept] = (await tabOf("general")).gear;
+    expect(kept).toMatchObject({ ref: "phase_treads", perk_amount: 7 });
+    expect(await chestTakeGear(db, CREW, "bo", kept.id)).toBeNull();
+    expect(sql.prepare("SELECT perk_amount FROM inventory WHERE player_id = 'bo' AND ref = 'phase_treads'").get()).toEqual({ perk_amount: 7 });
+  });
+
   it("takes no gear that is worn, is somebody else's, or is meant for a tab that does not hold gear", async () => {
     const chest = await tabOf("general");
     const worn = gear("ann", "Worn Ring", "ring", 1);

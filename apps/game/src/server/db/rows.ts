@@ -82,6 +82,8 @@ export interface InventoryRow {
   upgrades: number;
   /** 1 while worn but not drawn on the hero. */
   hidden: number;
+  /** How strong its power is (ItemDef.perkAmount), or null for gear without one. */
+  perk_amount?: number | null;
 }
 
 export function rowToItem(row: InventoryRow): ItemDef {
@@ -97,15 +99,16 @@ export function rowToItem(row: InventoryRow): ItemDef {
     icon: row.icon,
     ...(row.upgrades ? { upgrades: row.upgrades } : {}),
     ...(row.hidden ? { hidden: true } : {}),
+    ...(row.perk_amount != null ? { perkAmount: row.perk_amount } : {}),
   };
 }
 
 export function insertItem(db: D1Database, playerId: string, item: ItemDef, equipped: boolean, storedIn: number | null = null): D1PreparedStatement {
   return db
     .prepare(
-      "INSERT INTO inventory (player_id, kind, ref, name, rarity, slot, power, level_req, icon, stat_bonus_json, equipped, stored_in, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO inventory (player_id, kind, ref, name, rarity, slot, power, level_req, icon, stat_bonus_json, equipped, stored_in, created_at, perk_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
-    .bind(playerId, item.kind, item.ref, item.name, item.rarity, item.slot, item.power, item.levelReq, item.icon, JSON.stringify(item.statBonus), equipped ? 1 : 0, storedIn, Date.now());
+    .bind(playerId, item.kind, item.ref, item.name, item.rarity, item.slot, item.power, item.levelReq, item.icon, JSON.stringify(item.statBonus), equipped ? 1 : 0, storedIn, Date.now(), item.perkAmount ?? null);
 }
 
 /**
@@ -116,9 +119,9 @@ export function insertItem(db: D1Database, playerId: string, item: ItemDef, equi
 export function paidItemStatement(db: D1Database, playerId: string, item: ItemDef): D1PreparedStatement {
   return db
     .prepare(
-      "INSERT INTO inventory (player_id, kind, ref, name, rarity, slot, power, level_req, icon, stat_bonus_json, equipped, created_at) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ? WHERE changes() > 0",
+      "INSERT INTO inventory (player_id, kind, ref, name, rarity, slot, power, level_req, icon, stat_bonus_json, equipped, created_at, perk_amount) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ? WHERE changes() > 0",
     )
-    .bind(playerId, item.kind, item.ref, item.name, item.rarity, item.slot, item.power, item.levelReq, item.icon, JSON.stringify(item.statBonus), Date.now());
+    .bind(playerId, item.kind, item.ref, item.name, item.rarity, item.slot, item.power, item.levelReq, item.icon, JSON.stringify(item.statBonus), Date.now(), item.perkAmount ?? null);
 }
 
 export async function getItem(db: D1Database, playerId: string, itemId: number): Promise<InventoryRow | null> {

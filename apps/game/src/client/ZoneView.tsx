@@ -63,6 +63,9 @@ import {
   checkCommon,
   checkThrow,
   commonCost,
+  commonCostFor,
+  isBlink,
+  blinkRange,
   AP_MAX,
   AP_TURN,
   SUMMON_AP_TURN,
@@ -77,7 +80,7 @@ import {
   diceText,
   healDice,
   isCrateId,
-  JUMP_RANGE,
+  jumpRange,
   previewAttack,
   sameHex,
   sees,
@@ -211,6 +214,9 @@ const LEAVING_WAIT_MS = 6000;
 const AHEAD_WAIT_MS = 6000;
 
 /** The things that are done, as against what comes of them: each starts a new run of results. */
+/** The shimmer of a blink through Phase Treads, and the hexes only a blink reaches. */
+const PHASE_COLOR = "#b98cff";
+
 const CAUSES = new Set<ZoneEvent["t"]>(["stood", "used", "moved", "jumped", "blinked", "shoved", "reaction", "turn", "round", "fight_start", "fight_end"]);
 
 /**
@@ -284,7 +290,7 @@ function dwell(ev: ZoneEvent, many: boolean, next: ZoneEvent | undefined, carrie
     case "shoved": return 400;
     // The crouch, the leap and the landing: what follows waits for the feet to come down.
     case "jumped": return 700;
-    case "blinked": return 450;
+    case "blinked": return ev.phase ? 650 : 450;
     case "seen": return 200;
     case "fight_start": return 1300;
     case "bell": return 900;
@@ -727,13 +733,38 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         const u = find(ev.id);
         const was = u ? u.pos : null;
         if (u) u.pos = ev.to;
-        // Gone in a puff and there: no walk, no leap. Smoke where they were, and where they come out.
-        later(() => {
-          sounds.zone("jump");
-          if (was) spells.current?.puff(point(was, 0.3));
-          view?.blinkUnit(ev.id, ev.to);
-          spells.current?.puff(point(ev.to, 0.3));
-        });
+        // Phase Treads: thinned to a shimmer, a streak across, and back in with a ring of light.
+        if (ev.phase) {
+          later(() => {
+            sounds.zone("jump");
+            const fx = spells.current;
+            if (was && fx) {
+              fx.flash(point(was, 0.5), PHASE_COLOR, 0.9);
+              fx.ring(point(was, 0.05), 0.8, PHASE_COLOR, 0.4);
+              fx.burst(point(was, 0.5), PHASE_COLOR, 10);
+            }
+            // A beat later the streak crosses, and they are there.
+            window.setTimeout(() => {
+              const fx = spells.current;
+              if (was && fx) fx.beam(point(was, 0.6), point(ev.to, 0.6), PHASE_COLOR, 0.12);
+              // A faint trail of afterimages strung out behind them, fading toward where they land.
+              view?.afterimages(ev.id, ev.to, PHASE_COLOR);
+              view?.blinkUnit(ev.id, ev.to);
+              if (!fx) return;
+              fx.flash(point(ev.to, 0.5), PHASE_COLOR, 1.2);
+              fx.ring(point(ev.to, 0.05), 1.1, PHASE_COLOR, 0.6);
+              fx.burst(point(ev.to, 0.5), "#f3e8ff", 8);
+            }, 180);
+          });
+        } else {
+          // Gone in a puff and there: no walk, no leap. Smoke where they were, and where they come out.
+          later(() => {
+            sounds.zone("jump");
+            if (was) spells.current?.puff(point(was, 0.3));
+            view?.blinkUnit(ev.id, ev.to);
+            spells.current?.puff(point(ev.to, 0.3));
+          });
+        }
         owe(ev.id);
       } else if (ev.t === "fell") {
         // Over an edge and down: the knock that sent them is already under way, and the harm of it follows.
@@ -1962,11 +1993,15 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       }
     } else if (pick.what === "jump") {
       // Where a leap can land: up a ledge two levels high at most, with room to stand. Down more than two is a fall (marked in red).
-      const lands = within(JUMP_RANGE, true).filter((t) => !checkCommon(z, act, "jump", { at: t }, null));
+      // In Phase Treads, where only a blink gets to is marked in violet: it costs more.
+      const lands = within(Math.max(jumpRange(act), blinkRange(act)), true).filter((t) => !checkCommon(z, act, "jump", { at: t }, null));
+      const blinks = lands.filter((t) => isBlink(z, act, t));
+      const leaps = lands.filter((t) => !blinks.includes(t));
       const drop = (t: HexPos) => (tileAt(state.map, act.pos)?.elev ?? 0) - (tileAt(state.map, t)?.elev ?? 0);
-      out.push({ hexes: lands.filter((t) => drop(t) <= 2), color: "#8fd3ff", fill: 0.14, line: 0.8 });
-      out.push({ hexes: lands.filter((t) => drop(t) > 2), color: "#ff6b6b", fill: 0.14, line: 0.8 });
-      if (hover) out.push({ hexes: [hover], color: "#8fd3ff", fill: 0.35, line: 0.9 });
+      out.push({ hexes: leaps.filter((t) => drop(t) <= 2), color: "#8fd3ff", fill: 0.14, line: 0.8 });
+      out.push({ hexes: leaps.filter((t) => drop(t) > 2), color: "#ff6b6b", fill: 0.14, line: 0.8 });
+      if (blinks.length > 0) out.push({ hexes: blinks, color: PHASE_COLOR, fill: 0.2, line: 0.9 });
+      if (hover) out.push({ hexes: [hover], color: blinks.some((t) => t.q === hover.q && t.r === hover.r) ? PHASE_COLOR : "#8fd3ff", fill: 0.35, line: 0.9 });
     } else {
       out.push({ hexes: inArm(), color: pick.what === "help" ? "#7dff9a" : "#ffd23f", fill: 0.12, line: 0.8 });
     }
@@ -2138,7 +2173,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const common = (what: CommonAction, aim: { target?: string; at?: HexPos } = {}) => {
     if (!act || !z) return;
     const sure = !checkCommon(z, act, what, aim, fighting ? (budget ?? null) : null);
-    declare({ type: "common", unit: act.id, what, ...aim }, sure, { cost: commonCost(what, act.kind), gain: what === "disengage" ? what : undefined, slot: `do:${what}`, name: COMMON_ACTIONS[what].name, toward: aimedAt(aim) });
+    declare({ type: "common", unit: act.id, what, ...aim }, sure, { cost: commonCostFor(act, what, what === "jump" && isBlink(z, act, aim.at)), gain: what === "disengage" ? what : undefined, slot: `do:${what}`, name: COMMON_ACTIONS[what].name, toward: aimedAt(aim) });
     setPick(null);
   };
   /** The small things done to what is beside you (a chest, a door, a torch, mushrooms): the cost shows at once, and the hero turns to it. */
@@ -2479,7 +2514,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     };
   }
   for (const what of Object.keys(COMMON_ICON) as CommonAction[]) {
-    const cost = commonCost(what, act.kind);
+    const cost = commonCostFor(act, what);
     const needsFight = what === "disengage" || what === "flee";
     entries[`do:${what}`] = {
       id: `do:${what}`,
@@ -2980,7 +3015,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           ap={shownBudget?.ap ?? 0}
           apMax={AP_MAX}
           apTurn={act.summon ? SUMMON_AP_TURN : AP_TURN}
-          apCost={!myTurn ? null : pick ? (pick.kind === "ability" ? tacticOf(pick.id).cost : pick.kind === "item" ? ITEM_AP.throw : commonCost(pick.what, act.kind)) : moveTip && !moveTip.none ? moveTip.ap : null}
+          apCost={!myTurn ? null : pick ? (pick.kind === "ability" ? tacticOf(pick.id).cost : pick.kind === "item" ? ITEM_AP.throw : commonCostFor(act, pick.what, pick.what === "jump" && !!hover && isBlink(asState(state), act, hover))) : moveTip && !moveTip.none ? moveTip.ap : null}
           move={shownBudget?.move ?? 0}
           stride={shownBudget?.stride ?? 0}
           moveCost={myTurn && moveTip && !moveTip.none ? moveTip.cost : null}

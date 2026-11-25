@@ -83,6 +83,8 @@ export interface InventoryItem {
   upgrades?: number;
   /** 1 while worn but not drawn on the hero. */
   hidden?: number;
+  /** How strong its power is (ItemDef.perkAmount), or null for gear without one. */
+  perk_amount?: number | null;
 }
 
 /** The traveling salesman in the pub, if one is in, and their stock for this player; otherwise who is due next. */

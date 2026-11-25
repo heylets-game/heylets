@@ -8,7 +8,7 @@
 
 import type { HexPos, Stats } from "@gantt-quest/core";
 import type { EffectKind } from "../content";
-import type { ItemDef, Outfit } from "../gear";
+import type { ItemDef, Outfit, Perks } from "../gear";
 import type { ResourceKind, Resources } from "../hut";
 import type { Clime, WorldMap } from "../map";
 import type { FurnishingGrant } from "../drops";
@@ -75,6 +75,8 @@ export interface Unit {
   outfit?: Outfit;
   /** A hero's lantern helm, shown or hidden (HeroSheet.lantern): it lights the dark round them. */
   lantern?: boolean;
+  /** Powers from a hero's gear, each with its strength (HeroSheet.perks): read with perkOf. */
+  perks?: Perks;
   conditions: UnitCondition[];
   down: boolean;
   /** Rounds until each ability can be used again. */
@@ -204,6 +206,8 @@ export interface Encounter {
   fled?: string[];
   /** Who has taken Disengage in this fight: once a fight each. Missing: nobody yet. */
   disengaged?: string[];
+  /** Attacks each hero in a Ghostsail Cloak has had miss them this fight (the Ghostly power). Missing: none yet. */
+  ghosted?: Record<string, number>;
   /** The alarm bell (bell.ts): which enemy is going to ring it, and the last round the enemy side rolled for one to. */
   bell?: { goer: string | null; rolled: number };
   /**
@@ -385,6 +389,8 @@ export interface ZoneHero {
   outfit?: Outfit;
   /** A lantern helm on the head, shown or hidden (HeroSheet.lantern). */
   lantern?: boolean;
+  /** Powers from their gear (HeroSheet.perks). */
+  perks?: Perks;
   maxHp: number;
   /** The class abilities they carry in, already checked against their class and level (classabilities.ts), on top of the weapon's. */
   classAbilities?: string[];
@@ -540,7 +546,8 @@ export type ZoneEvent =
   /** One who was Unseen gives themselves away. */
   | { t: "seen"; id: string }
   /** Gone from one hex and there on another, with nothing crossed between (Smuggler's Route, Tactical Retreat). */
-  | { t: "blinked"; id: string; from: HexPos; to: HexPos }
+  /** `phase`: through Phase Treads, in place of a Jump (drawn as its own shimmer). */
+  | { t: "blinked"; id: string; from: HexPos; to: HexPos; phase?: true }
   /** A creature is called into the fight (Summon Sea Turtle) by `by`; or one is gone (it fell, was replaced, or the fight is over). */
   | { t: "summoned"; id: string; by: string }
   | { t: "dismissed"; id: string }

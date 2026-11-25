@@ -11,7 +11,7 @@
 // checks every purchase, flask, step and haggle again.
 
 import { useMemo, useState } from "react";
-import { FLASK_RECIPES, HAGGLE_ASKS, KEEPER_PLACES, RARITY_COLOR, SHELF_DAILY, SLOT_LABEL, SMITHY_MAX_STEPS, THROWABLES, THROWABLE_KINDS, flaskProblem, haggledPrice, smithyProblem, smithyWork, upgradedName, workKey, type Deal, type HaggleAsk, type ItemDef, type KeeperShop, type Resources, type Throwable } from "@gantt-quest/world";
+import { FLASK_RECIPES, HAGGLE_ASKS, KEEPER_PLACES, RARITY_COLOR, SHELF_DAILY, SLOT_LABEL, SMITHY_MAX_STEPS, THROWABLES, THROWABLE_KINDS, flaskProblem, haggledPrice, perkLine, smithyProblem, smithyWork, upgradedName, workKey, type Deal, type HaggleAsk, type ItemDef, type KeeperShop, type Resources, type Throwable } from "@gantt-quest/world";
 import { api, type ApothecaryView, type HaggleResult, type KeeperWare, type Me, type SmithyView } from "../api";
 import { CostChips, RewardChips } from "../hutDrops";
 import { Icon, ItemDetail, VerdictTag, bonusSummary, compare, powerLabel, toOwned } from "../items";
@@ -311,7 +311,7 @@ export function SmithyKeeperPanel({ me, view, setView, reload, refresh, onSay, o
 
 /** A piece of gear in a few words: "Main hand · +4 power · +1 Strength". */
 function gearBrief(item: ItemDef): string {
-  return [SLOT_LABEL[item.slot], item.power > 0 ? `+${item.power} ${powerLabel(item).toLowerCase()}` : "", bonusSummary(item)].filter(Boolean).join(" · ");
+  return [SLOT_LABEL[item.slot], item.power > 0 ? `+${item.power} ${powerLabel(item).toLowerCase()}` : "", bonusSummary(item), perkLine(item) ? `✦ ${perkLine(item)!.name}` : ""].filter(Boolean).join(" · ");
 }
 
 // ---------- the galley ----------

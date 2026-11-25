@@ -79,7 +79,7 @@ A tab left open on an older build is told when a newer one is out (`src/client/N
 | `…/map.ts` | Tiles, places (`Poi`) and weighted pathfinding, shared by every map |
 | `…/harbor.ts` | The Harbor map, path check and message types |
 | `…/hero.ts`, `progression.ts`, `classabilities.ts`, `content.ts` | A hero as a fight sees one, levelling, class abilities, and the tables of weapons, abilities and enemies |
-| `…/gear.ts`, `carry.ts` | Slots, rarities, item generation, armor, prices and the stall's stock; the pack and what fits in it |
+| `…/gear.ts`, `carry.ts` | Slots, rarities, item generation, armor, gear powers (`PERK_INFO`, `perksOf`), prices and the stall's stock; the pack and what fits in it |
 | `…/hut.ts`, `…/hutroom.ts` | Hut materials, furnishings and tiers; the walk-in room, placement and its message types |
 | `…/drops.ts` | What a searched cache gives for the hut |
 | `…/gather.ts` | Fishing, felling and the quarry: outings, timing, payouts, stamina and resting |
@@ -140,5 +140,5 @@ In dev builds the page exposes `window.__harbor` in the Harbor and `window.__gqZ
 - The Harbor has twelve plots: a crew larger than that can't all own one.
 - Crew chat isn't stored.
 - Timing in fishing and the quarry trusts the client's reported moment within a round trip, so a script can always hit dead centre (capped at +20% a roll). Felling's report is replayed against what an axe could do (swing speed, regrowth, the round's length by the server's clock), but a script can still chop at the fastest swing and strike every log dead centre: at most the payout cap.
-- Gear has no affixes, uniques, sets or elements.
+- Gear has no random affixes, sets or elements. Some bases have a power of their own (`GearPerk` in gear.ts: Hover, Blink, Thorns…), fixed per base and only made from a rarity floor up; how strong it is is rolled per item (`perkAmount`).
 - Felling's sounds are synth stand-ins until recordings are added under `sfx/gather/` (see `audio/manifest.ts`).

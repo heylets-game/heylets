@@ -2,7 +2,7 @@
 // its prices come from the server; one of each entry per player per visit.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FURNISHINGS, RARITY_COLOR, SLOT_LABEL, dueIn, resourcesText, salesGoodsName, salesman, type SalesEntry } from "@gantt-quest/world";
+import { FURNISHINGS, RARITY_COLOR, SLOT_LABEL, dueIn, perkLine, resourcesText, salesGoodsName, salesman, type SalesEntry } from "@gantt-quest/world";
 import { api, type Me, type SalesmanView } from "./api";
 import { Icon, ItemDetail, VerdictTag, bonusSummary, compare, powerLabel, toOwned } from "./items";
 import { regularFace } from "./RegularPanel";
@@ -75,7 +75,7 @@ export function SalesmanPanel({ me, refresh, onClose }: { me: Me; refresh(): Pro
         art: <Icon name={g.item.icon} color={color} size={68} />,
         corner: <VerdictTag verdict={compare(g.item, current).verdict} />,
         facts: [g.item.rarity, g.item.levelReq > 1 ? `Level ${g.item.levelReq}` : ""].filter(Boolean),
-        brief: [SLOT_LABEL[g.item.slot], g.item.power > 0 ? `+${g.item.power} ${powerLabel(g.item).toLowerCase()}` : "", bonusSummary(g.item)].filter(Boolean).join(" · "),
+        brief: [SLOT_LABEL[g.item.slot], g.item.power > 0 ? `+${g.item.power} ${powerLabel(g.item).toLowerCase()}` : "", bonusSummary(g.item), perkLine(g.item) ? `✦ ${perkLine(g.item)!.name}` : ""].filter(Boolean).join(" · "),
         detail: <ItemDetail item={g.item} current={current} classId={c.class_id} level={c.level} />,
       };
     }

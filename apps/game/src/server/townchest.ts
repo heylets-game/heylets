@@ -36,7 +36,7 @@ import {
 import { CELLS_SQL, carryState, packHasRoomSql, spendStatements, type InventoryRow } from "./db";
 
 /** A piece of gear in the chest, as an `inventory` row would say it: `id` is the one it had in a pack, and has again in the pack of whoever takes it out. */
-export type TownGear = Pick<InventoryRow, "id" | "kind" | "ref" | "name" | "rarity" | "slot" | "power" | "level_req" | "icon" | "stat_bonus_json" | "upgrades">;
+export type TownGear = Pick<InventoryRow, "id" | "kind" | "ref" | "name" | "rarity" | "slot" | "power" | "level_req" | "icon" | "stat_bonus_json" | "upgrades" | "perk_amount">;
 export interface TownTab {
   id: number;
   name: string;
@@ -59,7 +59,7 @@ interface TabRow {
   kind: string;
   color: string | null;
 }
-const GEAR_COLS = "kind, ref, name, rarity, slot, power, level_req, icon, stat_bonus_json, upgrades";
+const GEAR_COLS = "kind, ref, name, rarity, slot, power, level_req, icon, stat_bonus_json, upgrades, perk_amount";
 /** SQL for the squares filled in tab `tab` (a number, written in): its gear by footprint, and a square a stack. */
 const usedSql = (tab: number) =>
   `((SELECT COALESCE(SUM(${CELLS_SQL}), 0) FROM town_gear WHERE tab_id = ${tab}) + (SELECT COALESCE(SUM((qty + ${STACK_MAX - 1}) / ${STACK_MAX}), 0) FROM town_stacks WHERE tab_id = ${tab} AND qty > 0))`;
