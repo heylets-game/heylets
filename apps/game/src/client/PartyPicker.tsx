@@ -6,6 +6,7 @@
 // Out on a map the party is as it set out (the server refuses a change there).
 
 import { useEffect, useState } from "react";
+import { PARTY_MOST } from "@gantt-quest/world";
 import { api, type HeroSlot } from "./api";
 import { label } from "./labels";
 import { actAs, useActingHero } from "./party";
@@ -26,6 +27,7 @@ export function PartyPicker({ leader, onClose, onChanged }: { leader: string; on
   }, []);
   const world = heroes?.find((h) => h.id === leader)?.crew ?? null;
   const others = (heroes ?? []).filter((h) => h.id !== leader);
+  const full = 1 + others.filter((h) => h.party && h.crew?.id === world?.id).length >= PARTY_MOST;
 
   const change = async (hero: HeroSlot) => {
     setBusy(hero.id);
@@ -48,7 +50,7 @@ export function PartyPicker({ leader, onClose, onChanged }: { leader: string; on
           <h3>Your party</h3>
           <button className="link" onClick={onClose}>Close</button>
         </div>
-        <p className="muted">Heroes in your party come onto a map with you, and you play each of them. Each keeps their own sheet, pack and XP; the party takes one share of a place's spoils.</p>
+        <p className="muted">Heroes in your party come onto a map with you, and you play each of them: up to {PARTY_MOST}, you among them. Each keeps their own sheet, pack and XP; the party takes one share of a place's spoils.</p>
         {!heroes && !error && <p className="muted">Looking for your heroes…</p>}
         {heroes && others.length === 0 && <p className="muted">You have no other heroes yet. Make one from the main menu (Change hero), then add them here.</p>}
         <ul className="party-list">
@@ -64,7 +66,7 @@ export function PartyPicker({ leader, onClose, onChanged }: { leader: string; on
                     {elsewhere ? (h.crew ? ` · in ${h.crew.name}: comes into this world` : " · comes into this world") : ""}
                   </span>
                 </span>
-                <button className={`small ${h.party ? "" : "primary"}`} disabled={busy !== null} onClick={() => void change(h)}>
+                <button className={`small ${h.party ? "" : "primary"}`} disabled={busy !== null || (full && !h.party)} title={full && !h.party ? `Your party is full: ${PARTY_MOST} heroes` : undefined} onClick={() => void change(h)}>
                   {busy === h.id ? "…" : h.party ? "Remove" : "Add"}
                 </button>
               </li>
@@ -91,7 +93,7 @@ export function useTownParty(you: string | null, worldId: string | null, inTown 
   const selected = useActingHero();
   const reload = () => void api.heroes().then((r) => setHeroes(r.heroes), () => {});
   useEffect(reload, [you]);
-  const ids = you ? [you, ...(heroes ?? []).filter((h) => h.id !== you && h.party && h.crew?.id === worldId).map((h) => h.id)] : [];
+  const ids = you ? [you, ...(heroes ?? []).filter((h) => h.id !== you && h.party && h.crew?.id === worldId).map((h) => h.id)].slice(0, PARTY_MOST) : [];
   const acting = selected && ids.includes(selected) ? selected : you;
   useEffect(() => {
     if (inTown && heroes && selected && acting !== selected) actAs(null);

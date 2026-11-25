@@ -114,6 +114,27 @@ describe("a party of an account's heroes", () => {
     expect(await partyOf(db, second)).toEqual([first]);
   });
 
+  it("takes at most four heroes, the one being played among them", async () => {
+    const { db, sql, app, first, second, third } = await threeHeroes("four@example.com");
+    const more: string[] = [];
+    for (const name of ["Fourth", "Fifth"]) {
+      const id = (await app.call("/api/heroes/new", {})).data.id as string;
+      giveHero(sql, id, name);
+      more.push(id);
+    }
+    expect((await app.call("/api/heroes/choose", { id: first })).status).toBe(200);
+    for (const id of [second, third, more[0]]) expect((await app.call("/api/party/add", { id })).status).toBe(200);
+    expect((await partyOf(db, first)).length).toBe(3);
+    const refused = await app.call("/api/party/add", { id: more[1] });
+    expect(refused.status).toBe(409);
+    expect(refused.data.error).toMatch(/at most 4/);
+
+    // A party already bigger than that (from before the limit) brings only its oldest along.
+    sql.prepare("UPDATE players SET party = 1 WHERE id = ?").run(more[1]);
+    inWorld(sql, more[1], "WORLDA");
+    expect(await partyOf(db, first)).toEqual([second, third, more[0]]);
+  });
+
   it("leaves out a member who has gone into another world", async () => {
     const { db, sql, app, first, second } = await threeHeroes("elsewhere@example.com");
     await app.call("/api/party/add", { id: second });

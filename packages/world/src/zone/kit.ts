@@ -681,15 +681,11 @@ export interface Mind {
   height: number;
   /** How much it minds harm on the way: fire and poison underfoot, and blows drawn by walking out of reach. 1 is the usual; 0 does not care. */
   caution: number;
-  /** How much more a blow is worth at someone hurt: this share more against one who is all but down. */
-  hunter: number;
-  /** What it adds for a blow that would, on an average roll, finish someone. */
-  finisher: number;
   /** What it adds for a blow at someone one of its own is already beside. */
   flank: number;
 }
 
-export const DEFAULT_MIND: Mind = { spacing: 0, height: 0, caution: 1, hunter: 0.5, finisher: 3, flank: 1 };
+export const DEFAULT_MIND: Mind = { spacing: 0, height: 0, caution: 1, flank: 1 };
 
 /** Those that shoot: they like room, and to look down on what they shoot at. */
 const SHOOTER: Partial<Mind> = { spacing: 0.4, height: 0.5 };

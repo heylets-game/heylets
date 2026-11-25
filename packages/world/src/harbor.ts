@@ -926,3 +926,5 @@ export const UNSTICK_COOLDOWN_MS = 3000;
 
 export const HARBOR_MAX_SAY = 200;
 export const MAX_CREW = 40;
+/** The most heroes one player plays at once: the hero they play and the rest of their party (server party.ts). */
+export const PARTY_MOST = 4;
