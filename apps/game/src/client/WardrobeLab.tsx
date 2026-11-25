@@ -1,4 +1,4 @@
-// The wardrobe lab: a dev-only page for looking at what a hero wears on the body and the legs, each piece on a
+// The wardrobe lab: a dev-only page for looking at what a hero wears on the body, the legs and the feet, each piece on a
 // hero (render/figures.ts) beside its icons (itemArt.ts and its little model, render/gearModels.ts), so the
 // look can be held up against the name. Click a piece to see it on one large hero, and pick how large.
 // Opened at #lab/wardrobe on the dev server.
@@ -13,6 +13,8 @@ import { voxelIconUrl } from "./ui/voxel";
 
 const BODY = ["hauberk", "greatcoat", "diving_plate"];
 const LEGS = ["greaves", "trousers", "diving_legs"];
+const FEET = ["boots", "treads", "lead_boots"];
+type Worn = "body" | "legs" | "boots";
 const RARITIES: Rarity[] = ["common", "uncommon", "rare", "epic", "legendary"];
 const TURNS: [string, number][] = [["Front", 0.3], ["Side", Math.PI / 2], ["Back", Math.PI]];
 
@@ -23,7 +25,7 @@ export default function WardrobeLab() {
   const [walk, setWalk] = useState(false);
   const [big, setBig] = useState(400);
   // One piece looked at closely, on one large hero, with its icons large.
-  const [focus, setFocus] = useState<["body" | "legs", string] | null>(null);
+  const [focus, setFocus] = useState<[Worn, string] | null>(null);
   const garb = useMemo(() => starterGarb(classId), [classId]);
   const piece = (ref: string) => {
     const base = GEAR_BASES.find((b) => b.ref === ref);
@@ -32,16 +34,17 @@ export default function WardrobeLab() {
     return { icon: g.icon, ref, rarity: g.rarity, name: g.name };
   };
   // Each piece on a hero in the class's own clothes otherwise, so it is seen as it would be worn.
-  const dressed = (slot: "body" | "legs", ref: string): Outfit => {
+  const dressed = (slot: Worn, ref: string): Outfit => {
     const out: Outfit = {};
     for (const g of garb) out[g.slot] = { icon: g.icon, ref: g.ref, rarity: g.rarity };
     const p = piece(ref);
     out[slot] = { icon: p.icon, ref: p.ref, rarity: p.rarity };
     return out;
   };
-  const rows: ["body" | "legs", string][] = [
-    ...(["garb_tunic", ...BODY].map((r) => ["body", r]) as ["body", string][]),
-    ...(["garb_trousers", ...LEGS].map((r) => ["legs", r]) as ["legs", string][]),
+  const rows: [Worn, string][] = [
+    ...(["garb_tunic", ...BODY].map((r) => ["body", r]) as [Worn, string][]),
+    ...(["garb_trousers", ...LEGS].map((r) => ["legs", r]) as [Worn, string][]),
+    ...(["garb_shoes", ...FEET].map((r) => ["boots", r]) as [Worn, string][]),
   ];
   const accent = RARITY_COLOR[rarity];
   return (

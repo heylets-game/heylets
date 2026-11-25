@@ -140,8 +140,8 @@ const BASES: Record<Exclude<Slot, "main_hand">, Base[]> = {
   ],
   boots: [
     { ref: "boots", name: "Sea Boots", icon: "boots" },
-    { ref: "treads", name: "Gangplank Treads", icon: "boots" },
-    { ref: "lead_boots", name: "Lead Boots", icon: "boots" },
+    { ref: "treads", name: "Gangplank Treads", icon: "treads" },
+    { ref: "lead_boots", name: "Lead Boots", icon: "lead-boots" },
   ],
   ring: [
     { ref: "ring", name: "Ring of Steady Tides", icon: "ring" },

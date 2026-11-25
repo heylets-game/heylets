@@ -1402,6 +1402,44 @@ export const LOW_POLY: Record<string, LowPolyDef> = {
       k.within({ at: [2.6, 0, 0.4], rot: [0, -0.3, 0] }, () => boot(k));
     },
   },
+  treads: {
+    // Gangplank Treads: short leather boots laced up the front, a band of the accent round the ankle, and thick
+    // iron-shod soles studded underneath for grip on a wet plank.
+    spin: 0,
+    tip: 0.3,
+    build: (k) => {
+      const one = () => {
+        const brown = "#5a4632";
+        k.cyl(1.95, 2.1, 3.4, 6, brown, { at: [0, 0.6, 0] });
+        k.cyl(2.25, 2.2, 0.9, 6, k.a, { at: [0, 2.4, 0] });
+        k.box(3.8, 2.8, 7, brown, { at: [0, -1.5, 1.6] }, 0.9);
+        for (const y of [1.4, 0.2, -1]) k.box(1.6, 0.3, 0.3, C.hide, { at: [0, y, 2.05 + (1.4 - y) * 0.35] });
+        k.box(4.2, 0.9, 7.8, C.iron, { at: [0, -3.25, 1.8] }, 0.25);
+        for (const z of [-1.4, 0.8, 3, 5]) for (const x of [-1.45, 1.45]) k.ball(0.32, C.steel, { at: [x, -3.75, z] });
+      };
+      k.within({ at: [-2.6, 0, -0.6], rot: [0, -0.45, 0] }, one);
+      k.within({ at: [2.6, 0, 0.4], rot: [0, -0.3, 0] }, one);
+    },
+  },
+  "lead-boots": {
+    // Lead Boots: a diver's heavy boots, dark and tall, a brass cap over the toe and a brass band round the top,
+    // a strap of the accent round the shaft, and a thick dark sole.
+    spin: 0,
+    tip: 0.3,
+    build: (k) => {
+      const one = () => {
+        const [lead, brass] = ["#3d3f44", "#b8893a"];
+        k.cyl(2.1, 2.3, 7, 6, lead, { at: [0, 2.5, 0] });
+        k.cyl(2.5, 2.45, 1.4, 6, brass, { at: [0, 6.4, 0] });
+        k.cyl(2.35, 2.35, 0.7, 6, k.a, { at: [0, 2.4, 0] });
+        k.box(4.1, 3, 7.2, lead, { at: [0, -1.5, 1.6] }, 0.9);
+        k.box(4.3, 2.4, 2.6, brass, { at: [0, -1.7, 4.2] }, 0.6);
+        k.box(4.4, 1, 7.9, C.dark, { at: [0, -3.3, 1.8] }, 0.25);
+      };
+      k.within({ at: [-2.6, 0, -0.6], rot: [0, -0.45, 0] }, one);
+      k.within({ at: [2.6, 0, 0.4], rot: [0, -0.3, 0] }, one);
+    },
+  },
 
   // ---- trinkets ----
   ring: {

@@ -599,6 +599,31 @@ const ART: Record<string, Art> = {
     p.r(5, 13, 10, 1, C.bark);
     p.r(6, 5, 1, 4, C.hide);
   },
+  treads: (p) => {
+    // Gangplank Treads: short leather boots laced up the front, a band of the accent round the ankle, and thick
+    // iron-shod soles studded underneath for grip on a wet plank.
+    const brown = "#5a4632";
+    p.r(5, 6, 5, 5, brown);
+    p.r(4, 5, 7, 2, p.accent);
+    p.r(5, 10, 9, 3, brown);
+    p.r(10, 10, 3, 1, "#6e573f");
+    for (const y of [7, 9]) p.r(8, y, 2, 1, C.hide);
+    p.r(4, 13, 11, 1, C.iron);
+    for (const x of [5, 8, 11, 13]) p.r(x, 14, 1, 1, C.steel);
+  },
+  "lead-boots": (p) => {
+    // Lead Boots: a diver's heavy boots, dark and tall, a brass cap over the toe and a brass band round the top,
+    // a strap of the accent round the shaft, and a thick dark sole.
+    const [lead, brass] = ["#3d3f44", "#b8893a"];
+    p.r(5, 2, 5, 9, lead);
+    p.r(4, 1, 7, 2, brass);
+    p.r(6, 3, 1, 6, "#55585e");
+    p.r(5, 6, 5, 1, p.accent);
+    p.r(5, 10, 9, 3, lead);
+    p.r(11, 10, 3, 3, brass);
+    p.r(12, 10, 1, 1, "#d9ac55");
+    p.r(4, 13, 11, 1, C.dark);
+  },
   ring: (p) => {
     spans(p, C.gold, [[6, 5, 10], [7, 4, 5], [7, 10, 11], [8, 4, 4], [8, 11, 11], [9, 4, 4], [9, 11, 11], [10, 4, 4], [10, 11, 11], [11, 4, 5], [11, 10, 11], [12, 5, 10]]);
     p.r(6, 2, 4, 4, p.accent);
