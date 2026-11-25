@@ -1,7 +1,7 @@
 // HTTP helpers for the Harbor screens.
 
 import type { StatKey } from "@gantt-quest/core";
-import type { FinishKind, HutFinish, Muster, MusterAnswer, SowWith } from "@gantt-quest/world";
+import type { FinishKind, Gossip, HutFinish, Muster, MusterAnswer, SowWith } from "@gantt-quest/world";
 import type { Appearance, BaitId, BoatId, RodId, CarryState, FishSpot, GatherChoice, HarborXpStatus, GatherSpot, HarborWorks, HutSummary, ItemDef, Lodestone, ProjectAmounts, PublicHero, Resources, SalesEntry, SalesmanId, SalesmanVisit, ShopEntry, Throwable, TradeSide } from "@gantt-quest/world";
 import { devTools } from "./devTools";
 import { actAs, actingHero } from "./party";
@@ -273,8 +273,9 @@ export const api = {
   gatherStep: (choice: GatherChoice) => request<GatherStatus & { paid?: Resources; xp?: XpResult; sitting?: SittingPaid }>("/api/gather/step", { choice }),
   pubLeaderboard: () => request<PubLeaderboard>("/api/pub/leaderboard"),
   pubOrder: (itemId: string) => request<PubOrdered>("/api/pub/order", { itemId }),
-  pubTalk: (text: string) => request<{ say: string; left: number }>("/api/pub/talk", { text }),
-  pubTalkLeft: () => request<{ left: number; cap: number }>("/api/pub/talk"),
+  talk: (who: string, text: string) => request<{ say: string; left: number }>("/api/talk", { who, text }),
+  talkLeft: () => request<{ left: number; cap: number }>("/api/talk"),
+  gossip: () => request<{ gossip: Gossip[] }>("/api/gossip"),
   salesman: () => request<SalesmanView>("/api/pub/salesman", undefined, salesmanHeader()),
   buyFromSalesman: (index: number) => request<{ got: SalesEntry }>("/api/pub/salesman/buy", { index }, salesmanHeader()),
   regulars: () => request<RegularsView>("/api/pub/regulars"),
