@@ -59,7 +59,7 @@ export interface LaidGroup {
   id: string;
   kinds: string[];
   posts: HexPos[];
-  /** What it would be for each party of one to four (index: the party less one), to grow it by as heroes come (zone.ts growGroups). */
+  /** What it would be for each party of one to six (index: the party less one), to grow it by as heroes come (zone.ts growGroups). */
   bands?: string[][];
 }
 

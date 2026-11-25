@@ -211,11 +211,11 @@ export function bandOf(faction: FactionId, size: number, pick: <T>(list: readonl
 
 type Member = { kind: string; role: "front" | "shot" | "heavy" };
 
-/** The most heroes a map's groups are sized for: a full party. */
-export const PARTY_SIZES = [1, 2, 3, 4] as const;
+/** How many heroes a map's groups can be sized for: one to six, the most a map takes (zone.ts MAX_PARTY). */
+export const PARTY_SIZES = [1, 2, 3, 4, 5, 6] as const;
 
 /**
- * A band laid out on a place (lay.ts, indoors.ts), as it would be for each party of one to four (index: the party less
+ * A band laid out on a place (lay.ts, indoors.ts), as it would be for each party of one to six (index: the party less
  * one): `made` for the party it was made for, and `at` for the rest. Those are rolled with dice of their own (`dice`),
  * so the map's own rolls, and so the map, are as they were. A band for more heroes keeps every member of the one for one
  * fewer, by part, and adds to it, so it is the band a map made for them would have, and growing it only ever adds.

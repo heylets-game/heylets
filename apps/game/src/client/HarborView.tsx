@@ -651,6 +651,10 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
   // The map the crew has open out through the gate (the latest, if there are several): while there is one the gate
   // stands open, and stepping through it goes there.
   const openMap = board.maps?.[0];
+  /** Through the gate onto a map: asked first where a crewmate is on it already, since walking on makes its enemies more. */
+  const stepThrough = (code: string) => {
+    if (joinOk(board.members.some((m) => m.id !== you && m.zone?.code === code))) location.hash = `zone/${code}`;
+  };
   const gateOpen = !!openMap || !!harbor.muster?.code;
   // Shut, the gate is a knot of stone and brass asleep on its plinth; a map being opened bursts it out into the air.
   useEffect(() => {
@@ -833,12 +837,12 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
     : atWaygate ? {
         title: <>The waygate <span className="muted">· {outThere ? `${outThere.name} is out through it${outThere.zone?.fighting ? ", in a fight" : ""}` : openMap ? `open to ${openMap.place}` : "shut. It opens onto the crew's atlas"}</span></>,
         label: outThere ? `Step through to ${outThere.name}` : openMap ? `Step through to ${openMap.place}` : "Open the atlas",
-        run: () => (location.hash = outThere?.zone ? `zone/${outThere.zone.code}` : openMap ? `zone/${openMap.code}` : "atlas"),
+        run: () => (outThere?.zone ? stepThrough(outThere.zone.code) : openMap ? stepThrough(openMap.code) : (location.hash = "atlas")),
         // A click on the gate itself goes where it stands open to: the map the crew has open; shut, the atlas, where
         // the crew has been and where it could go next. (Stepping straight through to a crewmate, who may be in a
         // fight, is asked for with the button.)
-        enter: () => (location.hash = openMap ? `zone/${openMap.code}` : "atlas"),
-        also: outThere || openMap ? { label: "Open the atlas", run: () => (location.hash = "atlas") } : lastMap ? { label: "Step back through", run: () => (location.hash = `zone/${lastMap}`) } : undefined,
+        enter: () => (openMap ? stepThrough(openMap.code) : (location.hash = "atlas")),
+        also: outThere || openMap ? { label: "Open the atlas", run: () => (location.hash = "atlas") } : lastMap ? { label: "Step back through", run: () => stepThrough(lastMap) } : undefined,
       }
     : atWell ? {
         title: <>The town well <span className="muted">· fill a watering can or a water skin, or toss in a coin for luck</span></>,

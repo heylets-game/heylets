@@ -13,6 +13,8 @@
 // crew's Harbor room (apps/game/src/server/harbor-room.ts) keeps the muster,
 // its timer, and makes the map.
 
+import { MAX_PARTY } from "./zone/zone";
+
 /** How long a muster waits for answers. */
 export const MUSTER_MS = 60_000;
 /** How long a muster that has started (or fallen through) is still told to those who ask: long enough for everyone to hear how it ended. */
@@ -21,6 +23,8 @@ export const MUSTER_LINGER_MS = 20_000;
 export interface MusterMember {
   id: string;
   name: string;
+  /** How many heroes they bring: themselves and their party. One, when not said. */
+  heroes?: number;
 }
 
 export interface Muster {
@@ -51,8 +55,12 @@ export interface Muster {
 export type MusterAnswer = "ready" | "no" | "start" | "cancel";
 export const MUSTER_ANSWERS: readonly MusterAnswer[] = ["ready", "no", "start", "cancel"];
 
-/** The most a map is made for. */
-export const MUSTER_PARTY = 4;
+/** The most heroes a muster takes: as many as a map takes (zone.ts MAX_PARTY), parties and all. */
+export const MUSTER_PARTY = MAX_PARTY;
+
+/** How many heroes are going: everyone ready, with their parties. */
+export const musterHeroes = (m: Pick<Muster, "ready">): number => m.ready.reduce((sum, r) => sum + heroesOf(r), 0);
+const heroesOf = (m: MusterMember): number => Math.max(1, m.heroes ?? 1);
 
 export function callMuster(id: string, by: MusterMember, to: { node: string; place: string; site?: string; level?: number }, asked: MusterMember[], now: number): Muster {
   return {
@@ -78,8 +86,8 @@ export const musterShown = (m: Muster | null | undefined, now: number): boolean 
 /** Whether everyone it waits for has said one thing or the other. */
 export const musterAnswered = (m: Muster): boolean => m.asked.every((a) => m.ready.some((r) => r.id === a.id) || m.declined.includes(a.id));
 
-/** Whether it should start now: the time is up, everyone asked has answered, or there is no room for another. */
-export const musterDue = (m: Muster, now: number): boolean => musterOpen(m) && (now >= m.deadline || musterAnswered(m) || m.ready.length >= MUSTER_PARTY);
+/** Whether it should start now: the time is up, everyone asked has answered, or there is no room for another hero. */
+export const musterDue = (m: Muster, now: number): boolean => musterOpen(m) && (now >= m.deadline || musterAnswered(m) || musterHeroes(m) >= MUSTER_PARTY);
 
 /**
  * Someone answers. Returns the muster as it now stands and whether that answer starts it (`start`) or calls it off
@@ -95,7 +103,9 @@ export function answerMuster(m: Muster, who: MusterMember, answer: MusterAnswer,
   if (caller) return { error: "You called it: you are going. Call it off if you are not." };
   const others = m.ready.filter((r) => r.id !== who.id);
   if (answer === "ready") {
-    if (others.length >= MUSTER_PARTY) return { error: `There is room for ${MUSTER_PARTY}, and they are spoken for.` };
+    const room = MUSTER_PARTY - musterHeroes({ ready: others });
+    if (room <= 0) return { error: `There is room for ${MUSTER_PARTY} heroes, and they are spoken for.` };
+    if (heroesOf(who) > room) return { error: `There is room for ${room} more ${room === 1 ? "hero" : "heroes"}, and your party is ${heroesOf(who)}.` };
     const next: Muster = { ...m, ready: [...others, who], declined: m.declined.filter((id) => id !== who.id) };
     return musterDue(next, now) ? { muster: next, start: true } : { muster: next };
   }

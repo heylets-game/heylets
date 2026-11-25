@@ -1,7 +1,7 @@
 // Zones: going down into the caves, where the crew is and teleporting
 // to one of them, and the socket into a map's room.
 
-import { zoneOptions } from "@gantt-quest/world";
+import { MAX_PARTY, zoneOptions } from "@gantt-quest/world";
 import { enterProblem } from "../atlas";
 import { crewFor, getCharacter } from "../db";
 import { createZoneRow, crewPlaces, crewPlacesOf, getZoneRow, openCave, teleportTo } from "../zones";
@@ -11,7 +11,7 @@ import { harborParty, inTown, othersOn, type GameApp } from "./shared";
 export function zoneRoutes(app: GameApp): void {
   // Down into the Haunted Caverns: the crew's cave if one is still being fought through, else a fresh one.
   // A fresh cave is pitched for whoever of the crew is in the Harbor now (the asker always counts): as many
-  // heroes as are there, up to four, at their average level. Crewmates who come later join by teleport.
+  // heroes as are there, up to six, at their average level. Crewmates who come later join by teleport.
   app.post("/api/caves", async (c) => {
     const player = c.get("player");
     const [crew, character] = await Promise.all([crewFor(c.env.DB, player.id), getCharacter(c.env.DB, player.id)]);
@@ -23,7 +23,7 @@ export function zoneRoutes(app: GameApp): void {
     const party = await harborParty(c.env, crew.id, player.id);
     const level = party.length > 0 ? party.reduce((sum, m) => sum + m.level, 0) / party.length : character.level;
     // A delve: the caverns' chambers and tunnels, with chests to open and the hoard in the deepest (zone/delve.ts).
-    const options = zoneOptions({ size: "medium", biome: "caves", delve: true, party: Math.min(4, Math.max(1, party.length)), level });
+    const options = zoneOptions({ size: "medium", biome: "caves", delve: true, party: Math.min(MAX_PARTY, Math.max(1, party.length)), level });
     return c.json({ code: await createZoneRow(c.env.DB, player.id, options, crypto.randomUUID().slice(0, 8), "caves", crew.id), fresh: true });
   });
 

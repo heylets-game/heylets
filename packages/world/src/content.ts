@@ -466,13 +466,13 @@ export type CavernLead = (typeof CAVERN_LEADS)[number];
 
 /**
  * A band in the caverns for a party of `party` heroes: one enemy for a lone
- * hero, a pair for a party, a third for a full one. Bats are half an enemy
- * each and come as a swarm.
+ * hero, a pair for a party, a third for four, a fourth for six. Bats are half
+ * an enemy each and come as a swarm.
  */
 export function cavernBand(lead: CavernLead, party: number): string[] {
-  if (lead === "bat") return ["bat", "bat", ...(party >= 2 ? ["bat"] : []), ...(party >= 4 ? ["bat", "bat"] : [])];
+  if (lead === "bat") return ["bat", "bat", ...(party >= 2 ? ["bat"] : []), ...(party >= 4 ? ["bat", "bat"] : []), ...(party >= 6 ? ["bat", "bat"] : [])];
   const second = lead === "skeleton" ? "bat" : lead;
-  return [lead, ...(party >= 2 ? [second] : []), ...(party >= 4 ? [lead] : [])];
+  return [lead, ...(party >= 2 ? [second] : []), ...(party >= 4 ? [lead] : []), ...(party >= 6 ? [second] : [])];
 }
 
 /** What can lead a roaming band. */
@@ -480,12 +480,13 @@ export type RoamerLead = "wolf" | "bandit" | "bear" | "ogre";
 
 /**
  * A roaming band for a party of `party` heroes: a lone hero meets one enemy, a
- * party a pair, a full party a third. A bear is a pair's worth on its own, so
- * it comes alone until the party is full, and then with a second. So does an ogre, and what comes with it
- * to a full party is the bandit who keeps it fed.
+ * party a pair, four a third, six a fourth. A bear is a pair's worth on its own, so
+ * it comes alone until there are four, then with a second, and a third for six. So does an ogre, and what comes
+ * with it is the bandit who keeps it fed, and for six the archer who watches its back.
  */
 export function bandKinds(lead: RoamerLead, party: number): string[] {
-  if (lead === "bear") return party >= 4 ? ["bear", "bear"] : ["bear"];
-  if (lead === "ogre") return party >= 4 ? ["ogre", "bandit"] : ["ogre"];
-  return [lead, ...(party >= 2 ? [lead === "bandit" ? "archer" : "wolf"] : []), ...(party >= 4 ? [lead] : [])];
+  if (lead === "bear") return ["bear", ...(party >= 4 ? ["bear"] : []), ...(party >= 6 ? ["bear"] : [])];
+  if (lead === "ogre") return ["ogre", ...(party >= 4 ? ["bandit"] : []), ...(party >= 6 ? ["archer"] : [])];
+  const second = lead === "bandit" ? "archer" : "wolf";
+  return [lead, ...(party >= 2 ? [second] : []), ...(party >= 4 ? [lead] : []), ...(party >= 6 ? [second] : [])];
 }

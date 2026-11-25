@@ -82,8 +82,14 @@ function enemyUnit(state: ZoneState, kind: string, pos: HexPos, group: string): 
   };
 }
 
-/** The most heroes a map's groups are ever sized for: a full party. */
+/**
+ * The most heroes on a map at once, and the most its groups are ever sized for. A hero whose player has gone (`away`)
+ * keeps their place but does not count against it: one who comes back finds it as full as it is then.
+ */
 export const MAX_PARTY = PARTY_SIZES.length;
+
+/** Said when a hero would make the map's heroes more than it takes. */
+export const MAP_FULL = `This map is full: ${MAX_PARTY} heroes are on it already.`;
 
 /** What is in `want` and not in `had`, one for one, in `want`'s order. */
 function beyond(want: readonly string[], had: readonly string[]): string[] {
@@ -914,6 +920,10 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
   }
   if (action.type === "join") {
     const hero = action.hero;
+    // No more than the map takes at once: a hero who is here already (their gear read again) is not arriving.
+    const was = unitById(state, hero.id);
+    const present = (u: Unit) => u.side === "hero" && !u.summon && !u.away;
+    if ((!was || was.away) && state.units.filter(present).length >= MAX_PARTY) return MAP_FULL;
     // Back on the map: their hero, and the stand-ins they play, are here again.
     for (const u of state.units) if (u.id === hero.id || u.controller === hero.id) delete u.away;
     const here = unitById(state, hero.id);

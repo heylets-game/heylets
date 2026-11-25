@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MUSTER_LINGER_MS, MUSTER_MS, MUSTER_PARTY, answerMuster, callMuster, musterAnswered, musterDue, musterOpen, musterShown, type Muster, type MusterMember } from "./muster";
+import { MUSTER_LINGER_MS, MUSTER_MS, MUSTER_PARTY, answerMuster, musterHeroes, callMuster, musterAnswered, musterDue, musterOpen, musterShown, type Muster, type MusterMember } from "./muster";
 
 const ann: MusterMember = { id: "a", name: "Ann" };
 const bo: MusterMember = { id: "b", name: "Bo" };
@@ -83,8 +83,21 @@ describe("a muster", () => {
     const full = said(m, more[4], "ready");
     expect(full.muster.ready).toHaveLength(MUSTER_PARTY);
     expect(full.start).toBe(true);
-    // No room for a fifth, though one of the four may still stand down.
-    expect(answerMuster(full.muster, more[5], "ready", NOW)).toEqual({ error: `There is room for ${MUSTER_PARTY}, and they are spoken for.` });
+    // No room for a seventh, though one of the six may still stand down.
+    expect(MUSTER_PARTY).toBe(6);
+    expect(answerMuster(full.muster, more[5], "ready", NOW)).toEqual({ error: `There is room for ${MUSTER_PARTY} heroes, and they are spoken for.` });
+  });
+
+  it("counts each one's party with them: a party that would make more than six cannot come, and a full one starts it", () => {
+    const dee: MusterMember = { id: "d", name: "Dee", heroes: 3 };
+    const eve: MusterMember = { id: "e", name: "Eve", heroes: 3 };
+    let m = callMuster("m1", { ...ann, heroes: 2 }, { node: "2,-1", place: "Petrel Spit" }, [bo, dee, eve], NOW);
+    m = said(m, dee, "ready").muster;
+    expect(musterHeroes(m)).toBe(5);
+    expect(answerMuster(m, eve, "ready", NOW)).toEqual({ error: "There is room for 1 more hero, and your party is 3." });
+    const full = said(m, bo, "ready");
+    expect(musterHeroes(full.muster)).toBe(6);
+    expect(full.start).toBe(true);
   });
 
   it("once it has started or fallen through it takes no more answers, and is told a little while longer", () => {

@@ -65,7 +65,8 @@ export function atlasRoutes(app: GameApp): void {
     const seen = await scoutNode(c.env.DB, crew.id, body.node, body.stone);
     if ("error" in seen) return c.json({ error: seen.error }, seen.status);
     if ("live" in seen) return c.json({ code: seen.live, fresh: false, others: await othersOn(c.env.DB, crew.id, player.id, seen.live) });
-    const called = await musterRoom(c.env, crew.id, "/call", { by: { id: player.id, name: character.name }, to: seen, stone: body.stone });
+    // Whoever calls it brings their party, and the muster counts them all.
+    const called = await musterRoom(c.env, crew.id, "/call", { by: { id: player.id, name: character.name, heroes: await heroesOf(c.env.DB, [player.id]) }, to: seen, stone: body.stone });
     if (called.json.alone) {
       // Alone in town, but perhaps with a party: the map is made for all of them.
       const went = await openNode(c.env.DB, crew.id, player.id, body.node, await heroesOf(c.env.DB, [player.id]), body.stone);
@@ -83,7 +84,7 @@ export function atlasRoutes(app: GameApp): void {
     if (!crew) return c.json({ error: "You are not in a crew." }, 403);
     if (character?.status !== "active") return c.json({ error: "Create a character first." }, 409);
     const body = await c.req.json<{ answer?: unknown }>().catch(() => ({}) as { answer?: unknown });
-    const said = await musterRoom(c.env, crew.id, "/answer", { who: { id: player.id, name: character.name }, answer: body.answer });
+    const said = await musterRoom(c.env, crew.id, "/answer", { who: { id: player.id, name: character.name, heroes: await heroesOf(c.env.DB, [player.id]) }, answer: body.answer });
     return c.json(said.json, said.status as 200 | 400 | 409);
   });
 }

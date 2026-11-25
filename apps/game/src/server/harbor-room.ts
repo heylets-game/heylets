@@ -35,6 +35,7 @@ import {
   answerMuster,
   callMuster,
   musterDue,
+  musterHeroes,
   musterOpen,
   musterShown,
   type Muster,
@@ -46,7 +47,10 @@ import { gildedRod, ownedVessel } from "./fishmarket";
 import { clearPresence } from "./zones";
 import { openNode } from "./atlas";
 import { Walkers, hexAsked, tellTrades, walkerFrom, withHero } from "./walk-room";
-import { heroesOf, partyOf } from "./party";
+import { partyOf } from "./party";
+
+/** How many heroes someone brings to a muster, as the worker counted them (routes/atlas.ts): none said is one. */
+const heroCount = (n: unknown): { heroes?: number } => (typeof n === "number" && Number.isInteger(n) && n > 1 ? { heroes: n } : {});
 
 /** A muster as it is kept: with the crew it is for and the lodestone set into the place, neither of which is sent to anyone. */
 interface KeptMuster {
@@ -142,7 +146,7 @@ export class HarborRoom extends DurableObject<Env> {
       // is not asked: they cannot see the muster from in there.)
       const asked = this.here.players().filter((p) => p.id !== body.by!.id && !p.inside).map((p) => ({ id: p.id, name: p.name }));
       if (asked.length === 0) return Response.json({ alone: true });
-      const muster = callMuster(crypto.randomUUID().slice(0, 8), { id: body.by.id, name: body.by.name }, body.to, asked, Date.now());
+      const muster = callMuster(crypto.randomUUID().slice(0, 8), { id: body.by.id, name: body.by.name, ...heroCount(body.by.heroes) }, body.to, asked, Date.now());
       await this.ctx.storage.put("muster", { crewId, stone: body.stone, muster } satisfies KeptMuster);
       await this.ctx.storage.setAlarm(muster.deadline);
       this.here.broadcast({ type: "muster", muster });
@@ -154,7 +158,7 @@ export class HarborRoom extends DurableObject<Env> {
       if (!body?.who?.id || !body.answer || !MUSTER_ANSWERS.includes(body.answer)) return Response.json({ error: "That is no answer." }, { status: 400 });
       if (!kept || !musterOpen(kept.muster)) return Response.json({ error: "There is no muster to answer." }, { status: 409 });
       if (kept.starting || this.startingMuster === kept.muster.id) return Response.json({ error: "They are setting out this moment." }, { status: 409 });
-      const res = answerMuster(kept.muster, { id: body.who.id, name: body.who.name }, body.answer, Date.now());
+      const res = answerMuster(kept.muster, { id: body.who.id, name: body.who.name, ...heroCount(body.who.heroes) }, body.answer, Date.now());
       if ("error" in res) return Response.json({ error: res.error }, { status: 409 });
       if (res.cancel) return Response.json({ muster: await this.endMuster({ ...kept, muster: { ...res.muster, failed: `${res.muster.by.name} called it off.` } }) });
       if (res.start) return Response.json({ muster: await this.startMuster({ ...kept, muster: res.muster }) });
@@ -259,7 +263,7 @@ export class HarborRoom extends DurableObject<Env> {
     if (now && now.muster.id === kept.muster.id && (now.starting || !musterOpen(now.muster))) return now.muster;
     await this.ctx.storage.put("muster", { ...kept, starting: true } satisfies KeptMuster);
     const { muster } = kept;
-    const went = await openNode(this.env.DB, kept.crewId, muster.by.id, muster.node, await heroesOf(this.env.DB, muster.ready.map((r) => r.id)), kept.stone).catch((err: unknown) => ({ error: err instanceof Error ? err.message : "The map could not be made.", status: 409 as const }));
+    const went = await openNode(this.env.DB, kept.crewId, muster.by.id, muster.node, musterHeroes(muster), kept.stone).catch((err: unknown) => ({ error: err instanceof Error ? err.message : "The map could not be made.", status: 409 as const }));
     const ended = await this.endMuster({ ...kept, muster: "error" in went ? { ...muster, failed: went.error } : { ...muster, code: went.code } });
     // The chart has changed: the board says so.
     if (!("error" in went) && this.ctx.getWebSockets().length > 0) this.here.broadcast({ type: "board", ...(await harborBoard(this.env.DB, kept.crewId)) });
