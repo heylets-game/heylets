@@ -37,6 +37,31 @@ describe("HarborRoom walks", () => {
     expect(mine.sent.at(-1)).toEqual({ type: "moved", id: "me", path: next });
   });
 
+  it("calls a walk still under way off where the hero has got to, and walks on from there", async () => {
+    const far = { q: HARBOR_SPAWN.q + 6, r: HARBOR_SPAWN.r };
+    await move(mine, far);
+    const walked = (mine.sent.at(-1) as { path: { q: number; r: number }[] }).path;
+    const got = walked[1];
+    const back = { q: HARBOR_SPAWN.q, r: HARBOR_SPAWN.r };
+    await room.webSocketMessage(mine as unknown as WebSocket, JSON.stringify({ type: "move", to: back, from: got }));
+    const told = { type: "moved", id: "me", path: [got, ...harborPath(MAP, got, back, null)!] };
+    expect(mine.sent.at(-1)).toEqual(told);
+    expect(theirs.sent.at(-1)).toEqual(told);
+    expect(mine.deserializeAttachment()?.pos).toEqual(back);
+    // A hex that was never on the way is not taken at its word: the walk sets off from where the hero stands.
+    await room.webSocketMessage(mine as unknown as WebSocket, JSON.stringify({ type: "move", to: along, from: far }));
+    expect(mine.sent.at(-1)).toEqual({ type: "moved", id: "me", path: harborPath(MAP, back, along, null) });
+  });
+
+  it("stops a walk on the hex it is called off at, when that is the hex asked for", async () => {
+    const far = { q: HARBOR_SPAWN.q + 6, r: HARBOR_SPAWN.r };
+    await move(mine, far);
+    const got = (mine.sent.at(-1) as { path: { q: number; r: number }[] }).path[2];
+    await room.webSocketMessage(mine as unknown as WebSocket, JSON.stringify({ type: "move", to: got, from: got }));
+    expect(mine.sent.at(-1)).toEqual({ type: "moved", id: "me", path: [got] });
+    expect(mine.deserializeAttachment()?.pos).toEqual(got);
+  });
+
   it("tells the one who asked, and nobody else, when it makes no walk", async () => {
     // Onto the hex they stand on: no walk to make.
     await move(mine, HARBOR_SPAWN);

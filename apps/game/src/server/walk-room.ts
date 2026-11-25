@@ -106,6 +106,13 @@ export function withHero(player: HarborPlayer, hero: HeroInit): HarborPlayer {
   return { ...player, name: hero.name, classId: hero.classId, level: hero.level, xp: hero.xp, outfit: hero.outfit };
 }
 
+/** A step of a walk as a client plays it, at the most (render/WorldRenderer.ts walks a hero a little faster). */
+const STROLL_STEP_MS = 500;
+/** Time allowed on top of a walk's own, for the click calling it off to reach the room. */
+const STROLL_GRACE_MS = 2_000;
+
+const sameHex = (a: HexPos, b: HexPos) => a.q === b.q && a.r === b.r;
+
 /** The hex a "move" asks to walk to, or null if what was sent is not one. */
 export function hexAsked(to: unknown): HexPos | null {
   const asked = to as { q?: unknown; r?: unknown } | null | undefined;
@@ -124,6 +131,8 @@ export class Walkers<Out> {
   private lookedAt = new Map<string, number>();
   /** When each player last emoted, so a held key cannot flood the room. */
   private emotedAt = new Map<string, number>();
+  /** Each player's last walk: the hexes it went through (where it set off first) and when. In memory only: a hibernation forgets it, and then no walk is called off. */
+  private strolls = new Map<string, { hexes: HexPos[]; at: number }>();
 
   constructor(private ctx: DurableObjectState) {
     // Pings are answered by the runtime, without waking the room.
@@ -207,12 +216,29 @@ export class Walkers<Out> {
    * everyone is told. `ends`: what walking off puts an end to in this room (a bedroll, lying in bed). Gives them
    * as they now are.
    */
-  walk(ws: WebSocket, player: HarborPlayer, path: HexPos[], ends: Partial<HarborPlayer> = {}): HarborPlayer {
+  walk(ws: WebSocket, player: HarborPlayer, path: HexPos[], ends: Partial<HarborPlayer> = {}, cut: HexPos | null = null): HarborPlayer {
     // Walking off gets them up off the floor, wherever this is.
     const next: HarborPlayer = { ...player, pos: path[path.length - 1], sat: undefined, ...ends };
+    // A walk that calls off the one before sets off from where that one was called off (the first hex of its path), not from where it would have ended.
+    this.strolls.set(player.id, { hexes: cut ? path : [player.pos, ...path], at: Date.now() });
     ws.serializeAttachment(next);
     this.tell({ type: "moved", id: player.id, path });
     return next;
+  }
+
+  /**
+   * Where `player`'s last walk is called off, for a new one asked for while it is still being played on screen:
+   * `from`, the hex their client says they have got to. Only a hex on that walk, only while it could still be
+   * playing, and only if they are still where it left them. Null: the new walk sets off from where they stand.
+   */
+  cutAt(player: HarborPlayer, from: unknown): HexPos | null {
+    if (from === undefined || from === null) return null;
+    const at = hexAsked(from);
+    const last = this.strolls.get(player.id);
+    if (!at || !last || last.hexes.length < 2) return null;
+    if (!sameHex(player.pos, last.hexes[last.hexes.length - 1])) return null;
+    if (Date.now() > last.at + (last.hexes.length - 1) * STROLL_STEP_MS + STROLL_GRACE_MS) return null;
+    return last.hexes.some((p) => sameHex(p, at)) ? at : null;
   }
 
   /** Which way they are looking: passed on to everyone else here, and not kept. At most one per LOOK_MIN_MS from each player. */

@@ -864,7 +864,11 @@ export type HarborServerMessage =
   | XpMessage;
 
 export type HarborClientMessage =
-  | { type: "move"; to: HexPos }
+  /**
+   * `from`: the hex the sender's hero has got to on their last walk, still being played on screen. That walk is called
+   * off there, and this one is walked from it: its path starts with that hex. (In the Harbor; the other rooms ignore it.)
+   */
+  | { type: "move"; to: HexPos; from?: HexPos }
   | { type: "say"; text: string }
   | LookRequest
   | EmoteRequest

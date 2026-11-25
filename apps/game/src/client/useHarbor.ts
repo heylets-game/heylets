@@ -57,7 +57,11 @@ const theHarbor = () => (harborMap ??= generateHarbor());
  * keeper's house or "hut:<owner id>") it is opened again marked as inside that one, so the crew sees their portrait
  * over its roof rather than nobody at all; it opens afresh as they step back out, at the door they went in by.
  */
-export function useHarbor(onMoved: (id: string, path: HexPos[]) => void, onXp?: (m: XpMessage) => void, onSaid?: (id: string, text: string) => void, here = true, inside: string | null = null): HarborConnection {
+/**
+ * `walkLeft`: the hexes a hero still has to walk on screen, the one being stepped onto first (WorldRenderer.walkLeft).
+ * With it, a walk asked for while your hero is still walking calls that one off where they have got to.
+ */
+export function useHarbor(onMoved: (id: string, path: HexPos[]) => void, onXp?: (m: XpMessage) => void, onSaid?: (id: string, text: string) => void, here = true, inside: string | null = null, walkLeft?: (id: string) => HexPos[]): HarborConnection {
   const [crew, setCrew] = useState<HarborConnection["crew"]>(null);
   const [board, setBoard] = useState<HarborBoard>(EMPTY);
   const [trades, setTrades] = useState(0);
@@ -204,18 +208,26 @@ export function useHarbor(onMoved: (id: string, path: HexPos[]) => void, onXp?: 
     waiting.current = [];
     ahead.current = [];
   }, [here]);
-  const send = useCallback((message: HarborClientMessage) => {
+  const left = useRef(walkLeft);
+  left.current = walkLeft;
+  const send = useCallback((asked: HarborClientMessage) => {
+    const me = believed.current;
+    const to = asked.type === "move" ? { q: Number(asked.to?.q), r: Number(asked.to?.r) } : null;
+    const valid = !!to && Number.isInteger(to.q) && Number.isInteger(to.r);
+    // Still walking: that walk stops on the hex being stepped onto, and this one sets off from there (the room checks
+    // it is on the way). Not while the connection is still opening: the room may not have the walk before to call off.
+    const onScreen = me && valid && !opening.current ? (left.current?.(me.id) ?? []) : [];
+    const cut = onScreen.length > 1 ? onScreen[0] : null;
+    const fromCut = cut && valid ? (cut.q === to!.q && cut.r === to!.r ? [] : harborPath(theHarbor(), cut, to!, me!.vessel ?? null)) : null;
+    const message: HarborClientMessage = asked.type === "move" && cut && fromCut ? { ...asked, from: cut } : asked;
     if (!post.current(message)) {
       // Not connected yet. A walk is kept for when it is, and shown now; anything else is let go, as before.
       if (message.type !== "move" || !believed.current || !opening.current) return;
       waiting.current.push(message);
     }
-    // A walk is shown now, along the way the room will find from where your hero is believed to stand.
-    const me = believed.current;
-    if (message.type !== "move" || !me) return;
-    const to = { q: Number(message.to?.q), r: Number(message.to?.r) };
-    if (!Number.isInteger(to.q) || !Number.isInteger(to.r)) return;
-    const path = harborPath(theHarbor(), me.pos, to, me.vessel ?? null);
+    // A walk is shown now, along the way the room will find from where your hero is believed to stand (or from where the last was called off).
+    if (message.type !== "move" || !me || !valid) return;
+    const path = cut && fromCut ? [cut, ...fromCut] : harborPath(theHarbor(), me.pos, to!, me.vessel ?? null);
     ahead.current.push(path);
     if (!path) return;
     believed.current = { ...me, pos: path[path.length - 1] };
