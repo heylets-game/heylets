@@ -76,6 +76,19 @@ describe("a party on a map", () => {
     expect(hexDistance(ann.pos, annika.pos)).toBeLessThanOrEqual(2);
   });
 
+  it("leaves behind a party member a muster left behind, unless they are on the map already", async () => {
+    const code = await createZoneRow(db, "ann", options, "party-bench");
+    // Ann2 was on the map before the bench: she still comes.
+    (await connect(code, "ann2")).close(1000, "");
+    const benched = await zone.fetch(new Request("https://zone/bench", { method: "POST", body: JSON.stringify({ ids: ["bo", "ann2"] }) }));
+    expect(benched.status).toBe(204);
+    const ws = await connect(code, "ann", ["ann2", "bo"]);
+    expect(ws.state.party).toEqual(["ann2"]);
+    expect(ws.state.units.some((u) => u.id === "bo")).toBe(false);
+    // Played on their own, a hero left behind may still walk on.
+    expect((await connect(code, "bo")).state.units.some((u) => u.id === "bo")).toBe(true);
+  });
+
   it("gives the party one key, whichever of them the player goes in as, for one share of the spoils", async () => {
     const code = await createZoneRow(db, "ann", options, "party-key");
     let ws = await connect(code, "ann2", ["ann"]);

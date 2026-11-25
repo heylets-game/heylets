@@ -6,7 +6,7 @@
 
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ATLAS_HOME, HARBOR_SPAWN, MUSTER_LINGER_MS, MUSTER_MS, MUSTER_PARTY, atlasNodeById, needsStone, stoneItem, type Muster, type MusterAnswer, type MusterMember, type ZoneMod, type ZoneOptions } from "@gantt-quest/world";
+import { ATLAS_HOME, HARBOR_SPAWN, MUSTER_CHOOSE_MS, MUSTER_LINGER_MS, MUSTER_MS, MUSTER_PARTY, atlasNodeById, needsStone, stoneItem, type Muster, type MusterAnswer, type MusterMember, type ZoneMod, type ZoneOptions } from "@gantt-quest/world";
 import { atlasSeed, chartFor, clearNode, openNode, scoutNode } from "../src/server/atlas";
 import { lodestonesOf } from "../src/server/lodestones";
 import { CAVE_IDLE_MS, getZoneRow } from "../src/server/zones";
@@ -326,6 +326,37 @@ describe("answering a muster", () => {
     const ended = (await answer(cy, "no")).json.muster!;
     expect(ended.ready).toEqual([ann]);
     expect(optionsOf(ended.code!).party).toBe(1);
+  });
+
+  it("with too many ready, counts each party as it is now and waits for the caller to choose who stays behind", async () => {
+    // Ann plays a party of four, Dee a party of three: one more than a map takes.
+    const account = (lead: MusterMember, more: number) => {
+      sql.prepare("UPDATE players SET user_id = ?, party = 1 WHERE id = ?").run(`user-${lead.id}`, lead.id);
+      for (let i = 1; i <= more; i++) {
+        addHero(sql, { id: `${lead.id}${i}`, name: `${lead.name}${i}`, crew: CREW, at: T0 + i });
+        sql.prepare("UPDATE players SET user_id = ?, party = 1 WHERE id = ?").run(`user-${lead.id}`, `${lead.id}${i}`);
+      }
+    };
+    account(ann, 3);
+    account(dee, 2);
+    for (const who of [ann, bo, dee]) inTown(who);
+    // The worker said nothing of their parties: the room counts them itself when it would set out.
+    await called(ann, first());
+    await answer(bo, "no");
+    const choosing = (await answer(dee, "ready")).json.muster!;
+    expect(choosing).not.toHaveProperty("code");
+    expect(choosing).toMatchObject({ choosing: true, left: ["dee2"], deadline: T0 + MUSTER_CHOOSE_MS });
+    expect(choosing.ready.map((r) => r.party?.map((h) => h.id))).toEqual([["ann1", "ann2", "ann3"], ["dee1", "dee2"]]);
+    expect(alarm).toBe(choosing.deadline);
+    expect(zones()).toEqual([]);
+
+    // Not enough left behind: it waits on.
+    expect((await ask("/answer", { who: ann, answer: "start", left: [] })).json.muster).toMatchObject({ choosing: true });
+    // Ann leaves one of her own behind instead, and they set out: six go.
+    const gone = (await ask("/answer", { who: ann, answer: "start", left: ["ann3"] })).json.muster!;
+    expect(gone.left).toEqual(["ann3"]);
+    expect(gone).not.toHaveProperty("choosing");
+    expect(optionsOf(gone.code!).party).toBe(MUSTER_PARTY);
   });
 
   it("starts as soon as the party is full, whoever has yet to answer", async () => {

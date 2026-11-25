@@ -408,7 +408,7 @@ export function AtlasView({ me, refresh, onLeave }: { me: Me; refresh(): Promise
       remember(n.id);
       if (went.code) {
         // A map others are on: walking on makes its enemies more, so the player is asked first.
-        if (!joinOk(went.others)) return;
+        if (!joinOk(went)) return;
         // The stone is gone from the pack.
         void refresh();
         location.hash = `zone/${went.code}`;

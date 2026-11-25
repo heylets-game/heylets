@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MUSTER_LINGER_MS, MUSTER_MS, MUSTER_PARTY, answerMuster, musterHeroes, callMuster, musterAnswered, musterDue, musterOpen, musterShown, type Muster, type MusterMember } from "./muster";
+import { MUSTER_CHOOSE_MS, MUSTER_LINGER_MS, MUSTER_MS, MUSTER_PARTY, answerMuster, musterGoing, musterHeroes, callMuster, musterAnswered, musterDue, musterOpen, musterShown, settleMuster, type Muster, type MusterMember } from "./muster";
 
 const ann: MusterMember = { id: "a", name: "Ann" };
 const bo: MusterMember = { id: "b", name: "Bo" };
@@ -83,21 +83,71 @@ describe("a muster", () => {
     const full = said(m, more[4], "ready");
     expect(full.muster.ready).toHaveLength(MUSTER_PARTY);
     expect(full.start).toBe(true);
-    // No room for a seventh, though one of the six may still stand down.
     expect(MUSTER_PARTY).toBe(6);
-    expect(answerMuster(full.muster, more[5], "ready", NOW)).toEqual({ error: `There is room for ${MUSTER_PARTY} heroes, and they are spoken for.` });
+    // A seventh may still ready up: the caller chooses who stays behind.
+    const over = said(full.muster, more[5], "ready");
+    expect(over.muster.ready).toHaveLength(MUSTER_PARTY + 1);
   });
 
-  it("counts each one's party with them: a party that would make more than six cannot come, and a full one starts it", () => {
+  it("counts each one's party with them, and starts when it is full", () => {
     const dee: MusterMember = { id: "d", name: "Dee", heroes: 3 };
-    const eve: MusterMember = { id: "e", name: "Eve", heroes: 3 };
-    let m = callMuster("m1", { ...ann, heroes: 2 }, { node: "2,-1", place: "Petrel Spit" }, [bo, dee, eve], NOW);
+    let m = callMuster("m1", { ...ann, heroes: 2 }, { node: "2,-1", place: "Petrel Spit" }, [bo, dee], NOW);
     m = said(m, dee, "ready").muster;
     expect(musterHeroes(m)).toBe(5);
-    expect(answerMuster(m, eve, "ready", NOW)).toEqual({ error: "There is room for 1 more hero, and your party is 3." });
     const full = said(m, bo, "ready");
     expect(musterHeroes(full.muster)).toBe(6);
     expect(full.start).toBe(true);
+  });
+
+  describe("with more ready than a map takes", () => {
+    // Ann calls it with a party of four; Dee readies with a party of three.
+    const party = (id: string, n: number) => Array.from({ length: n }, (_, i) => ({ id: `${id}${i + 1}`, name: `${id.toUpperCase()}${i + 1}` }));
+    const ann4: MusterMember = { ...ann, party: party("a", 3) };
+    const dee3: MusterMember = { id: "d", name: "Dee", party: party("d", 2) };
+    const seven = () => {
+      const m = callMuster("m1", ann4, { node: "2,-1", place: "Petrel Spit" }, [bo, dee3], NOW);
+      const res = said(m, dee3, "ready");
+      expect(musterHeroes(res.muster)).toBe(7);
+      expect(res.start).toBe(true);
+      return res.muster;
+    };
+
+    it("does not set out, but gives the caller time to choose, with the last to ready up picked to stay", () => {
+      const m = seven();
+      const s = settleMuster(m, NOW + 2000);
+      expect(s.start).toBeUndefined();
+      expect(s.muster).toMatchObject({ choosing: true, left: ["d2"], deadline: NOW + 2000 + MUSTER_CHOOSE_MS });
+      expect(musterDue(s.muster, NOW + 2000 + MUSTER_CHOOSE_MS - 1)).toBe(false);
+      expect(musterDue(s.muster, NOW + 2000 + MUSTER_CHOOSE_MS)).toBe(true);
+      // Their time up, the pick goes.
+      const gone = settleMuster(s.muster, NOW + 2000 + MUSTER_CHOOSE_MS);
+      expect(gone.start).toBe(true);
+      expect(gone.muster.left).toEqual(["d2"]);
+      expect(gone.muster.choosing).toBeUndefined();
+      expect(musterGoing(gone.muster, gone.muster.left)).toBe(6);
+    });
+
+    it("sets out with whoever the caller chooses, if the rest fit", () => {
+      const m = settleMuster(seven(), NOW + 2000).muster;
+      // One of Ann's own stays instead.
+      expect(settleMuster(m, NOW + 3000, ["a3"])).toMatchObject({ start: true, muster: { left: ["a3"] } });
+      // Leaving Dee leaves Dee's party too.
+      const noDee = settleMuster(m, NOW + 3000, ["d"]);
+      expect(noDee.start).toBe(true);
+      expect(musterGoing(noDee.muster, noDee.muster.left)).toBe(4);
+      // Not enough left behind, or the caller themselves: it waits on, with the pick as it was.
+      expect(settleMuster(m, NOW + 3000, [])).toMatchObject({ muster: { choosing: true, left: ["d2"] } });
+      expect(settleMuster(m, NOW + 3000, ["a"]).start).toBeUndefined();
+      expect(settleMuster(m, NOW + 3000, ["nobody"]).start).toBeUndefined();
+    });
+
+    it("starts at once if someone stands down while the caller chooses, and only the caller can choose", () => {
+      const m = settleMuster(seven(), NOW + 2000).muster;
+      expect(answerMuster(m, dee3, "start", NOW + 3000)).toHaveProperty("error");
+      const res = said(m, dee3, "no", NOW + 3000);
+      expect(res.start).toBe(true);
+      expect(settleMuster(res.muster, NOW + 3000)).toMatchObject({ start: true, muster: { ready: [ann4] } });
+    });
   });
 
   it("once it has started or fallen through it takes no more answers, and is told a little while longer", () => {

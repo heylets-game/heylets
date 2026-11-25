@@ -51,6 +51,18 @@ export async function partyOf(db: D1Database, playerId: string, member = false):
   return rows.results.map((r) => r.id);
 }
 
+/** The rest of `playerId`'s party (partyOf), with their heroes' names: as a muster shows who they bring. */
+export async function partyNamed(db: D1Database, playerId: string): Promise<{ id: string; name: string }[]> {
+  const ids = await partyOf(db, playerId);
+  if (ids.length === 0) return [];
+  const rows = await db
+    .prepare(`SELECT player_id AS id, name FROM characters WHERE status = 'active' AND player_id IN (${ids.map(() => "?").join(",")})`)
+    .bind(...ids)
+    .all<{ id: string; name: string }>();
+  const names = new Map(rows.results.map((r) => [r.id, r.name]));
+  return ids.map((id) => ({ id, name: names.get(id) ?? "A hero" }));
+}
+
 /** How many heroes these players bring onto a map: each of them, and each one's party with them. */
 export async function heroesOf(db: D1Database, playerIds: readonly string[]): Promise<number> {
   const heroes = new Set(playerIds);

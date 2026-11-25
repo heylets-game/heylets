@@ -466,9 +466,10 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   }, [note]);
   /** Go to where a crewmate is: their map (beside them), or the Harbor if they are not out on one. */
   const teleportTo = (id: string) => {
-    api.teleport(id).then(({ zone: to, others }) => {
+    api.teleport(id).then((went) => {
+      const to = went.zone;
       if (!to) return onLeave();
-      if (!joinOk(others)) return;
+      if (!joinOk(went)) return;
       try {
         sessionStorage.setItem("gq.zone.near", id);
       } catch {

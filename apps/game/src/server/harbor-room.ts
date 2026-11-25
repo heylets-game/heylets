@@ -35,9 +35,10 @@ import {
   answerMuster,
   callMuster,
   musterDue,
-  musterHeroes,
+  musterGoing,
   musterOpen,
   musterShown,
+  settleMuster,
   type Muster,
   type MusterAnswer,
   type MusterMember, } from "@gantt-quest/world";
@@ -47,10 +48,17 @@ import { gildedRod, ownedVessel } from "./fishmarket";
 import { clearPresence } from "./zones";
 import { openNode } from "./atlas";
 import { Walkers, hexAsked, tellTrades, walkerFrom, withHero } from "./walk-room";
-import { partyOf } from "./party";
+import { partyNamed, partyOf } from "./party";
 
-/** How many heroes someone brings to a muster, as the worker counted them (routes/atlas.ts): none said is one. */
-const heroCount = (n: unknown): { heroes?: number } => (typeof n === "number" && Number.isInteger(n) && n > 1 ? { heroes: n } : {});
+/**
+ * Someone answering a muster, as the worker sent them (routes/atlas.ts): with the heroes they bring, their party, or
+ * (from an older worker) how many heroes that makes.
+ */
+function memberFrom(m: MusterMember): MusterMember {
+  const party = Array.isArray(m.party) ? m.party.filter((h) => typeof h?.id === "string" && typeof h.name === "string").slice(0, 8).map((h) => ({ id: h.id, name: h.name })) : null;
+  if (party) return { id: m.id, name: m.name, ...(party.length > 0 ? { party } : {}) };
+  return { id: m.id, name: m.name, ...(typeof m.heroes === "number" && Number.isInteger(m.heroes) && m.heroes > 1 ? { heroes: m.heroes } : {}) };
+}
 
 /** A muster as it is kept: with the crew it is for and the lodestone set into the place, neither of which is sent to anyone. */
 interface KeptMuster {
@@ -146,22 +154,22 @@ export class HarborRoom extends DurableObject<Env> {
       // is not asked: they cannot see the muster from in there.)
       const asked = this.here.players().filter((p) => p.id !== body.by!.id && !p.inside).map((p) => ({ id: p.id, name: p.name }));
       if (asked.length === 0) return Response.json({ alone: true });
-      const muster = callMuster(crypto.randomUUID().slice(0, 8), { id: body.by.id, name: body.by.name, ...heroCount(body.by.heroes) }, body.to, asked, Date.now());
+      const muster = callMuster(crypto.randomUUID().slice(0, 8), memberFrom(body.by), body.to, asked, Date.now());
       await this.ctx.storage.put("muster", { crewId, stone: body.stone, muster } satisfies KeptMuster);
       await this.ctx.storage.setAlarm(muster.deadline);
       this.here.broadcast({ type: "muster", muster });
       return Response.json({ muster });
     }
     if (pathname === "/muster/answer") {
-      const body = (await request.json().catch(() => null)) as { who?: MusterMember; answer?: MusterAnswer } | null;
+      const body = (await request.json().catch(() => null)) as { who?: MusterMember; answer?: MusterAnswer; left?: unknown } | null;
       const kept = await this.ctx.storage.get<KeptMuster>("muster");
       if (!body?.who?.id || !body.answer || !MUSTER_ANSWERS.includes(body.answer)) return Response.json({ error: "That is no answer." }, { status: 400 });
       if (!kept || !musterOpen(kept.muster)) return Response.json({ error: "There is no muster to answer." }, { status: 409 });
       if (kept.starting || this.startingMuster === kept.muster.id) return Response.json({ error: "They are setting out this moment." }, { status: 409 });
-      const res = answerMuster(kept.muster, { id: body.who.id, name: body.who.name, ...heroCount(body.who.heroes) }, body.answer, Date.now());
+      const res = answerMuster(kept.muster, memberFrom(body.who), body.answer, Date.now());
       if ("error" in res) return Response.json({ error: res.error }, { status: 409 });
       if (res.cancel) return Response.json({ muster: await this.endMuster({ ...kept, muster: { ...res.muster, failed: `${res.muster.by.name} called it off.` } }) });
-      if (res.start) return Response.json({ muster: await this.startMuster({ ...kept, muster: res.muster }) });
+      if (res.start) return Response.json({ muster: await this.startMuster({ ...kept, muster: res.muster }, body.answer === "start" ? body.left : undefined) });
       await this.ctx.storage.put("muster", { ...kept, muster: res.muster } satisfies KeptMuster);
       this.here.broadcast({ type: "muster", muster: res.muster });
       return Response.json({ muster: res.muster });
@@ -253,21 +261,56 @@ export class HarborRoom extends DurableObject<Env> {
     return muster;
   }
 
-  /** They set out: the map is made for as many heroes as the ready bring (their parties too), with the caller's lodestone, and everyone is told its code. */
-  private async startMuster(kept: KeptMuster): Promise<Muster> {
+  /**
+   * They set out: the map is made for as many heroes as the ready bring (their parties too), with the caller's
+   * lodestone, and everyone is told its code. Unless that is more than a map takes: then the caller is given time to
+   * choose who stays behind (`left`: who they chose, with their "start"), and it sets out once they have, or once
+   * their time is up.
+   */
+  private async startMuster(kept: KeptMuster, left?: unknown): Promise<Muster> {
     // Making the map waits on the database, and the room hears other things meanwhile (an answer, the alarm, the
     // caller's "start"): it is marked as starting first, in the room's own storage, so none of them starts it again.
     if (this.startingMuster === kept.muster.id) return kept.muster;
     this.startingMuster = kept.muster.id;
     const now = await this.ctx.storage.get<KeptMuster>("muster");
     if (now && now.muster.id === kept.muster.id && (now.starting || !musterOpen(now.muster))) return now.muster;
+    // Each party as it is now, not as it was when its hero answered: it may have changed since.
+    const fresh: Muster = { ...kept.muster, ready: await Promise.all(kept.muster.ready.map(async (r) => this.withParty(r))) };
+    fresh.by = fresh.ready.find((r) => r.id === fresh.by.id) ?? fresh.by;
+    const settled = settleMuster(fresh, Date.now(), left);
+    if (!settled.start) {
+      // Too many: the caller chooses. Nothing has been made, so it is not starting after all.
+      this.startingMuster = null;
+      await this.ctx.storage.put("muster", { ...kept, muster: settled.muster } satisfies KeptMuster);
+      await this.ctx.storage.setAlarm(settled.muster.deadline);
+      this.here.broadcast({ type: "muster", muster: settled.muster });
+      return settled.muster;
+    }
+    const muster = settled.muster;
+    kept = { ...kept, muster };
     await this.ctx.storage.put("muster", { ...kept, starting: true } satisfies KeptMuster);
-    const { muster } = kept;
-    const went = await openNode(this.env.DB, kept.crewId, muster.by.id, muster.node, musterHeroes(muster), kept.stone).catch((err: unknown) => ({ error: err instanceof Error ? err.message : "The map could not be made.", status: 409 as const }));
+    const went = await openNode(this.env.DB, kept.crewId, muster.by.id, muster.node, musterGoing(muster, muster.left), kept.stone).catch((err: unknown) => ({ error: err instanceof Error ? err.message : "The map could not be made.", status: 409 as const }));
+    // Those left behind do not come onto it with their party (zone-room.ts): only the ones the caller took.
+    if (!("error" in went) && muster.left?.length) {
+      try {
+        const zone = this.env.ZONE_ROOM.get(this.env.ZONE_ROOM.idFromName(went.code));
+        await zone.fetch("https://zone/bench", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ids: muster.left }) });
+      } catch (err) {
+        console.error("harbor-room:bench", err);
+      }
+    }
     const ended = await this.endMuster({ ...kept, muster: "error" in went ? { ...muster, failed: went.error } : { ...muster, code: went.code } });
     // The chart has changed: the board says so.
     if (!("error" in went) && this.ctx.getWebSockets().length > 0) this.here.broadcast({ type: "board", ...(await harborBoard(this.env.DB, kept.crewId)) });
     return ended;
+  }
+
+  /** A muster member with their party as it stands now (party.ts), names and all. */
+  private async withParty(r: MusterMember): Promise<MusterMember> {
+    const party = await partyNamed(this.env.DB, r.id).catch(() => null);
+    if (!party) return r;
+    const { heroes: _heroes, party: _party, ...rest } = r;
+    return { ...rest, ...(party.length > 0 ? { party } : {}) };
   }
 
   /** The muster's time is up (it starts with whoever is ready), or one that ended has been told long enough. */

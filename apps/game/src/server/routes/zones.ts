@@ -19,7 +19,7 @@ export function zoneRoutes(app: GameApp): void {
     if (character?.status !== "active") return c.json({ error: "Create a character first." }, 409);
     const open = await openCave(c.env.DB, crew.id);
     // Others down there already: the client asks first, since walking on makes the cave's enemies more.
-    if (open) return c.json({ code: open, fresh: false, others: await othersOn(c.env.DB, crew.id, player.id, open) });
+    if (open) return c.json({ code: open, fresh: false, ...(await othersOn(c.env.DB, crew.id, player.id, open)) });
     const party = await harborParty(c.env, crew.id, player.id);
     const level = party.length > 0 ? party.reduce((sum, m) => sum + m.level, 0) / party.length : character.level;
     // A delve: the caverns' chambers and tunnels, with chests to open and the hoard in the deepest (zone/delve.ts).
@@ -45,7 +45,7 @@ export function zoneRoutes(app: GameApp): void {
     const go = teleportTo(crew ? await crewPlaces(c.env.DB, crew.id) : [], c.get("player").id, body.to);
     if ("error" in go) return c.json({ error: go.error }, go.status);
     // Onto a map with others on it: the client asks first, since walking on makes its enemies more.
-    return c.json(crew && go.zone ? { ...go, others: await othersOn(c.env.DB, crew.id, c.get("player").id, go.zone) } : go);
+    return c.json(crew && go.zone ? { ...go, ...(await othersOn(c.env.DB, crew.id, c.get("player").id, go.zone)) } : go);
   });
 
   // A zone's socket. Anyone with a hero and the code can walk in, but a landfall on a crew's chart is that crew's
