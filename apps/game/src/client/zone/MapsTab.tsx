@@ -11,7 +11,7 @@
 // server refuses outside a development deployment.
 
 import { useEffect, useState } from "react";
-import { ABILITIES, CLIMES, DEFAULT_ZONE_OPTIONS, ENEMIES, HERO_CLASSES, SITES, SITE_IDS, SURFACE_INFO, WEAPONS, poolFor, type SurfaceKind, type ZoneBiome, type ZoneSize } from "@gantt-quest/world";
+import { ABILITIES, MAX_PARTY, CLIMES, DEFAULT_ZONE_OPTIONS, ENEMIES, HERO_CLASSES, SITES, SITE_IDS, SURFACE_INFO, WEAPONS, poolFor, type SurfaceKind, type ZoneBiome, type ZoneSize } from "@gantt-quest/world";
 import { api, PROFILE } from "../api";
 import { setZoneDev, useZoneDev, type KitHero } from "./zoneDev";
 
@@ -116,7 +116,7 @@ export function MapsTab() {
             <option value="dummy">{ENEMIES.dummy.name}</option>
           </select>
         </label>
-        {number("party", 1, 4, "Sized for")}
+        {number("party", 1, MAX_PARTY, "Sized for")}
       </div>
       <div className="dev-row">
         {level("elevation", "High ground")}

@@ -8,7 +8,7 @@
 // the seed a node's map and its dice are made from is rolled afresh and never
 // leaves the server.
 
-import { atlasNodeById, atlasOpen, atlasView, cleanStone, needsStone, nodeOptions, nodePlace, stoneKey, stoneName, stoneOn, type AtlasNodeView, type Lodestone } from "@gantt-quest/world";
+import { MAX_PARTY, atlasNodeById, atlasOpen, atlasView, cleanStone, needsStone, nodeOptions, nodePlace, stoneKey, stoneName, stoneOn, type AtlasNodeView, type Lodestone } from "@gantt-quest/world";
 import { spendStone } from "./lodestones";
 import { CAVE_IDLE_MS, createZoneRow, crewPlaces, type ZoneRow } from "./zones";
 
@@ -114,7 +114,7 @@ export async function openNode(db: D1Database, crewId: string, playerId: string,
   // rolled here and kept here (the chart's own is the crew's id, which anyone in the crew can read).
   const attempt = (mine?.attempts ?? 0) + 1;
   // How much the stone carried goes with the map: the lodestones in its spoils are reckoned from it.
-  const options = nodeOptions(seed, node, Math.min(4, Math.max(1, Math.round(party))), set ? stoneOn(node, set).added : [], set ? set.length : undefined);
+  const options = nodeOptions(seed, node, Math.min(MAX_PARTY, Math.max(1, Math.round(party))), set ? stoneOn(node, set).added : [], set ? set.length : undefined);
   const code = await createZoneRow(db, playerId, options, crypto.randomUUID().slice(0, 12), "atlas", crewId, node.id);
   await db
     .prepare(

@@ -12,7 +12,7 @@ import { hexesBetween, solid } from "./geometry";
 import { GROUP_EXTRAS } from "./kit";
 import { cleanMods, modsOf } from "./mods";
 import { layZone } from "./lay";
-import { SITES } from "./sites";
+import { PARTY_SIZES, SITES } from "./sites";
 import type { GroundSurface, ZoneBiome, ZoneOptions, ZoneSize } from "./types";
 
 /** How big a map of open cave floor is (a dev map: the atlas's caves are delves). Every other map is laid by lay.ts, on its own grids (`LAY_GRIDS`). */
@@ -58,7 +58,7 @@ export function zoneOptions(raw: unknown): ZoneOptions {
     elevation: whole(o.elevation, 0, 3, d.elevation),
     obstacles: whole(o.obstacles, 0, 3, d.obstacles),
     clear: whole(o.clear, 2, 8, d.clear),
-    party: whole(o.party, 1, 4, d.party),
+    party: whole(o.party, 1, PARTY_SIZES.length, d.party),
     level: whole(o.level, 1, 40, d.level),
     ...(o.delve === true ? { delve: true } : {}),
     ...(cleanMods(o.mods).length > 0 ? { mods: cleanMods(o.mods) } : {}),
@@ -70,21 +70,22 @@ export function zoneOptions(raw: unknown): ZoneOptions {
   };
 }
 
-/** Who stands with a group's leader, for a party of this size: one enemy for a lone hero, a pair for two, a third for a full party. */
+/** Who stands with a group's leader, for a party of this size: one enemy for a lone hero, a pair for two, a third for four, a fourth for six. */
 export function groupKinds(lead: string, party: number): string[] {
   if (lead === "wolf" || lead === "bandit" || lead === "bear") return bandKinds(lead as RoamerLead, party);
   if (lead === "shade" || lead === "bat" || lead === "skeleton" || lead === "slime") return cavernBand(lead as CavernLead, party);
   // A boss stands alone. Anything else brings its own kind, or a bandit to hold the line for one that shoots.
   if (ENEMIES[lead]?.boss) return [lead];
   const second = lead === "archer" ? "bandit" : lead === "brute" ? "bandit" : lead;
-  return [lead, ...(party >= 2 ? [second] : []), ...(party >= 4 ? [lead] : [])];
+  return [lead, ...(party >= 2 ? [second] : []), ...(party >= 4 ? [lead] : []), ...(party >= 6 ? [second] : [])];
 }
 
 export interface ZonePlan {
   map: WorldMap;
   start: HexPos;
   /** `id`: what the group is called on the map (a delve keeps its chamber's), else one is made up. */
-  groups: { id?: string; kinds: string[]; posts: HexPos[] }[];
+  /** `bands`: what each would be for a party of one to six (index: the party less one), to grow it by as heroes come (zone.ts growGroups). */
+  groups: { id?: string; kinds: string[]; posts: HexPos[]; bands?: string[][] }[];
   /** The groups that carry a key to a locked door (a delve's). */
   keys?: string[];
   /** What lies on the ground from the start, by hex key: the patches a modifier put there, which stay. */
@@ -219,15 +220,20 @@ function generateCaveFloor(seed: string, asked: ZoneOptions): ZonePlan {
   const leads = options.kinds.length > 0 ? options.kinds : BIOME_LEADS[options.biome];
   const taken = new Set<string>();
   const groups = centres.map((c, i) => {
-    const kinds = groupKinds(options.kinds.length > 0 ? leads[i % leads.length] : rng.pick(leads), options.party);
-    // Each group has more than its leader would bring: another of whoever came with it. A boss still stands alone.
-    if (!ENEMIES[kinds[0]]?.boss && kinds[0] !== "dummy") for (let n = 0; n < GROUP_EXTRAS + mods.extras; n++) kinds.push(kinds[kinds.length - 1]);
+    const lead = options.kinds.length > 0 ? leads[i % leads.length] : rng.pick(leads);
+    const kindsAt = (party: number) => {
+      const kinds = groupKinds(lead, party);
+      // Each group has more than its leader would bring: another of whoever came with it. A boss still stands alone.
+      if (!ENEMIES[kinds[0]]?.boss && kinds[0] !== "dummy") for (let n = 0; n < GROUP_EXTRAS + mods.extras; n++) kinds.push(kinds[kinds.length - 1]);
+      return kinds;
+    };
+    const kinds = kindsAt(options.party);
     const posts = inner
       .filter((p) => hexDistance(p, c) <= 3 && open.has(posKey(p)) && !taken.has(posKey(p)))
       .sort((a, b) => hexDistance(a, c) - hexDistance(b, c) || a.q - b.q || a.r - b.r)
       .slice(0, kinds.length);
     for (const p of posts) taken.add(posKey(p));
-    return { kinds: kinds.slice(0, posts.length), posts };
+    return { kinds: kinds.slice(0, posts.length), posts, bands: PARTY_SIZES.map(kindsAt) };
   });
 
   // Heights for the eye: a level is a clear step up.

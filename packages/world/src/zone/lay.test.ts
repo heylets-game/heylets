@@ -551,7 +551,7 @@ describe("the chests", () => {
     const zone = createZone("LAY", "guarded", options({ site: "keep" }));
     const chest = zone.map.pois.find((p) => p.kind === "cache")!;
     expect(zone.units.some((u) => u.group === chest.guard)).toBe(true);
-    expect(zone.groups[chest.guard!]).toEqual({ alerted: false });
+    expect(zone.groups[chest.guard!]).toMatchObject({ alerted: false });
   });
 });
 

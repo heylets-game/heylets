@@ -5,6 +5,7 @@
 // inside of that crew member's hut; #pub, #smithy, #apothecary, #galley and
 // #lapidary are the insides of those buildings.
 
+import { AskHost } from "./ui/Ask";
 import { Suspense, isValidElement, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { dismissBoot } from "./boot";
 import { leaveFor } from "./render/handover";
@@ -108,6 +109,7 @@ export function App() {
     <>
       <Screen me={me} refresh={refresh} zone={zone} atlas={atlas} invite={invite} hut={hut} pub={pub} keeper={keeper} admin={admin} catches={catches} menu={menu} />
       {me.devTools && <Suspense fallback={null}><DevToolbox me={me} refresh={refresh} /></Suspense>}
+      <AskHost />
     </>
   );
 }

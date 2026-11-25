@@ -6,7 +6,7 @@
 
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ATLAS_HOME, HARBOR_SPAWN, MUSTER_LINGER_MS, MUSTER_MS, MUSTER_PARTY, atlasNodeById, needsStone, stoneItem, type Muster, type MusterAnswer, type MusterMember, type ZoneMod, type ZoneOptions } from "@gantt-quest/world";
+import { ATLAS_HOME, HARBOR_SPAWN, MUSTER_CHOOSE_MS, MUSTER_LINGER_MS, MUSTER_MS, MUSTER_PARTY, atlasNodeById, needsStone, stoneItem, type Muster, type MusterAnswer, type MusterMember, type ZoneMod, type ZoneOptions } from "@gantt-quest/world";
 import { atlasSeed, chartFor, clearNode, openNode, scoutNode } from "../src/server/atlas";
 import { lodestonesOf } from "../src/server/lodestones";
 import { CAVE_IDLE_MS, getZoneRow } from "../src/server/zones";
@@ -328,18 +328,49 @@ describe("answering a muster", () => {
     expect(optionsOf(ended.code!).party).toBe(1);
   });
 
+  it("with too many ready, counts each party as it is now and waits for the caller to choose who stays behind", async () => {
+    // Ann plays a party of four, Dee a party of three: one more than a map takes.
+    const account = (lead: MusterMember, more: number) => {
+      sql.prepare("UPDATE players SET user_id = ?, party = 1 WHERE id = ?").run(`user-${lead.id}`, lead.id);
+      for (let i = 1; i <= more; i++) {
+        addHero(sql, { id: `${lead.id}${i}`, name: `${lead.name}${i}`, crew: CREW, at: T0 + i });
+        sql.prepare("UPDATE players SET user_id = ?, party = 1 WHERE id = ?").run(`user-${lead.id}`, `${lead.id}${i}`);
+      }
+    };
+    account(ann, 3);
+    account(dee, 2);
+    for (const who of [ann, bo, dee]) inTown(who);
+    // The worker said nothing of their parties: the room counts them itself when it would set out.
+    await called(ann, first());
+    await answer(bo, "no");
+    const choosing = (await answer(dee, "ready")).json.muster!;
+    expect(choosing).not.toHaveProperty("code");
+    expect(choosing).toMatchObject({ choosing: true, left: ["dee2"], deadline: T0 + MUSTER_CHOOSE_MS });
+    expect(choosing.ready.map((r) => r.party?.map((h) => h.id))).toEqual([["ann1", "ann2", "ann3"], ["dee1", "dee2"]]);
+    expect(alarm).toBe(choosing.deadline);
+    expect(zones()).toEqual([]);
+
+    // Not enough left behind: it waits on.
+    expect((await ask("/answer", { who: ann, answer: "start", left: [] })).json.muster).toMatchObject({ choosing: true });
+    // Ann leaves one of her own behind instead, and they set out: six go.
+    const gone = (await ask("/answer", { who: ann, answer: "start", left: ["ann3"] })).json.muster!;
+    expect(gone.left).toEqual(["ann3"]);
+    expect(gone).not.toHaveProperty("choosing");
+    expect(optionsOf(gone.code!).party).toBe(MUSTER_PARTY);
+  });
+
   it("starts as soon as the party is full, whoever has yet to answer", async () => {
-    for (const who of [ann, bo, cy, dee, eve, fay]) inTown(who);
+    const gil: MusterMember = { id: "gil", name: "Gil" };
+    for (const who of [ann, bo, cy, dee, eve, fay, gil]) inTown(who);
     const muster = await called(ann, first());
-    expect(muster.asked).toEqual([bo, cy, dee, eve, fay]);
-    expect((await answer(bo, "ready")).json.muster).not.toHaveProperty("code");
-    expect((await answer(cy, "ready")).json.muster).not.toHaveProperty("code");
-    const full = (await answer(dee, "ready")).json.muster!;
-    expect(full.ready).toEqual([ann, bo, cy, dee]);
+    expect(muster.asked).toEqual([bo, cy, dee, eve, fay, gil]);
+    for (const who of [bo, cy, dee, eve]) expect((await answer(who, "ready")).json.muster).not.toHaveProperty("code");
+    const full = (await answer(fay, "ready")).json.muster!;
+    expect(full.ready).toEqual([ann, bo, cy, dee, eve, fay]);
     expect(full.ready).toHaveLength(MUSTER_PARTY);
     expect(optionsOf(full.code!).party).toBe(MUSTER_PARTY);
-    // It has gone: the fifth is too late.
-    expect(await answer(eve, "ready")).toEqual({ status: 409, json: { error: "There is no muster to answer." } });
+    // It has gone: the seventh is too late.
+    expect(await answer(gil, "ready")).toEqual({ status: 409, json: { error: "There is no muster to answer." } });
   });
 
   it("the caller's start sets out with whoever is ready, and nobody else can say it", async () => {

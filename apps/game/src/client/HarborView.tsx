@@ -7,7 +7,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 import { useAudioScene } from "./audio/useAudioScene";
 import { hexDistance, hexNeighbors, type HexPos } from "@gantt-quest/core";
 import { GATHER_SPOTS, GATHER_SPOT_IDS, HARBOR_APOTHECARY, HARBOR_LAPIDARY, HARBOR_BOARD, HARBOR_BUILDINGS, footing, HARBOR_CAVE, HARBOR_WAYGATE, HARBOR_CHEST, HARBOR_GALLEY, HARBOR_LIGHTHOUSE, HARBOR_SMITHY, HARBOR_GATHER, HARBOR_NAME, HARBOR_PLOTS, HARBOR_PLOT_FACING, HARBOR_PUB, HARBOR_RING, HARBOR_SHOP, HARBOR_SPAWN, HARBOR_WORKS, PLOT_PRICE, RESOURCE_KINDS, SHACK_COST, binFill, binNeeds, builtProjects, BOOK_TITLE, fishFrom, harborDoor, tileAt, type FishSpot, FISH_SPOTS, HOLE_NAMES, holeFishNames, generateHarbor, projectById, projectProgress, harborPoi, hutTier, poiAt, salesman, gardenBeds, gardenCorner, gardenLooks, plotAt, gardenSpotAt, GARDEN_SPOTS, HARBOR_WELL, HARBOR_WELL_AT, bedProgress, nextReady, readyCount, growText, type GardenBed, type GatherSpot, type Resources, regular as regularOf, regularTalk, type RegularId, roofColor, DECORATOR, DECORATOR_SHUT, FINISHES_STALL, HARBOR_FINISHES, decoratorOpen, decoratorOpensAt, decoratorTalk, FISHMONGER, FISHMONGER_FACES, FISHMONGER_POS, isFishmongerAt, fishmongerAdvice, fishmongerTalk, fishmongerTip, bestHole } from "@gantt-quest/world";
-import { FURNISHINGS as FURNITURE, flotsamName, flotsamWithin } from "@gantt-quest/world";
+import { FURNISHINGS as FURNITURE, MAX_PARTY, flotsamName, flotsamWithin } from "@gantt-quest/world";
 import type { Poi, Vessel, WorldMap } from "@gantt-quest/world";
 import { MusterPanel, useMuster } from "./atlas/Muster";
 import { api, type Me, type RegularsView } from "./api";
@@ -53,6 +53,7 @@ import { useConversation } from "./useConversation";
 import { regularHero, regularOn, regularUnit, useRegularsAbout } from "./useRegularsAbout";
 import { useBanter } from "./useBanter";
 import "./pub.css";
+import { joinOk } from "./joinWarning";
 
 const same = (a: HexPos, b: HexPos) => a.q === b.q && a.r === b.r;
 /**
@@ -244,8 +245,10 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
   const ownOutfit = useOwnLook(players.find((p) => p.id === you)?.outfit);
   /** Go to where a crewmate is: the zone they are on (beside them), if the server says they can be joined. */
   const teleportTo = (id: string) => {
-    api.teleport(id).then(({ zone, name }) => {
+    api.teleport(id).then(async (went) => {
+      const { zone, name } = went;
       if (!zone) return setNote(`${name} is not out on a map.`);
+      if (!(await joinOk(went))) return;
       try {
         sessionStorage.setItem("gq.zone.near", id);
       } catch {
@@ -649,6 +652,14 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
   // The map the crew has open out through the gate (the latest, if there are several): while there is one the gate
   // stands open, and stepping through it goes there.
   const openMap = board.maps?.[0];
+  /** Through the gate onto a map: asked first where a crewmate is on it already, since walking on makes its enemies more. */
+  const stepThrough = (code: string) => {
+    const mine = new Set(party?.ids ?? (you ? [you] : []));
+    const there = board.members.filter((m) => !mine.has(m.id) && m.zone?.code === code).length;
+    const bringing = Math.max(1, mine.size);
+    const room = Math.max(0, MAX_PARTY - there);
+    void joinOk({ others: there > 0, ...(bringing > room ? { room, bringing } : {}) }).then((ok) => ok && (location.hash = `zone/${code}`));
+  };
   const gateOpen = !!openMap || !!harbor.muster?.code;
   // Shut, the gate is a knot of stone and brass asleep on its plinth; a map being opened bursts it out into the air.
   useEffect(() => {
@@ -794,7 +805,7 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
   };
   /** Down into the caves: the crew's cave if one is still being fought through, else a fresh one. Leaving it comes back to the mouth. */
   const goDown = () => {
-    api.caves().then(({ code }) => goInside(`${HARBOR_CAVE.q},${HARBOR_CAVE.r}`, `zone/${code}`), (e: Error) => setNote(e.message));
+    api.caves().then(async (went) => (await joinOk(went)) && goInside(`${HARBOR_CAVE.q},${HARBOR_CAVE.r}`, `zone/${went.code}`), (e: Error) => setNote(e.message));
   };
   // Flotsam bobbing beside the hero (or under their boat): fished out from the beach or from a boat.
   const flotsamHere = self ? flotsamWithin(flotsam.pieces, self.pos) : null;
@@ -831,12 +842,12 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
     : atWaygate ? {
         title: <>The waygate <span className="muted">· {outThere ? `${outThere.name} is out through it${outThere.zone?.fighting ? ", in a fight" : ""}` : openMap ? `open to ${openMap.place}` : "shut. It opens onto the crew's atlas"}</span></>,
         label: outThere ? `Step through to ${outThere.name}` : openMap ? `Step through to ${openMap.place}` : "Open the atlas",
-        run: () => (location.hash = outThere?.zone ? `zone/${outThere.zone.code}` : openMap ? `zone/${openMap.code}` : "atlas"),
+        run: () => (outThere?.zone ? stepThrough(outThere.zone.code) : openMap ? stepThrough(openMap.code) : (location.hash = "atlas")),
         // A click on the gate itself goes where it stands open to: the map the crew has open; shut, the atlas, where
         // the crew has been and where it could go next. (Stepping straight through to a crewmate, who may be in a
         // fight, is asked for with the button.)
-        enter: () => (location.hash = openMap ? `zone/${openMap.code}` : "atlas"),
-        also: outThere || openMap ? { label: "Open the atlas", run: () => (location.hash = "atlas") } : lastMap ? { label: "Step back through", run: () => (location.hash = `zone/${lastMap}`) } : undefined,
+        enter: () => (openMap ? stepThrough(openMap.code) : (location.hash = "atlas")),
+        also: outThere || openMap ? { label: "Open the atlas", run: () => (location.hash = "atlas") } : lastMap ? { label: "Step back through", run: () => stepThrough(lastMap) } : undefined,
       }
     : atWell ? {
         title: <>The town well <span className="muted">· fill a watering can or a water skin, or toss in a coin for luck</span></>,

@@ -20,6 +20,7 @@
 //   den       a hollow ringed with boulders and bones
 
 import type { Clime } from "../map";
+import { makeRng, seedFromString } from "../rng";
 import type { ZoneBiome } from "./types";
 
 /** What lies under and round the land: the open sea, or a void the land floats over; or, under a roof or under ground, the dark. */
@@ -206,4 +207,30 @@ export function bandOf(faction: FactionId, size: number, pick: <T>(list: readonl
     ...Array.from({ length: heavy }, () => ({ kind: pick(f.heavy!), role: "heavy" as const })),
     ...Array.from({ length: shot }, () => ({ kind: pick(f.shot), role: "shot" as const })),
   ];
+}
+
+type Member = { kind: string; role: "front" | "shot" | "heavy" };
+
+/** How many heroes a map's groups can be sized for: one to six, the most a map takes (zone.ts MAX_PARTY). */
+export const PARTY_SIZES = [1, 2, 3, 4, 5, 6] as const;
+
+/**
+ * A band laid out on a place (lay.ts, indoors.ts), as it would be for each party of one to six (index: the party less
+ * one): `made` for the party it was made for, and `at` for the rest. Those are rolled with dice of their own (`dice`),
+ * so the map's own rolls, and so the map, are as they were. A band for more heroes keeps every member of the one for one
+ * fewer, by part, and adds to it, so it is the band a map made for them would have, and growing it only ever adds.
+ */
+export function bandsBeside(made: readonly Member[], party: number, at: (party: number, pick: <T>(list: readonly T[]) => T) => Member[], dice: string): string[][] {
+  const rng = makeRng(seedFromString(`bands|${dice}`));
+  let last: readonly Member[] = made;
+  return PARTY_SIZES.map((p) => {
+    if (p === party) return made.map((m) => m.kind);
+    const fresh = at(p, rng.pick);
+    if (p < party) return fresh.map((m) => m.kind);
+    last = (["front", "heavy", "shot"] as const).flatMap((role) => {
+      const had = last.filter((m) => m.role === role);
+      return [...had, ...fresh.filter((m) => m.role === role).slice(had.length)];
+    });
+    return last.map((m) => m.kind);
+  });
 }

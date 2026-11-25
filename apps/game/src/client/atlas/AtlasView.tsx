@@ -47,6 +47,7 @@ import { uiZoom } from "../uiScale";
 import { AtlasCloud, CLOUD_TOP } from "./AtlasCloud";
 import { AtlasLayer, type AtlasMark, type AtlasRoute, type Rise } from "./AtlasLayer";
 import { dragSource, useDropTarget } from "../dragDrop";
+import { joinOk } from "../joinWarning";
 import "./atlas.css";
 
 type Known = Extract<ChartNode, { state: "harbor" | "cleared" | "open" }>;
@@ -406,6 +407,8 @@ export function AtlasView({ me, refresh, onLeave }: { me: Me; refresh(): Promise
       const went = await api.callMuster(n.id, n.zone || !inSlot ? undefined : stoneKey(inSlot));
       remember(n.id);
       if (went.code) {
+        // A map others are on: walking on makes its enemies more, so the player is asked first.
+        if (!(await joinOk(went))) return;
         // The stone is gone from the pack.
         void refresh();
         location.hash = `zone/${went.code}`;

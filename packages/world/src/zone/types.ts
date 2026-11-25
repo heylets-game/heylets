@@ -324,8 +324,14 @@ export interface ZoneState {
   /** Where heroes arrive, and wake after a lost fight. */
   start: HexPos;
   units: Unit[];
-  /** Enemy groups by id: whether they have noticed the party. */
-  groups: Record<string, { alerted: boolean }>;
+  /**
+   * Enemy groups by id: whether they have noticed the party, and what the group would have been on this map made for a
+   * party of one to six (`bands`, index: the party less one), which it grows to as more heroes come (zone.ts growGroups).
+   * A map saved before groups knew it has none, and its groups stay as they are.
+   */
+  groups: Record<string, { alerted: boolean; bands?: string[][] }>;
+  /** How many heroes the groups are sized for now, where more have come onto the map than it was made for (options.party). */
+  sizedFor?: number;
   /** The ground, by hex key. */
   surfaces: Record<string, GroundSurface>;
   /** Weather spells have left over the ground (weather.ts). */

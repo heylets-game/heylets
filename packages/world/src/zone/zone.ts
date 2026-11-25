@@ -34,7 +34,7 @@ import { ALERT_RANGE, JOIN_RANGE, freeHexNear, generateZone } from "./gen";
 import { generateDelve } from "./delve";
 import { checkLoot, checkOpen, leaveBody, look, lootFor, openChest, payBounty, take } from "./loot";
 import { isCrateId } from "./crates";
-import { siteOpen } from "./sites";
+import { PARTY_SIZES, siteOpen } from "./sites";
 import { FREE_WALK, blast, blockerAt, inFight, isDead, pathIn, roomAt, sameHex, sees, solid, unitAt, unitById, zoneReach } from "./geometry";
 import { AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, ENEMY_MOVE_AP, FLEE_RANGE, ITEM_AP, STROLL_GRACE_MS, STROLL_STEP_MS, SUMMONS, STARTING_ITEMS, THROWABLES, THROWABLE_KINDS, cleanItems, commonCost, enemyHp, enemyMove, tacticOf } from "./kit";
 import { d20, heroMove, mod, rollDice, statOf } from "./rules";
@@ -83,6 +83,55 @@ function enemyUnit(state: ZoneState, kind: string, pos: HexPos, group: string): 
 }
 
 /**
+ * The most heroes on a map at once, and the most its groups are ever sized for. A hero whose player has gone (`away`)
+ * keeps their place but does not count against it: one who comes back finds it as full as it is then.
+ */
+export const MAX_PARTY = PARTY_SIZES.length;
+
+/** Said when a hero would make the map's heroes more than it takes. */
+export const MAP_FULL = `This map is full: ${MAX_PARTY} heroes are on it already.`;
+
+/** What is in `want` and not in `had`, one for one, in `want`'s order. */
+function beyond(want: readonly string[], had: readonly string[]): string[] {
+  const left = [...had];
+  return want.filter((kind) => {
+    const i = left.indexOf(kind);
+    if (i < 0) return true;
+    left.splice(i, 1);
+    return false;
+  });
+}
+
+/**
+ * More heroes on the map than its groups were sized for (a crewmate, or their party, has walked on): every group not
+ * yet beaten and not in a fight now is made what it would have been on a map made for that many, by adding whoever
+ * that band has and this one was not made with, stood round its post. The new enemies' ids, in order.
+ */
+export function growGroups(state: ZoneState): string[] {
+  const from = state.sizedFor ?? state.options.party;
+  const to = Math.min(MAX_PARTY, state.units.filter((u) => u.side === "hero" && !u.summon).length);
+  if (to <= from) return [];
+  state.sizedFor = to;
+  const added: string[] = [];
+  for (const [id, group] of Object.entries(state.groups)) {
+    if (!group.bands) continue;
+    const members = state.units.filter((u) => u.side === "enemy" && u.group === id);
+    const standing = members.find((u) => !u.down);
+    if (!standing || members.some((u) => inFight(state, u.id))) continue;
+    const post = standing.home ?? standing.pos;
+    for (const kind of beyond(group.bands[to - 1] ?? [], group.bands[from - 1] ?? [])) {
+      if (!ENEMIES[kind]) continue;
+      const pos = freeHexNear(state.map, post, (p) => !!unitAt(state, p) || blockerAt(state, p), (p) => tileAt(state.map, p));
+      if (!pos) break;
+      const enemy = enemyUnit(state, kind, pos, id);
+      state.units.push(enemy);
+      added.push(enemy.id);
+    }
+  }
+  return added;
+}
+
+/**
  * A cave is left by its mouth, and only there (ZoneView). One made without a mouth (open cave floor from before
  * delves, or a dev map) is given one where heroes arrive: its start. Run on every cave made, and on every saved
  * one as it is loaded, so none is ever left with no way out. Returns the same state, changed in place.
@@ -112,7 +161,7 @@ export function createZone(code: string, seed: string, options: ZoneOptions): Zo
   if (plan.scene) state.scene = { ...plan.scene };
   for (const group of plan.groups) {
     const id = group.id ?? `g${++state.seq}`;
-    state.groups[id] = { alerted: false };
+    state.groups[id] = { alerted: false, ...(group.bands ? { bands: group.bands.map((b) => [...b]) } : {}) };
     group.kinds.forEach((kind, i) => state.units.push(enemyUnit(state, kind, group.posts[i], id)));
   }
   ensureMouth(state);
@@ -871,6 +920,10 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
   }
   if (action.type === "join") {
     const hero = action.hero;
+    // No more than the map takes at once: a hero who is here already (their gear read again) is not arriving.
+    const was = unitById(state, hero.id);
+    const present = (u: Unit) => u.side === "hero" && !u.summon && !u.away;
+    if ((!was || was.away) && state.units.filter(present).length >= MAX_PARTY) return MAP_FULL;
     // Back on the map: their hero, and the stand-ins they play, are here again.
     for (const u of state.units) if (u.id === hero.id || u.controller === hero.id) delete u.away;
     const here = unitById(state, hero.id);
@@ -905,6 +958,8 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
     if (!pos) return "There is no room to arrive.";
     state.units.push(heroUnit(hero, pos));
     ctx.events.push({ t: "joined", id: hero.id });
+    // A bigger party than the map was made for: the groups not yet beaten grow to meet it.
+    growGroups(state);
     return null;
   }
   if (action.type === "timeout") {

@@ -6,6 +6,7 @@ import type { Hono } from "hono";
 import type { HexPos } from "@gantt-quest/core";
 import { crewFor, homeCrewOf, hutHeaders, hutRoomOf, type Env, type Player } from "../db";
 import type { Standing } from "../gather";
+import { MAX_PARTY } from "@gantt-quest/world";
 import { partyOf } from "../party";
 import { crewPlaces } from "../zones";
 
@@ -33,12 +34,35 @@ export async function inTown(env: Env, crewId: string): Promise<Set<string>> {
     .then((r) => new Set(r.ids), () => new Set<string>());
 }
 
-/** Whoever of a crew is in the Harbor now, and the asker and their party with them: who a map made this moment is sized for. */
+/**
+ * Whether anyone but `playerId` and their own party is on map `code` right now. Walking on beside them makes the party
+ * there bigger, and its enemies with it (zone.ts growGroups), so the player is asked first.
+ */
+export async function othersOn(db: D1Database, crewId: string, playerId: string, code: string): Promise<JoinNews> {
+  const [places, party] = await Promise.all([crewPlaces(db, crewId), partyOf(db, playerId)]);
+  const mine = new Set([playerId, ...party]);
+  const there = places.filter((m) => m.zone?.code === code && !mine.has(m.id)).length;
+  // Not all of the party fits: the map takes so many, and the last of them would be turned away (zone.ts MAP_FULL).
+  const room = Math.max(0, MAX_PARTY - there);
+  return { others: there > 0, ...(mine.size > room ? { room, bringing: mine.size } : {}) };
+}
+
+/**
+ * What a player is told before walking onto a map that is under way (client joinWarning.ts): whether others are on it,
+ * and, where their party will not all fit, how many it has room for (`room`) and how many they bring (`bringing`).
+ */
+export interface JoinNews {
+  others: boolean;
+  room?: number;
+  bringing?: number;
+}
+
+/** Whoever of a crew is in the Harbor now, everyone's party with them, and the asker and theirs: who a map made this moment is sized for. */
 export async function harborParty(env: Env, crewId: string, playerId: string) {
   const here = await inTown(env, crewId);
   here.add(playerId);
-  // A player's party comes with them, from wherever in the world its members are.
-  for (const id of await partyOf(env.DB, playerId)) here.add(id);
+  // A player's party comes with them, from wherever in the world its members are: the asker's, and everyone else's here.
+  for (const party of await Promise.all([...here].map((id) => partyOf(env.DB, id)))) for (const id of party) here.add(id);
   return (await crewPlaces(env.DB, crewId)).filter((m) => here.has(m.id));
 }
 

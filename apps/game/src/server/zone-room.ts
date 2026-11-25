@@ -188,6 +188,15 @@ export class ZoneRoom extends DurableObject<Env> {
     if (request.headers.get("Upgrade") !== "websocket") {
       // A trade changed: tell the player it concerns to look again, if they are here and connected.
       const url = new URL(request.url);
+      // A muster set out with too many, and its caller left these heroes behind (harbor-room.ts): they do not come
+      // onto the map with their party. Played on their own, they still may, if there is room.
+      if (url.pathname === "/bench") {
+        const body = (await request.json().catch(() => null)) as { ids?: unknown } | null;
+        const ids = Array.isArray(body?.ids) ? body.ids.filter((id): id is string => typeof id === "string" && id.length <= 64).slice(0, 32) : [];
+        const bench = new Set([...((await this.ctx.storage.get<string[]>("bench")) ?? []), ...ids]);
+        await this.ctx.storage.put("bench", [...bench]);
+        return new Response(null, { status: 204 });
+      }
       if (url.pathname !== "/trades") return new Response("expected websocket", { status: 426 });
       return tellTrades(this.ctx, url.searchParams.getAll("to"));
     }
@@ -205,7 +214,12 @@ export class ZoneRoom extends DurableObject<Env> {
       const refused = await this.walkOn(playerId, near, key);
       if (refused) return refused;
       // The party comes on beside the hero the player went in as. One who cannot is left behind; the rest still come.
-      for (const id of asked) if (!(await this.walkOn(id, playerId, key))) party.push(id);
+      // So is one a muster left behind, unless they are on the map already.
+      const bench = new Set((await this.ctx.storage.get<string[]>("bench")) ?? []);
+      for (const id of asked) {
+        if (bench.has(id) && !this.zone?.units.some((u) => u.id === id)) continue;
+        if (!(await this.walkOn(id, playerId, key))) party.push(id);
+      }
       return null;
     });
     if (error) return new Response(error, { status: 409 });
