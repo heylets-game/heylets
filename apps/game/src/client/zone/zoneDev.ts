@@ -38,6 +38,21 @@ export function setZoneDev(next: Partial<ZoneDevState>): void {
   for (const tell of listeners) tell();
 }
 
+// Escape puts an armed tool down rather than opening the game's menu. Listened for as this module loads, ahead of
+// the menu's own listener on the same target, so stopping it here keeps the menu shut.
+if (typeof window !== "undefined") {
+  window.addEventListener(
+    "keydown",
+    (e) => {
+      if (e.key !== "Escape" || !state.tool) return;
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      setZoneDev({ tool: null });
+    },
+    true,
+  );
+}
+
 export function useZoneDev(): ZoneDevState {
   return useSyncExternalStore(
     (tell) => {

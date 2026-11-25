@@ -11,7 +11,7 @@ import { addCondition, attackContext, burnOf, damage, defenceOf, kindle, shieldO
 import { shantyOf, shantyRadius, songsOn } from "./song";
 import { chartOf, constellationLinks } from "./stars";
 import { ALERT_RANGE, DEFAULT_ZONE_OPTIONS, JOIN_RANGE, generateZone, zoneOptions } from "./gen";
-import { HEX_ROOM, adjacent, blast, blockerAt, flies, isDead, seesFor, solid, stepCost, unitAt, zoneReach } from "./geometry";
+import { HEX_ROOM, adjacent, blast, blockerAt, flies, isDead, sameHex, seesFor, solid, stepCost, unitAt, zoneReach } from "./geometry";
 import { propOf } from "./props";
 import { SITE_IDS, backdropOf, siteInside, type SiteId } from "./sites";
 import { ACTION_AP, AP_MAX, AP_TURN, AQUEOUS, RALLY, SUMMON_AP_TURN, AURAS, CHART, COMMON_ACTIONS, BLOCK, BONUS_AP, BOLSTER, AGAINST_WAVES, ENDURE, STAND_STRONG, STURDY, ENEMY_BURST, ENEMY_KIT, ENEMY_MOVE_AP, EXPLORE_ROUND_MS, FLEE_RANGE, LIGHT_RADIUS, SHIELD_SET_ASIDE, TACTICS, TORCH_GROUND_ROUNDS, TORCH_HELD_ROUNDS, TORCH_ROUND_MS, abilityDice as abilityDiceFor, commonCost, enemyHp, DEFAULT_MIND, abilityStrikes, enemyMove, enemyStrikes, mindOf, tacticOf, unitStrikes } from "./kit";
@@ -1438,6 +1438,25 @@ describe("the end of a fight", () => {
     expect(state.units.some((u) => u.id === foe)).toBe(false);
     expect(state.loot).toEqual([{ id: foe, kind: "body", name: ENEMIES.skeleton.name, pos: fell, unit: "skeleton", level: 1, loot: {} }]);
     expect(events.some((e) => e.t === "cleared")).toBe(true);
+  });
+
+  it("a dev spawn puts its first enemy on the hex clicked, beside an enemy if the rules allow, and spreads the rest", () => {
+    let state = board();
+    enemy(state, "wolf", at(7, 6));
+    hero(state, "ann", "qa_paladin", at(4, 6));
+    const spawn = (kinds: string[], pos: HexPos) => (state = must(state, { type: "dev", by: "ann", dev: { op: "spawn", kinds, at: pos } }));
+    const on = (pos: HexPos) => state.units.filter((u) => sameHex(u.pos, pos)).length;
+    const crowd = () => Math.max(...state.units.map((u) => on(u.pos)));
+    spawn(["wolf", "wolf", "wolf"], at(7, 6));
+    expect(on(at(7, 6))).toBe(HEX_ROOM);
+    expect(state.units.filter((u) => u.side === "enemy")).toHaveLength(4);
+    expect(crowd()).toBe(HEX_ROOM);
+    // A full hex, or a hero's, takes nobody more.
+    spawn(["wolf"], at(7, 6));
+    expect(on(at(7, 6))).toBe(HEX_ROOM);
+    spawn(["wolf"], at(4, 6));
+    expect(on(at(4, 6))).toBe(1);
+    expect(crowd()).toBe(HEX_ROOM);
   });
 
   it("says nothing of a cleared map while another group still stands", () => {

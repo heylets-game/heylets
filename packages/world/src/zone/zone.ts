@@ -35,7 +35,7 @@ import { generateDelve } from "./delve";
 import { checkLoot, checkOpen, leaveBody, look, lootFor, openChest, payBounty, take } from "./loot";
 import { isCrateId } from "./crates";
 import { siteOpen } from "./sites";
-import { FREE_WALK, blast, blockerAt, inFight, pathIn, sameHex, sees, solid, unitAt, unitById, zoneReach } from "./geometry";
+import { FREE_WALK, blast, blockerAt, inFight, pathIn, roomAt, sameHex, sees, solid, unitAt, unitById, zoneReach } from "./geometry";
 import { AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, ENEMY_MOVE_AP, FLEE_RANGE, ITEM_AP, SUMMONS, STARTING_ITEMS, THROWABLES, THROWABLE_KINDS, cleanItems, commonCost, enemyHp, enemyMove, tacticOf } from "./kit";
 import { d20, heroMove, mod, rollDice, statOf } from "./rules";
 import { hiddenEnemies, sentToClient } from "./light";
@@ -756,10 +756,13 @@ function dev(ctx: Ctx, by: string, op: DevOp): string | null {
     if (kinds.length === 0 || solid(tileAt(state.map, op.at))) return "Nothing to put there.";
     const group = `g${++state.seq}`;
     state.groups[group] = { alerted: false };
-    for (const kind of kinds) {
-      const pos = free(op.at);
+    // The first goes on the hex clicked if the rules let it stand there (beside up to HEX_ROOM - 1 of its own side,
+    // never with a hero); the rest spread out, each on a hex of its own.
+    const first = roomAt(state, op.at, { id: "", side: "enemy" }) && !blockerAt(state, op.at) ? op.at : null;
+    kinds.forEach((kind, i) => {
+      const pos = (i === 0 && first) || free(op.at);
       if (pos) state.units.push(enemyUnit(state, kind, pos, group));
-    }
+    });
   } else if (op.op === "paint") {
     const hexes = op.hexes.filter((p) => tileAt(state.map, p)).slice(0, 60);
     if (op.kind) placeSurface(ctx, hexes, op.kind, PAINT_ROUNDS, null);
