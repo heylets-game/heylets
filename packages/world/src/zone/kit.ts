@@ -700,36 +700,34 @@ export interface EnemyKit {
   fly?: boolean;
   /** Advantage on an attack when one of its own is next to the target. */
   pack?: boolean;
-  /** It has the hands and the wit for it: it will shove someone beside it over a drop or into a pit (its bonus action). */
-  shoves?: boolean;
 }
 
 export const ENEMY_KIT: Record<string, EnemyKit> = {
   dummy: {},
-  bandit: { shoves: true },
+  bandit: {},
   wolf: { pack: true },
-  bear: { shoves: true },
+  bear: {},
   // Its Stomp, like anything that strikes the whole crew, is a burst around it.
-  ogre: { shoves: true },
+  ogre: {},
   // It rakes up close, and will throw a rock at whoever keeps away. (Its wounds closing is in zone.ts, at the start of its turn.)
-  troll: { shoves: true },
+  troll: {},
   cultist: { mind: SHOOTER },
-  brute: { shoves: true },
+  brute: {},
   archer: { mind: SHOOTER },
   alpha: { pack: true },
-  great_bear: { shoves: true },
-  guardian: { shoves: true },
+  great_bear: {},
+  guardian: {},
   shade: {},
   bat: { fly: true },
-  skeleton: { shoves: true },
+  skeleton: {},
   slime: {},
   haunt: {},
-  villain: { shoves: true },
+  villain: {},
   spider: { pack: true },
   broodmother: {},
   frost_wolf: { pack: true },
   ember_hound: { pack: true },
-  snow_bear: { shoves: true },
+  snow_bear: {},
   wraith: { mind: SHOOTER },
   witch: { mind: SHOOTER },
 };
@@ -753,6 +751,8 @@ export interface EnemyStrike {
   range: number;
   burst: boolean;
   dice: Dice;
+  /** It does no harm when it lands (a shove): only what it does besides. */
+  harmless: boolean;
   bonus: number;
   perfect?: EnemyAbilityDef["perfect"];
   weight: number;
@@ -791,6 +791,7 @@ export function abilityStrikes(ids: readonly string[], level: number, more = 0):
         range: burst ? ENEMY_BURST : (a.range ?? 1),
         burst,
         dice: diceFor(a.damage + Math.floor(level / 2) + edge),
+        harmless: a.damage <= 0,
         bonus: a.toHit + Math.floor((Math.max(1, level) - 1) / 4) + edge,
         perfect: a.perfect,
         weight: a.weight,

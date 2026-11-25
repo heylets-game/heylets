@@ -1037,9 +1037,11 @@ export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Uni
     ctx.events.push({ t: "miss", actor: enemy.id, target: target.id, what: attack.name });
     return;
   }
-  const rolled = rollShown(ctx.rng, attack.dice, 0, roll.crit);
-  damage(ctx, target, rolled.total, { actor: enemy.id, what: attack.name, crit: roll.crit, dice: rolled });
-  if (attack.range === 1) thorns(ctx, enemy, target);
+  if (!attack.harmless) {
+    const rolled = rollShown(ctx.rng, attack.dice, 0, roll.crit);
+    damage(ctx, target, rolled.total, { actor: enemy.id, what: attack.name, crit: roll.crit, dice: rolled });
+    if (attack.range === 1) thorns(ctx, enemy, target);
+  }
   leave(target, true);
   if (attack.kit.surface) placeSurface(ctx, [target.pos], attack.kit.surface.kind, attack.kit.surface.rounds, enemy.id);
   if (attack.kit.chills) chill(ctx, target.pos, enemy.id);

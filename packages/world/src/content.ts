@@ -338,7 +338,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   },
   bandit: {
     kind: "bandit", name: "Bandit", hp: 17, defence: 12, move: 2, save: 0, init: 1, xp: 12,
-    abilities: ["slash", "cheap_shot"],
+    abilities: ["slash", "cheap_shot", "shove"],
   },
   wolf: {
     kind: "wolf", name: "Dire Wolf", hp: 13, defence: 12, move: 3, save: 0, init: 2, xp: 10,
@@ -348,20 +348,20 @@ export const ENEMIES: Record<string, EnemyDef> = {
   // Where the Brute stuns with a club, the bear tears (bleeding) and only its roar stuns.
   bear: {
     kind: "bear", name: "Cave Bear", hp: 38, defence: 11, move: 2, save: 2, init: -1, xp: 20,
-    abilities: ["mauling_swipe", "roar"],
+    abilities: ["mauling_swipe", "roar", "shove"],
   },
   // The heaviest thing that walks ashore: very slow, and its club lands like a dropped mast. Its stomp
   // shakes the whole crew and leaves them slow on their feet. A pair's worth on its own, like a bear.
   ogre: {
     kind: "ogre", name: "Ogre", hp: 46, defence: 10, move: 2, save: 2, init: -2, xp: 24,
-    abilities: ["club_smash", "stomp"],
+    abilities: ["club_smash", "stomp", "shove"],
   },
   // A troll: no tougher than a brute to look at, but its wounds close as you watch. It grows back every
   // turn unless it is Burning, so fire (or a lot of damage at once) is how it is put down.
   troll: {
     kind: "troll", name: "Troll", hp: 29, defence: 11, move: 2, save: 2, init: -1, xp: 22,
     regen: { amount: TROLL_REGEN, unless: "burning", name: "Regenerate" },
-    abilities: ["rake", "hurl_rock"],
+    abilities: ["rake", "hurl_rock", "shove"],
   },
   cultist: {
     kind: "cultist", name: "Cultist", hp: 16, defence: 11, move: 2, save: 0, init: 0, xp: 14,
@@ -369,7 +369,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   },
   brute: {
     kind: "brute", name: "Brute", hp: 26, defence: 11, move: 2, save: 2, init: -1, xp: 18,
-    abilities: ["maul", "brute_shove"],
+    abilities: ["maul", "brute_shove", "shove"],
   },
   archer: {
     kind: "archer", name: "Archer", hp: 13, defence: 12, move: 2, save: 0, init: 1, xp: 13,
@@ -383,12 +383,12 @@ export const ENEMIES: Record<string, EnemyDef> = {
   // A beast boss that comes alone: slow, huge, and it tears; its roar can stun the whole crew.
   great_bear: {
     kind: "great_bear", name: "Great Bear", hp: 60, defence: 12, move: 2, save: 3, init: -1, xp: 44, boss: true,
-    abilities: ["crushing_maul", "thunderous_roar"],
+    abilities: ["crushing_maul", "thunderous_roar", "shove"],
   },
   // A guardian boss: slow and alone, but each blow lands like a wall.
   guardian: {
     kind: "guardian", name: "Guardian", hp: 51, defence: 12, move: 2, save: 3, init: -1, xp: 44, boss: true,
-    abilities: ["stone_fist", "quake"],
+    abilities: ["stone_fist", "quake", "shove"],
   },
   // The Haunted Caverns' dead. A shade is quick and weak, and its touch chills (slows) whoever it lays a hand on.
   shade: {
@@ -403,7 +403,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   // The smugglers' dead, still guarding their camp: slow and steady, and hard to put down.
   skeleton: {
     kind: "skeleton", name: "Skeleton", hp: 22, defence: 11, move: 2, save: 0, init: 0, xp: 14,
-    abilities: ["rusted_cutlass", "bone_rattle"],
+    abilities: ["rusted_cutlass", "bone_rattle", "shove"],
   },
   // A cave slime: very slow and very tough, and its acid leaves its prey exposed (taking more from every hit). The acid
   // burns and is spent: it leaves no poison lying about (enemyabilities.ts).
@@ -441,7 +441,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   // A cave bear's white cousin: as slow, as thick-hided, and every bit as cross.
   snow_bear: {
     kind: "snow_bear", name: "Snow Bear", hp: 40, defence: 11, move: 2, save: 2, init: -1, xp: 21,
-    abilities: ["mauling_swipe", "roar"],
+    abilities: ["mauling_swipe", "roar", "shove"],
   },
   // The frost's dead: it keeps its distance, and what its cold reaches is slow to move after.
   wraith: {
@@ -456,7 +456,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   },
   villain: {
     kind: "villain", name: "Villain", hp: 38, defence: 12, move: 2, save: 3, init: 0, xp: 40, boss: true,
-    abilities: ["crushing_strike", "sweeping_ruin"],
+    abilities: ["crushing_strike", "sweeping_ruin", "shove"],
   },
 };
 

@@ -1281,7 +1281,8 @@ describe("the enemy uses the ground", () => {
     return { state: after, events, effects: [] };
   }
   /** What the enemy did, in order: its common actions and attacks by name. */
-  const did = (events: ZoneEvent[], id: string) => got(events, "used").filter((e) => e.id === id).map((e) => e.what);
+  // Its Shove is an attack, known by its name.
+  const did = (events: ZoneEvent[], id: string) => got(events, "used").filter((e) => e.id === id).map((e) => (e.name === "Shove" ? "shove" : e.what));
 
   /** A Mage with a drop of `levels` behind her, and one enemy beside her on the high ground. AI on. */
   function backToTheDrop(kind: string, levels: number, pit = false) {
@@ -1295,14 +1296,14 @@ describe("the enemy uses the ground", () => {
 
   it("one with hands shoves a hero who has a long drop behind them, before it does anything else", () => {
     const { state, foe } = backToTheDrop("bandit", 3);
-    expect(ENEMY_KIT.bandit.shoves).toBe(true);
+    expect(ENEMIES.bandit.abilities).toContain("shove");
     let fell = 0;
     for (let seed = 1; seed <= 30; seed++) {
       const { state: after, events } = play(state, seed);
       // The shove first, for its AP, and that once only (if she kept her feet it is not tried again this turn); then a blow if she is still there to hit.
       expect(did(events, foe)[0], `seed ${seed}`).toBe("shove");
       expect(did(events, foe).filter((what) => what === "shove"), `seed ${seed}`).toHaveLength(1);
-      expect(got(events, "used").find((e) => e.id === foe)).toMatchObject({ what: "shove", target: "ann" });
+      expect(got(events, "used").find((e) => e.id === foe)).toMatchObject({ name: "Shove", target: "ann" });
       expect(did(events, foe).length * 1, `seed ${seed}`).toBeLessThanOrEqual(AP_TURN);
       const over = events.findIndex((e) => e.t === "fell");
       if (over < 0) {
@@ -1330,7 +1331,7 @@ describe("the enemy uses the ground", () => {
       const out: string[][] = [[]];
       for (const e of events) {
         if (e.t === "turn") out.push([]);
-        else if (e.t === "used" && e.id === foe) out[out.length - 1].push(e.what);
+        else if (e.t === "used" && e.id === foe) out[out.length - 1].push(e.name === "Shove" ? "shove" : e.what);
       }
       return out.filter((did) => did.length > 0);
     };
@@ -1375,7 +1376,7 @@ describe("the enemy uses the ground", () => {
     const flat = backToTheDrop("bandit", 0);
     const short = backToTheDrop("bandit", 1);
     const wolf = backToTheDrop("wolf", 3);
-    expect(ENEMY_KIT.wolf.shoves).toBeFalsy();
+    expect(ENEMIES.wolf.abilities).not.toContain("shove");
     for (let seed = 1; seed <= 10; seed++) {
       for (const made of [flat, short, wolf]) {
         const { events } = play(made.state, seed);

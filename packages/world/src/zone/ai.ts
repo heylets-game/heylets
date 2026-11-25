@@ -15,9 +15,8 @@
 // It knows the lie of the land. A ladder is a way up like any other, and
 // a blow struck down one is better than a blow struck up it. One that can
 // find no way on foot to anyone it could hit will leap a ledge to get
-// there (a Jump). And one with hands, standing by someone who has a drop
-// or a pit behind them, will try to shove them over it before it does
-// anything else.
+// there (a Jump). One that can Shove (an ability like any other) will
+// knock someone with a drop or a pit at their back over it.
 //
 // If nothing it can reach lets it attack, it heads for the nearest place
 // from which it could, by the walking of it, round whoever holds the ground
@@ -30,18 +29,17 @@
 // only if it can get no blow in on them this turn.
 //
 // How it is put together: a turn is a list of steps (TURN_STEPS: the bell,
-// a shove, the fight), each sharing one Turn. What it can use is its own
+// the fight), each sharing one Turn. What it can use is its own
 // abilities (enemyabilities.ts), each weighed up by the behaviour it names
 // (behaviours.ts); how it likes to fight is its kind's Mind (kit.ts).
 
 import { hexDistance, posKey, type HexPos } from "@gantt-quest/core";
 import { behaviourOf, type Look } from "./behaviours";
 import { BELL_AP, goesForBell, liveBell, ringBell, somethingToRouse } from "./bell";
-import { apForMove, checkCommon, doCommon, enemyAct, leavesReach, shiftInto, shoveBonus, shoveDest, walk, walkAp } from "./combat";
-import { defenceOf, has, unseen, type Ctx } from "./engine";
-import { blast, elevOf, flies, heldAgainst, inFight, pathIn, sameHex, stepCost, strikes, zoneReach, type Reached } from "./geometry";
-import { AP_MAX, COMMON_ACTIONS, ENEMY_KIT, ENEMY_WHIM, JUMP_RANGE, mindOf, unitStrikes, type EnemyStrike, type Mind } from "./kit";
-import { hitChance } from "./rules";
+import { apForMove, checkCommon, doCommon, enemyAct, leavesReach, walk, walkAp } from "./combat";
+import { has, unseen, type Ctx } from "./engine";
+import { blast, elevOf, flies, heldAgainst, inFight, pathIn, sameHex, stepCost, zoneReach, type Reached } from "./geometry";
+import { ACTION_AP, AP_MAX, COMMON_ACTIONS, ENEMY_WHIM, JUMP_RANGE, mindOf, unitStrikes, type EnemyStrike, type Mind } from "./kit";
 import { seedFromString } from "../rng";
 import { HARMFUL } from "./surfaces";
 import type { Budget, Unit, ZoneState } from "./types";
@@ -68,8 +66,9 @@ function rollWhim(ctx: Ctx): Whim {
 
 /**
  * The best ability an enemy could use standing on `pos`, on whom, and what it is worth, or null if it has none to use
- * from there. Each ability's behaviour (behaviours.ts) says what it is worth; the one the enemy favours (its
- * `weight`, against the `heaviest` of all it has) gets the benefit of a close call.
+ * from there. Each ability's behaviour (behaviours.ts) says what it is worth, for the AP it takes (one that takes
+ * half an attack's AP is worth twice as much); the one the enemy favours (its `weight`, against the `heaviest` of
+ * all it has) gets the benefit of a close call.
  */
 function bestAttack(state: ZoneState, enemy: Unit, pos: HexPos, blows: EnemyStrike[], heroes: Unit[], heaviest: number, whim?: Whim): Option | null {
   const look = { state, enemy, mind: mindOf(enemy.kind), whim };
@@ -77,7 +76,7 @@ function bestAttack(state: ZoneState, enemy: Unit, pos: HexPos, blows: EnemyStri
   for (const attack of blows) {
     const use = behaviourOf(attack).value(look, pos, attack, heroes);
     if (!use) continue;
-    const scored = use.worth * (0.75 + (0.25 * attack.weight) / heaviest);
+    const scored = use.worth * (ACTION_AP / attack.cost) * (0.75 + (0.25 * attack.weight) / heaviest);
     if (!best || scored > best.worth) best = { attack, target: use.target, worth: scored };
   }
   return best;
@@ -87,34 +86,6 @@ function bestAttack(state: ZoneState, enemy: Unit, pos: HexPos, blows: EnemyStri
 function taunter(enemy: Unit, heroes: Unit[]): Unit | undefined {
   const by = enemy.conditions.find((c) => c.kind === "taunted")?.by;
   return by ? heroes.find((h) => h.id === by) : undefined;
-}
-
-/**
- * What shoving `hero` from where `enemy` stands would be worth: nothing unless it would send them into a pit or
- * over a drop of two levels or more.
- */
-function shoveWorth(state: ZoneState, enemy: Unit, hero: Unit): number {
-  if (!strikes(state.map, enemy.pos, hero.pos) || has(hero, "prone")) return 0;
-  const into = shiftInto(state, hero.pos, shoveDest(enemy.pos, hero.pos), hero);
-  if (!into || into.how === "open") return 0;
-  // It has to hit with the shove, and then they have to fail to catch the edge (about an even chance).
-  const win = hitChance(shoveBonus(state, enemy), defenceOf(hero, state), 0);
-  const prize = into.how === "pit" ? Math.max(8, hero.hp) : 2.5 * (into.levels - 1) + 2;
-  return win * 0.5 * prize;
-}
-
-/** Shove whoever is best shoved over an edge from where the enemy stands, if anyone is worth the AP. Says whether it did. */
-function tryShove(ctx: Ctx, enemy: Unit, budget: Budget, heroes: Unit[]): boolean {
-  const cost = COMMON_ACTIONS.shove.cost;
-  if (budget.ap < cost || !ENEMY_KIT[enemy.kind]?.shoves || enemy.down || has(enemy, "prone")) return false;
-  const best = heroes
-    .filter((h) => !h.down && !unseen(h))
-    .map((h) => ({ h, worth: shoveWorth(ctx.state, enemy, h) }))
-    .sort((a, b) => b.worth - a.worth || a.h.id.localeCompare(b.h.id))[0];
-  if (!best || best.worth < 1.5) return false;
-  budget.ap -= cost;
-  doCommon(ctx, enemy, "shove", { target: best.h.id }, budget);
-  return true;
 }
 
 /**
@@ -157,8 +128,6 @@ export interface Turn {
   /** The heroes in the fight it can see (the Unseen are not there, as far as it knows), and the one who taunted it, if any: looked at again with `look`. */
   heroes: Unit[];
   goaded: Unit | undefined;
-  /** It has shoved someone this turn: once a turn at the most. */
-  shoved: boolean;
   /** It rang the alarm bell (bell.ts): its caller rouses the place. */
   rang: boolean;
   /** Its fancy for the attack it is picking now (rollWhim): rolled afresh before each. */
@@ -374,7 +343,6 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
     blows: unitStrikes(state, enemy),
     heroes,
     goaded: taunter(enemy, heroes),
-    shoved: false,
     rang: false,
     whim: undefined,
     ready: () => {
@@ -422,20 +390,11 @@ const bellStep: TurnStep = {
   },
 };
 
-/** Someone with their back to a drop, right where it stands: over they go, before anything else. */
-const shoveStep: TurnStep = {
-  id: "shove",
-  run(t) {
-    t.shoved = tryShove(t.ctx, t.enemy, t.budget, t.heroes);
-    return "on";
-  },
-};
-
 /**
  * The fight: while it has the AP for an attack, move to the best hex it can reach with the AP an attack leaves
  * (leaping a ledge, if that is the only way to a blow), and use the best of its abilities from there, again and
  * again. With nothing in reach before its first, it goes toward where there would be (approach), over whoever is in
- * the way if it must. Someone it comes up beside with their back to a drop is shoved, if it has not shoved yet.
+ * the way if it must.
  */
 const fightStep: TurnStep = {
   id: "fight",
@@ -475,8 +434,6 @@ const fightStep: TurnStep = {
         doCommon(ctx, enemy, "jump", { at: plan.leap }, budget);
         if (t.out()) return "end";
       }
-      // Someone it has come up beside may have their back to a drop.
-      if (!t.shoved) t.shoved = tryShove(ctx, enemy, budget, t.look());
       if (t.out() || budget.ap < Math.min(...t.blows.map((b) => b.cost))) return "end";
       // It may not have got where it meant to: look again from where it stands.
       const still = t.look();
@@ -496,8 +453,8 @@ const fightStep: TurnStep = {
 };
 
 /**
- * The steps of every enemy's turn, in order (each can end it): the bell, if it is the one sent to ring it; a shove,
- * for someone already at a drop; then the fight. A new kind of thing an enemy does on its turn, beside using its
+ * The steps of every enemy's turn, in order (each can end it): the bell, if it is the one sent to ring it; then the
+ * fight. A new kind of thing an enemy does on its turn, beside using its
  * abilities, is a new step here.
  */
-export const TURN_STEPS: readonly TurnStep[] = [bellStep, shoveStep, fightStep];
+export const TURN_STEPS: readonly TurnStep[] = [bellStep, fightStep];

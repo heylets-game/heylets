@@ -9,6 +9,7 @@
 // What the ability then does when used is the rules' business (combat.ts enemyAct), not the behaviour's.
 
 import { hexDistance, type HexPos } from "@gantt-quest/core";
+import { shiftInto, shoveDest } from "./combat";
 import { has } from "./engine";
 import { HIGH_REACH, reachFrom, seesFor, strikes } from "./geometry";
 import { ENEMY_BURST, type EnemyStrike, type Mind } from "./kit";
@@ -78,7 +79,29 @@ const burst: Behaviour = {
   },
 };
 
-export const BEHAVIOURS = { strike, burst } satisfies Record<string, Behaviour>;
+/**
+ * A hero beside it with a drop or a pit at their back, knocked over it: worth what the fall would do to them, and
+ * into a pit (deep water, lava, off the edge) as much as their whole life. Shoving someone onto open ground is worth
+ * nothing to it: it does not use it then. As with a blow, how likely it is to land, or that they catch the edge, does
+ * not come into it.
+ */
+const shove: Behaviour = {
+  reaches: (look, from, _attack, targets) => targets.some((h) => strikes(look.state.map, from, h.pos)),
+  value(look, from, attack, targets) {
+    let best: Use | null = null;
+    for (const hero of targets) {
+      if (!strikes(look.state.map, from, hero.pos) || has(hero, "prone")) continue;
+      const into = shiftInto(look.state, hero.pos, shoveDest(from, hero.pos), hero);
+      if (!into || into.how === "open") continue;
+      let worth = (into.how === "pit" ? Math.max(8, hero.hp) : 2.5 * (into.levels - 1) + 2) * (look.whim?.(attack, hero) ?? 1);
+      if (has(hero, "taunting")) worth *= 3;
+      if (!best || worth > best.worth) best = { attack, target: hero, worth };
+    }
+    return best;
+  },
+};
+
+export const BEHAVIOURS = { strike, burst, shove } satisfies Record<string, Behaviour>;
 
 export type BehaviourId = keyof typeof BEHAVIOURS;
 

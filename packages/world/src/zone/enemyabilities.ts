@@ -12,7 +12,7 @@ export interface EnemyAbilityDef {
   id: string;
   /** What it is called in the fight's log and on the enemy's card. */
   name: string;
-  /** How hard it hits, before level and edge: turned into dice (rules.ts diceFor). */
+  /** How hard it hits, before level and edge: turned into dice (rules.ts diceFor). 0: it does no harm (a shove). */
   damage: number;
   /** Added to its roll to hit, before level and edge. */
   toHit: number;
@@ -33,8 +33,8 @@ export interface EnemyAbilityDef {
   /** Freezes water under the target. */
   chills?: boolean;
   /**
-   * How an enemy weighs up using it (behaviours.ts): `strike` for one target, `burst` for everyone round. When not
-   * said, it follows the shape.
+   * How an enemy weighs up using it (behaviours.ts): `strike` for one target, `burst` for everyone round, `shove` for
+   * one beside it with a drop or a pit at their back. When not said, it follows the shape.
    */
   behaviour?: string;
   /** How much its user favours it, beside its other abilities: the favourite wins a close call. */
@@ -42,6 +42,9 @@ export interface EnemyAbilityDef {
 }
 
 export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
+  // An attack that does no harm: on a hit, the hero beside it goes a hex back, over a drop or into a pit if that is
+  // what is behind them (they roll to catch the edge). It is only worth it to an enemy where there is an edge. Once a turn.
+  shove: { id: "shove", name: "Shove", damage: 0, toHit: 3, push: true, cost: 1, cooldown: 1, behaviour: "shove", weight: 1 },
   wobble: { id: "wobble", name: "Wobble", damage: 1, toHit: 0, weight: 1 },
   slash: { id: "slash", name: "Slash", damage: 6, toHit: 3, weight: 3 },
   cheap_shot: { id: "cheap_shot", name: "Cheap Shot", damage: 5, toHit: 3, perfect: { effect: "bleeding", turns: 2 }, weight: 1 },

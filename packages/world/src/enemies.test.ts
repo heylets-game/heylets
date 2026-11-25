@@ -78,7 +78,7 @@ describe("the training dummy", () => {
     const dummy = ENEMIES.dummy;
     expect(dummy.xp).toBe(0);
     expect(dummy.boss).toBeFalsy();
-    const softest = Math.min(...Object.values(ENEMIES).filter((e) => e.kind !== "dummy").flatMap((e) => attacksOf(e).map((a) => a.damage)));
+    const softest = Math.min(...Object.values(ENEMIES).filter((e) => e.kind !== "dummy").flatMap((e) => attacksOf(e).map((a) => a.damage).filter((d) => d > 0)));
     for (const a of attacksOf(dummy)) expect(a.damage).toBeLessThan(softest);
     expect(dummy.hp).toBeGreaterThan(Math.max(...Object.values(ENEMIES).filter((e) => !e.boss && e.kind !== "dummy").map((e) => e.hp)));
   });
