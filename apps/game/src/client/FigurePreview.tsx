@@ -1,7 +1,7 @@
-// A hero's model, live and turning slowly, for the look builder at character
-// creation: the same figure the Harbor draws (render/figures.ts), lit like a
-// portrait, rebuilt whenever what it shows changes. Drag to turn it; `spin`
-// false holds it where it is.
+// A hero's model, live, for the look builder at character creation: the same
+// figure the Harbor draws (render/figures.ts), lit like a portrait, rebuilt
+// whenever what it shows changes. It stands still, a little turned; drag to
+// turn it. `head` brings the camera in close on the face.
 
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
@@ -12,19 +12,26 @@ import { lookFor } from "./render/sprites";
 /** Tall enough for a lanky hero in a wizard's hat, in world units. */
 const SIZE = 2;
 
+/** Where the camera stands and what it looks at: the whole figure, or close on its head. */
+interface Shot {
+  y: number;
+  away: number;
+  at: number;
+}
+
 /**
  * `aim` turns the hero to face `turn` (0 is the front, π the back) each time its `n` changes, as when a side of
- * the tattoo doll is drawn on.
+ * the tattoo doll is drawn on. `head` frames the head instead of the whole figure.
  */
-export function FigurePreview({ classId, outfit, size = 280, spin = true, walk = false, aim = null }: { classId: string; outfit: Outfit; size?: number; spin?: boolean; walk?: boolean; aim?: { turn: number; n: number } | null }) {
+export function FigurePreview({ classId, outfit, size = 280, head = false, walk = false, aim = null }: { classId: string; outfit: Outfit; size?: number; head?: boolean; walk?: boolean; aim?: { turn: number; n: number } | null }) {
   const canvas = useRef<HTMLCanvasElement>(null);
-  // Read by the animation loop each frame, so turning stops and starts without rebuilding anything.
-  const spinning = useRef(spin);
-  spinning.current = spin;
+  // Read by the animation loop each frame, so the camera eases in and out without rebuilding anything.
+  const close = useRef(head);
+  close.current = head;
   // Walking on the spot, to see the stride and what swings with it.
   const walking = useRef(walk);
   walking.current = walk;
-  const stage = useRef<{ renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera; stand: THREE.Group; figure: Figure | null; turn: number } | null>(null);
+  const stage = useRef<{ renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.PerspectiveCamera; stand: THREE.Group; figure: Figure | null; turn: number; whole: Shot; face: Shot; zoom: number } | null>(null);
 
   // The renderer, the lights and the turning stand: made once.
   useEffect(() => {
@@ -51,7 +58,8 @@ export function FigurePreview({ classId, outfit, size = 280, spin = true, walk =
     const camera = new THREE.PerspectiveCamera(26, 1, 0.1, 50);
     camera.position.set(0, 1.35, 6.4);
     camera.lookAt(0, 1.05, 0);
-    stage.current = { renderer, scene, camera, stand, figure: null, turn: 0.45 };
+    const shot: Shot = { y: 1.35, away: 6.4, at: 1.05 };
+    stage.current = { renderer, scene, camera, stand, figure: null, turn: 0.3, whole: shot, face: shot, zoom: close.current ? 1 : 0 };
 
     let raf = 0;
     let last = performance.now();
@@ -62,8 +70,12 @@ export function FigurePreview({ classId, outfit, size = 280, spin = true, walk =
       if (!s) return;
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
-      if (!dragging && spinning.current) s.turn += dt * 0.35;
       s.stand.rotation.y = s.turn;
+      // In toward the head, or back out to the whole figure, easing.
+      s.zoom += ((close.current ? 1 : 0) - s.zoom) * Math.min(1, dt * 8);
+      const mix = (a: number, b: number) => a + (b - a) * s.zoom;
+      s.camera.position.set(0, mix(s.whole.y, s.face.y), mix(s.whole.away, s.face.away));
+      s.camera.lookAt(0, mix(s.whole.at, s.face.at), 0);
       if (walking.current) stride += dt * 1.5;
       s.figure?.update({ time: (now - t0) / 1000, stride, walking: walking.current, lean: 0, lying: false });
       s.renderer.render(s.scene, s.camera);
@@ -71,7 +83,7 @@ export function FigurePreview({ classId, outfit, size = 280, spin = true, walk =
     };
     raf = requestAnimationFrame(frame);
 
-    // Drag to turn it by hand; it carries on turning when let go.
+    // Drag to turn it by hand; it stays where it is let go.
     let dragging = false;
     let fromX = 0;
     const down = (e: PointerEvent) => {
@@ -128,11 +140,14 @@ export function FigurePreview({ classId, outfit, size = 280, spin = true, walk =
     const box = new THREE.Box3().setFromObject(figure.root);
     const tall = Math.max(1.6, box.max.y - box.min.y);
     const mid = (box.max.y + box.min.y) / 2;
-    const away = (tall * 0.62) / Math.tan(THREE.MathUtils.degToRad(s.camera.fov / 2));
-    s.camera.position.set(0, mid + tall * 0.12, away);
-    s.camera.lookAt(0, mid, 0);
+    const lens = Math.tan(THREE.MathUtils.degToRad(s.camera.fov / 2));
+    s.whole = { y: mid + tall * 0.12, away: (tall * 0.62) / lens, at: mid };
+    // Close on the head: its middle a little above where it sits on the neck, filling most of the view.
+    const neck = figure.head()?.getWorldPosition(new THREE.Vector3());
+    const faceY = neck ? neck.y + tall * 0.13 : box.max.y - tall * 0.22;
+    s.face = { y: faceY + tall * 0.03, away: (tall * 0.29) / lens, at: faceY + tall * 0.02 };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  return <canvas ref={canvas} className="figure-preview" width={size} height={size} style={{ width: size, height: size }} aria-label="Your hero, turning. Drag to turn them." role="img" />;
+  return <canvas ref={canvas} className="figure-preview" width={size} height={size} style={{ width: size, height: size }} aria-label="Your hero. Drag to turn them." role="img" />;
 }

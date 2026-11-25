@@ -13,6 +13,15 @@ interface SizedPreset<Id extends string> extends Preset<Id> {
   k: number;
 }
 
+/**
+ * The body's type. A female body has a fuller chest; picking one also sets the shoulders and hips to its usual
+ * shape (`shape`), which can then be changed like any other choice.
+ */
+export const BODY_TYPES = [
+  { id: "male", label: "Male", shape: { shoulders: "average", hips: "average" } },
+  { id: "female", label: "Female", shape: { shoulders: "narrow", hips: "wide" } },
+] as const satisfies readonly (Preset<string> & { shape: { shoulders: string; hips: string } })[];
+
 export const HEIGHTS = [
   { id: "stubby", label: "Stubby", k: 0.75 },
   { id: "short", label: "Short", k: 0.88 },
@@ -75,10 +84,50 @@ export const EYES = [
   { id: "narrow", label: "Narrow" },
   { id: "sleepy", label: "Sleepy" },
   { id: "fierce", label: "Fierce" },
-  // A patch over one eye (the hero's own right or left), the other eye round.
-  { id: "patchR", label: "Patch, right", patch: "right" },
-  { id: "patchL", label: "Patch, left", patch: "left" },
-] as const satisfies readonly (Preset<string> & { patch?: "right" | "left" })[];
+  { id: "lashed", label: "Lashed" },
+  { id: "glancing", label: "Glancing" },
+  { id: "lashes", label: "Long lashes" },
+  { id: "startled", label: "Startled" },
+  { id: "drowsy", label: "Drowsy" },
+  { id: "square", label: "Square" },
+  { id: "almond", label: "Almond" },
+  { id: "doe", label: "Doe" },
+  { id: "arched", label: "Arched" },
+  { id: "googly", label: "Googly" },
+] as const satisfies readonly Preset<string>[];
+
+/** A patch over one eye (the hero's own right or left), or none: worn over whatever eyes they have. */
+export const EYE_PATCHES = [
+  { id: "none", label: "None" },
+  { id: "right", label: "Right" },
+  { id: "left", label: "Left" },
+] as const satisfies readonly Preset<string>[];
+
+/** The nose's size, as a share of the usual: the slider's ends and step. */
+export const NOSE_SIZE = { min: 0.7, max: 1.35, step: 0.05 } as const;
+/** How far the nose sits above (or, negative, below) the usual, in the head's units: the slider's ends and step. */
+export const NOSE_LIFT = { min: -0.35, max: 0.3, step: 0.05 } as const;
+
+/** A slider's value as kept: inside its ends and on its step, or undefined for none (the usual). */
+function onSlider(v: unknown, range: { min: number; max: number; step: number }, usual: number): number | undefined {
+  if (typeof v !== "number" || !Number.isFinite(v)) return undefined;
+  const stepped = Math.round(Math.min(range.max, Math.max(range.min, v)) / range.step) * range.step;
+  const kept = Math.round(stepped * 100) / 100;
+  return kept === usual ? undefined : kept;
+}
+
+/** The shape of the brows. Natural is the brow there always was (over fierce eyes, it angles down). */
+export const BROWS = [
+  { id: "natural", label: "Natural" },
+  { id: "arched", label: "Arched" },
+  { id: "thick", label: "Thick" },
+  { id: "thin", label: "Thin" },
+  { id: "angry", label: "Angry" },
+  { id: "worried", label: "Worried" },
+  { id: "bushy", label: "Bushy" },
+  { id: "unibrow", label: "Unibrow" },
+  { id: "none", label: "None" },
+] as const satisfies readonly Preset<string>[];
 
 /** A choice of limbs: how long (`len`) and how thick (`thick`) they are, 1 the usual; and on one side, if any, something in place of the limb's end. */
 interface LimbPreset<Id extends string> extends Preset<Id> {
@@ -116,6 +165,7 @@ export const NOSES = [
   { id: "broad", label: "Broad" },
   { id: "long", label: "Long" },
   { id: "hooked", label: "Hooked" },
+  { id: "rounded", label: "Rounded" },
 ] as const satisfies readonly Preset<string>[];
 
 export const MUSTACHES = [
@@ -133,6 +183,7 @@ export const BEARDS = [
   { id: "goatee", label: "Goatee" },
   { id: "full", label: "Full beard" },
   { id: "chops", label: "Mutton chops" },
+  { id: "bigChops", label: "Big chops" },
   { id: "wizard", label: "Wizard beard" },
 ] as const satisfies readonly Preset<string>[];
 
@@ -145,11 +196,15 @@ export const EARS = [
 ] as const satisfies readonly Preset<string>[];
 
 export const SKIN_TONES = ["#f6d9c0", "#f1c9a5", "#e3b48c", "#d9a67c", "#c48a5c", "#a8704a", "#87573a", "#5f3c27", "#c9b8c4", "#9fbf9a"] as const;
+/** Eye colours: a hero who picks one has eyes this colour round a dark pupil (none, the plain dark eyes). */
+export const EYE_COLORS = ["#5a3a24", "#8a6a2e", "#3f6fa8", "#5f8fbf", "#4f7d3a", "#7a8590", "#6b4a8a"] as const;
 export const HAIR_COLORS = ["#1a1424", "#3a2a20", "#5a3d22", "#8a5a2b", "#c9743a", "#e0b84a", "#ececec", "#9a9aa2", "#b9433d", "#3f6fa8", "#5d7d3a", "#8b5bb5"] as const;
 
 type IdOf<T extends readonly { id: string }[]> = T[number]["id"];
 
 export interface Appearance {
+  /** Male or female: a female body has a fuller chest. */
+  body: IdOf<typeof BODY_TYPES>;
   height: IdOf<typeof HEIGHTS>;
   build: IdOf<typeof BUILDS>;
   shoulders: IdOf<typeof SHOULDERS>;
@@ -162,6 +217,9 @@ export interface Appearance {
   ears: IdOf<typeof EARS>;
   hairStyle: IdOf<typeof HAIR_STYLES>;
   eyes: IdOf<typeof EYES>;
+  /** Which eye a patch covers, if either. */
+  eyePatch: IdOf<typeof EYE_PATCHES>;
+  brows: IdOf<typeof BROWS>;
   nose: IdOf<typeof NOSES>;
   mustache: IdOf<typeof MUSTACHES>;
   beard: IdOf<typeof BEARDS>;
@@ -171,9 +229,17 @@ export interface Appearance {
   skin: string;
   /** One of HAIR_COLORS. */
   hair: string;
+  /** One of EYE_COLORS, for eyes this colour round a dark pupil; none for the plain dark eyes. */
+  eyeColor?: string;
+  /** The nose's size, a share of the usual (see NOSE_SIZE); none for the usual. */
+  noseSize?: number;
+  /** How far the nose sits above or below the usual (see NOSE_LIFT); none for where it always was. */
+  noseLift?: number;
 }
 
 export const DEFAULT_APPEARANCE: Appearance = {
+  // (A look saved before there was a choice of body is a male one: no hero changes shape.)
+  body: "male",
   height: "average",
   build: "average",
   shoulders: "average",
@@ -185,6 +251,8 @@ export const DEFAULT_APPEARANCE: Appearance = {
   ears: "round",
   hairStyle: "short",
   eyes: "round",
+  eyePatch: "none",
+  brows: "natural",
   nose: "pointy",
   mustache: "none",
   beard: "none",
@@ -194,6 +262,7 @@ export const DEFAULT_APPEARANCE: Appearance = {
 
 /** Every field's presets, for checking and for the picker, in the order the picker shows them. */
 export const APPEARANCE_OPTIONS = {
+  body: BODY_TYPES,
   height: HEIGHTS,
   build: BUILDS,
   shoulders: SHOULDERS,
@@ -205,6 +274,8 @@ export const APPEARANCE_OPTIONS = {
   ears: EARS,
   hairStyle: HAIR_STYLES,
   eyes: EYES,
+  eyePatch: EYE_PATCHES,
+  brows: BROWS,
   nose: NOSES,
   mustache: MUSTACHES,
   beard: BEARDS,
@@ -222,8 +293,8 @@ export function limbsOf(field: "legs" | "arms", look: Appearance): { len: number
 }
 
 /** The eye covered by a patch, if one is. */
-export function eyePatchOf(eyes: string | undefined): "right" | "left" | undefined {
-  return (EYES as readonly { id: string; patch?: "right" | "left" }[]).find((e) => e.id === eyes)?.patch;
+export function eyePatchOf(look: { eyePatch?: string } | null | undefined): "right" | "left" | undefined {
+  return look?.eyePatch === "right" || look?.eyePatch === "left" ? look.eyePatch : undefined;
 }
 
 /**
@@ -261,6 +332,13 @@ export function parseAppearance(raw: unknown): Appearance | null {
   }
   if (typeof r.skin === "string" && (SKIN_TONES as readonly string[]).includes(r.skin)) out.skin = r.skin;
   if (typeof r.hair === "string" && (HAIR_COLORS as readonly string[]).includes(r.hair)) out.hair = r.hair;
+  if (typeof r.eyeColor === "string" && (EYE_COLORS as readonly string[]).includes(r.eyeColor)) out.eyeColor = r.eyeColor;
+  const noseSize = onSlider(r.noseSize, NOSE_SIZE, 1);
+  if (noseSize !== undefined) out.noseSize = noseSize;
+  const noseLift = onSlider(r.noseLift, NOSE_LIFT, 0);
+  if (noseLift !== undefined) out.noseLift = noseLift;
+  // A look saved when the patch was one of the eyes: round eyes, the patch over the same one.
+  if ((r.eyes === "patchR" || r.eyes === "patchL") && r.eyePatch === undefined) out.eyePatch = r.eyes === "patchR" ? "right" : "left";
   const ink = parseInk(r.ink);
   if (ink) out.ink = ink;
   return out;
@@ -269,7 +347,8 @@ export function parseAppearance(raw: unknown): Appearance | null {
 /** A short stable string for an appearance, for caching whatever is drawn from it. */
 export function appearanceKey(look: Appearance | undefined): string {
   if (!look) return "";
-  return [look.height, look.build, look.shoulders, look.hips, look.legs, look.arms, look.headSize, look.headShape, look.ears, look.hairStyle, look.eyes, look.nose, look.mustache, look.beard, look.skin, look.hair, inkKey(look.ink)].join(".");
+  // (A female body, an eye colour, a brow shape, an eye patch and the nose's sliders add to the end, so every look saved before there was a choice keeps the key it had.)
+  return [look.height, look.build, look.shoulders, look.hips, look.legs, look.arms, look.headSize, look.headShape, look.ears, look.hairStyle, look.eyes, look.nose, look.mustache, look.beard, look.skin, look.hair, inkKey(look.ink)].join(".") + (look.body === "female" ? ".female" : "") + (look.eyeColor ? `.${look.eyeColor}` : "") + (look.brows && look.brows !== "natural" ? `.${look.brows}` : "") + (look.eyePatch && look.eyePatch !== "none" ? `.patch-${look.eyePatch}` : "") + (look.noseSize ? `.ns${look.noseSize}` : "") + (look.noseLift ? `.nl${look.noseLift}` : "");
 }
 
 /** A random appearance, for the picker's dice. `rand` returns 0 to 1. */
@@ -281,6 +360,7 @@ export function randomAppearance(rand: () => number = Math.random): Appearance {
     return pick(list.filter((p) => special(p) === odd));
   };
   return {
+    body: pick(BODY_TYPES).id,
     height: pick(HEIGHTS).id,
     build: pick(BUILDS).id,
     shoulders: pick(SHOULDERS).id,
@@ -291,12 +371,16 @@ export function randomAppearance(rand: () => number = Math.random): Appearance {
     headShape: pick(HEAD_SHAPES).id,
     ears: pick(EARS).id,
     hairStyle: pick(HAIR_STYLES).id,
-    eyes: rarely<(typeof EYES)[number]>(EYES, (p) => "patch" in p).id,
+    eyes: pick(EYES).id,
+    eyePatch: rarely<(typeof EYE_PATCHES)[number]>(EYE_PATCHES, (p) => p.id !== "none").id,
     nose: pick(NOSES).id,
     mustache: pick(MUSTACHES).id,
     beard: pick(BEARDS).id,
     skin: pick(SKIN_TONES),
     hair: pick(HAIR_COLORS),
+    // Plain dark eyes about one time in three.
+    eyeColor: rand() < 0.33 ? undefined : pick(EYE_COLORS),
+    brows: pick(BROWS.filter((b) => b.id !== "none")).id,
   };
 }
 

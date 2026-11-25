@@ -65,13 +65,36 @@ describe("ink", () => {
   });
 });
 
+describe("nose sliders", () => {
+  it("keeps the nose's size and height inside their ends and on their steps, and leaves the usual unset", () => {
+    const look = parseAppearance({ ...DEFAULT_APPEARANCE, noseSize: 1.23, noseLift: -9 })!;
+    expect(look.noseSize).toBe(1.25);
+    expect(look.noseLift).toBe(-0.35);
+    const usual = parseAppearance({ ...DEFAULT_APPEARANCE, noseSize: 1, noseLift: 0 })!;
+    expect(usual.noseSize).toBeUndefined();
+    expect(usual.noseLift).toBeUndefined();
+    expect(parseAppearance({ ...DEFAULT_APPEARANCE, noseSize: "big" })!.noseSize).toBeUndefined();
+    expect(appearanceKey(look)).not.toBe(appearanceKey(DEFAULT_APPEARANCE));
+  });
+});
+
 describe("limbs and eye patches", () => {
   it("keeps a peg leg, a hook and a patch, each on its side", () => {
-    const look = parseAppearance({ ...DEFAULT_APPEARANCE, legs: "pegL", arms: "hookR", eyes: "patchR" })!;
+    const look = parseAppearance({ ...DEFAULT_APPEARANCE, legs: "pegL", arms: "hookR", eyes: "almond", eyePatch: "right" })!;
     expect(limbsOf("legs", look).side).toBe("left");
     expect(limbsOf("arms", look).side).toBe("right");
-    expect(eyePatchOf(look.eyes)).toBe("right");
+    expect(eyePatchOf(look)).toBe("right");
+    // The patch is worn over the eyes chosen, which it keeps.
+    expect(look.eyes).toBe("almond");
     expect(appearanceKey(look)).not.toBe(appearanceKey(DEFAULT_APPEARANCE));
+  });
+
+  it("reads a patch saved as one of the eyes as round eyes under a patch on that side", () => {
+    const { eyePatch: _, ...old } = DEFAULT_APPEARANCE;
+    void _;
+    const look = parseAppearance({ ...old, eyes: "patchL" })!;
+    expect(look.eyes).toBe("round");
+    expect(eyePatchOf(look)).toBe("left");
   });
 
   it("gives a look saved before arms and legs could be chosen the usual ones", () => {
