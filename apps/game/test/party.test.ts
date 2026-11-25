@@ -8,6 +8,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import type { Env } from "../src/server/db";
+import { partyVessel } from "../src/server/fishmarket";
 import { partyOf } from "../src/server/party";
 import { heroRoutes } from "../src/server/routes/heroes";
 import { harborStanding } from "../src/server/routes/shared";
@@ -173,6 +174,22 @@ describe("a party of an account's heroes", () => {
     expect((await app.call("/api/party/remove", { id: theirs })).status).toBe(404);
   });
 
+  it("rows the best boat anyone in the party owns, whoever walks the town", async () => {
+    const { db, sql, app, first, second, third } = await threeHeroes("boat@example.com");
+    const boat = (id: string, def: string) => sql.prepare("INSERT INTO furnishings (player_id, def_id, label, meta_json, created_at) VALUES (?, ?, ?, '{}', 0)").run(id, def, def);
+    boat(second, "rowboat");
+    boat(third, "float_barrel");
+    // Not in the party yet: First has no boat of their own.
+    expect(await partyVessel(db, first)).toBeNull();
+    await app.call("/api/party/add", { id: third });
+    expect(await partyVessel(db, first)).toBe("barrel");
+    await app.call("/api/party/add", { id: second });
+    expect(await partyVessel(db, first)).toBe("rowboat");
+    // Played as Second, or as Third, it is the same boat.
+    expect(await partyVessel(db, second)).toBe("rowboat");
+    expect(await partyVessel(db, third)).toBe("rowboat");
+  });
+
   it("stands a party member where the one walking the town stands", async () => {
     const { db, app, first, second, third } = await threeHeroes("standing@example.com");
     await app.call("/api/party/add", { id: second });
@@ -183,7 +200,7 @@ describe("a party of an account's heroes", () => {
     };
     const env = { DB: db, HARBOR_ROOM: harbors } as unknown as Env;
     expect(await harborStanding(env, first)).toEqual({ crewId: "WORLDA", pos: { q: 3, r: 4 } });
-    expect(await harborStanding(env, second)).toEqual({ crewId: "WORLDA", pos: { q: 3, r: 4 } });
+    expect(await harborStanding(env, second)).toEqual({ crewId: "WORLDA", pos: { q: 3, r: 4 }, by: first });
     // Not one of the party: nowhere, even in the same world.
     await app.call("/api/party/add", { id: third });
     await app.call("/api/party/remove", { id: third });
