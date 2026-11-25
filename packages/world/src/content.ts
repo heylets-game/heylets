@@ -337,125 +337,125 @@ export const ENEMIES: Record<string, EnemyDef> = {
     abilities: ["wobble"],
   },
   bandit: {
-    kind: "bandit", name: "Bandit", hp: 13, defence: 12, move: 2, save: 0, init: 1, xp: 12,
+    kind: "bandit", name: "Bandit", hp: 17, defence: 12, move: 2, save: 0, init: 1, xp: 12,
     abilities: ["slash", "cheap_shot"],
   },
   wolf: {
-    kind: "wolf", name: "Dire Wolf", hp: 10, defence: 12, move: 3, save: 0, init: 2, xp: 10,
+    kind: "wolf", name: "Dire Wolf", hp: 13, defence: 12, move: 3, save: 0, init: 2, xp: 10,
     abilities: ["wolf_bite"],
   },
   // A beast bruiser: slow and thick-hided, and every blow lands like a falling tree.
   // Where the Brute stuns with a club, the bear tears (bleeding) and only its roar stuns.
   bear: {
-    kind: "bear", name: "Cave Bear", hp: 29, defence: 11, move: 2, save: 2, init: -1, xp: 20,
+    kind: "bear", name: "Cave Bear", hp: 38, defence: 11, move: 2, save: 2, init: -1, xp: 20,
     abilities: ["mauling_swipe", "roar"],
   },
   // The heaviest thing that walks ashore: very slow, and its club lands like a dropped mast. Its stomp
   // shakes the whole crew and leaves them slow on their feet. A pair's worth on its own, like a bear.
   ogre: {
-    kind: "ogre", name: "Ogre", hp: 35, defence: 10, move: 2, save: 2, init: -2, xp: 24,
+    kind: "ogre", name: "Ogre", hp: 46, defence: 10, move: 2, save: 2, init: -2, xp: 24,
     abilities: ["club_smash", "stomp"],
   },
   // A troll: no tougher than a brute to look at, but its wounds close as you watch. It grows back every
   // turn unless it is Burning, so fire (or a lot of damage at once) is how it is put down.
   troll: {
-    kind: "troll", name: "Troll", hp: 22, defence: 11, move: 2, save: 2, init: -1, xp: 22,
+    kind: "troll", name: "Troll", hp: 29, defence: 11, move: 2, save: 2, init: -1, xp: 22,
     regen: { amount: TROLL_REGEN, unless: "burning", name: "Regenerate" },
     abilities: ["rake", "hurl_rock"],
   },
   cultist: {
-    kind: "cultist", name: "Cultist", hp: 12, defence: 11, move: 2, save: 0, init: 0, xp: 14,
+    kind: "cultist", name: "Cultist", hp: 16, defence: 11, move: 2, save: 0, init: 0, xp: 14,
     abilities: ["dark_bolt", "immolate"],
   },
   brute: {
-    kind: "brute", name: "Brute", hp: 20, defence: 11, move: 2, save: 2, init: -1, xp: 18,
+    kind: "brute", name: "Brute", hp: 26, defence: 11, move: 2, save: 2, init: -1, xp: 18,
     abilities: ["maul", "brute_shove"],
   },
   archer: {
-    kind: "archer", name: "Archer", hp: 10, defence: 12, move: 2, save: 0, init: 1, xp: 13,
+    kind: "archer", name: "Archer", hp: 13, defence: 12, move: 2, save: 0, init: 1, xp: 13,
     abilities: ["volley", "barbed_arrow"],
   },
   // A beast boss: fast, and it makes its victims bleed.
   alpha: {
-    kind: "alpha", name: "Pack Leader", hp: 30, defence: 13, move: 3, save: 3, init: 2, xp: 40, boss: true,
+    kind: "alpha", name: "Pack Leader", hp: 39, defence: 13, move: 3, save: 3, init: 2, xp: 40, boss: true,
     abilities: ["savage_bite", "pounce", "rending_howl"],
   },
   // A beast boss that comes alone: slow, huge, and it tears; its roar can stun the whole crew.
   great_bear: {
-    kind: "great_bear", name: "Great Bear", hp: 46, defence: 12, move: 2, save: 3, init: -1, xp: 44, boss: true,
+    kind: "great_bear", name: "Great Bear", hp: 60, defence: 12, move: 2, save: 3, init: -1, xp: 44, boss: true,
     abilities: ["crushing_maul", "thunderous_roar"],
   },
   // A guardian boss: slow and alone, but each blow lands like a wall.
   guardian: {
-    kind: "guardian", name: "Guardian", hp: 39, defence: 12, move: 2, save: 3, init: -1, xp: 44, boss: true,
+    kind: "guardian", name: "Guardian", hp: 51, defence: 12, move: 2, save: 3, init: -1, xp: 44, boss: true,
     abilities: ["stone_fist", "quake"],
   },
   // The Haunted Caverns' dead. A shade is quick and weak, and its touch chills (slows) whoever it lays a hand on.
   shade: {
-    kind: "shade", name: "Shade", hp: 11, defence: 12, move: 3, save: 0, init: 1, xp: 12,
+    kind: "shade", name: "Shade", hp: 14, defence: 12, move: 3, save: 0, init: 1, xp: 12,
     abilities: ["chill_touch", "wail"],
   },
   // Cave bats: weak alone, but quick, and they come in swarms.
   bat: {
-    kind: "bat", name: "Cave Bat", hp: 7, defence: 13, move: 3, save: 0, init: 3, xp: 7,
+    kind: "bat", name: "Cave Bat", hp: 9, defence: 13, move: 3, save: 0, init: 3, xp: 7,
     abilities: ["bat_bite", "screech"],
   },
   // The smugglers' dead, still guarding their camp: slow and steady, and hard to put down.
   skeleton: {
-    kind: "skeleton", name: "Skeleton", hp: 17, defence: 11, move: 2, save: 0, init: 0, xp: 14,
+    kind: "skeleton", name: "Skeleton", hp: 22, defence: 11, move: 2, save: 0, init: 0, xp: 14,
     abilities: ["rusted_cutlass", "bone_rattle"],
   },
   // A cave slime: very slow and very tough, and its acid leaves its prey exposed (taking more from every hit). The acid
   // burns and is spent: it leaves no poison lying about (enemyabilities.ts).
   slime: {
-    kind: "slime", name: "Cave Slime", hp: 22, defence: 10, move: 2, save: 2, init: -2, xp: 13,
+    kind: "slime", name: "Cave Slime", hp: 29, defence: 10, move: 2, save: 2, init: -2, xp: 13,
     abilities: ["engulf", "acid_splash"],
   },
   // What is bound in the caverns' deepest chamber, guarding the hoard.
   haunt: {
-    kind: "haunt", name: "Haunt", hp: 33, defence: 12, move: 2, save: 3, init: 0, xp: 44, boss: true,
+    kind: "haunt", name: "Haunt", hp: 43, defence: 12, move: 2, save: 3, init: 0, xp: 44, boss: true,
     abilities: ["grave_grasp", "keening"],
   },
   // ---- what lives out on the atlas's maps ----
   // A hunting spider the size of a hound: quick and frail, its bite leaves venom on the ground, and its web slows
   // whoever it catches from across the way.
   spider: {
-    kind: "spider", name: "Giant Spider", hp: 11, defence: 12, move: 3, save: 0, init: 1, xp: 11,
+    kind: "spider", name: "Giant Spider", hp: 14, defence: 12, move: 3, save: 0, init: 1, xp: 11,
     abilities: ["venomous_bite", "spider_web_spit"],
   },
   // What the nest belongs to: a spider the size of a cart, that webs the whole crew at once.
   broodmother: {
-    kind: "broodmother", name: "Broodmother", hp: 42, defence: 12, move: 2, save: 3, init: 0, xp: 44, boss: true,
+    kind: "broodmother", name: "Broodmother", hp: 55, defence: 12, move: 2, save: 3, init: 0, xp: 44, boss: true,
     abilities: ["impaling_fang", "brood_web_spit", "brood_swarm"],
   },
   // The frost's wolves: a dire wolf in all but coat, and the cold in its bite slows what it bleeds.
   frost_wolf: {
-    kind: "frost_wolf", name: "Frost Wolf", hp: 11, defence: 12, move: 3, save: 0, init: 2, xp: 11,
+    kind: "frost_wolf", name: "Frost Wolf", hp: 14, defence: 12, move: 3, save: 0, init: 2, xp: 11,
     abilities: ["rime_bite"],
   },
   // The ashlands' hounds, and what they bite catches fire.
   ember_hound: {
-    kind: "ember_hound", name: "Ember Hound", hp: 12, defence: 12, move: 3, save: 0, init: 1, xp: 12,
+    kind: "ember_hound", name: "Ember Hound", hp: 16, defence: 12, move: 3, save: 0, init: 1, xp: 12,
     abilities: ["searing_bite"],
   },
   // A cave bear's white cousin: as slow, as thick-hided, and every bit as cross.
   snow_bear: {
-    kind: "snow_bear", name: "Snow Bear", hp: 31, defence: 11, move: 2, save: 2, init: -1, xp: 21,
+    kind: "snow_bear", name: "Snow Bear", hp: 40, defence: 11, move: 2, save: 2, init: -1, xp: 21,
     abilities: ["mauling_swipe", "roar"],
   },
   // The frost's dead: it keeps its distance, and what its cold reaches is slow to move after.
   wraith: {
-    kind: "wraith", name: "Rime Wraith", hp: 12, defence: 12, move: 2, save: 0, init: 1, xp: 14,
+    kind: "wraith", name: "Rime Wraith", hp: 16, defence: 12, move: 2, save: 0, init: 1, xp: 14,
     abilities: ["frost_lance", "wail"],
   },
   // Whoever it is that lives alone in the wood or the fen, and does not care for callers. Thorns from across the
   // clearing, and a hex that leaves whoever it lands on easy to hit.
   witch: {
-    kind: "witch", name: "Hedge Witch", hp: 13, defence: 11, move: 2, save: 0, init: 0, xp: 15,
+    kind: "witch", name: "Hedge Witch", hp: 17, defence: 11, move: 2, save: 0, init: 0, xp: 15,
     abilities: ["thorn_hex", "evil_eye"],
   },
   villain: {
-    kind: "villain", name: "Villain", hp: 29, defence: 12, move: 2, save: 3, init: 0, xp: 40, boss: true,
+    kind: "villain", name: "Villain", hp: 38, defence: 12, move: 2, save: 3, init: 0, xp: 40, boss: true,
     abilities: ["crushing_strike", "sweeping_ruin"],
   },
 };
