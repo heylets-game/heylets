@@ -23,8 +23,8 @@ export const SURFACE_INFO: Record<SurfaceKind, { name: string; blurb: string; co
   slime: { name: "Slime", blurb: "Sticky: costs one more to cross, and Slows whoever walks into it. Fire burns it off; water washes it away.", color: "#c9f5b8" },
 };
 
-/** Surfaces a creature would rather not walk through. The enemy looks for a way round these. */
-export const HARMFUL: ReadonlySet<SurfaceKind> = new Set(["poison", "fire"]);
+/** Surfaces a creature would rather not walk through: they hurt, or (ice) trip it up. The enemy looks for a way round these. */
+export const HARMFUL: ReadonlySet<SurfaceKind> = new Set(["poison", "fire", "ice"]);
 
 /** Ground that hurts, slows or trips whoever crosses it: what Show the Way sweeps away. Water stays. */
 export const HINDERING: ReadonlySet<SurfaceKind> = new Set(["poison", "fire", "oil", "ice", "slime"]);

@@ -35,13 +35,14 @@
 // (behaviours.ts); how it likes to fight is its kind's Mind (kit.ts).
 
 import { hexDistance, posKey, type HexPos } from "@gantt-quest/core";
-import { behaviourOf } from "./behaviours";
+import { behaviourOf, type Look } from "./behaviours";
 import { BELL_AP, goesForBell, liveBell, ringBell, somethingToRouse } from "./bell";
 import { apForMove, checkCommon, doCommon, enemyAct, leavesReach, shiftInto, shoveBonus, shoveDest, walk, walkAp } from "./combat";
 import { defenceOf, has, unseen, type Ctx } from "./engine";
-import { blast, close, elevOf, flies, heldAgainst, inFight, pathIn, sameHex, stepCost, strikes, zoneReach, type Reached } from "./geometry";
-import { AP_MAX, COMMON_ACTIONS, ENEMY_KIT, JUMP_RANGE, mindOf, unitStrikes, type EnemyStrike, type Mind } from "./kit";
+import { blast, elevOf, flies, heldAgainst, inFight, pathIn, sameHex, stepCost, strikes, zoneReach, type Reached } from "./geometry";
+import { AP_MAX, COMMON_ACTIONS, ENEMY_KIT, ENEMY_WHIM, JUMP_RANGE, mindOf, unitStrikes, type EnemyStrike, type Mind } from "./kit";
 import { hitChance } from "./rules";
+import { seedFromString } from "../rng";
 import { HARMFUL } from "./surfaces";
 import type { Budget, Unit, ZoneState } from "./types";
 
@@ -53,13 +54,25 @@ interface Option {
 
 export { strikeReaches } from "./behaviours";
 
+type Whim = NonNullable<Look["whim"]>;
+
+/**
+ * A fresh fancy for one pick of an attack: each ability on each target gets its own factor, from 1 - ENEMY_WHIM to
+ * 1 + ENEMY_WHIM, the same at every hex it looks at (so where it goes and what it does there agree). One roll of the
+ * fight's dice makes the whole of it.
+ */
+function rollWhim(ctx: Ctx): Whim {
+  const seed = Math.floor(ctx.rng.next() * 4294967296);
+  return (attack, target) => 1 - ENEMY_WHIM + (2 * ENEMY_WHIM * seedFromString(`${seed}|${attack.id}|${target?.id ?? ""}`)) / 4294967296;
+}
+
 /**
  * The best ability an enemy could use standing on `pos`, on whom, and what it is worth, or null if it has none to use
  * from there. Each ability's behaviour (behaviours.ts) says what it is worth; the one the enemy favours (its
  * `weight`, against the `heaviest` of all it has) gets the benefit of a close call.
  */
-function bestAttack(state: ZoneState, enemy: Unit, pos: HexPos, blows: EnemyStrike[], heroes: Unit[], heaviest = Math.max(...blows.map((s) => s.weight))): Option | null {
-  const look = { state, enemy, mind: mindOf(enemy.kind) };
+function bestAttack(state: ZoneState, enemy: Unit, pos: HexPos, blows: EnemyStrike[], heroes: Unit[], heaviest: number, whim?: Whim): Option | null {
+  const look = { state, enemy, mind: mindOf(enemy.kind), whim };
   let best: Option | null = null;
   for (const attack of blows) {
     const use = behaviourOf(attack).value(look, pos, attack, heroes);
@@ -148,6 +161,8 @@ export interface Turn {
   shoved: boolean;
   /** It rang the alarm bell (bell.ts): its caller rouses the place. */
   rang: boolean;
+  /** Its fancy for the attack it is picking now (rollWhim): rolled afresh before each. */
+  whim: Whim | undefined;
   ready(): void;
   look(): Unit[];
   /** It can do nothing more: down, or knocked flat. */
@@ -192,7 +207,7 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
     /** The abilities it could still use after a walk costing `walked`, with `extra` AP spent besides (a jump). */
     const fitting = (walked: number, extra: number): EnemyStrike[] =>
       usable.filter((b) => b.cost + extra <= budget.ap && (extra ? reach(b.cost + extra) : room.get(b.cost)!) >= walked);
-    // Two looks at the ground: one that will not set foot in fire or poison, and one that will.
+    // Two looks at the ground: one that will not set foot in fire, poison or ice, and one that will.
     const clean = zoneReach(state, enemy, movement, air || harmful.size === 0 ? undefined : harmful);
     const any = air || harmful.size === 0 ? clean : zoneReach(state, enemy, movement);
     /** What ending on `pos` is worth, come to by `path` at `cost` (`walked` of it on foot, and `extra` AP besides). */
@@ -210,11 +225,9 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
         }
         score -= mind.caution * 3 * drawn.size;
       }
-      const option = strike ? bestAttack(state, enemy, pos, fitting(walked, extra), targets, heaviest) : null;
+      const option = strike ? bestAttack(state, enemy, pos, fitting(walked, extra), targets, heaviest, t.whim) : null;
       if (option) {
         score += option.worth;
-        // Two on one: a blow lands better with a friend already at the target's side.
-        if (option.target && state.units.some((u) => u.id !== enemy.id && u.side === "enemy" && !u.down && close(u.pos, option.target!.pos))) score += mind.flank;
         // Room, and high ground over its target, as much as it cares for them (those that shoot do).
         if (mind.spacing) score += Math.min(nearest(pos), 4) * mind.spacing;
         if (mind.height && option.target) score += Math.min(3, Math.max(0, elevOf(state.map, pos) - elevOf(state.map, option.target.pos))) * mind.height;
@@ -297,7 +310,7 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
    * heroes leave it no such hex (a doorway or a bridge held, and the ground before it full of its own), it takes the
    * way it would go were nobody standing anywhere, as far as that is open: up behind its friends, to wait its chance, or
    * up to whoever lies or stands in the way and is none of `targets`, and over them (`leap`, see leapOver).
-   * It keeps out of fire and poison where there is another way. Null: the ground itself gives it no way to a blow.
+   * It keeps out of fire, poison and ice where there is another way. Null: the ground itself gives it no way to a blow.
    */
   const approach = (targets: Unit[]): { path: HexPos[]; leap?: HexPos } | null => {
     const movement = budget.move + walkAp(budget) * budget.stride;
@@ -363,6 +376,7 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
     goaded: taunter(enemy, heroes),
     shoved: false,
     rang: false,
+    whim: undefined,
     ready: () => {
       t.blows = unitStrikes(state, enemy);
     },
@@ -433,6 +447,7 @@ const fightStep: TurnStep = {
       if (t.look().length === 0) return "end";
       // The cheapest thing it has to use: with less AP than that, there is no blow to plan for.
       const cheapest = Math.min(...t.blows.map((b) => b.cost));
+      t.whim = rollWhim(ctx);
       const plan = budget.ap >= cheapest ? t.choose(true) : null;
       if (!plan?.attacks) {
         // Nothing it can reach and still strike: before any blow, it goes toward where it could (at the one who taunted it, if
@@ -467,7 +482,7 @@ const fightStep: TurnStep = {
       const still = t.look();
       const affordable = t.blows.filter((b) => b.cost <= budget.ap);
       const heaviest = Math.max(...t.blows.map((b) => b.weight));
-      const option = (t.goaded ? bestAttack(state, enemy, enemy.pos, affordable, [t.goaded], heaviest) : null) ?? (still.length > 0 ? bestAttack(state, enemy, enemy.pos, affordable, still, heaviest) : null);
+      const option = (t.goaded ? bestAttack(state, enemy, enemy.pos, affordable, [t.goaded], heaviest, t.whim) : null) ?? (still.length > 0 ? bestAttack(state, enemy, enemy.pos, affordable, still, heaviest, t.whim) : null);
       if (!option) return "end";
       budget.ap -= option.attack.cost;
       if (option.attack.cooldown > 0) {

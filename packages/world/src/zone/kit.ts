@@ -686,11 +686,9 @@ export interface Mind {
   height: number;
   /** How much it minds harm on the way: fire and poison underfoot, and blows drawn by walking out of reach. 1 is the usual; 0 does not care. */
   caution: number;
-  /** What it adds for a blow at someone one of its own is already beside. */
-  flank: number;
 }
 
-export const DEFAULT_MIND: Mind = { spacing: 0, height: 0, caution: 1, flank: 1 };
+export const DEFAULT_MIND: Mind = { spacing: 0, height: 0, caution: 1 };
 
 /** Those that shoot: they like room, and to look down on what they shoot at. */
 const SHOOTER: Partial<Mind> = { spacing: 0.4, height: 0.5 };
@@ -765,6 +763,12 @@ export interface EnemyStrike {
   cooldown: number;
   kit: EnemyAttackKit;
 }
+
+/**
+ * How far an enemy's fancy sways what it does: each time it picks an attack, what each ability on each target is worth
+ * to it is taken up or down by as much as this share, at random, so it does not do the same thing every time.
+ */
+export const ENEMY_WHIM = 0.25;
 
 /** What every enemy adds to the damage and the to-hit of its abilities, and to the saves against what it does. */
 export const ENEMY_EDGE = 0;

@@ -9,10 +9,10 @@
 // What the ability then does when used is the rules' business (combat.ts enemyAct), not the behaviour's.
 
 import { hexDistance, type HexPos } from "@gantt-quest/core";
-import { attackContext, defenceOf, has } from "./engine";
+import { has } from "./engine";
 import { HIGH_REACH, reachFrom, seesFor, strikes } from "./geometry";
 import { ENEMY_BURST, type EnemyStrike, type Mind } from "./kit";
-import { diceAverage, hitChance } from "./rules";
+import { diceAverage } from "./rules";
 import type { Unit, ZoneState } from "./types";
 
 /** What a behaviour is told: the place, and the enemy weighing it up. */
@@ -21,6 +21,8 @@ export interface Look {
   enemy: Unit;
   /** How it likes to fight (kit.ts Mind). */
   mind: Mind;
+  /** Its fancy this turn: what it makes of using an ability on someone (null: on everyone round), as a factor on its worth. None: 1. */
+  whim?: (attack: EnemyStrike, target: Unit | null) => number;
 }
 
 /** An ability used on someone (or on nobody in particular, for one that catches everyone round), and what that is worth. */
@@ -49,20 +51,17 @@ const caughtBy = (look: Look, pos: HexPos, targets: readonly Unit[]): Unit[] =>
   targets.filter((h) => hexDistance(pos, h.pos) <= ENEMY_BURST && seesFor(look.state, look.enemy.side, pos, h.pos));
 
 /**
- * One hero, hit or missed: the chance it lands times the damage it does. How hurt they are does not come into it: it
- * picks no one out for being near down. It rises to a taunt, and thinks less of a blow at someone guarded.
+ * One hero: the damage it does. Neither how likely it is to land nor how hurt they are comes into it: it picks no one
+ * out for being easy to hit or near down, and does not mind if they are guarded. It rises to a taunt.
  */
 const strike: Behaviour = {
   reaches: (look, from, attack, targets) => targets.some((h) => strikeReaches(look.state, look.enemy, from, attack, h)),
   value(look, from, attack, targets) {
-    const { state, enemy } = look;
-    const there = { ...enemy, pos: from };
     const average = diceAverage(attack.dice);
     let best: Use | null = null;
     for (const hero of targets) {
-      if (!strikeReaches(state, enemy, from, attack, hero)) continue;
-      const c = attackContext(state, there, hero, { melee: attack.range === 1 });
-      let worth = hitChance(attack.bonus + c.mods, defenceOf(hero, state), c.adv) * average * (has(hero, "guarded") ? 0.5 : 1);
+      if (!strikeReaches(look.state, look.enemy, from, attack, hero)) continue;
+      let worth = average * (look.whim?.(attack, hero) ?? 1);
       if (has(hero, "taunting")) worth *= 3;
       if (!best || worth > best.worth) best = { attack, target: hero, worth };
     }
@@ -75,7 +74,7 @@ const burst: Behaviour = {
   reaches: (look, from, _attack, targets) => caughtBy(look, from, targets).length > 0,
   value(look, from, attack, targets) {
     const caught = caughtBy(look, from, targets);
-    return caught.length > 0 ? { attack, target: null, worth: caught.length * diceAverage(attack.dice) * 0.75 } : null;
+    return caught.length > 0 ? { attack, target: null, worth: caught.length * diceAverage(attack.dice) * 0.75 * (look.whim?.(attack, null) ?? 1) } : null;
   },
 };
 
