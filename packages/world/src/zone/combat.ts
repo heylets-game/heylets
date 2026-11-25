@@ -850,7 +850,12 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
       if (!next) break;
       chain.push(next);
     }
-    for (const foe of chain) if (!foe.down) landed = strike(ctx, unit, def, tactic, foe) || landed;
+    // A miss breaks the chain: the lightning goes no further than the enemy that dodged it.
+    for (const foe of chain) {
+      if (foe.down) continue;
+      if (!strike(ctx, unit, def, tactic, foe)) break;
+      landed = true;
+    }
   } else if (tactic.shape === "blast" || tactic.shape === "burst" || tactic.shape === "line" || tactic.shape === "cone") {
     const area = abilityArea(state, unit, ability, aim.at);
     const keys = new Set(area.map(posKey));
