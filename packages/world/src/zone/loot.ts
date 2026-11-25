@@ -235,7 +235,8 @@ export const zoneCleared = (state: Pick<ZoneState, "map" | "units" | "options">)
  */
 export const unlooted = (state: Pick<ZoneState, "loot">, hero: string): number => (state.loot ?? []).filter((s) => (lootIn(s, hero)?.length ?? 1) > 0).length;
 
-/** What a client is sent of the loot: every spot, with what is everyone's in it as it stands, and of the shares in it only `you`'s own. */
-export function lootFor(state: Pick<ZoneState, "loot">, you: string): LootSpot[] | undefined {
-  return state.loot?.map((s) => ({ ...s, loot: s.loot[you] ? { [you]: s.loot[you] } : {} }));
+/** What a client is sent of the loot: every spot, with what is everyone's in it as it stands, and of the shares in it only `you`'s own (or, given several, each of theirs). */
+export function lootFor(state: Pick<ZoneState, "loot">, you: string | readonly string[]): LootSpot[] | undefined {
+  const whose = typeof you === "string" ? [you] : you;
+  return state.loot?.map((s) => ({ ...s, loot: Object.fromEntries(whose.filter((id) => s.loot[id]).map((id) => [id, s.loot[id]])) }));
 }

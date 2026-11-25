@@ -371,7 +371,7 @@ export function HutView({ ownerId, me, refresh, onLeave }: { ownerId: string; me
     return true;
   };
 
-  const heroSheet = useHeroSheet();
+  const heroSheet = useHeroSheet(me.player.id);
 
   useEffect(() => {
     const r = new WorldRenderer(mount.current!, {
@@ -904,6 +904,7 @@ export function HutView({ ownerId, me, refresh, onLeave }: { ownerId: string; me
       </HudBar>
       {bagOpen && me.character && (
         <InventoryScreen
+          key={me.player.id}
           me={me}
           refresh={reloadAll}
           onClose={closeBag}
@@ -912,7 +913,7 @@ export function HutView({ ownerId, me, refresh, onLeave }: { ownerId: string; me
           chest={chestOpen ? { box: chestOpen, furnishings, own, send: hut.send, carry: (id) => (setEditing(true), pick(id)), onClose: () => setOpened(null) } : null}
         />
       )}
-      {book && me.character && <Logbook me={me} refresh={reloadAll} onClose={() => setBook(false)} />}
+      {book && me.character && <Logbook key={me.player.id} me={me} refresh={reloadAll} onClose={() => setBook(false)} />}
       {atDoor && self && <TileAction renderer={renderer} pos={self.pos} unitId={self.id} label="Leave" run={onLeave} />}
       {!atDoor && self && besideUse && <TileAction renderer={renderer} pos={self.pos} unitId={self.id} label={besideUse.label} run={() => doUse.current(besideUse.piece)} />}
       </>}

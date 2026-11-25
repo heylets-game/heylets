@@ -25,6 +25,7 @@ import { KeeperView } from "./KeeperView";
 import { MAIN_MENU_HASH } from "./OptionsMenu";
 import { PubView } from "./PubView";
 import { ZoneView } from "./ZoneView";
+import { onActing } from "./party";
 
 const pubFromHash = () => location.hash === "#pub";
 const menuFromHash = () => location.hash === MAIN_MENU_HASH;
@@ -94,6 +95,9 @@ export function App() {
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, [refresh]);
+
+  // Acting as another of the party (on a map): everything the screens show of "you" is that hero's.
+  useEffect(() => onActing(() => void refresh()), [refresh]);
 
   // Nothing to wait for behind the opening screen.
   if (error) dismissBoot();

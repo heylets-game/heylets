@@ -11,6 +11,10 @@
 // one that does not, actions are sent as they always were and nothing is
 // shown ahead.
 //
+// A party (party.ts) is on this one connection: each message says which of its
+// heroes it is from (`as`), the one whose unit an action moves, or else the
+// one being acted as. The server takes only a hero of the party at its word.
+//
 // A map's tiles never change, and they are most of what a state weighs. The
 // connection says it keeps them (`lean`), so the server sends them with the
 // first update only, and they are carried over into every one after.
@@ -18,6 +22,7 @@
 import { useCallback, useRef, useState } from "react";
 import type { Emote, EmoteMessage, ZoneAction, ZoneEvent, ZoneView } from "@gantt-quest/world";
 import { PROFILE } from "./api";
+import { actingHero } from "./party";
 import { emotes } from "./emotes";
 import { useRoomSocket } from "./useRoom";
 
@@ -35,6 +40,8 @@ export interface ZoneConnection {
   send(action: ZoneSend): number | null;
   /** Your gear has changed: have the server read your hero again. */
   resheet(): void;
+  /** Connect again: the party has changed, and the room brings on whoever is in it now. */
+  rejoin(): void;
   /** Wave, cheer, bow, dance or breakdance where your hero stands (in a fight too, for nothing; the server drops one from a hero who is down). */
   emote(emote: Emote): void;
   clearError(): void;
@@ -59,6 +66,8 @@ export function useZone(code: string, handlers: ZoneHandlers): ZoneConnection {
   const [state, setState] = useState<ZoneView | null>(null);
   const [online, setOnline] = useState<string[]>([]);
   const [trades, setTrades] = useState(0);
+  /** Counts up for each new connection asked for by hand (rejoin). */
+  const [joins, setJoins] = useState(0);
   const latest = useRef<ZoneView | null>(null);
   const handler = useRef(handlers);
   handler.current = handlers;
@@ -70,7 +79,7 @@ export function useZone(code: string, handlers: ZoneHandlers): ZoneConnection {
   const tiles = useRef<ZoneView["map"]["tiles"] | null>(null);
 
   const socket = useRoomSocket<ZoneMessage>({
-    key: code,
+    key: `${code}#${joins}`,
     elsewhere: "This map was opened in another tab.",
     unopened: { error: "Could not reach that map. Check the code, and that you have a character." },
     // What the map refused stays up through a reconnection, until the view clears it.
@@ -122,16 +131,20 @@ export function useZone(code: string, handlers: ZoneHandlers): ZoneConnection {
   const send = useCallback((action: ZoneSend) => {
     // The number is used up only by an action that was sent.
     const n = sent.current + 1;
-    if (!post({ type: "action", action, n })) return null;
+    // Whose this is: the hero whose unit it moves, or who plays it (a stand-in, a creature called in).
+    const unit = "unit" in action ? latest.current?.units.find((u) => u.id === action.unit) : undefined;
+    const as = unit ? (unit.controller ?? unit.id) : actingHero();
+    if (!post({ type: "action", action, n, ...(as ? { as } : {}) })) return null;
     sent.current = n;
     return answers.current ? n : null;
   }, []);
   const resheet = useCallback(() => {
-    post({ type: "sheet" });
+    post({ type: "sheet", ...(actingHero() ? { as: actingHero() } : {}) });
   }, []);
   const emote = useCallback((emote: Emote) => {
-    post({ type: "emote", emote });
+    post({ type: "emote", emote, ...(actingHero() ? { as: actingHero() } : {}) });
   }, []);
   const clearError = useCallback(() => setError(null), []);
-  return { state, online, status: socket.status, error: socket.error, trades, send, resheet, emote, clearError };
+  const rejoin = useCallback(() => setJoins((n) => n + 1), []);
+  return { state, online, status: socket.status, error: socket.error, trades, send, resheet, rejoin, emote, clearError };
 }

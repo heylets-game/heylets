@@ -125,11 +125,12 @@ export function createZone(code: string, seed: string, options: ZoneOptions): Zo
  * told, and in a cave it takes going over every tile, so a caller with one state to send to several works it out
  * once and hands it in each time.
  */
-export function zoneView(state: ZoneState, you: string, hidden: readonly string[] = hiddenEnemies(state)): ZoneView {
+export function zoneView(state: ZoneState, you: string, hidden: readonly string[] = hiddenEnemies(state), party: readonly string[] = []): ZoneView {
   const { rng: _rng, seed: _seed, loot: _loot, ...rest } = state;
-  // Of what there is to loot: what is everyone's (a body, a chest) as it stands, and of the spoils only the share of the one being told.
-  const loot = lootFor(state, you);
-  const mine = loot ? { loot } : {};
+  // Of what there is to loot: what is everyone's (a body, a chest) as it stands, and of the spoils only the shares of
+  // the one being told and of the party they play.
+  const loot = lootFor(state, [you, ...party]);
+  const mine = { ...(loot ? { loot } : {}), ...(party.length > 0 ? { party: [...party] } : {}) };
   if (hidden.length === 0) return { ...rest, ...mine, you };
   // What the dark hides is not sent at all, unless it is in a fight: then it keeps its place in the order, marked.
   const fighting = hidden.filter((id) => inFight(state, id));

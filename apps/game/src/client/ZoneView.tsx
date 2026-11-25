@@ -122,7 +122,9 @@ import {
   carriesLantern,
 } from "@gantt-quest/world";
 import { api, type Me } from "./api";
+import { actAs, actingHero } from "./party";
 import { CrewRoster, type RosterMember } from "./CrewRoster";
+import { PartyBar, type PartyCard } from "./PartyBar";
 import { InventoryScreen } from "./InventoryScreen";
 import { Trading } from "./TradePanel";
 import { useAudioScene } from "./audio/useAudioScene";
@@ -166,6 +168,9 @@ interface Picture {
 }
 
 const asState = (view: ZoneViewState) => view as unknown as ZoneState;
+
+/** One of your own heroes: the one this device plays, or another of your party (each a hero of their own, party.ts). */
+const ownHero = (view: { you: string; party?: string[] }, id: string | undefined): boolean => !!id && (id === view.you || !!view.party?.includes(id));
 
 /** How often an ability can be used, for the cost line of its tooltip: a cooldown ticks off as each of your turns ends, the turn it was used in too. */
 function cooldownText(turns: number): string {
@@ -423,7 +428,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const [pick, setPick] = useState<Pick | null>(null);
   const [focus, setFocus] = useState(false);
   const [hover, setHover] = useState<HexPos | null>(null);
-  const [playAs, setPlayAs] = useState<string | null>(null);
+  // Whoever of the party was selected before coming onto the map is played first (party.ts).
+  const [playAs, setPlayAs] = useState<string | null>(actingHero);
   /** The bar's eighteen slots, by key (zone/hotbar.ts), and the slot whose contents are being chosen. */
   const [bar, setBar] = useState<string[]>([]);
   const [barMenu, setBarMenu] = useState<number | null>(null);
@@ -547,7 +553,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       setWatching(false);
       return setPicture(end);
     }
-    const yours = (id: string) => next.units.some((u) => u.id === id && (u.id === next.you || u.controller === next.you));
+    const yours = (id: string) => next.units.some((u) => u.id === id && (ownHero(next, u.id) || ownHero(next, u.controller)));
     // The turn has passed to the enemy in this: it is watched through before the turn is yours again.
     setWatching(!!next.encounter && events.some((ev) => ev.t === "turn"));
     const { many, last } = runs(events);
@@ -689,11 +695,11 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         const where = ev.pit === "lava" ? "into the lava" : ev.pit === "water" ? "into the deep water" : "over the edge";
         say(gone ? `${name(ev.id)} goes ${where}, and is gone.` : `${name(ev.id)} goes ${where}, and is hauled back to the brink, down.`, gone ? "good" : "bad");
       } else if (ev.t === "looked") {
-        // Your own look into something: its window opens. Anyone else's is their own business.
-        if (ev.id === next.you) {
+        // Your own look into something (or one of your party's): its window opens. Anyone else's is their own business.
+        if (ownHero(next, ev.id)) {
           const found = next.loot?.find((s) => s.id === ev.spot);
           // Nothing there (it had nothing on it, or someone has had it all already): said, with no window opened on nothing.
-          if (found && lootIn(found, next.you)?.length === 0) later(() => setNote(`There is nothing ${found.kind === "body" ? "on" : "in"} it.`));
+          if (found && lootIn(found, ev.id)?.length === 0) later(() => setNote(`There is nothing ${found.kind === "body" ? "on" : "in"} it.`));
           else later(() => setLooting(ev.spot));
         }
       } else if (ev.t === "took") {
@@ -702,9 +708,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         const where = !from ? "" : from.kind === "spoils" ? " from their share of the spoils" : from.kind === "chest" ? ` from ${from.chest === "hoard" ? "the hoard" : from.chest === "vault" ? "the strongbox" : "the chest"}` : ` from the fallen ${from.name}`;
         say(`${name(ev.id)} takes ${ev.items.map(lootLine).join(", ")}${where}.`, "good");
         // Someone else has had the last of what you were looking into: its window shuts, and this is why.
-        if (from && ev.id !== next.you && lootingNow.current === ev.spot && sharedLoot(from) && from.shared?.length === 0) setNote(`${name(ev.id)} took the last of it.`);
+        if (from && !ownHero(next, ev.id) && lootingNow.current === ev.spot && sharedLoot(from) && from.shared?.length === 0) setNote(`${name(ev.id)} took the last of it.`);
         later(() => view?.pickups(ev.id, ev.items.map((item) => ({ text: `+${lootLine(item)}`, color: item.t === "gold" ? "#ffd23f" : item.t === "gear" ? "#c4b5fd" : item.t === "stone" ? "#7fd0ff" : "#e8dcc0" }))));
-        if (ev.id === next.you) later(() => void refresh());
+        if (ownHero(next, ev.id)) later(() => void refresh());
       } else if (ev.t === "seen") {
         const u = find(ev.id);
         if (u) u.conditions = u.conditions.filter((c) => c.kind !== "invisible");
@@ -1395,7 +1401,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           const mine = next.units.find((u) => ev.ids.includes(u.id) && yours(u.id));
           later(() => {
             sounds.zone("turn.yours");
-            announce("yours", "Your turn", mine && mine.id !== next.you ? mine.name : undefined);
+            announce("yours", "Your turn", mine && (mine.id !== next.you || (next.party?.length ?? 0) > 0) ? mine.name : undefined);
             logAdd({ k: "turn", name: mine?.name ?? "You", side: "hero" });
             setSpot(null);
             setWatching(false);
@@ -1443,8 +1449,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           ...(ev.stone ? [{ text: `+${stoneName(ev.stone)}`, color: "#7fd0ff" }] : []),
         ];
         if (pops.length > 0) later(() => view?.pickups(ev.id, pops));
-        // Your own level, XP and materials as the server now has them.
-        if (ev.id === next.you) later(() => void refresh());
+        // Your own level, XP and materials as the server now has them (the hero acted as: the others are read on switching to them).
+        if (ownHero(next, ev.id)) later(() => void refresh());
       } else if (ev.t === "cleared") {
         later(() => {
           announce("cleared", "Cleared", "Nothing else stirs here");
@@ -1630,13 +1636,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   // The state as it is believed to be: the server's last, with what has been done since and not yet answered.
   const state = useMemo(() => (zone.state ? believe(zone.state, ahead) : null), [zone.state, ahead]);
   const enc = state?.encounter ?? null;
-  // Which of your own you are playing: your hero, or a stand-in whose turn it is.
-  // What your own hero carries comes out of your pack: when the count on the map changes, the pack is read again.
-  const carried = JSON.stringify(state?.units.find((u) => u.id === state.you)?.items ?? null);
-  useEffect(() => {
-    if (carried !== "null") void refresh();
-  }, [carried]);
-  const mine = useMemo(() => state?.units.filter((u) => u.side === "hero" && (u.id === state.you || u.controller === state.you)) ?? [], [state]);
+  // Which of your own you are playing: your hero, one of your party, or a stand-in or creature whose turn it is.
+  const mine = useMemo(() => state?.units.filter((u) => u.side === "hero" && (ownHero(state, u.id) || ownHero(state, u.controller))) ?? [], [state]);
   // The Maps tab (dev toolbox) can change these: it is told who they are and what they have.
   const mineKey = mine.map((u) => `${u.id}:${u.kind}:${u.level}:${u.outfit?.main_hand?.ref}:${u.abilities.join(",")}`).join("|");
   useEffect(() => {
@@ -1644,6 +1645,18 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   }, [mineKey]);
   const ready = (u: Unit) => !!enc && enc.acting.includes(u.id) && !enc.done.includes(u.id) && !u.down;
   const act = mine.find((u) => u.id === playAs && (!enc || !enc.order.includes(u.id) || ready(u))) ?? mine.find(ready) ?? mine.find((u) => u.id === state?.you) ?? mine[0];
+  // The hero of yours being played (party.ts): `act` itself, or whose stand-in or creature it is. Their sheet, bag and
+  // share of the loot are what the screen shows, and what they carry comes out of their own pack.
+  const selfId = !state ? "" : act && ownHero(state, act.id) ? act.id : act && act.controller && ownHero(state, act.controller) ? act.controller : state.you;
+  const self = state?.units.find((u) => u.id === selfId);
+  useEffect(() => {
+    if (state) actAs(selfId !== state.you ? selfId : null);
+  }, [selfId, state?.you]);
+  // What the hero carries comes out of their pack: when the count on the map changes, the pack is read again.
+  const carried = JSON.stringify(self?.items ?? null);
+  useEffect(() => {
+    if (carried !== "null") void refresh();
+  }, [carried]);
   const fighting = !!act && !!enc?.order.includes(act.id);
   // While an enemy's turn is still being shown the turn is not yet yours to play, though the server already
   // waits on you: what they did is seen through, and the health it cost is on the bars, before you answer it.
@@ -1816,7 +1829,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     if (!pick && courseOnly.length > 0) out.push({ hexes: courseOnly, color: "#ff4d4d", fill: 0.12, line: 0.7, dashed: true });
     // What there is still to search (for you): a gold ring round each, once no fight is on.
     if (!pick && !fighting) {
-      const left = (state.loot ?? []).filter((s) => (lootIn(s, state.you)?.length ?? 1) > 0);
+      const left = (state.loot ?? []).filter((s) => (lootIn(s, selfId)?.length ?? 1) > 0);
       if (left.length > 0) out.push({ hexes: left.map((s) => s.pos), color: "#ffd23f", fill: 0.06, line: 0.75, dashed: true });
     }
     if (!pick) return out;
@@ -2055,10 +2068,10 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     if (!state) return;
     lootNext.current = null;
     // What is known to be in it already: a body's or a chest's once anyone has looked, the spoils' once you have.
-    const known = lootIn(spot, state.you);
+    const known = lootIn(spot, selfId);
     if (known?.length === 0) return setNote(sharedLoot(spot) ? `There is nothing left ${spot.kind === "body" ? "on" : "in"} it.` : "You have taken all of your share.");
     if (known) setLooting(spot.id);
-    zone.send({ type: "loot", unit: state.you, spot: spot.id });
+    zone.send({ type: "loot", unit: selfId, spot: spot.id });
   };
 
   click.current = (pos, clicked, chosen) => {
@@ -2101,7 +2114,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         if (hexDistance(pos, act.pos) <= 1) return leave();
         const beside = [...reach.values()].filter((r) => r.stop && hexDistance(r.pos, pos) === 1).sort((a, b) => a.cost - b.cost)[0];
         if (beside) {
-          if (act.id === state.you) gateNext.current = pos;
+          if (act.id === selfId) gateNext.current = pos;
           walkTo(beside.pos);
         }
         return;
@@ -2127,7 +2140,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       // beside it, or walks up to it first and looks on getting there. Not in the middle of a fight.
       const spot = lootOn(pos);
       if (spot && !(there && !there.down && there.side === "enemy")) {
-        if (act.id !== state.you) return setNote("Only your own hero can search it.");
+        if (act.id !== selfId) return setNote("Only your own hero can search it.");
         if (fighting) return setNote("Not in the middle of a fight: it will keep.");
         if (hexDistance(spot.pos, act.pos) <= 1) return search(spot);
         const beside = [...reach.values()].filter((r) => r.stop && hexDistance(r.pos, spot.pos) <= 1).sort((a, b) => a.cost - b.cost)[0];
@@ -2209,8 +2222,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   // Nor does the which-one menu outlive the pick it was asked for.
   useEffect(() => setWhichOne(null), [pick, act?.id, myTurn]);
   // Walked up to something to search it: once there (and the walk answered), look into it. A fight breaking out calls it off.
-  const ownAt = state?.units.find((u) => u.id === state.you)?.pos;
-  const ownFighting = !!state && !!enc?.order.includes(state.you);
+  const ownAt = self?.pos;
+  const ownFighting = !!state && !!enc?.order.includes(selfId);
   useEffect(() => {
     const id = lootNext.current;
     if (!id || !state || !ownAt) return;
@@ -2224,7 +2237,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     if (!looting || !state) return;
     const spot = state.loot?.find((s) => s.id === looting);
     // (Or once it has been emptied: there is nothing more to look at.)
-    if (!spot || !ownAt || ownFighting || hexDistance(ownAt, spot.pos) > 1 || lootIn(spot, state.you)?.length === 0) setLooting(null);
+    if (!spot || !ownAt || ownFighting || hexDistance(ownAt, spot.pos) > 1 || lootIn(spot, selfId)?.length === 0) setLooting(null);
   }, [looting, state, ownAt, ownFighting]);
   // With something open to search, the sea bag is open beside it: what is taken goes there.
   useEffect(() => {
@@ -2270,7 +2283,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     if (!gate || !state || !ownAt) return;
     if (ownFighting) return void (gateNext.current = null);
     if (ahead.length > 0 || hexDistance(ownAt, gate) > 1) return;
-    const you = state.you;
+    const you = selfId;
     const through = () => {
       if (gateNext.current !== gate) return clearInterval(tick);
       // Still on the way: the walk is being played, or is waiting its turn to be.
@@ -2467,15 +2480,14 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   };
   // What is open to be searched, why nothing can be taken from it just now (if so), and how much is left on the map for you.
   const lootSpot = looting ? state.loot?.find((s) => s.id === looting) : undefined;
-  const own = state.units.find((u) => u.id === state.you);
-  const lootBlocked = lootSpot && own ? checkLoot(asState(state), own, lootSpot) : null;
+  const lootBlocked = lootSpot && self ? checkLoot(asState(state), self, lootSpot) : null;
   // What is in it: everyone's, if it is a body or a chest (and going as others take it); your own share of the spoils.
-  const lootItems = lootSpot ? (lootIn(lootSpot, state.you) ?? []) : [];
+  const lootItems = lootSpot ? (lootIn(lootSpot, selfId) ?? []) : [];
   /** Take one thing from it, named by its own number: a click that lands after someone else's never takes whatever has moved into its place. */
   const takeOne = (index: number, uid = lootItems[index]?.uid) => {
-    if (lootSpot) zone.send({ type: "take", unit: state.you, spot: lootSpot.id, ...(uid !== undefined ? { uid } : { index }) });
+    if (lootSpot) zone.send({ type: "take", unit: selfId, spot: lootSpot.id, ...(uid !== undefined ? { uid } : { index }) });
   };
-  const leftToSearch = unlooted(state, state.you);
+  const leftToSearch = unlooted(state, selfId);
   const spoilsSpot = state.loot?.find((s) => s.id === SPOILS_ID);
   const hoverTorch = hover ? state.lights?.[posKey(hover)] : undefined;
   const hoverDoor = hover ? state.map.pois.find((p) => p.kind === "gate" && p.pos.q === hover.q && p.pos.r === hover.r) : undefined;
@@ -2617,15 +2629,20 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         />
       )}
 
-      {mine.length > 1 && (
-        <div className="zone-party panel">
-          {mine.map((u) => (
-            <button key={u.id} className={`small ${u.id === act.id ? "primary" : ""}`} disabled={u.down || (!!enc?.order.includes(u.id) && !ready(u))} onClick={() => setPlayAs(u.id)}>
-              {u.name.split(" ")[0]} · {seen(u).hp}/{u.maxHp}{shieldOf(seen(u)) ? ` +${shieldOf(seen(u))}` : ""}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Your party (and any stand-in or creature of yours): click one to play them; the "+" adds more of your heroes. */}
+      <PartyBar
+        className="zone-party"
+        cards={mine.map((u): PartyCard => ({
+          id: u.id, name: u.name, classId: u.kind, level: u.level, outfit: u.outfit,
+          hp: { now: seen(u).hp, max: u.maxHp, shield: shieldOf(seen(u)) || undefined },
+          blocked: u.down ? `${u.name} is down.` : enc?.order.includes(u.id) && !ready(u) ? `It is not ${u.name}'s turn.` : undefined,
+        }))}
+        acting={act.id}
+        onPick={setPlayAs}
+        leader={state.you}
+        locked={enc && mine.some((u) => enc.order.includes(u.id)) ? "Not in the middle of a fight: change the party once it is over." : undefined}
+        onChanged={zone.rejoin}
+      />
 
       {/* Everything that happens, and every roll: the whole fight, to read back through. */}
       <CombatLog entries={log} open={logOpen} onToggle={toggleLog} />
@@ -2638,7 +2655,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           items={lootItems}
           blocked={lootBlocked ?? undefined}
           onTake={(index) => takeOne(index)}
-          onTakeAll={() => zone.send({ type: "take", unit: state.you, spot: lootSpot.id })}
+          onTakeAll={() => zone.send({ type: "take", unit: selfId, spot: lootSpot.id })}
           onClose={() => setLooting(null)}
           viewer={{ classId: me.character.class_id, level: me.character.level }}
         />
@@ -2669,7 +2686,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
               {caves && !atMouth ? " The way out is back at the cave mouth." : ""}
             </p>
             <p className="zone-ask-buttons">
-              {spoilsSpot && (lootIn(spoilsSpot, state.you)?.length ?? 1) > 0 && <button className="primary" onClick={() => { renderer.current?.lookAt(spoilsSpot.pos); setChartAsk(false); }}>Show me the spoils</button>}
+              {spoilsSpot && (lootIn(spoilsSpot, selfId)?.length ?? 1) > 0 && <button className="primary" onClick={() => { renderer.current?.lookAt(spoilsSpot.pos); setChartAsk(false); }}>Show me the spoils</button>}
               {caves && !atMouth
                 ? <button onClick={() => { renderer.current?.lookAt(mouthAt); setChartAsk(false); }}>Show the way out</button>
                 : <button className={leftToSearch > 0 ? "" : "primary"} onClick={leave}>Back to the atlas</button>}
@@ -2746,7 +2763,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
               {hoverProp && <div className="muted">{hoverProp.blurb}</div>}
               {overGate && <div style={{ color: "#ffd23f" }}>{hexDistance(hover, act.pos) <= 1 ? "Click to step through" : "Click to walk up to it and step through"}</div>}
               {ground.ladder ? <div className="muted">A ladder stands here: the way up the cliff beside it (a step more for each level climbed).</div> : null}
-              {hoverLoot && <div style={{ color: "#ffd23f" }}>{hoverLoot.name} <span className="muted">· {(lootIn(hoverLoot, state.you)?.length ?? 1) > 0 ? (fighting ? "to be searched once the fight is over" : hexDistance(hoverLoot.pos, act.pos) <= 1 ? "click to search" : "click to walk up and search") : sharedLoot(hoverLoot) ? "nothing left in it" : "you have emptied it"}</span></div>}
+              {hoverLoot && <div style={{ color: "#ffd23f" }}>{hoverLoot.name} <span className="muted">· {(lootIn(hoverLoot, selfId)?.length ?? 1) > 0 ? (fighting ? "to be searched once the fight is over" : hexDistance(hoverLoot.pos, act.pos) <= 1 ? "click to search" : "click to walk up and search") : sharedLoot(hoverLoot) ? "nothing left in it" : "you have emptied it"}</span></div>}
               {hover && act && !under && edgeBelow(hover) > 0 && <div className="muted">An edge: {edgeBelow(hover)} levels down on one side. Whoever is shoved off it falls.</div>}
             </>
           )}
@@ -2761,11 +2778,11 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       {crew.length > 1 && (
         <div className="zone-crew roster-panel crew-cards">
           <CrewRoster
-            you={state.you}
+            you={selfId}
             heading={<>{crew.filter((m) => m.zone?.code === code).length} of {crew.length} on this map</>}
             members={crew.map((m): RosterMember => ({ id: m.id, name: m.name, classId: m.classId, level: m.level, here: m.zone?.code === code, outfit: state.units.find((u) => u.id === m.id)?.outfit, tags: m.zone?.fighting ? ["in a fight"] : m.zone && m.zone.code !== code ? ["on another map"] : !m.zone ? ["not on a map"] : undefined }))}
             menu={(m) => {
-              if (m.id === state.you) return [];
+              if (ownHero(state, m.id)) return [];
               const where = crew.find((x) => x.id === m.id)?.zone;
               return [
                 { label: "Trade", run: () => setTradeWith(m.id) },
@@ -2780,17 +2797,19 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           />
         </div>
       )}
-      {me.character && <Trading me={me} partners={crew.filter((m) => m.id !== state.you)} withId={tradeWith} onWith={setTradeWith} refresh={refresh} nudge={zone.trades} />}
+      {me.character && <Trading me={me} partners={crew.filter((m) => m.id !== selfId)} withId={tradeWith} onWith={setTradeWith} refresh={refresh} nudge={zone.trades} />}
       {bag && !tradeWith && me.character && (
         <InventoryScreen
+          // Whose bag it is: another of the party selected opens theirs in its place.
+          key={me.player.id}
           // A lit torch in a hand is shown in that hand's slot, and put away from there. Your own hero's only: the bag is theirs.
-          torch={act.id === state.you && act.torch ? { hand: act.torchHand === "main" ? "main" : "off", rounds: act.torch, stow: stowTorch, why: handWhy } : undefined}
+          torch={act.id === selfId && act.torch ? { hand: act.torchHand === "main" ? "main" : "off", rounds: act.torch, stow: stowTorch, why: handWhy } : undefined}
           me={me}
           onIsland
           // Gear changed here is gear changed on the map: the server reads the hero again (and leaves them be in a fight).
           refresh={() => refresh().then(() => zone.resheet())}
           onClose={() => setBag(false)}
-          gearLocked={enc?.order.includes(state.you) ? "A fight is on: what you are wearing stays as it is until it is over." : undefined}
+          gearLocked={enc?.order.includes(selfId) ? "A fight is on: what you are wearing stays as it is until it is over." : undefined}
           // Something dragged out of what is being searched and dropped on the bag is taken.
           onLootDrop={lootSpot && !lootBlocked ? (index, uid) => takeOne(index, uid) : undefined}
           usable={{
@@ -2800,7 +2819,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
             },
             // The bag is your own hero's: a stand-in you are playing carries its own.
             blocked: (item) =>
-              act.id !== state.you ? "This is your own pack. Play your own hero to use what is in it."
+              act.id !== selfId ? `This is ${self?.name ?? "your hero"}'s pack. Play them to use what is in it.`
               : (act.items[item] ?? 0) <= 0 ? "You have none left."
               : !entries[`it:${item}`]?.spent ? undefined
               : fighting && !myTurn ? "It is not your turn."

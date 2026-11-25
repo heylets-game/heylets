@@ -6,6 +6,7 @@ import type { Hono } from "hono";
 import type { HexPos } from "@gantt-quest/core";
 import { crewFor, homeCrewOf, hutHeaders, hutRoomOf, type Env, type Player } from "../db";
 import type { Standing } from "../gather";
+import { partyOf } from "../party";
 import { crewPlaces } from "../zones";
 
 /** What every handler is given: the Worker's bindings, and (past the sign-in check) the player asking. */
@@ -24,27 +25,39 @@ export async function inOwnHut(env: Env, playerId: string): Promise<boolean> {
   }
 }
 
-/** Whoever of a crew is in the Harbor now, and the asker with them: who a map made this moment is sized for. */
+/** Whoever of a crew is in the Harbor now, and the asker and their party with them: who a map made this moment is sized for. */
 export async function harborParty(env: Env, crewId: string, playerId: string) {
   const here = await env.HARBOR_ROOM.get(env.HARBOR_ROOM.idFromName(crewId))
     .fetch("https://harbor/present", { headers: { "x-crew-id": crewId } })
     .then((r) => (r.ok ? (r.json() as Promise<{ ids: string[] }>) : { ids: [] }))
     .then((r) => new Set([...r.ids, playerId]), () => new Set([playerId]));
+  // A player's party comes with them, from wherever in the world its members are.
+  for (const id of await partyOf(env.DB, playerId)) here.add(id);
   return (await crewPlaces(env.DB, crewId)).filter((m) => here.has(m.id));
 }
 
 /**
  * Where the player is standing in their crew's Harbor right now, as its room knows it (the room checked every step
- * of the way there), and whose Harbor it is; null if they are not walking it.
+ * of the way there), and whose Harbor it is; null if they are not walking it. One figure walks the town for a whole
+ * party (party.ts): a member of it who is not that figure stands where the figure does.
  */
 export async function harborStanding(env: Env, playerId: string): Promise<Standing | null> {
   const crew = await crewFor(env.DB, playerId);
   if (!crew) return null;
-  try {
-    const res = await env.HARBOR_ROOM.get(env.HARBOR_ROOM.idFromName(crew.id)).fetch(`https://harbor/where?id=${encodeURIComponent(playerId)}`, { headers: { "x-crew-id": crew.id } });
-    const { pos } = (await res.json()) as { pos: HexPos | null };
-    return pos ? { crewId: crew.id, pos } : null;
-  } catch {
-    return null;
+  const where = async (id: string): Promise<HexPos | null> => {
+    try {
+      const res = await env.HARBOR_ROOM.get(env.HARBOR_ROOM.idFromName(crew.id)).fetch(`https://harbor/where?id=${encodeURIComponent(id)}`, { headers: { "x-crew-id": crew.id } });
+      return ((await res.json()) as { pos: HexPos | null }).pos;
+    } catch {
+      return null;
+    }
+  };
+  const own = await where(playerId);
+  if (own) return { crewId: crew.id, pos: own };
+  // Not walking it themselves: the party is only looked up then, and only if they are in it.
+  for (const id of await partyOf(env.DB, playerId, true)) {
+    const pos = await where(id);
+    if (pos) return { crewId: crew.id, pos };
   }
+  return null;
 }

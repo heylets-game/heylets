@@ -16,6 +16,7 @@ import { CatchPanel } from "./CatchPanel";
 import { ChatInput } from "./ChatInput";
 import { AccountPanel } from "./Account";
 import { CrewRoster, type RosterMember } from "./CrewRoster";
+import { TownParty } from "./PartyBar";
 import { NoticeBoard } from "./board/NoticeBoard";
 import { AttentionMark } from "./AttentionMark";
 import { PlaceTitle } from "./PlaceTitle";
@@ -326,7 +327,7 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
   }, [base, board, players, you, stamina, ownOutfit, clock, about, nellIn]);
   const latest = useRef(scene);
   latest.current = scene;
-  const heroSheet = useHeroSheet();
+  const heroSheet = useHeroSheet(me.player.id);
 
   useEffect(() => {
     // A click anywhere on a place (its model, the ground it stands on, a building's doorstep) is a walk to its
@@ -941,8 +942,9 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
       {/* Someone of the crew is setting out for a place on the atlas, and asks who is coming. */}
       {muster.muster && <MusterPanel muster={muster.muster} me={harbor.you ?? me.player.id} onSay={muster.say} busy={muster.busy} error={muster.error} />}
       <div key="stage" className="stage" ref={mount} />
-      {/* Down the left-hand side: the docks at the top, the crew's cards in the middle (the talk sits under them). */}
+      {/* Down the left-hand side: your party, the docks, the crew's cards in the middle (the talk sits under them). */}
       <div className="hud-left">
+        <TownParty you={you ?? me.player.id} worldId={me.crew?.id ?? null} outfit={ownOutfit} />
         <DragPanel id="harbor.docks" title="Docks" foldOnPhone className="story panel docks">
           <p className="muted">The crew's atlas is opened at the waygate, in the middle of the square: everywhere you have found, and the routes that run on from there. When one of you sets out, everyone in town is asked whether they are coming. Setting out takes a lodestone: they are cut and worked at the Lapidary, the narrow shop with a gem for a sign, where Tilda also buys gems. What the crew shares is kept in the town chest, on its dais down on the west shore.</p>
           <p>
@@ -1033,8 +1035,8 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
       {title && hoverPoi && !panelOpen && <PlaceTitle renderer={renderer} poiId={hoverPoi.id} title={title} />}
       {error && <div className="toast">{error}</div>}
       {note && !error && <div className="toast note">{note}</div>}
-      {sheet && !tradeWith && !chest && me.character && <InventoryScreen me={me} refresh={refreshAll} onClose={() => setSheet(false)} onLogbook={() => { setSheet(false); setBook(true); }} />}
-      {book && me.character && <Logbook me={me} refresh={refreshAll} onClose={() => setBook(false)} />}
+      {sheet && !tradeWith && !chest && me.character && <InventoryScreen key={me.player.id} me={me} refresh={refreshAll} onClose={() => setSheet(false)} onLogbook={() => { setSheet(false); setBook(true); }} />}
+      {book && me.character && <Logbook key={me.player.id} me={me} refresh={refreshAll} onClose={() => setBook(false)} />}
       {account && <AccountPanel me={me} refresh={refresh} onClose={() => setAccount(false)} />}
       {notices && <NoticeBoard seen={me.seenRelease} onSeen={() => void refresh()} onClose={() => setNotices(false)} />}
       {unseen && !panelOpen && !atBoard && <AttentionMark renderer={renderer} pos={BOARD_STANDS} lift={2.35} label="Something new on the notice board" />}

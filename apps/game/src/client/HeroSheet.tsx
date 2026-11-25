@@ -4,7 +4,7 @@
 // on the paper doll, their weapon's abilities, the class passive and what
 // their hut gives them. Works for anyone in your crew, and for yourself.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ABILITIES,
   DEFAULT_APPEARANCE,
@@ -67,8 +67,18 @@ function useHero(id: string | null, reload = 0): { hero: PublicHero | null; erro
 }
 
 /** Whose sheet is open. Picking someone opens theirs; picking them again, or Close, shuts it. */
-export function useHeroSheet() {
+/**
+ * Whose hero sheet is open. `self`: the hero being played (`me.player.id`): a sheet open on them follows when another
+ * of the party is selected (party.ts), and one open on anyone else stays on them.
+ */
+export function useHeroSheet(self?: string) {
   const [open, setOpen] = useState<string | null>(null);
+  const was = useRef(self);
+  useEffect(() => {
+    const before = was.current;
+    was.current = self;
+    if (self && before && before !== self) setOpen((o) => (o === before ? self : o));
+  }, [self]);
   const toggle = useCallback((id: string) => setOpen((o) => (o === id ? null : id)), []);
   const close = useCallback(() => setOpen(null), []);
   return { open, toggle, close };

@@ -581,5 +581,6 @@ export type ZoneStep = { ok: true; state: ZoneState; events: ZoneEvent[]; effect
 
 /** What a client is sent: the zone, less its dice. */
 /** `dark`: enemies in the fight that stand where the party cannot see them (those out of a fight are not sent at all). */
-/** `loot`: of what there is to loot, each thing holds only what is in it for you. */
-export type ZoneView = Omit<ZoneState, "rng" | "seed"> & { you: string; dark?: string[] };
+/** `loot`: of what there is to loot, each thing holds only what is in it for you (and for your party). */
+/** `party`: the other heroes the player being told plays as well (their account's party), each a hero of their own. */
+export type ZoneView = Omit<ZoneState, "rng" | "seed"> & { you: string; party?: string[]; dark?: string[] };

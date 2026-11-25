@@ -351,6 +351,11 @@ describe("searching", () => {
     expect(spotOf(after, spot).loot.ann).toEqual([{ t: "res", kind: "iron", n: 1 }]);
     expect(Array.isArray(spotOf(after, spot).loot.bo)).toBe(true);
     expect(zoneView(after, "bo").loot![0].loot).toEqual({ bo: spotOf(after, spot).loot.bo });
+    // A player who plays both (a party) is sent both shares, and the view says who else is theirs.
+    const both = zoneView(after, "bo", undefined, ["ann"]);
+    expect(both.loot![0].loot).toEqual({ bo: spotOf(after, spot).loot.bo, ann: spotOf(after, spot).loot.ann });
+    expect(both.party).toEqual(["ann"]);
+    expect(zoneView(after, "bo").party).toBeUndefined();
     // One nobody had looked into by then is everyone's from here on.
     const fresh = body();
     expect(spotOf(must(fresh.state, look("bo", fresh.spot)), fresh.spot)).toMatchObject({ loot: {}, shared: expect.any(Array) });

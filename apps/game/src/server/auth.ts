@@ -137,15 +137,25 @@ export function heroCookieName(req: Request): string {
 }
 
 /**
- * The hero behind a request's session: the one this device chose (its hero cookie), if it is the account's; else the
- * account's most recently played. A new account's first hero slot is made on first use. Null if not signed in.
+ * The hero a tab says it is acting as (the x-gq-hero header, or `?hero=` on a socket, which cannot send headers):
+ * the party member it has selected. It is only ever taken if it is one of the account's own heroes.
+ */
+export function heroAsked(req: Request): string | null {
+  const id = req.headers.get("x-gq-hero") ?? new URL(req.url).searchParams.get("hero") ?? "";
+  return id && id.length <= 64 ? id : null;
+}
+
+/**
+ * The hero behind a request's session: the one the tab says it is acting as (heroAsked), else the one this device
+ * chose (its hero cookie), if it is the account's; else the account's most recently played. A new account's first
+ * hero slot is made on first use. Null if not signed in.
  */
 export async function playerForRequest(env: Env, req: Request): Promise<Player | null> {
   const found = await createAuth(env, req).api.getSession({ headers: req.headers });
   if (!found) return null;
   const { user } = found;
   const email = (user as { isAnonymous?: boolean | null }).isAnonymous ? null : user.email;
-  const chosen = readCookie(req, heroCookieName(req)) ?? "";
+  const chosen = heroAsked(req) ?? readCookie(req, heroCookieName(req)) ?? "";
   const find = () =>
     env.DB.prepare("SELECT id, name FROM players WHERE user_id = ?1 ORDER BY id = ?2 DESC, last_played_at DESC, created_at, id LIMIT 1")
       .bind(user.id, chosen)

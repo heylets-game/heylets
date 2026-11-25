@@ -4,6 +4,7 @@ import type { StatKey } from "@gantt-quest/core";
 import type { FinishKind, HutFinish, Muster, MusterAnswer, SowWith } from "@gantt-quest/world";
 import type { Appearance, BaitId, BoatId, RodId, CarryState, FishSpot, GatherChoice, HarborXpStatus, GatherSpot, HarborWorks, HutSummary, ItemDef, Lodestone, ProjectAmounts, PublicHero, Resources, SalesEntry, SalesmanId, SalesmanVisit, ShopEntry, Throwable, TradeSide } from "@gantt-quest/world";
 import { devTools } from "./devTools";
+import { actingHero } from "./party";
 import { forcedSalesman } from "./salesmanClock";
 import type { GatherStatus } from "../server/gather";
 import type { SittingPaid } from "../server/fishing";
@@ -150,12 +151,15 @@ export interface HeroSlot {
   appearance: string | null;
   /** The world (crew) they are in, if any. */
   crew: { id: string; name: string } | null;
+  /** In the account's party: they come onto a map with the hero being played. */
+  party: boolean;
 }
 
 async function request<T>(path: string, body?: unknown, extra: Record<string, string> = {}): Promise<T> {
   const res = await fetch(path, {
     method: body === undefined ? "GET" : "POST",
-    headers: { "content-type": "application/json", ...(PROFILE ? { "x-gq-profile": PROFILE } : {}), ...extra },
+    // The party member this tab is acting as, if not the hero this device plays (party.ts): it is that hero who asks.
+    headers: { "content-type": "application/json", ...(PROFILE ? { "x-gq-profile": PROFILE } : {}), ...(actingHero() ? { "x-gq-hero": actingHero()! } : {}), ...extra },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   // The game's routes answer `error`; Better Auth's (/api/auth/*) answer `message` and `code`.
@@ -223,6 +227,10 @@ export const api = {
   heroes: () => request<{ heroes: HeroSlot[]; max: number }>("/api/heroes"),
   /** Play another of the account's heroes on this device. */
   chooseHero: (id: string) => request("/api/heroes/choose", { id }),
+  /** Another of the account's heroes into the party of the hero being played, brought into this world if they are not in it. */
+  addToParty: (id: string) => request("/api/party/add", { id }),
+  /** One of the account's heroes out of the party. */
+  leaveParty: (id: string) => request("/api/party/remove", { id }),
   /** An empty slot to make a new hero in, now the one this device plays. */
   newHero: () => request<{ id: string }>("/api/heroes/new", {}),
   createCrew: (name: string) => request("/api/crew", { name }),

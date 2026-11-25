@@ -25,6 +25,11 @@
 // the update that carries what the action did, or on the error that refused
 // it. That is all the room does for it: the room still decides everything.
 //
+// A player may bring a party (party.ts): more of their account's heroes, each a
+// hero of their own, all on the player's one connection. Each message says
+// which of them it is from (`as`), and only a hero of that connection's party
+// is taken at its word; anything else is the player's own hero.
+//
 // The tiles of a map never change, and they are most of what a state weighs,
 // so a client that says it keeps them (x-zone-lean) is sent them once per
 // socket and not with every update after. That they have been sent is
@@ -45,6 +50,8 @@ export const ZONE_TURN_MS = 90_000;
 
 interface Attachment {
   playerId: string;
+  /** The other heroes of the player's party, played on this connection too. */
+  party?: string[];
   /** This client keeps the map's tiles from the first update it is sent, and needs them only once. */
   lean?: boolean;
   /** This socket has been sent the tiles. */
@@ -157,6 +164,18 @@ export class ZoneRoom extends DurableObject<Env> {
     return this.zone;
   }
 
+  /** Bring a hero onto the map (or back onto it), as their sheet and pack stand now. `near`: whose side to come on at. */
+  private async walkOn(heroId: string, near?: string): Promise<string | null> {
+    // Read afresh each time: the hero may have changed gear since they were last here.
+    const hero = await heroInitFor(this.env.DB, heroId);
+    if (!hero) return "You need a character first.";
+    // Coins tossed in the town well come onto the map as lucky rolls; if the map cannot take them, they go back.
+    const luck = await takeLuck(this.env.DB, heroId);
+    const refused = await this.apply({ type: "join", hero: zoneHero(hero, await consumablesOf(this.env.DB, heroId), luck), near });
+    if (refused && luck > 0) await returnLuck(this.env.DB, heroId, luck);
+    return refused;
+  }
+
   async fetch(request: Request): Promise<Response> {
     if (request.headers.get("Upgrade") !== "websocket") {
       // A trade changed: tell the player it concerns to look again, if they are here and connected.
@@ -168,29 +187,29 @@ export class ZoneRoom extends DurableObject<Env> {
     const playerId = request.headers.get("x-player-id");
     const near = request.headers.get("x-zone-near") ?? undefined;
     if (!code || !playerId) return new Response("missing zone or player", { status: 400 });
+    const asked = (request.headers.get("x-party-ids") ?? "").split(",").filter((id) => id && id !== playerId).slice(0, 8);
 
+    const party: string[] = [];
     const error = await this.serial(async () => {
       await this.load(code);
-      // Read afresh each time: the hero may have changed gear since they were last here.
-      const hero = await heroInitFor(this.env.DB, playerId);
-      if (!hero) return "You need a character first.";
-      // Coins tossed in the town well come onto the map as lucky rolls; if the map cannot take them, they go back.
-      const luck = await takeLuck(this.env.DB, playerId);
-      const refused = await this.apply({ type: "join", hero: zoneHero(hero, await consumablesOf(this.env.DB, playerId), luck), near });
-      if (refused && luck > 0) await returnLuck(this.env.DB, playerId, luck);
-      return refused;
+      const refused = await this.walkOn(playerId, near);
+      if (refused) return refused;
+      // The party comes on beside the hero the player went in as. One who cannot is left behind; the rest still come.
+      for (const id of asked) if (!(await this.walkOn(id, playerId))) party.push(id);
+      return null;
     });
     if (error) return new Response(error, { status: 409 });
 
-    // One socket per player: a new tab takes over from the old one.
-    for (const old of this.ctx.getWebSockets(playerId)) old.close(4000, "replaced by a newer connection");
+    // One socket per hero: a new tab takes over from the old one, and so does a party that has one of its heroes.
+    const heroes = [playerId, ...party];
+    for (const id of heroes) for (const old of this.ctx.getWebSockets(id)) old.close(4000, "replaced by a newer connection");
     const pair = new WebSocketPair();
-    this.ctx.acceptWebSocket(pair[1], [playerId]);
-    pair[1].serializeAttachment({ playerId, ...(request.headers.get("x-zone-lean") === "1" ? { lean: true } : {}) } satisfies Attachment);
+    this.ctx.acceptWebSocket(pair[1], heroes);
+    pair[1].serializeAttachment({ playerId, ...(party.length > 0 ? { party } : {}), ...(request.headers.get("x-zone-lean") === "1" ? { lean: true } : {}) } satisfies Attachment);
 
     await this.serial(async () => {
       await this.resumeTimer();
-      this.fighting.delete(playerId);
+      for (const id of heroes) this.fighting.delete(id);
       this.tellHarbor(await this.notePresence());
       this.broadcast([]);
     });
@@ -199,13 +218,15 @@ export class ZoneRoom extends DurableObject<Env> {
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     if (typeof message !== "string" || message.length > 8000) return;
-    let msg: { type?: string; action?: unknown; n?: unknown; emote?: unknown };
+    let msg: { type?: string; action?: unknown; n?: unknown; emote?: unknown; as?: unknown };
     try {
       msg = JSON.parse(message);
     } catch {
       return;
     }
-    const { playerId } = ws.deserializeAttachment() as Attachment;
+    const seat = ws.deserializeAttachment() as Attachment;
+    // Which hero of the party this is from: one of this connection's, else the player's own.
+    const playerId = typeof msg.as === "string" && seat.party?.includes(msg.as) ? msg.as : seat.playerId;
     if (msg.type === "sheet") {
       // Gear was changed in the bag: the hero is read again. In a fight the reducer leaves them as they were.
       await this.serial(async () => {
@@ -236,11 +257,12 @@ export class ZoneRoom extends DurableObject<Env> {
 
   async webSocketClose(ws: WebSocket, code: number): Promise<void> {
     closeBack(ws, code);
-    const { playerId } = (ws.deserializeAttachment() as Attachment | null) ?? { playerId: "" };
+    const seat = (ws.deserializeAttachment() as Attachment | null) ?? { playerId: "" };
     await this.serial(async () => {
       const zone = await this.load();
-      // Gone from the zone, unless another tab of theirs is still here.
-      if (playerId && !this.ctx.getWebSockets(playerId).some((other) => other !== ws)) {
+      // Each hero on it (the player's, and their party's) is gone from the zone, unless another tab has them here.
+      for (const playerId of [seat.playerId, ...(seat.party ?? [])]) {
+        if (!playerId || this.ctx.getWebSockets(playerId).some((other) => other !== ws)) continue;
         // Their hero (and any stand-in they play) stays where it is, but nothing draws it into a fight while they are gone.
         if (zone.units.some((u) => u.side === "hero" && (u.id === playerId || u.controller === playerId) && !u.away)) await this.apply({ type: "away", player: playerId, away: true });
         this.fighting.delete(playerId);
@@ -401,9 +423,12 @@ export class ZoneRoom extends DurableObject<Env> {
     for (const ws of this.ctx.getWebSockets()) sendTo(ws, { type: "emoted", id: playerId, emote });
   }
 
-  /** Players connected right now. */
+  /** Heroes connected right now: each player's, and their party's. */
   private online(): string[] {
-    return [...new Set(this.ctx.getWebSockets().map((ws) => (ws.deserializeAttachment() as Attachment).playerId))];
+    return [...new Set(this.ctx.getWebSockets().flatMap((ws) => {
+      const seat = ws.deserializeAttachment() as Attachment;
+      return [seat.playerId, ...(seat.party ?? [])];
+    }))];
   }
 
   /** Tell everyone here the state and what happened. `from`: whose action this answers; their socket alone gets their number back. */
@@ -415,7 +440,7 @@ export class ZoneRoom extends DurableObject<Env> {
     const hidden = hiddenEnemies(zone);
     for (const ws of this.ctx.getWebSockets()) {
       const seat = ws.deserializeAttachment() as Attachment;
-      const view = zoneView(zone, seat.playerId, hidden);
+      const view = zoneView(zone, seat.playerId, hidden, seat.party);
       // The tiles go once to a client that keeps them: everything else about the map (its places) goes every time.
       const { tiles: _tiles, ...rest } = view.map;
       const state = seat.lean && seat.tiles ? { ...view, map: rest } : view;

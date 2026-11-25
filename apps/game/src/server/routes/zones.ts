@@ -5,6 +5,7 @@ import { zoneOptions } from "@gantt-quest/world";
 import { enterProblem } from "../atlas";
 import { crewFor, getCharacter } from "../db";
 import { createZoneRow, crewPlaces, crewPlacesOf, getZoneRow, openCave, teleportTo } from "../zones";
+import { partyOf } from "../party";
 import { harborParty, type GameApp } from "./shared";
 
 export function zoneRoutes(app: GameApp): void {
@@ -40,7 +41,7 @@ export function zoneRoutes(app: GameApp): void {
   });
 
   // A zone's socket. Anyone with a hero and the code can walk in, but a landfall on a crew's chart is that crew's
-  // own. Zones are made by /api/caves, /api/atlas/open and the dev route.
+  // own (and a party is all in the one world, so its members are that crew's too). Zones are made by /api/caves, /api/atlas/open and the dev route.
   app.get("/api/zone/:code/ws", async (c) => {
     const code = c.req.param("code").toUpperCase();
     const zone = await getZoneRow(c.env.DB, code);
@@ -50,6 +51,8 @@ export function zoneRoutes(app: GameApp): void {
     const headers = new Headers(c.req.raw.headers);
     headers.set("x-zone-code", code);
     headers.set("x-player-id", c.get("player").id);
+    // The rest of the player's party walks on with them, on this one connection (party.ts).
+    headers.set("x-party-ids", (await partyOf(c.env.DB, c.get("player").id)).join(","));
     // Arriving by teleport: beside the crewmate teleported to.
     const near = c.req.query("near");
     if (near && near.length <= 64) headers.set("x-zone-near", near);

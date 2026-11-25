@@ -276,7 +276,7 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
   const send = useRef(pub.send);
   send.current = pub.send;
 
-  const heroSheet = useHeroSheet();
+  const heroSheet = useHeroSheet(me.player.id);
 
   useEffect(() => {
     const r = new WorldRenderer(mount.current!, { onPropClick: (id) => {
@@ -662,8 +662,8 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
         {atBoard && !holdingDice && <button className="primary" disabled={reading} onClick={() => setReading(true)}>Read the board</button>}
         <button className={atDoor ? "primary" : ""} disabled={holdingDice} onClick={onLeave}>Leave</button>
       </HudBar>}
-      {bag && me.character && <InventoryScreen me={me} refresh={refresh} onClose={() => setBag(false)} onLogbook={() => { setBag(false); setBook(true); }} />}
-      {book && me.character && <Logbook me={me} refresh={refresh} onClose={() => setBook(false)} />}
+      {bag && me.character && <InventoryScreen key={me.player.id} me={me} refresh={refresh} onClose={() => setBag(false)} onLogbook={() => { setBag(false); setBook(true); }} />}
+      {book && me.character && <Logbook key={me.player.id} me={me} refresh={refresh} onClose={() => setBook(false)} />}
       {atDoor && self && !holdingDice && <TileAction renderer={renderer} pos={self.pos} unitId={self.id} label="Leave" run={onLeave} />}
       {near && self && !talking && !holdingDice && !atBoard && !talk.active && <TileAction renderer={renderer} pos={self.pos} unitId={self.id} label={`Talk to ${near.short}`} run={() => chat(near.id)} />}
       {atDealer && self && !dealing && !holdingDice && !talk.active && <TileAction renderer={renderer} pos={self.pos} unitId={self.id} label={`Talk to ${PUB_DEALER.short}`} run={() => chat("dealer")} />}
