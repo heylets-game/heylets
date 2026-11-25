@@ -2629,7 +2629,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         />
       )}
 
-      {/* Your party (and any stand-in or creature of yours): click one to play them; the "+" adds more of your heroes. */}
+      {/* Your party (and any stand-in or creature of yours): click one to play them. The party is changed in town. */}
       <PartyBar
         className="zone-party"
         cards={mine.map((u): PartyCard => ({
@@ -2640,8 +2640,6 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         acting={act.id}
         onPick={setPlayAs}
         leader={state.you}
-        locked={enc && mine.some((u) => enc.order.includes(u.id)) ? "Not in the middle of a fight: change the party once it is over." : undefined}
-        onChanged={zone.rejoin}
       />
 
       {/* Everything that happens, and every roll: the whole fight, to read back through. */}

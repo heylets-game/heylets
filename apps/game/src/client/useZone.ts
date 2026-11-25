@@ -40,8 +40,6 @@ export interface ZoneConnection {
   send(action: ZoneSend): number | null;
   /** Your gear has changed: have the server read your hero again. */
   resheet(): void;
-  /** Connect again: the party has changed, and the room brings on whoever is in it now. */
-  rejoin(): void;
   /** Wave, cheer, bow, dance or breakdance where your hero stands (in a fight too, for nothing; the server drops one from a hero who is down). */
   emote(emote: Emote): void;
   clearError(): void;
@@ -66,8 +64,6 @@ export function useZone(code: string, handlers: ZoneHandlers): ZoneConnection {
   const [state, setState] = useState<ZoneView | null>(null);
   const [online, setOnline] = useState<string[]>([]);
   const [trades, setTrades] = useState(0);
-  /** Counts up for each new connection asked for by hand (rejoin). */
-  const [joins, setJoins] = useState(0);
   const latest = useRef<ZoneView | null>(null);
   const handler = useRef(handlers);
   handler.current = handlers;
@@ -79,7 +75,7 @@ export function useZone(code: string, handlers: ZoneHandlers): ZoneConnection {
   const tiles = useRef<ZoneView["map"]["tiles"] | null>(null);
 
   const socket = useRoomSocket<ZoneMessage>({
-    key: `${code}#${joins}`,
+    key: code,
     elsewhere: "This map was opened in another tab.",
     unopened: { error: "Could not reach that map. Check the code, and that you have a character." },
     // What the map refused stays up through a reconnection, until the view clears it.
@@ -145,6 +141,5 @@ export function useZone(code: string, handlers: ZoneHandlers): ZoneConnection {
     post({ type: "emote", emote, ...(actingHero() ? { as: actingHero() } : {}) });
   }, []);
   const clearError = useCallback(() => setError(null), []);
-  const rejoin = useCallback(() => setJoins((n) => n + 1), []);
-  return { state, online, status: socket.status, error: socket.error, trades, send, resheet, rejoin, emote, clearError };
+  return { state, online, status: socket.status, error: socket.error, trades, send, resheet, emote, clearError };
 }

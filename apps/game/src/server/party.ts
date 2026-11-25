@@ -7,6 +7,9 @@
 // player picks which of them they are acting as. A request names that hero
 // (auth.ts heroAsked), so every other route reads `c.get("player")` as before.
 //
+// The party is changed only in town: not while any of it (or the hero being
+// added or taken out) is out on a map.
+//
 // The party is kept on the account (players.party). The hero being played is
 // always in it. On a map, only the members who are in the same world as that
 // hero come along: adding a hero from another world brings them into this one.
@@ -14,6 +17,16 @@
 import { MAX_CREW } from "@gantt-quest/world";
 import { crewFor, joinCrew, refreshHarbor, type Env } from "./db";
 import { currentCrewSql } from "./db/rows";
+import { onAZone } from "./zones";
+
+/** Said when the party cannot be changed: one of them is out on a map. */
+export const PARTY_IN_TOWN = "Change your party in the Harbor, not out on a map.";
+
+/** Whether the party (the hero being played, the rest of it, and `heroId`) is all off the maps, so it can be changed. */
+async function allInTown(db: D1Database, playerId: string, heroId: string): Promise<boolean> {
+  const heroes = [...new Set([playerId, heroId, ...(await partyOf(db, playerId))])];
+  return !(await Promise.all(heroes.map((id) => onAZone(db, id)))).some(Boolean);
+}
 
 /**
  * The other heroes in `playerId`'s party who are in the same world as them now, oldest first. The hero being played is
@@ -49,6 +62,7 @@ export async function addToParty(env: Env, userId: string, playerId: string, her
   const db = env.DB;
   if (heroId === playerId) return "They are the hero you are playing.";
   if (!(await ownHero(db, userId, heroId))) return "That is not one of your heroes.";
+  if (!(await allInTown(db, playerId, heroId))) return PARTY_IN_TOWN;
   const crew = await crewFor(db, playerId);
   if (!crew) return "Go into a world first.";
   const there = await crewFor(db, heroId);
@@ -62,8 +76,9 @@ export async function addToParty(env: Env, userId: string, playerId: string, her
   return null;
 }
 
-/** Take one of the account's heroes out of the party. They stay in the world. */
-export async function dropFromParty(db: D1Database, userId: string, heroId: string): Promise<string | null> {
+/** Take one of the account's heroes out of the party of the hero being played (`playerId`). They stay in the world. */
+export async function dropFromParty(db: D1Database, userId: string, playerId: string, heroId: string): Promise<string | null> {
+  if (!(await allInTown(db, playerId, heroId))) return PARTY_IN_TOWN;
   const done = await db.prepare("UPDATE players SET party = 0 WHERE id = ? AND user_id = ?").bind(heroId, userId).run();
   return done.meta.changes > 0 ? null : "That is not one of your heroes.";
 }

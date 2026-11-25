@@ -8,7 +8,7 @@ import type { Context } from "hono";
 import { setCookie } from "hono/cookie";
 import { MAX_HEROES, heroCookieName } from "../auth";
 import { currentCrewSql, now } from "../db/rows";
-import { addToParty, dropFromParty } from "../party";
+import { PARTY_IN_TOWN, addToParty, dropFromParty } from "../party";
 import type { AppEnv, GameApp } from "./shared";
 
 /** A hero as the menu lists it. */
@@ -96,7 +96,7 @@ export function heroRoutes(app: GameApp): void {
   });
 
   // The party: another of the account's heroes to play beside the one being played (brought into this world if they
-  // are not in it), or one taken out of it.
+  // are not in it), or one taken out of it. Only in town: never while any of them is out on a map.
   app.post("/api/party/add", async (c) => {
     const player = c.get("player");
     if (!player.userId) return c.json({ error: "Not signed in." }, 401);
@@ -108,7 +108,7 @@ export function heroRoutes(app: GameApp): void {
     const player = c.get("player");
     if (!player.userId) return c.json({ error: "Not signed in." }, 401);
     const body = await c.req.json<{ id?: string }>().catch(() => ({}) as { id?: string });
-    const error = await dropFromParty(c.env.DB, player.userId, String(body.id ?? ""));
-    return error ? c.json({ error }, 404) : c.json({ ok: true });
+    const error = await dropFromParty(c.env.DB, player.userId, player.id, String(body.id ?? ""));
+    return error ? c.json({ error }, error === PARTY_IN_TOWN ? 409 : 404) : c.json({ ok: true });
   });
 }

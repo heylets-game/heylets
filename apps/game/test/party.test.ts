@@ -121,6 +121,27 @@ describe("a party of an account's heroes", () => {
     expect(await partyOf(db, first)).toEqual([]);
   });
 
+  it("is changed only in town: not while the hero played, the one asked about, or the rest of the party is on a map", async () => {
+    const { db, sql, app, first, second, third } = await threeHeroes("intown@example.com");
+    const out = (id: string) => sql.prepare("INSERT INTO zone_presence (player_id, code, fighting, seen_at) VALUES (?, 'ABCD', 0, ?)").run(id, Date.now());
+    const home = (id: string) => sql.prepare("DELETE FROM zone_presence WHERE player_id = ?").run(id);
+    for (const id of [first, second]) {
+      out(id);
+      const refused = await app.call("/api/party/add", { id: second });
+      expect(refused.status).toBe(409);
+      expect(refused.data.error).toMatch(/Harbor/);
+      home(id);
+    }
+    expect((await app.call("/api/party/add", { id: second })).status).toBe(200);
+    // With Second in the party and out on a map, Third cannot be added, nor Second taken out.
+    out(second);
+    expect((await app.call("/api/party/add", { id: third })).status).toBe(409);
+    expect((await app.call("/api/party/remove", { id: second })).status).toBe(409);
+    home(second);
+    expect((await app.call("/api/party/remove", { id: second })).status).toBe(200);
+    expect(await partyOf(db, first)).toEqual([]);
+  });
+
   it("refuses the hero being played, and someone else's hero", async () => {
     const { db, app, first } = await threeHeroes("refuse@example.com");
     expect((await app.call("/api/party/add", { id: first })).status).toBe(409);

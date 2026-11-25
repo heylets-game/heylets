@@ -1,7 +1,7 @@
 // The party: the heroes of yours being played together (party.ts), one card
-// each, the one being acted as lit up. Clicking another acts as them. Under
-// the cards, a "+" opens the list of the account's heroes, to add one to the
-// party or take one out of it.
+// each, the one being acted as lit up. Clicking another acts as them. In town,
+// a "+" under the cards opens the list of the account's heroes, to add one to
+// the party or take one out of it. Out on a map the party is as it set out.
 //
 // On a map (ZoneView) each card shows the hero's health, and stand-ins and
 // creatures of yours are listed with them. In the Harbor (HarborView) one
@@ -35,10 +35,10 @@ interface Props {
   onPick(id: string): void;
   /** The hero this device plays: always in the party, so not offered in the list. */
   leader: string;
-  /** Why the party cannot be changed right now (in a fight). */
+  /** Why the party cannot be changed right now. */
   locked?: string;
-  /** The party was changed: read it again (and, on a map, bring the new member on). */
-  onChanged(): void;
+  /** The party was changed: read it again. Without it there is no "+" (out on a map, the party is as it set out). */
+  onChanged?(): void;
   className?: string;
 }
 
@@ -77,8 +77,8 @@ export function PartyBar({ cards, acting, onPick, leader, locked, onChanged, cla
           </span>
         </button>
       ))}
-      <button className="party-add" title={locked ?? "Add a hero of yours to the party"} aria-label="Change the party" onClick={() => setOpen(true)}>+</button>
-      {open && <PartyPicker leader={leader} locked={locked} onClose={() => setOpen(false)} onChanged={onChanged} />}
+      {onChanged && <button className="party-add" title={locked ?? "Add a hero of yours to the party"} aria-label="Change the party" onClick={() => setOpen(true)}>+</button>}
+      {open && onChanged && <PartyPicker leader={leader} locked={locked} onClose={() => setOpen(false)} onChanged={onChanged} />}
     </div>
   );
 }
