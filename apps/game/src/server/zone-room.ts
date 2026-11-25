@@ -164,14 +164,17 @@ export class ZoneRoom extends DurableObject<Env> {
     return this.zone;
   }
 
-  /** Bring a hero onto the map (or back onto it), as their sheet and pack stand now. `near`: whose side to come on at. */
-  private async walkOn(heroId: string, near?: string): Promise<string | null> {
+  /**
+   * Bring a hero onto the map (or back onto it), as their sheet and pack stand now. `near`: whose side to come on at.
+   * `party`: the key of the party they come with (one share of the spoils between them), or "" on their own.
+   */
+  private async walkOn(heroId: string, near?: string, party = ""): Promise<string | null> {
     // Read afresh each time: the hero may have changed gear since they were last here.
     const hero = await heroInitFor(this.env.DB, heroId);
     if (!hero) return "You need a character first.";
     // Coins tossed in the town well come onto the map as lucky rolls; if the map cannot take them, they go back.
     const luck = await takeLuck(this.env.DB, heroId);
-    const refused = await this.apply({ type: "join", hero: zoneHero(hero, await consumablesOf(this.env.DB, heroId), luck), near });
+    const refused = await this.apply({ type: "join", hero: { ...zoneHero(hero, await consumablesOf(this.env.DB, heroId), luck), party }, near });
     if (refused && luck > 0) await returnLuck(this.env.DB, heroId, luck);
     return refused;
   }
@@ -190,12 +193,14 @@ export class ZoneRoom extends DurableObject<Env> {
     const asked = (request.headers.get("x-party-ids") ?? "").split(",").filter((id) => id && id !== playerId).slice(0, 8);
 
     const party: string[] = [];
+    // The party's key: the same whichever of them the player went in as, so it is one party's share of the spoils.
+    const key = asked.length > 0 ? [playerId, ...asked].sort()[0] : "";
     const error = await this.serial(async () => {
       await this.load(code);
-      const refused = await this.walkOn(playerId, near);
+      const refused = await this.walkOn(playerId, near, key);
       if (refused) return refused;
       // The party comes on beside the hero the player went in as. One who cannot is left behind; the rest still come.
-      for (const id of asked) if (!(await this.walkOn(id, playerId))) party.push(id);
+      for (const id of asked) if (!(await this.walkOn(id, playerId, key))) party.push(id);
       return null;
     });
     if (error) return new Response(error, { status: 409 });

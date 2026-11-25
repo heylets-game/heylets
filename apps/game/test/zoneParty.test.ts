@@ -76,6 +76,23 @@ describe("a party on a map", () => {
     expect(hexDistance(ann.pos, annika.pos)).toBeLessThanOrEqual(2);
   });
 
+  it("gives the party one key, whichever of them the player goes in as, for one share of the spoils", async () => {
+    const code = await createZoneRow(db, "ann", options, "party-key");
+    let ws = await connect(code, "ann2", ["ann"]);
+    await connect(code, "bo");
+    const keys = () => Object.fromEntries(ws.state.units.filter((u) => u.side === "hero").map((u) => [u.id, u.party]));
+    expect(keys()).toEqual({ ann: "ann", ann2: "ann", bo: undefined });
+    ws.close();
+    await zone.webSocketClose(ws as unknown as WebSocket, 1000);
+    ws = await connect(code, "ann", ["ann2"]);
+    expect(keys()).toEqual({ ann: "ann", ann2: "ann", bo: undefined });
+    // On their own again: no longer one of a party.
+    ws.close();
+    await zone.webSocketClose(ws as unknown as WebSocket, 1000);
+    ws = await connect(code, "ann");
+    expect(keys().ann).toBeUndefined();
+  });
+
   it("moves whichever of the party a message names, and never someone else's hero", async () => {
     const code = await createZoneRow(db, "ann", options, "party-acts");
     const ws = await connect(code, "ann", ["ann2"]);

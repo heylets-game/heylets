@@ -170,6 +170,7 @@ function heroUnit(hero: ZoneHero, pos: HexPos, controller?: string): Unit {
     cooldowns: {},
     items: { ...(hero.items ?? STARTING_ITEMS) },
     controller,
+    ...(hero.party ? { party: hero.party } : {}),
   };
 }
 
@@ -839,6 +840,11 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
     if (here) {
       // What their pack holds is what they carry, fight or no fight.
       if (hero.items) here.items = { ...hero.items };
+      // Come back in a party, or on their own.
+      if (hero.party !== undefined) {
+        if (hero.party) here.party = hero.party;
+        else delete here.party;
+      }
       // Luck brought back from the well is added to whatever they still had.
       if (hero.luck && hero.luck > 0 && !here.down) {
         const held = here.conditions.find((c) => c.kind === "lucky");

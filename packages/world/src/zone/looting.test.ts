@@ -13,7 +13,7 @@ import { SPOIL_STONES, STONE_MODS, cleanStone, rollStone, spoilStones } from "..
 import { makeRng } from "../rng";
 import { ZONE_MODS } from "./mods";
 import { ITEM_AP, AP_TURN } from "./kit";
-import { CHEST_PAY, SPOILS_ID, bountyPay, leaveBody, lootFor, unlooted } from "./loot";
+import { CHEST_PAY, SPOILS_ID, bountyPay, leaveBody, lootFor, lootIn, unlooted } from "./loot";
 import { BOSS_LOOT, ENEMY_FAMILY, FAMILY_LOOT, rollBody, rollChest, rollSpoils, type Family } from "./spoils";
 import { stepZone, zoneView } from "./zone";
 import type { LootItem, LootSpot, Unit, ZoneAction, ZoneEffect, ZoneEvent, ZoneState } from "./types";
@@ -521,6 +521,36 @@ describe("the spoils of a place the atlas made", () => {
     expect(state.units.some((u) => posKey(u.pos) === posKey(heap.pos))).toBe(false);
     expect(posKey(heap.pos)).not.toBe(posKey(spotOf(state, bandit).pos));
     expect(Math.min(...["ann", "bo", "cy"].map((id) => hexDistance(unit(state, id).pos, heap.pos)))).toBe(1);
+  });
+
+  it("hold one share for a party, whichever of them looks, and a share of their own for everyone else", () => {
+    let state = board({ tier: 3, name: "Gull Rock", stone: 2 });
+    // Ann plays Ann and Annika together (their party's key is "ann"); Bo plays Bo.
+    hero(state, "ann", at(5, 6)).party = "ann";
+    hero(state, "ann2", at(5, 5)).party = "ann";
+    hero(state, "bo", at(4, 7));
+    enemy(state, "bandit", at(7, 6));
+    state = win(startFight(state));
+    for (const id of ["ann", "ann2", "bo"]) unit(state, id).pos = spotOf(state, SPOILS_ID).pos;
+    // Annika looks first: the party's share is rolled, under its key, and both of them take from it.
+    state = must(must(state, look("ann2", SPOILS_ID)), look("bo", SPOILS_ID));
+    const heap = spotOf(state, SPOILS_ID);
+    expect(Object.keys(heap.loot).sort()).toEqual(["ann", "bo"]);
+    expect(heap.shareOf).toEqual({ ann: "ann", ann2: "ann" });
+    const share = heap.loot.ann;
+    expect(share.length).toBeGreaterThan(0);
+    // Ann finds the same share, not another; once Annika has taken it all, there is nothing left for Ann.
+    state = must(state, look("ann", SPOILS_ID));
+    expect(spotOf(state, SPOILS_ID).loot.ann).toEqual(share);
+    state = must(state, take("ann2", SPOILS_ID));
+    expect(fails(state, take("ann", SPOILS_ID))).toMatch(/nothing left in it for you/);
+    // Bo's own share is untouched by any of it.
+    expect(spotOf(state, SPOILS_ID).loot.bo.length).toBeGreaterThan(0);
+    // The party's player is sent the one share, and that it is both of theirs.
+    const view = zoneView(state, "ann", undefined, ["ann2"]).loot!.find((s) => s.id === SPOILS_ID)!;
+    expect(Object.keys(view.loot)).toEqual(["ann"]);
+    expect(lootIn(view, "ann2")).toEqual([]);
+    expect(zoneView(state, "bo").loot!.find((s) => s.id === SPOILS_ID)!.shareOf).toBeUndefined();
   });
 
   it("hold each hero's own share: what a good chest that far out would, and lodestones, never fewer than one", () => {
