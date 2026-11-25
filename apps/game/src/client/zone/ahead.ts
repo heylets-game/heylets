@@ -44,6 +44,11 @@ export interface WalkAhead {
   at: number;
   /** An earlier walk of this hero's did not go as shown, so this one set off from the wrong place: it is no longer believed. */
   off?: boolean;
+  /**
+   * Clicked while the walk before was still being played: that one was called off at `from`, and these are the hexes
+   * of it that were dropped, to walk after all should the server not call it off (nothing came of it but the walk).
+   */
+  cut?: HexPos[];
 }
 
 /** Something done whose result is the server's to say: only what it costs, and what is known of it, is shown. */
@@ -224,7 +229,8 @@ export function settle(ahead: readonly Ahead[], n: number, ok: boolean, events: 
   if (entry?.kind === "walk" && !entry.off && !recall.some((r) => r.unit === entry.unit)) {
     const shown = new Map<number, number>();
     let kept = 0;
-    let same = ok;
+    // Shown setting off from part of the way along the walk before: none of it stands unless the server called that one off too.
+    let same = ok && (!entry.cut || events.some((ev) => ev.t === "moved" && ev.id === entry.unit && !!ev.cut));
     events.forEach((ev, i) => {
       if (ev.t !== "moved" || ev.id !== entry.unit) return;
       let here = 0;

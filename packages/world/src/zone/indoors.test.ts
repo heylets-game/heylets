@@ -349,7 +349,7 @@ describe("a fight under a roof or under ground", () => {
         // It ends, and with nobody fighting back it ends one way: they wake where they came in.
         expect(state.encounter, `${where}: still fighting after ${turns} turns`).toBeNull();
         expect(got(events, "fight_end").map((e) => e.outcome), where).toEqual(["defeat"]);
-        for (const h of state.units.filter((u) => u.side === "hero")) if (events.some((e) => e.t === "down" && e.id === h.id)) expect(h, where).toMatchObject({ down: false, hp: 1 });
+        for (const h of state.units.filter((u) => u.side === "hero")) if (events.some((e) => e.t === "down" && e.id === h.id)) expect(h, where).toMatchObject({ down: false, hp: h.maxHp });
         // It took the enemy rounds, and (nearly always: a band that shoots may not need to) it had to come to them to do it.
         rounds += Math.max(0, ...got(events, "round").map((e) => e.n));
         if (got(events, "moved").some((e) => state.units.find((u) => u.id === e.id)?.side === "enemy")) walked++;

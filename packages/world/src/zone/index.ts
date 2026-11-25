@@ -86,6 +86,7 @@ export {
   enemyHp,
   ENEMY_EDGE,
   GROUP_EXTRAS,
+  STROLL_STEP_MS,
   type Tactic,
   type SummonDef,
   type SummonCall,
@@ -103,7 +104,7 @@ export { summonsOf, summonSpots } from "./summon";
 export { breathDc, drowningStacks } from "./drowning";
 export { SHANTIES, isShanty, joinable, shantyOf, shantyRadius, songsOn, type Song } from "./song";
 export { carriesLantern, isDark, litHexes, inDark, seenByHeroes, lightSources, hiddenEnemies } from "./light";
-export { MAX_CATCHUP_ROUNDS } from "./clock";
+export { MAX_CATCHUP_ROUNDS, nextTick } from "./clock";
 export { CHEST_PAY, SPOILS_ID, bountyPay, checkOpen, checkLoot, lootIn, sharedLoot, unopened, unlooted, zoneCleared } from "./loot";
 export { ENEMY_FAMILY, FAMILY_LOOT, BOSS_LOOT, rollBody, rollChest, rollSpoils, type Family } from "./spoils";
 export { HEAR_RANGE } from "./zone";

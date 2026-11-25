@@ -35,8 +35,8 @@ import { generateDelve } from "./delve";
 import { checkLoot, checkOpen, leaveBody, look, lootFor, openChest, payBounty, take } from "./loot";
 import { isCrateId } from "./crates";
 import { siteOpen } from "./sites";
-import { FREE_WALK, blast, blockerAt, inFight, pathIn, roomAt, sameHex, sees, solid, unitAt, unitById, zoneReach } from "./geometry";
-import { AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, ENEMY_MOVE_AP, FLEE_RANGE, ITEM_AP, SUMMONS, STARTING_ITEMS, THROWABLES, THROWABLE_KINDS, cleanItems, commonCost, enemyHp, enemyMove, tacticOf } from "./kit";
+import { FREE_WALK, blast, blockerAt, inFight, isDead, pathIn, roomAt, sameHex, sees, solid, unitAt, unitById, zoneReach } from "./geometry";
+import { AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, ENEMY_MOVE_AP, FLEE_RANGE, ITEM_AP, STROLL_GRACE_MS, STROLL_STEP_MS, SUMMONS, STARTING_ITEMS, THROWABLES, THROWABLE_KINDS, cleanItems, commonCost, enemyHp, enemyMove, tacticOf } from "./kit";
 import { d20, heroMove, mod, rollDice, statOf } from "./rules";
 import { hiddenEnemies, sentToClient } from "./light";
 import { tickWeather, weatherAtTurn } from "./weather";
@@ -126,7 +126,7 @@ export function createZone(code: string, seed: string, options: ZoneOptions): Zo
  * once and hands it in each time.
  */
 export function zoneView(state: ZoneState, you: string, hidden: readonly string[] = hiddenEnemies(state), party: readonly string[] = []): ZoneView {
-  const { rng: _rng, seed: _seed, loot: _loot, ...rest } = state;
+  const { rng: _rng, seed: _seed, loot: _loot, strolls: _strolls, ...rest } = state;
   // Of what there is to loot: what is everyone's (a body, a chest) as it stands, and of the spoils only the shares of
   // the one being told and of the party they play.
   const loot = lootFor(state, [you, ...party]);
@@ -528,8 +528,9 @@ function endTurn(ctx: Ctx, unit: Unit): void {
 }
 
 /**
- * If the fight is decided, end it. Won: the fallen heroes get up on 1 HP and the enemy dead are cleared
- * away. Lost: the heroes wake at the start on 1 HP, and the enemy are back at their posts, healed.
+ * If the fight is decided, end it. Every hero who was in it is back to full HP, whichever way it went. Won: the
+ * fallen heroes get up and the enemy dead are cleared away. Lost: the heroes wake at the start, and the enemy are
+ * back at their posts, healed.
  * Fled (every hero still standing got away, and none is left in it): nobody wins. The enemy go back to
  * their posts and bind their wounds, but those of them that fell stay fallen: fleeing gets a party out,
  * and what it killed stays killed, but it is no way to wear a band down. It never costs more than losing:
@@ -551,19 +552,22 @@ function settle(ctx: Ctx): boolean {
   // What was called into it goes with it.
   for (const u of state.units.filter((x) => x.summon)) dismiss(ctx, u);
   state.encounter = null;
+  // However it ended, every hero who was in it is whole again: the fallen get up, and nobody carries a wound out.
   for (const h of heroes) {
     if (h.down) {
       h.down = false;
-      h.hp = 1;
       ctx.events.push({ t: "up", id: h.id });
     }
+    h.hp = h.maxHp;
     h.conditions = [];
     h.cooldowns = {};
   }
-  // Those who got away took part too: what they were waiting on in it is over with it.
+  // Those who got away took part too: what they were waiting on in it is over with it, and they are whole again too.
   for (const id of enc.fled ?? []) {
     const h = unitById(state, id);
-    if (h) h.cooldowns = {};
+    if (!h || h.side !== "hero") continue;
+    h.cooldowns = {};
+    if (!h.down) h.hp = h.maxHp;
   }
   if (won) {
     // Every hero who fought takes the whole XP. A stand-in takes nothing. What the fallen had on them stays on
@@ -607,10 +611,7 @@ function settle(ctx: Ctx): boolean {
       f.conditions = [];
       f.pos = { q: -99, r: -99 };
     }
-    for (const h of heroes) {
-      h.hp = 1;
-      h.pos = { q: -99, r: -99 };
-    }
+    for (const h of heroes) h.pos = { q: -99, r: -99 };
     for (const f of band) {
       const post = f.home ?? was.get(f.id)!;
       f.pos = freeHexNear(state.map, post, (p) => !!unitAt(state, p) || blockerAt(state, p), (p) => tileAt(state.map, p)) ?? post;
@@ -822,6 +823,42 @@ function dev(ctx: Ctx, by: string, op: DevOp): string | null {
   return null;
 }
 
+/**
+ * Where a hero's last walk is called off, for a new walk clicked while it is still being played on screen: `from`, the
+ * hex the client says they have got to. Only out of a fight, only for a walk that nothing came of and that is the last
+ * thing they did, only to a hex on it, and only while it could still be playing. Null leaves them where they are.
+ */
+function cutShort(state: ZoneState, unit: Unit, from: HexPos | undefined, now: number | undefined): HexPos | null {
+  const last = state.strolls?.[unit.id];
+  if (!from || !last || last.path.length === 0 || inFight(state, unit.id)) return null;
+  if (!sameHex(unit.pos, last.path[last.path.length - 1])) return null;
+  if (now !== undefined && now > last.at + last.path.length * STROLL_STEP_MS + STROLL_GRACE_MS) return null;
+  const on = sameHex(from, last.from) || last.path.some((p) => sameHex(p, from));
+  if (!on || blockerAt(state, from) || state.units.some((u) => u.id !== unit.id && !isDead(u) && sameHex(u.pos, from))) return null;
+  return { q: from.q, r: from.r };
+}
+
+/**
+ * Keep a hero's walk, for the next to call off part of the way (cutShort), if nothing came of it but the walk: no
+ * notice taken, no fight, nothing underfoot. Anything else they do forgets it.
+ */
+function keepStroll(state: ZoneState, action: ZoneAction, events: readonly ZoneEvent[], was: HexPos | undefined): void {
+  if (!("unit" in action)) return;
+  const id = action.unit;
+  const plain = action.type === "move" && events.length > 0 && events.every((ev) => ev.t === "moved" && ev.id === id);
+  const unit = unitById(state, id);
+  if (state.strolls) delete state.strolls[id];
+  if (!plain || !unit || !was || inFight(state, id)) {
+    if (state.strolls && Object.keys(state.strolls).length === 0) delete state.strolls;
+    return;
+  }
+  const moved = events as Extract<ZoneEvent, { t: "moved" }>[];
+  const from = moved[0].cut ?? was;
+  const path = moved.flatMap((ev) => ev.path).filter((p) => !sameHex(p, from));
+  if (path.length === 0) return;
+  (state.strolls ??= {})[id] = { from, path, at: action.type === "move" ? (action.now ?? 0) : 0 };
+}
+
 function act(ctx: Ctx, action: ZoneAction): string | null {
   const { state } = ctx;
   if (action.type === "away") {
@@ -896,13 +933,26 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
     return null;
   }
   if (action.type === "move") {
-    if (sameHex(action.to, unit.pos)) return null;
+    // Clicked again while the last walk is still being played: it stops where it had got to, and this one sets off from there.
+    const cut = budget ? null : cutShort(state, unit, action.from, action.now);
+    const mark = ctx.events.length;
+    if (cut) unit.pos = cut;
+    if (sameHex(action.to, unit.pos)) {
+      // Called off on the very hex asked for: the walk ends there, and everyone is told so.
+      if (cut) ctx.events.push({ t: "moved", id: unit.id, path: [cut], cut });
+      return null;
+    }
     // Only the hex asked for and the way to it are read, so the flood stops at it (zoneReach `enough`).
     const reach = zoneReach(state, unit, budget ? moveLeft(budget) : FREE_WALK, undefined, courseFor(state, unit, budget), (r) => sameHex(r.pos, action.to));
     const end = reach.get(posKey(action.to));
     if (!end) return budget ? "You cannot get there with the AP you have left." : "You cannot get there.";
     if (!end.stop) return "Someone is standing there.";
     walk(ctx, unit, pathIn(reach, action.to) ?? [], budget);
+    if (cut) {
+      const first = ctx.events.slice(mark).find((ev) => ev.t === "moved" && ev.id === unit.id);
+      if (first?.t === "moved") first.cut = cut;
+      else ctx.events.splice(mark, 0, { t: "moved", id: unit.id, path: [cut], cut });
+    }
     return null;
   }
   if (action.type === "use") {
@@ -917,19 +967,18 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
     const touched = state.units.filter((u) => u.id === action.target || area.has(posKey(u.pos)));
     const back = reachBack(state, unit, touched);
     if (back) return back;
-    if (budget && (unit.cooldowns[action.ability] ?? 0) > 0) return `${def.name} is not ready yet.`;
+    // Out of a fight too: there its cooldown runs down a round at a time on the clock (clock.ts).
+    if ((unit.cooldowns[action.ability] ?? 0) > 0) return `${def.name} is not ready yet.`;
     if (aim.focus && unit.focus <= 0) return "You have no Focus left.";
     const cost = spend(budget, tactic.cost);
     if (cost) return cost;
     if (aim.focus) unit.focus -= 1;
-    if (budget && tactic.cooldown) unit.cooldowns[action.ability] = tactic.cooldown;
+    if (tactic.cooldown) unit.cooldowns[action.ability] = tactic.cooldown;
     // A heal splashed among enemies is a kindness, as a healing potion thrown is: it starts nothing.
     const struck = tactic.splash ? [] : touched.filter((u) => u.side === "enemy" && !u.down).map((u) => u.group!);
     resolveAbility(ctx, unit, action.ability, aim);
     engage(ctx, struck, unit);
     reachIn(ctx, unit, touched);
-    // Cast out of a fight, one with a wait on it that draws the caster into a fight goes in waiting, as if spent on their first turn (their AP are whole).
-    if (!budget && tactic.cooldown && state.encounter?.order.includes(unit.id)) unit.cooldowns[action.ability] = tactic.cooldown;
     return null;
   }
   if (action.type === "common") {
@@ -1055,6 +1104,7 @@ export function stepZone(prev: ZoneState, action: ZoneAction): ZoneStep {
   state.map.tiles = prev.map.tiles;
   const ctx: Ctx = { state, rng: makeRng(state.rng), events: [] as ZoneEvent[], effects: [] as ZoneEffect[] };
   ctx.onStep = (unit, flush) => onStep(ctx, unit, flush);
+  const was = "unit" in action ? unitById(state, action.unit)?.pos : undefined;
   const error = act(ctx, action);
   if (error) return { ok: false, error };
   pullIn(ctx);
@@ -1079,6 +1129,7 @@ export function stepZone(prev: ZoneState, action: ZoneAction): ZoneStep {
   // A band beaten that carried a key: it goes on the ring.
   dropKeys(ctx);
   sweep(state);
+  keepStroll(state, action, ctx.events, was);
   state.rng = ctx.rng.state();
   return { ok: true, state, events: ctx.events, effects: ctx.effects };
 }

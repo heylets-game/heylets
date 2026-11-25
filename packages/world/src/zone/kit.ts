@@ -638,7 +638,12 @@ export const TORCH_GROUND_ROUNDS = 8;
  * ground and for conditions. Torches are given a far kinder clock out there, a round every TORCH_ROUND_MS: a
  * held torch lights some fifteen minutes of exploring.
  */
-export const EXPLORE_ROUND_MS = 6_000;
+export const EXPLORE_ROUND_MS = 3_000;
+
+/** A step of a walk as the client plays it, in ms (ZoneView WALK_MS). A walk can be called off part of the way along while it would still be playing (zone.ts). */
+export const STROLL_STEP_MS = 400;
+/** Time allowed on top of that, for the click to reach the server. */
+export const STROLL_GRACE_MS = 2_000;
 export const TORCH_ROUND_MS = 90_000;
 /** Defence lost while a torch is held in the hand a shield would be on. */
 export const SHIELD_SET_ASIDE = 2;

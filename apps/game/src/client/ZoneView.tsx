@@ -503,6 +503,21 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     for (const r of told.recall) renderer.current?.stopWalkAt(r.unit, r.to);
     if (told.walk?.back) renderer.current?.stopWalkAt(told.walk.unit, told.walk.back);
   };
+  /**
+   * The hero whose last walk out of a fight may still be called off part of the way, by clicking somewhere else while it
+   * plays (walkTo): nothing has come of it but the walk, as far as has been heard. The server has the last word.
+   */
+  const strolling = useRef<string | null>(null);
+  /**
+   * A walk shown setting off from part of the way along the one before (walkTo) was answered: if the server did not
+   * call the one before off there after all, the hero walks the rest of it first, and the server's walk goes on from its end.
+   */
+  const uncut = (entry: Ahead | null, events: readonly ZoneEvent[], ok: boolean) => {
+    if (entry?.kind !== "walk" || !entry.cut || entry.off) return;
+    if (ok && events.some((ev) => ev.t === "moved" && ev.id === entry.unit && ev.cut)) return;
+    renderer.current?.stopWalkAt(entry.unit, entry.from);
+    renderer.current?.walkUnit(entry.unit, entry.cut);
+  };
   const dev = useZoneDev();
 
   // ---------- the connection, and playing out what happened ----------
@@ -511,6 +526,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     // Refused: whatever was shown for it is taken back, and the bar has its Action again.
     const told = settle(aheadNow.current, n, false, []);
     takeBack(told);
+    uncut(told.entry, [], false);
     setAhead(told.ahead);
   }, onUpdate: (next, events, prev, ack) => {
     for (const u of next.units) names.current.set(u.id, u.name);
@@ -533,7 +549,11 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     const told = ack !== undefined ? settle(aheadNow.current, ack, true, events) : null;
     if (told) {
       takeBack(told);
+      uncut(told.entry, events, true);
       setAhead(told.ahead);
+      // Something came of a walk (a band took notice, the ground acted): it is not to be called off part of the way.
+      const entry = told.entry;
+      if (entry?.kind === "walk" && !events.every((ev) => ev.t === "moved" && ev.id === entry.unit)) strolling.current = null;
     }
     const walked = told?.walk ?? null;
     if (walked && walked.kept > 0 && told?.entry?.kind === "walk" && from) {
@@ -643,7 +663,11 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         const rest = ev.path.slice(already);
         if (rest.length > 0) {
           // Given to the renderer at its time, or at once should this playback be cut short before then (see unwalked).
-          const go = () => renderer.current?.walkUnit(ev.id, rest);
+          // A walk that calls off the one before it part of the way sets off from there (unless that is already shown).
+          const go = () => {
+            if (ev.cut && already === 0) renderer.current?.stopWalkAt(ev.id, ev.cut);
+            renderer.current?.walkUnit(ev.id, rest);
+          };
           unwalked.current.add(go);
           later(() => unwalked.current.delete(go) && go());
           owe(ev.id);
@@ -1998,18 +2022,30 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
    * Send a walk, and show at once as much of it as can be foreseen (zone/ahead.ts): the hero sets off at the
    * click, along the way the server will find. Nothing is shown ahead for a hero who still has a move to be
    * played out, or whose earlier walk was called off: where they really stand is not yet on screen.
+   *
+   * Out of a fight, a click while the hero is still walking (and nothing came of that walk) calls it off: they stop
+   * on the hex they are stepping onto, and set off from there for the new one. The server says whether it stands.
    */
   const walkTo = (to: HexPos) => {
     if (!act || !state) return;
     // What the enemy did is still being shown: nothing is sent into the middle of it. (The server already waits on
     // you and would take it, and its answer would cut short everything not yet shown.)
     if (fighting && watching) return;
+    const view = renderer.current;
     const unsure = owed.current.has(act.id) || aheadNow.current.some((a) => a.kind === "walk" && a.off && a.unit === act.id);
-    const seen = unsure ? null : foreseeWalk(state, act.id, to);
-    const n = zone.send({ type: "move", unit: act.id, to });
-    if (n === null || !seen) return;
-    renderer.current?.walkUnit(act.id, seen.path);
-    setAhead([...aheadNow.current, { n, kind: "walk", unit: act.id, from: act.pos, path: seen.path, cost: seen.cost, at: performance.now() }]);
+    const free = !state.encounter?.order.includes(act.id) && strolling.current === act.id;
+    const left = !unsure && free && view ? view.walkLeft(act.id) : [];
+    const held = (pos: HexPos) => state.units.some((u) => u.id !== act.id && !(u.down && u.side === "enemy") && sameHex(u.pos, pos));
+    const cut = left.length > 1 && !held(left[0]) ? left[0] : null;
+    const from = cut ? { ...state, units: state.units.map((u) => (u.id === act.id ? { ...u, pos: cut } : u)) } : state;
+    const seen = unsure ? null : foreseeWalk(from, act.id, to);
+    const n = zone.send({ type: "move", unit: act.id, to, ...(cut ? { from: cut } : {}) });
+    strolling.current = act.id;
+    if (n === null) return;
+    if (cut) view?.stopWalkAt(act.id, cut);
+    if (!seen) return;
+    view?.walkUnit(act.id, seen.path);
+    setAhead([...aheadNow.current, { n, kind: "walk", unit: act.id, from: cut ?? act.pos, path: seen.path, cost: seen.cost, at: performance.now(), ...(cut ? { cut: left.slice(1) } : {}) }]);
   };
 
   /**
@@ -2021,6 +2057,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const declare = (action: ZoneSend, sure: boolean, shown: { cost: number; gain?: "disengage"; slot?: string; name?: string; toward?: HexPos | null }) => {
     // (Nor into the middle of an enemy's turn still being shown: see walkTo.)
     if (!act || (fighting && watching)) return;
+    // Done something besides walking: the walk before it is no longer to be called off.
+    strolling.current = null;
     const n = zone.send(action);
     if (n === null || !sure || !canPay(shown.cost)) return;
     const view = renderer.current;
@@ -2074,8 +2112,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   };
 
   click.current = (pos, clicked, chosen) => {
-    // Any click is a new order: a walk up to the waygate that was under way no longer ends in going through it.
+    // Any click is a new order: a walk up to the waygate (or to something to search) that was under way no longer ends there.
     gateNext.current = null;
+    lootNext.current = null;
     setWhichOne(null);
     if (!state || !act) return;
     const want = pick?.kind === "ability" ? (tacticOf(pick.id).shape === "ally" ? "friend" : "foe") : pick?.kind === "common" ? (pick.what === "help" ? "friend" : "foe") : "any";

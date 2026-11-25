@@ -208,6 +208,13 @@ describe("settling what was shown against the server's answer", () => {
     expect([...told.walk!.shown]).toEqual([[0, 1]]);
   });
 
+  it("keeps a walk shown setting off part of the way along the last only if the server called that one off too", () => {
+    const cut = walkAhead(1, from, path, { cut: [hex(-1, 0)] });
+    expect(settle([cut], 1, true, [{ ...moved(...path), cut: from } as ZoneEvent]).walk).toMatchObject({ kept: 3, back: null });
+    // The same steps, but from the end of the walk before: none of it stood.
+    expect(settle([cut], 1, true, [moved(...path)]).walk).toMatchObject({ kept: 0, back: from });
+  });
+
   it("puts the hero back where they set off when the server refuses, or answers with no walk at all", () => {
     expect(settle([walkAhead(1, from, path)], 1, false, []).walk).toMatchObject({ kept: 0, back: from });
     expect(settle([walkAhead(1, from, path)], 1, true, []).walk).toMatchObject({ kept: 0, back: from });

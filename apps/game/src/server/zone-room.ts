@@ -9,7 +9,11 @@
 //   D1 as the order allows: what a hero used from their pack and the zone
 //   itself go in one batch, the pack first.
 // - The turn timer is a DO Alarm. Enemy turns resolve inside the reducer, so
-//   nothing waits on a connected client to make progress.
+//   nothing waits on a connected client to make progress. Out of a fight the
+//   same alarm is the clock: while someone is here and something is running
+//   out (a condition, a cooldown, the ground, a torch), it wakes the room as
+//   each round falls due (zone/clock.ts nextTick), and the round is counted
+//   and shown then, not only when someone next does something.
 // - What a won fight pays (XP and materials) is written before the zone is
 //   saved, as the pack is.
 //
@@ -36,7 +40,7 @@
 // written on the socket itself, which outlives the room's hibernation.
 
 import { DurableObject } from "cloudflare:workers";
-import { EMOTE_MIN_MS, THROWABLE_KINDS, ZONE_CLIENT_ACTIONS, createZone, hiddenEnemies, loadZone, stepZone, zoneAwaiting, zoneHero, zoneOptions, zoneView, validEmote, type ZoneAction, type ZoneEvent, type ZoneState } from "@gantt-quest/world";
+import { EMOTE_MIN_MS, THROWABLE_KINDS, ZONE_CLIENT_ACTIONS, createZone, hiddenEnemies, loadZone, nextTick, stepZone, zoneAwaiting, zoneHero, zoneOptions, zoneView, validEmote, type ZoneAction, type ZoneEvent, type ZoneState } from "@gantt-quest/world";
 import { consumablesOf, gainConsumables, kitStatements, spendConsumables, type Consumables } from "./consumables";
 import { returnLuck, takeLuck } from "./well";
 import { applyZoneGrant, crewFor, heroInitFor, refreshHarbor, type Env } from "./db";
@@ -94,7 +98,8 @@ export function zoneActionFrom(raw: unknown, by: string, dev: boolean): ZoneActi
     return null;
   }
   if (!text(a.unit)) return null;
-  if (a.type === "move") return isHex(a.to) ? { type: "move", by, unit: a.unit, to: hex(a.to)! } : null;
+  // `from`: where the hero has got to on a walk still being played, to call it off there (the reducer decides whether it may).
+  if (a.type === "move") return isHex(a.to) ? { type: "move", by, unit: a.unit, to: hex(a.to)!, ...(isHex(a.from) ? { from: hex(a.from)! } : {}) } : null;
   if (a.type === "use") return text(a.ability) ? { type: "use", by, unit: a.unit, ability: a.ability, target, at: hex(a.at), focus: !!a.focus } : null;
   if (a.type === "common") return text(a.what) ? { type: "common", by, unit: a.unit, what: a.what as never, target, at: hex(a.at) } : null;
   if (a.type === "throw") return text(a.item) && isHex(a.at) ? { type: "throw", by, unit: a.unit, item: a.item as never, at: hex(a.at)! } : null;
@@ -287,6 +292,11 @@ export class ZoneRoom extends DurableObject<Env> {
       const zone = await this.load();
       // Nobody here: pause. resumeTimer restarts the clock when someone comes back.
       if (this.ctx.getWebSockets().length === 0) return;
+      // Out of a fight: a round (or a torch's) has fallen due. Counting it sets the next (apply, armClock).
+      if (!zone.encounter) {
+        await this.apply({ type: "time", now: Date.now() });
+        return;
+      }
       const deadline = zone.encounter?.deadline ?? null;
       if (deadline && Date.now() < deadline - 500) {
         await this.ctx.storage.setAlarm(deadline);
@@ -303,6 +313,8 @@ export class ZoneRoom extends DurableObject<Env> {
    */
   private async apply(action: ZoneAction, pack?: string, from?: Asked): Promise<string | null> {
     const db = this.env.DB;
+    // A walk is timed, so the next may call it off while it is still being played (zone.ts, cutShort).
+    if (action.type === "move") action = { ...action, now: Date.now() };
     let prev = this.zone!;
     // Time out of a fight has gone by since the last thing done here (zone/clock.ts): it passes first.
     let passed: ZoneEvent[] = [];
@@ -336,6 +348,8 @@ export class ZoneRoom extends DurableObject<Env> {
     }
     const next = res.state;
     if (zoneAwaiting(next) !== zoneAwaiting(prev)) await this.armTimer(next);
+    // Out of a fight, the clock's next round.
+    if (!zoneAwaiting(next)) await this.armClock(next);
     this.zone = next;
     // The pack first: a potion drunk is gone from it even if the room goes away before the zone is saved.
     const writes: D1PreparedStatement[] = [];
@@ -467,10 +481,21 @@ export class ZoneRoom extends DurableObject<Env> {
     else await this.ctx.storage.deleteAlarm();
   }
 
+  /**
+   * Out of a fight: wake the room when the next round falls due, if anything is running out (zone/clock.ts nextTick);
+   * else no alarm at all. A fight's own timer (armTimer) is left alone.
+   */
+  private async armClock(zone: ZoneState) {
+    if (zoneAwaiting(zone)) return;
+    const due = nextTick(zone);
+    if (due === null) await this.ctx.storage.deleteAlarm();
+    else await this.ctx.storage.setAlarm(Math.max(due, Date.now() + 100));
+  }
+
   /** Called when someone connects: restart a clock that lapsed while the zone was empty. */
   private async resumeTimer() {
     const zone = this.zone!;
-    if (!zoneAwaiting(zone)) return;
+    if (!zoneAwaiting(zone)) return this.armClock(zone);
     const deadline = zone.encounter?.deadline ?? null;
     const alarm = await this.ctx.storage.getAlarm();
     if (alarm === null || !deadline || deadline < Date.now()) {

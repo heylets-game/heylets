@@ -290,8 +290,11 @@ export class HarborRoom extends DurableObject<Env> {
     if (msg.type === "move") {
       const to = hexAsked(msg.to);
       if (!to) return;
-      // With a boat, out onto the water: a barrel along the coast, a rowboat anywhere.
-      const path = harborPath(MAP, player.pos, to, player.vessel ?? null);
+      // With a boat, out onto the water: a barrel along the coast, a rowboat anywhere. Asked for while the last walk
+      // is still being played: that one stops where it had got to, and this one goes on from there (its first hex).
+      const cut = this.here.cutAt(player, msg.from);
+      const fromCut = cut && (cut.q === to.q && cut.r === to.r ? [] : harborPath(MAP, cut, to, player.vessel ?? null));
+      const path = cut && fromCut ? [cut, ...fromCut] : harborPath(MAP, player.pos, to, player.vessel ?? null);
       if (!path) {
         // No way there. A client shows its own walks at the click and counts the answers (client/useHarbor.ts), so
         // it is told this one was not made, and where its hero really stands. Nobody else saw anything, so nobody else is told.
@@ -299,7 +302,7 @@ export class HarborRoom extends DurableObject<Env> {
         return;
       }
       // Walking off rolls the bedroll back up, and puts the rod away.
-      this.here.walk(ws, player, path, { bedroll: undefined, fishing: undefined });
+      this.here.walk(ws, player, path, { bedroll: undefined, fishing: undefined }, cut && fromCut ? cut : null);
     } else if (msg.type === "refresh") {
       // They changed gear or levelled: re-read the character and show everyone the new look. The three
       // readings do not wait on one another, so they are asked for together. One figure walks the town for a whole

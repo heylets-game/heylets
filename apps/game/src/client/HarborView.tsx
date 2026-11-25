@@ -209,12 +209,16 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
   const [copied, setCopied] = useState(false);
   const chatEnd = useRef<HTMLDivElement>(null);
 
+  /** Whether a conversation is on, for the walk to tell (useHarbor's walkLeft). */
+  const talkingNow = useRef(false);
   const harbor = useHarbor(
     (id, path) => renderer.current?.playEvents([{ t: "moved", heroId: id, path }]),
     (m) => renderer.current?.playEvents(xpEvents(m)),
     (id, text) => renderer.current?.say(id, text),
     !resting,
     inside,
+    // A click while walking calls the walk off where it has got to; not in the middle of a conversation.
+    (id) => (talkingNow.current ? [] : (renderer.current?.walkLeft(id) ?? [])),
   );
   // The crew's muster, told down the Harbor's socket: whoever says they are ready is taken to the map when it starts.
   const muster = useMuster(harbor.you ?? me.player.id, { pushed: harbor.muster, onStart: () => void refresh() });
@@ -423,6 +427,7 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
   useBanter(renderer, me.crew?.id, "harbor", !resting, [talk.active?.unit, wantRegular ? regularUnit(wantRegular) : null, chatWith ? regularUnit(chatWith) : null]);
   // The conversation over: they are on their way again.
   const talking = !!talk.active;
+  talkingNow.current = talking;
   useEffect(() => {
     if (talking) return;
     setChatWith(null);

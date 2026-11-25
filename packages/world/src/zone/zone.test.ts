@@ -15,7 +15,7 @@ import { HEX_ROOM, adjacent, blast, blockerAt, flies, isDead, sameHex, seesFor, 
 import { propOf } from "./props";
 import { SITE_IDS, backdropOf, siteInside, type SiteId } from "./sites";
 import { ACTION_AP, AP_MAX, AP_TURN, AQUEOUS, RALLY, SUMMON_AP_TURN, AURAS, CHART, COMMON_ACTIONS, BLOCK, BONUS_AP, BOLSTER, AGAINST_WAVES, ENDURE, STAND_STRONG, STURDY, ENEMY_BURST, ENEMY_KIT, ENEMY_MOVE_AP, EXPLORE_ROUND_MS, FLEE_RANGE, LIGHT_RADIUS, SHIELD_SET_ASIDE, TACTICS, TORCH_GROUND_ROUNDS, TORCH_HELD_ROUNDS, TORCH_ROUND_MS, abilityDice as abilityDiceFor, commonCost, enemyHp, DEFAULT_MIND, abilityStrikes, enemyMove, enemyStrikes, mindOf, tacticOf, unitStrikes } from "./kit";
-import { MAX_CATCHUP_ROUNDS } from "./clock";
+import { MAX_CATCHUP_ROUNDS, nextTick } from "./clock";
 import { d20, diceAverage, diceFor, heroMove, hitChance } from "./rules";
 import { createZone, ensureMouth, loadZone, spentOut, standInHero, stepZone, zoneView } from "./zone";
 import { DELVE_CRATES, DELVE_GLOWCAPS as GLOWCAP_COUNT, generateDelve } from "./delve";
@@ -295,6 +295,67 @@ describe("zone generation", () => {
 });
 
 // ---------- walking, and walking into a fight ----------
+
+describe("a walk called off part of the way", () => {
+  const go = (to: HexPos, extra: { from?: HexPos; now?: number } = {}): ZoneAction => ({ type: "move", by: "ann", unit: "ann", to, now: 1_000, ...extra });
+
+  it("sets off again from where the hero had got to, and says where that was", () => {
+    let state = board();
+    hero(state, "ann", "qa_paladin", at(2, 6));
+    state = must(state, go(at(8, 6)));
+    const events: ZoneEvent[] = [];
+    state = must(state, go(at(4, 9), { from: at(4, 6), now: 1_500 }), events);
+    expect(unit(state, "ann").pos).toEqual(at(4, 9));
+    const moved = events.find((e) => e.t === "moved");
+    expect(moved?.t === "moved" && moved.cut).toEqual(at(4, 6));
+    // Its way there starts beside where it was called off, not back at the end of the walk before.
+    expect(moved?.t === "moved" && hexDistance(moved.path[0], at(4, 6))).toBe(1);
+  });
+
+  it("stops there and goes no further when that is the hex clicked", () => {
+    let state = board();
+    hero(state, "ann", "qa_paladin", at(2, 6));
+    state = must(state, go(at(8, 6)));
+    const events: ZoneEvent[] = [];
+    state = must(state, go(at(5, 6), { from: at(5, 6) }), events);
+    expect(unit(state, "ann").pos).toEqual(at(5, 6));
+    expect(events).toEqual([{ t: "moved", id: "ann", path: [at(5, 6)], cut: at(5, 6) }]);
+  });
+
+  it("is not called off at a hex off the way, nor once the walk would have finished playing", () => {
+    let state = board();
+    hero(state, "ann", "qa_paladin", at(2, 6));
+    state = must(state, go(at(8, 6)));
+    const off = must(state, go(at(4, 9), { from: at(4, 8), now: 1_500 }));
+    const late = must(state, go(at(4, 9), { from: at(4, 6), now: 60_000 }));
+    for (const s of [off, late]) expect(unit(s, "ann").pos).toEqual(at(4, 9));
+    const events: ZoneEvent[] = [];
+    must(state, go(at(4, 9), { from: at(4, 6), now: 60_000 }), events);
+    expect(events.some((e) => e.t === "moved" && e.cut)).toBe(false);
+  });
+
+  it("is not called off once the hero has done something else", () => {
+    let state = board();
+    hero(state, "ann", "qa_paladin", at(2, 6));
+    state = must(state, go(at(8, 6)));
+    const lit = must(state, { type: "drink", by: "ann", unit: "ann", item: "healing" });
+    const events: ZoneEvent[] = [];
+    must(lit, go(at(4, 9), { from: at(4, 6) }), events);
+    expect(events.some((e) => e.t === "moved" && e.cut)).toBe(false);
+    // Only the server keeps the walk: it is not sent.
+    expect("strolls" in zoneView(state, "ann")).toBe(false);
+  });
+
+  it("is not called off when the walk brought something about", () => {
+    let state = board();
+    state.aiOff = true;
+    hero(state, "ann", "qa_paladin", at(2, 6));
+    enemy(state, "bandit", at(12, 6));
+    // Walking up to the band: it takes notice, and a fight is on.
+    state = must(state, go(at(10, 6)));
+    expect(state.strolls?.ann).toBeUndefined();
+  });
+});
 
 describe("free walking", () => {
   it("lets a hero walk anywhere with no fight on, and takes no turns", () => {
@@ -1015,7 +1076,25 @@ describe("time out of a fight", () => {
     expect(unit(state, "ann").torch).toBe(3);
   });
 
-  it("counts every six seconds out of a fight as a round: the ground wears, burning burns, conditions run down", () => {
+  it("runs cooldowns down a round at a time, and says when the next round is due while anything is running out", () => {
+    let state = board();
+    hero(state, "ann", "qa_paladin", at(3, 6));
+    state = tell(state, T0);
+    // Nothing running out: no round to wait for.
+    expect(nextTick(state)).toBeNull();
+    unit(state, "ann").cooldowns = { bash: 2 };
+    expect(nextTick(state)).toBe(T0 + EXPLORE_ROUND_MS);
+    state = tell(state, T0 + EXPLORE_ROUND_MS);
+    expect(unit(state, "ann").cooldowns).toEqual({ bash: 1 });
+    state = tell(state, T0 + 2 * EXPLORE_ROUND_MS);
+    expect(unit(state, "ann").cooldowns).toEqual({});
+    expect(nextTick(state)).toBeNull();
+    // Only a torch alight: the torch's own, far slower clock.
+    unit(state, "ann").torch = 3;
+    expect(nextTick(state)).toBe(T0 + TORCH_ROUND_MS);
+  });
+
+  it("counts every three seconds out of a fight as a round: the ground wears, burning burns, conditions run down", () => {
     let state = board();
     const ann = hero(state, "ann", "qa_paladin", at(3, 6));
     ann.conditions = [{ kind: "burning", rounds: 2 }, { kind: "slowed", rounds: 5 }];
@@ -1389,7 +1468,7 @@ describe("the end of a fight", () => {
     expect(events.some((e) => e.t === "fight_end" && e.outcome === "victory")).toBe(true);
     expect(state.units.some((u) => u.side === "enemy")).toBe(false);
     expect(state.groups).toEqual({});
-    expect(unit(state, "bo")).toMatchObject({ down: false, hp: 1 });
+    expect(unit(state, "bo")).toMatchObject({ down: false, hp: unit(state, "bo").maxHp });
     expect(bo.id).toBe("bo");
   });
 
@@ -1404,10 +1483,22 @@ describe("the end of a fight", () => {
     for (let i = 0; i < 60 && state.encounter; i++) state = must(state, { type: "timeout" }, events);
     expect(events.some((e) => e.t === "fight_end" && e.outcome === "defeat")).toBe(true);
     expect(state.encounter).toBeNull();
-    expect(unit(state, "ann")).toMatchObject({ down: false, hp: 1 });
+    expect(unit(state, "ann")).toMatchObject({ down: false, hp: unit(state, "ann").maxHp });
     expect(hexDistance(unit(state, "ann").pos, state.start)).toBeLessThanOrEqual(1);
     expect(unit(state, bear.id)).toMatchObject({ hp: unit(state, bear.id).maxHp, pos: bear.home });
     expect(state.groups.g1.alerted).toBe(false);
+  });
+
+  it("sends every hero out of a won fight whole, the wounded and the fallen alike", () => {
+    let { state } = duel("skeleton");
+    const bo = hero(state, "bo", "devops_mage", at(3, 9));
+    state.encounter!.order.push("bo");
+    unit(state, "ann").hp = 2;
+    Object.assign(bo, { hp: 0, down: true });
+    state = must(state, { type: "dev", by: "ann", dev: { op: "end_fight" } });
+    expect(state.encounter).toBeNull();
+    expect(unit(state, "ann")).toMatchObject({ down: false, hp: unit(state, "ann").maxHp });
+    expect(unit(state, "bo")).toMatchObject({ down: false, hp: unit(state, "bo").maxHp });
   });
 
   it("pays a won fight's XP to each player's hero, never a stand-in's, leaves the fallen lying to be searched, and says when the map is cleared", () => {
@@ -1710,8 +1801,8 @@ describe("fleeing", () => {
     expect(step.events.some((e) => e.t === "spoils" || e.t === "cleared")).toBe(false);
     expect(step.effects).toEqual([]);
     expect(state.encounter).toBeNull();
-    // No worse off than losing: where she stood, as hurt as she was, never knocked down to 1 HP.
-    expect(unit(state, "ann")).toMatchObject({ pos: before.pos, hp: before.hp, down: false, cooldowns: {} });
+    // No worse off than losing: where she stood, and whole again, as anyone out of a fight is.
+    expect(unit(state, "ann")).toMatchObject({ pos: before.pos, hp: before.maxHp, down: false, cooldowns: {} });
     // The bandit is back at its post with its wounds bound, so fleeing is no way to wear it down, and has stopped looking.
     expect(unit(state, foe)).toMatchObject({ pos: at(9, 6), hp: bandit.maxHp, down: false, conditions: [] });
     expect(state.groups.g1.alerted).toBe(false);
@@ -1868,7 +1959,7 @@ describe("fleeing", () => {
     expect(events).toContainEqual({ t: "fight_end", outcome: "defeat" });
     expect(state.encounter).toBeNull();
     // The fallen wake at the start, as from any lost fight; the one who ran is where she ran to.
-    expect(unit(state, "bo")).toMatchObject({ down: false, hp: 1 });
+    expect(unit(state, "bo")).toMatchObject({ down: false, hp: unit(state, "bo").maxHp });
     expect(hexDistance(unit(state, "bo").pos, state.start)).toBeLessThanOrEqual(1);
     expect(unit(state, "ann")).toMatchObject({ pos: annBefore.pos, hp: annBefore.hp });
     expect(unit(state, wolf)).toMatchObject({ hp: unit(state, wolf).maxHp, pos: at(9, 6) });
@@ -2670,14 +2761,17 @@ describe("crates", () => {
     quiet(state);
     expect(step.effects.map((e) => e.heroId)).toEqual(["bo"]);
 
-    // A bomb thrown, and a blast with a wait on it used twice running: out of a fight neither Action nor wait counts.
+    // A bomb thrown, and a blast with a wait on it: out of a fight no Action counts, but the wait does, and it runs
+    // down on the clock (clock.ts), so it cannot be used again at once.
     const events: ZoneEvent[] = [];
     state = must(state, { type: "throw", by: "cy", unit: "cy", item: "fire", at: at(7, 3) }, events);
     state = must(state, { type: "use", by: "cy", unit: "cy", ability: "chorus", at: at(7, 3) }, events);
-    state = must(state, { type: "use", by: "cy", unit: "cy", ability: "chorus", at: at(7, 3) }, events);
+    expect(fails(state, { type: "use", by: "cy", unit: "cy", ability: "chorus", at: at(7, 3) })).toMatch(/not ready yet/);
     quiet(state);
-    expect(hits(events, "crate3").map((h) => h.what)).toEqual(["throw:fire", "fire", "chorus", "chorus"]);
-    expect(unit(state, "cy").cooldowns).toEqual({});
+    expect(hits(events, "crate3").map((h) => h.what)).toEqual(["throw:fire", "fire", "chorus"]);
+    expect(unit(state, "cy").cooldowns.chorus).toBeGreaterThan(0);
+    // As if its rounds had run out.
+    unit(state, "cy").cooldowns = {};
 
     // A blast that catches the band as well as a crate: that one starts a fight, with the band that was hit.
     const both: ZoneEvent[] = [];
