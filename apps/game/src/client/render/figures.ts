@@ -3740,16 +3740,17 @@ function lowHair(head: Part, hair: string, style: string, rings: readonly Ring[]
 }
 
 /**
- * A long wizard's beard from the chin down the chest, laid out like the braids in the torso's units so it
- * clears the chest however stout the hero: forward from the chin, then down, in two pieces that swing
- * (see swingBraids), wide and flat, tapering to a point.
+ * A long wizard's beard from under the chin down the chest, laid out like the braids in the torso's units so it
+ * clears the chest however stout the hero: forward, then down, in two pieces that swing (see swingBraids), wide
+ * and flat, tapering to a point. Its top is inside the jaw's beard (`w` wide across the cheeks, in the head's
+ * units), which carries on down past the chin to meet it, so it grows out of that with no edge showing.
  */
-function lowWizardBeard(head: Part, c: string, rings: readonly Ring[], chinY: number) {
+function lowWizardBeard(head: Part, c: string, rings: readonly Ring[], chinY: number, w: number) {
   const k = BIG_HEAD * m.head;
   const neckY = 6 + headLift();
   const g = m.girth;
-  const chinZ = faceAt(rings, chinY + 0.3) - 0.35;
-  const from = new THREE.Vector3(0, neckY + (chinY + 0.3) * k, chinZ * k);
+  const chin = ringAt(rings, chinY);
+  const from = new THREE.Vector3(0, neckY + (chinY - 0.35) * k, (chin.dz + 0.35) * k);
   const mid = new THREE.Vector3(0, Math.min(from.y - 2.6, 4.6), 2.15 * g + 1.25);
   const tip = new THREE.Vector3(0, mid.y - 3.4, 2.25 * g + 1.1);
   const root = new Part(head.joint, 0, (from.y - neckY) / k, from.z / k);
@@ -3757,17 +3758,16 @@ function lowWizardBeard(head: Part, c: string, rings: readonly Ring[], chinY: nu
   const upper = mid.clone().sub(from);
   aimDown(root.skin, upper);
   const a = upper.length();
-  // As wide at the top as the beard on the jaw above it (in the body's units, not the head's), so it carries on
-  // down from the cheeks rather than hanging narrower from the chin; narrowing to the point.
-  const w = (ringAt(rings, 1.6).rx + 0.2) * k;
-  root.loft(c, [[0.4, w * 0.95, 0.95], [-a * 0.35, w * 0.88, 1.0], [-a * 0.7, w * 0.75, 0.95], [-a - 0.3, w * 0.62, 0.85]], 8);
+  // As wide at the top as the jaw's beard where it meets it (in the body's units, not the head's), narrowing to the point.
+  const wb = w * k;
+  root.loft(c, [[0.4, wb * 0.8, 0.95], [-a * 0.35, wb * 0.85, 1.0], [-a * 0.7, wb * 0.75, 0.95], [-a - 0.3, wb * 0.62, 0.85]], 8);
   // An amulet is worn over it, where it would otherwise be hidden (see lowAmulet).
   beardFront = { part: root, at: [0, -a * 0.5, 1.0] };
   const end = new Part(root.joint, upper.x, upper.y, upper.z);
   const lower = tip.clone().sub(mid);
   aimDown(end.skin, lower);
   const b = lower.length();
-  end.loft(c, [[0.3, w * 0.62, 0.85], [-b * 0.35, w * 0.5, 0.75], [-b * 0.7, w * 0.3, 0.55], [-b, 0.15, 0.15, 0.25]], 8);
+  end.loft(c, [[0.3, wb * 0.62, 0.85], [-b * 0.35, wb * 0.5, 0.75], [-b * 0.7, wb * 0.3, 0.55], [-b, 0.15, 0.15, 0.25]], 8);
   hang(root, end, 0, 1);
 }
 
@@ -4676,10 +4676,18 @@ function lowFacialHair(head: Part, beard: string, mustache: string, skin: string
       break;
     }
     case "wizard": {
-      // A full beard on the jaw, and from the chin a long one down the chest in two pieces that swing.
+      // A full beard on the jaw that does not draw in to the chin but carries on down past it, as wide as the
+      // cheeks whatever the head's shape, and from inside the bottom of it a long one down the chest.
       const chin = ringAt(rings, chinY);
-      head.frontLoft(c, [[chinY - 0.4, chin.rx * 0.75, chin.rz * 0.6, chin.dz + 0.45], out(chinY + 0.1, 0.28), out(1.6, 0.2), out(2.5, 0.12)], JAW_ARC);
-      lowWizardBeard(head, c, rings, chinY);
+      const w = ringAt(rings, 1.6).rx + 0.2;
+      head.frontLoft(c, [[chinY - 0.7, w * 0.85, chin.rz + 0.1, chin.dz + 0.45], [chinY + 0.1, w * 0.95, chin.rz + 0.3, chin.dz + 0.2], out(1.6, 0.2), out(2.5, 0.12)], JAW_ARC);
+      lowWizardBeard(head, c, rings, chinY, w);
+      // Sideburns from the top of it up the sides of the face, in front of the ears, to the hair.
+      for (const s of [-1, 1]) {
+        const row = (y: number, front: number, back: number, lift: number): FacePt[] =>
+          [0, 1, 2, 3].map((i) => [y, front + ((back - front) * i) / 3, lift + (i === 0 ? -0.06 : 0)]);
+        lowFacePatch(head, c, rings, s, 0.3, [row(2.2, 60, 86, 0.3), row(3.05, 66, 86, 0.24), row(3.9, 70, 86, 0.16)]);
+      }
       break;
     }
     case "chops":
@@ -4722,6 +4730,23 @@ function lowFacialHair(head: Part, beard: string, mustache: string, skin: string
       // Wide past the corners of the mouth, up to the nose, its ends drooping.
       head.shape(c, sym([[1.55, y - 0.05, mz - 0.12], [1.3, y + 0.55, mz + 0.02], [0.4, y + 0.82, mz + 0.3], [0, y + 0.78, mz + 0.4], [0.5, y + 0.02, mz + 0.45], [0, y + 0.12, mz + 0.45], [1.75, y - 0.6, mz - 0.25], [1.15, y - 0.32, mz + 0.18]]));
       return;
+    case "standard": {
+      // A plain bar under the nose as thick and wide as a handlebar's, its ends rounded off at the corners of
+      // the mouth rather than swept up: the same run of short pieces lying on the face, thinning a little.
+      const lift = beard === "full" || beard === "wizard" ? 0.22 : 0;
+      const along: [number, number, number][] = [[0, 0.5, 0.3], [0.55, 0.44, 0.3], [1.05, 0.34, 0.27], [1.45, 0.22, 0.2], [1.62, 0.12, 0.12]];
+      for (const s of [-1, 1]) {
+        for (let i = 0; i + 1 < along.length; i++) {
+          const pts: Pt[] = [];
+          for (const [x, dy, th] of [along[i], along[i + 1]]) {
+            const z = faceZ(rings, x, y + dy) + lift;
+            for (const t of [-th, th]) pts.push([s * x, y + dy + t, z - 0.05], [s * x, y + dy + t, z + 0.12 + th]);
+          }
+          head.shape(c, pts);
+        }
+      }
+      return;
+    }
     case "pencil":
       // A thin line along the lip.
       head.shape(c, sym([[1.1, y + 0.28, mz - 0.02], [1.1, y + 0.42, mz - 0.02], [0.5, y + 0.36, mz + 0.2], [0.5, y + 0.5, mz + 0.2], [0, y + 0.38, mz + 0.26], [0, y + 0.52, mz + 0.26]]));
