@@ -141,7 +141,6 @@ export function MapsTab() {
             <button className="small" onClick={() => send({ op: "start_fight" })}>Start a fight here</button>
             <button className="small" onClick={() => send({ op: "end_fight" })}>End the fight</button>
             <button className="small" onClick={() => send({ op: "clear_surfaces" })}>Clear the ground</button>
-            <button className="small" onClick={() => dev.open?.previewBell?.()}>Ring the alarm bell (preview)</button>
           </div>
           <div className="dev-row">
             <label><input type="checkbox" onChange={(e) => send({ op: "ai", off: e.target.checked })} /> Enemy takes no turns</label>
