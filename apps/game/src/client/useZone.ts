@@ -11,6 +11,10 @@
 // one that does not, actions are sent as they always were and nothing is
 // shown ahead.
 //
+// A party (party.ts) is on this one connection: each message says which of its
+// heroes it is from (`as`), the one whose unit an action moves, or else the
+// one being acted as. The server takes only a hero of the party at its word.
+//
 // A map's tiles never change, and they are most of what a state weighs. The
 // connection says it keeps them (`lean`), so the server sends them with the
 // first update only, and they are carried over into every one after.
@@ -18,6 +22,7 @@
 import { useCallback, useRef, useState } from "react";
 import type { Emote, EmoteMessage, ZoneAction, ZoneEvent, ZoneView } from "@gantt-quest/world";
 import { PROFILE } from "./api";
+import { actingHero } from "./party";
 import { emotes } from "./emotes";
 import { useRoomSocket } from "./useRoom";
 
@@ -122,15 +127,18 @@ export function useZone(code: string, handlers: ZoneHandlers): ZoneConnection {
   const send = useCallback((action: ZoneSend) => {
     // The number is used up only by an action that was sent.
     const n = sent.current + 1;
-    if (!post({ type: "action", action, n })) return null;
+    // Whose this is: the hero whose unit it moves, or who plays it (a stand-in, a creature called in).
+    const unit = "unit" in action ? latest.current?.units.find((u) => u.id === action.unit) : undefined;
+    const as = unit ? (unit.controller ?? unit.id) : actingHero();
+    if (!post({ type: "action", action, n, ...(as ? { as } : {}) })) return null;
     sent.current = n;
     return answers.current ? n : null;
   }, []);
   const resheet = useCallback(() => {
-    post({ type: "sheet" });
+    post({ type: "sheet", ...(actingHero() ? { as: actingHero() } : {}) });
   }, []);
   const emote = useCallback((emote: Emote) => {
-    post({ type: "emote", emote });
+    post({ type: "emote", emote, ...(actingHero() ? { as: actingHero() } : {}) });
   }, []);
   const clearError = useCallback(() => setError(null), []);
   return { state, online, status: socket.status, error: socket.error, trades, send, resheet, emote, clearError };

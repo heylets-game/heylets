@@ -117,6 +117,8 @@ export interface CrewPlace {
   level: number;
   /** The zone they are on, or null if they are not on one (in the Harbor, or away). */
   zone: { code: string; fighting: boolean } | null;
+  /** Walking the Harbor (or in one of its buildings) right now: set where the Harbor's room was asked. */
+  town?: boolean;
 }
 
 async function placesIn(db: D1Database, crew: WhichCrew, id: string): Promise<CrewPlace[]> {

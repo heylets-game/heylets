@@ -26,12 +26,7 @@
 .zone-cursor.bad { border-color: #ff4d4d; color: #ff8a8a; }
 .zone-cursor.bad .zone-cursor-note { color: #ff8a8a; }
 
-/* Your own, when you have more than one to play (stand-in crewmates). */
-.zone-party { position: absolute; top: 60px; left: 10px; z-index: 10; display: flex; flex-direction: column; gap: 4px; padding: 6px; }
-
-
-/* The crew, and where each of them is: right-click one to trade with them or go to them. */
-.zone-crew { position: absolute; top: 60px; right: 52px; width: 230px; z-index: 10; }
+/* The crew, and where each of them is (right-click one to trade with them or go to them): placed by .party-roster (ui/hud.css). */
 
 
 /* The roll: the dice as they fell, the sum, what it had to reach, and how it came out. */

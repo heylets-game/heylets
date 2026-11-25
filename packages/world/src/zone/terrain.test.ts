@@ -1430,14 +1430,14 @@ describe("the enemy uses the ground", () => {
   });
 
   // ---- an enemy's abilities cost their own AP ----
-  /** A bandit carrying only `ability`; Ann a short walk off, and Bo, all but down, a longer one. */
+  /** A bandit carrying only `ability`; Ann a short walk off, and Bo, easier to hit (Sundered), a longer one. */
   function place(ability: string) {
     const state = board();
     state.aiOff = false;
     const ann = hero(state, "ann", "qa_paladin", at(5, 6));
     ann.hp = ann.maxHp = 300;
     const bo = hero(state, "bo", "qa_paladin", at(2, 1));
-    bo.hp = 1;
+    bo.conditions.push({ kind: "sundered", rounds: 99 });
     const foe = enemy(state, "bandit", at(2, 6), "g1", 200);
     foe.abilities = [ability];
     return { state, foe: foe.id };
@@ -1456,7 +1456,7 @@ describe("the enemy uses the ground", () => {
         // (Two turns of the heroes': with two of them, the enemy's first may come after both.)
         const { events } = play(state, seed, 2);
         const used = got(events, "used").filter((e) => e.id === foe);
-        // Bo, all but down, is the better blow, but it could not be paid for after the walk: it goes for Ann.
+        // Bo, easier to hit, is the better blow, but it could not be paid for after the walk: it goes for Ann.
         expect(used[0]?.target, `seed ${seed}`).toBe("ann");
       }
     } finally {

@@ -46,6 +46,7 @@ import { gildedRod, ownedVessel } from "./fishmarket";
 import { clearPresence } from "./zones";
 import { openNode } from "./atlas";
 import { Walkers, hexAsked, tellTrades, walkerFrom, withHero } from "./walk-room";
+import { partyOf } from "./party";
 
 /** A muster as it is kept: with the crew it is for and the lodestone set into the place, neither of which is sent to anyone. */
 interface KeptMuster {
@@ -301,9 +302,12 @@ export class HarborRoom extends DurableObject<Env> {
       this.here.walk(ws, player, path, { bedroll: undefined, fishing: undefined });
     } else if (msg.type === "refresh") {
       // They changed gear or levelled: re-read the character and show everyone the new look. The three
-      // readings do not wait on one another, so they are asked for together.
-      const [hero, vessel, gilded] = await Promise.all([heroInitFor(this.env.DB, player.id), ownedVessel(this.env.DB, player.id), gildedRod(this.env.DB, player.id)]);
-      if (hero) this.here.show(ws, { ...withHero(player, hero), vessel, gilded });
+      // readings do not wait on one another, so they are asked for together. One figure walks the town for a whole
+      // party (party.ts): it is drawn as whichever of the party they are acting as, and only as one of their party.
+      const asked = typeof msg.as === "string" ? msg.as : player.as ?? player.id;
+      const as = asked === player.id || (await partyOf(this.env.DB, player.id)).includes(asked) ? asked : player.id;
+      const [hero, vessel, gilded] = await Promise.all([heroInitFor(this.env.DB, as), ownedVessel(this.env.DB, player.id), gildedRod(this.env.DB, player.id)]);
+      if (hero) this.here.show(ws, { ...withHero(player, hero), vessel, gilded, as: as === player.id ? undefined : as });
     } else if (msg.type === "bedroll") {
       // Purely for show: the rest itself is decided by the server over HTTP. Not on a place, a street corner is fine.
       if (MAP.pois.some((p) => p.pos.q === player.pos.q && p.pos.r === player.pos.r)) return;

@@ -94,6 +94,11 @@ export interface Unit {
   home?: HexPos;
   /** A stand-in crewmate: the player who plays its turns. */
   controller?: string;
+  /**
+   * One of several heroes a single player plays together (their account's party): the party's key, the same for
+   * each of them. A party takes one share of the spoils between them, as one player would.
+   */
+  party?: string;
   /** Enemies: its pockets have been picked (Pickpocket pays once an enemy). */
   picked?: boolean;
   /** Enemies: gone into a pit (deep water, lava, off the edge of the land): it is down for good, and leaves no body to search. */
@@ -298,6 +303,11 @@ export interface LootSpot {
   shared?: LootItem[];
   /** A body or a chest: who took each thing that has gone from it, by the thing's `uid`. */
   gone?: Record<number, string>;
+  /**
+   * The spoils: whose share in `loot` each hero takes from, where it is not their own: a party has one share between
+   * them (Unit.party), kept under its key, and every hero in the party when it was rolled is written down here.
+   */
+  shareOf?: Record<string, string>;
 }
 
 export interface ZoneState {
@@ -371,6 +381,8 @@ export interface ZoneHero {
   items?: Partial<Record<Throwable, number>>;
   /** Lucky rolls they bring with them: coins tossed in the town well (well.ts), each one attack roll with advantage. */
   luck?: number;
+  /** One of a player's party (Unit.party): the party's key. Empty: on their own now. Missing: as they were. */
+  party?: string;
 }
 
 export type CommonAction = "disengage" | "help" | "shove" | "jump" | "flee" | "join";
@@ -581,5 +593,6 @@ export type ZoneStep = { ok: true; state: ZoneState; events: ZoneEvent[]; effect
 
 /** What a client is sent: the zone, less its dice. */
 /** `dark`: enemies in the fight that stand where the party cannot see them (those out of a fight are not sent at all). */
-/** `loot`: of what there is to loot, each thing holds only what is in it for you. */
-export type ZoneView = Omit<ZoneState, "rng" | "seed"> & { you: string; dark?: string[] };
+/** `loot`: of what there is to loot, each thing holds only what is in it for you (and for your party). */
+/** `party`: the other heroes the player being told plays as well (their account's party), each a hero of their own. */
+export type ZoneView = Omit<ZoneState, "rng" | "seed"> & { you: string; party?: string[]; dark?: string[] };

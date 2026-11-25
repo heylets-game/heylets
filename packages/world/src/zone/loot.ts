@@ -145,14 +145,32 @@ export function checkLoot(state: ZoneState, unit: Unit, spot: LootSpot | undefin
  */
 export const sharedLoot = (spot: LootSpot): boolean => spot.kind !== "spoils" && (!!spot.shared || Object.keys(spot.loot).length === 0);
 
-/** What `hero` would find in a spot now: what is left in a body or a chest, or of their own share of the spoils. Undefined: it has not been looked into yet. */
-export const lootIn = (spot: LootSpot, hero: string): LootItem[] | undefined => (sharedLoot(spot) ? spot.shared : spot.loot[hero]);
+/** What `hero` would find in a spot now: what is left in a body or a chest, or of their own share of the spoils (their party's). Undefined: it has not been looked into yet. */
+export const lootIn = (spot: LootSpot, hero: string): LootItem[] | undefined => (sharedLoot(spot) ? spot.shared : spot.loot[shareKey(spot, hero)]);
+
+/** Whose share of a spot `hero` takes from: their party's, once it has been rolled with them in it, else their own. */
+const shareKey = (spot: LootSpot, hero: string): string => spot.shareOf?.[hero] ?? hero;
+
+/**
+ * The key a hero's share of the spoils is kept under: their party's if they play in one, else their own. Once a
+ * party's share is rolled, every hero of it on the map is written down as taking from it, so none of them rolls another.
+ */
+function shareFor(hero: Unit, spot: LootSpot): string {
+  const known = spot.shareOf?.[hero.id];
+  if (known) return known;
+  if (spot.kind !== "spoils" || !hero.party) return hero.id;
+  return hero.party;
+}
 
 /** What is in a spot, as `hero` finds it: rolled now if nobody has looked into a body or a chest before, or they have not looked at their share of the spoils. */
 export function look(ctx: Ctx, hero: Unit, spot: LootSpot): LootItem[] {
   const shared = sharedLoot(spot);
-  const had = shared ? spot.shared : spot.loot[hero.id];
-  if (had) return had;
+  const key = shared ? hero.id : shareFor(hero, spot);
+  const had = shared ? spot.shared : spot.loot[key];
+  if (had) {
+    if (!shared && key !== hero.id) (spot.shareOf ??= {})[hero.id] = key;
+    return had;
+  }
   const { options } = ctx.state;
   // Whose a piece of gear in it would be: the looker's, in a share of their own. In what is everyone's, one of the
   // players' heroes on the map as the dice have it, so that what is found is nothing to do with who looked first.
@@ -164,7 +182,11 @@ export function look(ctx: Ctx, hero: Unit, spot: LootSpot): LootItem[] {
     : rollSpoils(ctx.rng, who, options);
   const found = rolled.map((item, i) => ({ ...item, uid: i + 1 }));
   if (shared) spot.shared = found;
-  else spot.loot[hero.id] = found;
+  else {
+    spot.loot[key] = found;
+    // A party's one share: each of them on the map now takes from it, whichever of them looks next.
+    if (key !== hero.id) for (const u of players(ctx.state)) if (u.party === key) (spot.shareOf ??= {})[u.id] = key;
+  }
   return found;
 }
 
@@ -191,7 +213,7 @@ export function take(ctx: Ctx, hero: Unit, spot: LootSpot, which: { index?: numb
   if (shared) {
     spot.shared = left;
     for (const item of taken) if (item.uid !== undefined) (spot.gone ??= {})[item.uid] = hero.id;
-  } else spot.loot[hero.id] = left;
+  } else spot.loot[shareKey(spot, hero.id)] = left;
   const blank = (): Extract<ZoneEffect, { type: "grant" }> => ({ type: "grant", heroId: hero.id, xp: 0, resources: {} });
   const grants = [blank()];
   /** The first grant with nothing of this sort in it yet, or a fresh one. */
@@ -235,7 +257,14 @@ export const zoneCleared = (state: Pick<ZoneState, "map" | "units" | "options">)
  */
 export const unlooted = (state: Pick<ZoneState, "loot">, hero: string): number => (state.loot ?? []).filter((s) => (lootIn(s, hero)?.length ?? 1) > 0).length;
 
-/** What a client is sent of the loot: every spot, with what is everyone's in it as it stands, and of the shares in it only `you`'s own. */
-export function lootFor(state: Pick<ZoneState, "loot">, you: string): LootSpot[] | undefined {
-  return state.loot?.map((s) => ({ ...s, loot: s.loot[you] ? { [you]: s.loot[you] } : {} }));
+/** What a client is sent of the loot: every spot, with what is everyone's in it as it stands, and of the shares in it only `you`'s own (or, given several, each of theirs). */
+export function lootFor(state: Pick<ZoneState, "loot">, you: string | readonly string[]): LootSpot[] | undefined {
+  const whose = typeof you === "string" ? [you] : you;
+  return state.loot?.map((s) => {
+    const { shareOf: _shareOf, ...rest } = s;
+    // A party's share is sent with which of them it is for; nobody else's is sent at all.
+    const keys = [...new Set(whose.map((id) => shareKey(s, id)))].filter((k) => s.loot[k]);
+    const mapped = whose.filter((id) => s.shareOf?.[id]);
+    return { ...rest, loot: Object.fromEntries(keys.map((k) => [k, s.loot[k]])), ...(mapped.length > 0 ? { shareOf: Object.fromEntries(mapped.map((id) => [id, s.shareOf![id]])) } : {}) };
+  });
 }

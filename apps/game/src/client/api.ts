@@ -4,6 +4,7 @@ import type { StatKey } from "@gantt-quest/core";
 import type { FinishKind, HutFinish, Muster, MusterAnswer, SowWith } from "@gantt-quest/world";
 import type { Appearance, BaitId, BoatId, RodId, CarryState, FishSpot, GatherChoice, HarborXpStatus, GatherSpot, HarborWorks, HutSummary, ItemDef, Lodestone, ProjectAmounts, PublicHero, Resources, SalesEntry, SalesmanId, SalesmanVisit, ShopEntry, Throwable, TradeSide } from "@gantt-quest/world";
 import { devTools } from "./devTools";
+import { actAs, actingHero } from "./party";
 import { forcedSalesman } from "./salesmanClock";
 import type { GatherStatus } from "../server/gather";
 import type { SittingPaid } from "../server/fishing";
@@ -150,12 +151,15 @@ export interface HeroSlot {
   appearance: string | null;
   /** The world (crew) they are in, if any. */
   crew: { id: string; name: string } | null;
+  /** In the account's party: they come onto a map with the hero being played. */
+  party: boolean;
 }
 
 async function request<T>(path: string, body?: unknown, extra: Record<string, string> = {}): Promise<T> {
   const res = await fetch(path, {
     method: body === undefined ? "GET" : "POST",
-    headers: { "content-type": "application/json", ...(PROFILE ? { "x-gq-profile": PROFILE } : {}), ...extra },
+    // The party member this tab is acting as, if not the hero this device plays (party.ts): it is that hero who asks.
+    headers: { "content-type": "application/json", ...(PROFILE ? { "x-gq-profile": PROFILE } : {}), ...(actingHero() ? { "x-gq-hero": actingHero()! } : {}), ...extra },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   // The game's routes answer `error`; Better Auth's (/api/auth/*) answer `message` and `code`.
@@ -221,10 +225,17 @@ export const api = {
   signOut: () => request("/api/auth/sign-out", {}),
   /** The account's finished heroes, most recently played first, and how many an account may have. */
   heroes: () => request<{ heroes: HeroSlot[]; max: number }>("/api/heroes"),
-  /** Play another of the account's heroes on this device. */
-  chooseHero: (id: string) => request("/api/heroes/choose", { id }),
-  /** An empty slot to make a new hero in, now the one this device plays. */
-  newHero: () => request<{ id: string }>("/api/heroes/new", {}),
+  /** Play another of the account's heroes on this device, as themselves: no longer acting as one of the old party. */
+  chooseHero: (id: string) => request("/api/heroes/choose", { id }).then((r) => (actAs(null), r)),
+  /** Another of the account's heroes into the party of the hero being played, brought into this world if they are not in it. */
+  addToParty: (id: string) => request("/api/party/add", { id }),
+  /** One of the account's heroes out of the party. */
+  leaveParty: (id: string) => request("/api/party/remove", { id }),
+  /**
+   * An empty slot to make a new hero in, now the one this device plays. No longer acting as one of the old party: the
+   * requests that make the hero would otherwise go as that member, who has a character already.
+   */
+  newHero: () => request<{ id: string }>("/api/heroes/new", {}).then((r) => (actAs(null), r)),
   createCrew: (name: string) => request("/api/crew", { name }),
   joinCrew: (code: string) => request("/api/crew/join", { code }),
   /** Leave a world for good: the one named, or else the one the hero is in. */
@@ -307,7 +318,7 @@ export const api = {
   // The dev toolbox's seeding. The server answers these only on a development deployment (server/dev.ts).
   /** Add gold to your purse, or take it with a negative amount. */
   /** Everyone in your crew and the zone each is on, if any. */
-  crewPlaces: () => request<{ members: { id: string; name: string; classId: string; level: number; zone: { code: string; fighting: boolean } | null }[] }>("/api/crew/places"),
+  crewPlaces: () => request<{ members: { id: string; name: string; classId: string; level: number; zone: { code: string; fighting: boolean } | null; town?: boolean }[] }>("/api/crew/places"),
   /** Where to go to join a crewmate: the zone they are on, or null for the Harbor. Refused while they are in a fight. */
   teleport: (to: string) => request<{ zone: string | null; name: string }>("/api/crew/teleport", { to }),
   /** The crew's chart: the Harbor, what is cleared, what is open, the fog beyond, and who is out on what. */

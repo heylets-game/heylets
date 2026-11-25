@@ -1,0 +1,15 @@
+/* The list that changes the party (PartyPicker.tsx): the account's heroes, each with Add or Remove. */
+.party-face { flex: none; width: 28px; height: 34px; image-rendering: pixelated; background: #14122a; border: 1px solid var(--line); }
+.party-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.party-name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.party-sub { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.party-ask { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(8, 6, 14, 0.45); z-index: 40; padding: 16px; }
+.party-picker { width: min(380px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; }
+.party-picker-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.party-picker-head h3 { margin: 0; }
+.party-picker > p { font-size: 13px; }
+.party-list { list-style: none; margin: 8px 0 0; padding: 0; }
+.party-list li { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px dashed #37335a; }
+.party-list li:last-child { border-bottom: none; }
+.party-error { color: #ff9b9b; font-size: 13px; }
