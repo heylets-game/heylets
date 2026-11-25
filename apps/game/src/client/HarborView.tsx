@@ -16,7 +16,7 @@ import { CatchPanel } from "./CatchPanel";
 import { ChatInput } from "./ChatInput";
 import { AccountPanel } from "./Account";
 import { CrewRoster, type RosterMember } from "./CrewRoster";
-import { TownParty } from "./PartyBar";
+import { useTownParty } from "./PartyPicker";
 import { NoticeBoard } from "./board/NoticeBoard";
 import { AttentionMark } from "./AttentionMark";
 import { PlaceTitle } from "./PlaceTitle";
@@ -253,11 +253,17 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
   // The whole crew, with whoever is walking the Harbor right now marked here (and drawn in what they wear),
   // and whoever is out on a map marked as that.
   // Someone inside one of the town's buildings is here too, tagged with where.
-  const roster: RosterMember[] = useMemo(() => board.members.map((m) => {
+  // Your party: one figure (yours) walks the town for all of them, and the rest are listed with it as yours.
+  const party = useTownParty(you, me.crew?.id ?? null);
+  const partyKey = party?.ids.join(",") ?? "";
+  // Whoever is online: in town, or out on a map. Nobody offline is listed, but the heroes of your party always are.
+  const roster: RosterMember[] = useMemo(() => board.members.flatMap((m) => {
     const p = players.find((x) => x.id === m.id) ?? indoors.find((x) => x.id === m.id);
+    const ours = !!party?.ids.includes(m.id);
+    if (!p && !m.zone && !ours) return [];
     const tags = m.zone ? [m.zone.fighting ? "in a fight" : "on a map"] : p?.inside ? [insideWords(p, board.members)] : undefined;
-    return { id: m.id, name: m.name, classId: m.classId, level: p?.level ?? m.level, here: !!p && !m.zone, outfit: p?.outfit, tags };
-  }), [board.members, players, indoors]);
+    return [{ id: m.id, name: m.name, classId: m.classId, level: p?.level ?? m.level, here: (!!p || ours) && !m.zone, outfit: p?.outfit, tags }];
+  }), [board.members, players, indoors, partyKey]);
   const hereCount = roster.filter((m) => m.here).length;
   const built = builtProjects(board.works);
   const lit = built.includes("lighthouse");
@@ -942,9 +948,8 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
       {/* Someone of the crew is setting out for a place on the atlas, and asks who is coming. */}
       {muster.muster && <MusterPanel muster={muster.muster} me={harbor.you ?? me.player.id} onSay={muster.say} busy={muster.busy} error={muster.error} />}
       <div key="stage" className="stage" ref={mount} />
-      {/* Down the left-hand side: your party, the docks, the crew's cards in the middle (the talk sits under them). */}
+      {/* Down the left-hand side: the docks (the talk sits under them). */}
       <div className="hud-left">
-        <TownParty you={you ?? me.player.id} worldId={me.crew?.id ?? null} outfit={ownOutfit} />
         <DragPanel id="harbor.docks" title="Docks" foldOnPhone className="story panel docks">
           <p className="muted">The crew's atlas is opened at the waygate, in the middle of the square: everywhere you have found, and the routes that run on from there. When one of you sets out, everyone in town is asked whether they are coming. Setting out takes a lodestone: they are cut and worked at the Lapidary, the narrow shop with a gem for a sign, where Tilda also buys gems. What the crew shares is kept in the town chest, on its dais down on the west shore.</p>
           <p>
@@ -952,23 +957,29 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
           </p>
         </DragPanel>
 
-        <div className="crew roster-panel crew-cards">
-          <CrewRoster
-            you={you}
-            heading={<>{hereCount} of {roster.length} here</>}
-            members={roster}
-            onOpen={heroSheet.toggle}
-            openId={heroSheet.open}
-            menu={(m) => {
-              if (m.id === you) return [];
-              const away = board.members.find((x) => x.id === m.id)?.zone;
-              return [
-                { label: "Trade", run: () => setTradeWith(m.id) },
-                { label: "Teleport to them", blocked: away?.fighting ? "In a fight" : away ? undefined : m.here ? "Already here with you" : "Not out on a map", run: () => teleportTo(m.id) },
-              ];
-            }}
-          />
-        </div>
+      </div>
+
+      {/* Top right, as on a map: the crew's cards, your party first. */}
+      <div className="crew roster-panel crew-cards party-roster">
+        <CrewRoster
+          you={you}
+          heading={<>{hereCount} here · {roster.length} online</>}
+          members={roster}
+          onOpen={heroSheet.toggle}
+          openId={heroSheet.open}
+          foldId="harbor"
+          party={party ? { ids: party.ids, acting: party.acting, onPick: party.pick, change: { leader: party.ids[0], onChanged: party.reload } } : undefined}
+          menu={(m) => {
+            // One of your party: a click plays them, and their sheet is here.
+            if (party?.ids.includes(m.id)) return m.id === party.acting ? [] : [{ label: "Hero sheet", run: () => heroSheet.toggle(m.id) }];
+            if (m.id === you) return [];
+            const away = board.members.find((x) => x.id === m.id)?.zone;
+            return [
+              { label: "Trade", run: () => setTradeWith(m.id) },
+              { label: "Teleport to them", blocked: away?.fighting ? "In a fight" : away ? undefined : m.here ? "Already here with you" : "Not out on a map", run: () => teleportTo(m.id) },
+            ];
+          }}
+        />
       </div>
 
       <DragPanel id="harbor.chat" title="Crew chat" foldOnPhone expandable className="chat panel harbor-chat">

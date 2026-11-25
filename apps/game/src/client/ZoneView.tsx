@@ -124,7 +124,6 @@ import {
 import { api, type Me } from "./api";
 import { actAs, actingHero } from "./party";
 import { CrewRoster, type RosterMember } from "./CrewRoster";
-import { PartyBar, type PartyCard } from "./PartyBar";
 import { InventoryScreen } from "./InventoryScreen";
 import { Trading } from "./TradePanel";
 import { useAudioScene } from "./audio/useAudioScene";
@@ -2488,6 +2487,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     if (lootSpot) zone.send({ type: "take", unit: selfId, spot: lootSpot.id, ...(uid !== undefined ? { uid } : { index }) });
   };
   const leftToSearch = unlooted(state, selfId);
+  // The crew who are online (on a map, this one or another, or in the Harbor) and not among your own here. Nobody offline.
+  const crewOnline = crew.filter((m) => !mine.some((u) => u.id === m.id) && (m.zone || m.town));
   const spoilsSpot = state.loot?.find((s) => s.id === SPOILS_ID);
   const hoverTorch = hover ? state.lights?.[posKey(hover)] : undefined;
   const hoverDoor = hover ? state.map.pois.find((p) => p.kind === "gate" && p.pos.q === hover.q && p.pos.r === hover.r) : undefined;
@@ -2629,19 +2630,6 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         />
       )}
 
-      {/* Your party (and any stand-in or creature of yours): click one to play them. The party is changed in town. */}
-      <PartyBar
-        className="zone-party"
-        cards={mine.map((u): PartyCard => ({
-          id: u.id, name: u.name, classId: u.kind, level: u.level, outfit: u.outfit,
-          hp: { now: seen(u).hp, max: u.maxHp, shield: shieldOf(seen(u)) || undefined },
-          blocked: u.down ? `${u.name} is down.` : enc?.order.includes(u.id) && !ready(u) ? `It is not ${u.name}'s turn.` : undefined,
-        }))}
-        acting={act.id}
-        onPick={setPlayAs}
-        leader={state.you}
-      />
-
       {/* Everything that happens, and every roll: the whole fight, to read back through. */}
       <CombatLog entries={log} open={logOpen} onToggle={toggleLog} />
 
@@ -2773,28 +2761,41 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       {zone.error && <div className="toast">{zone.error}</div>}
       {note && !zone.error && <div className="toast note">{note}</div>}
 
-      {crew.length > 1 && (
-        <div className="zone-crew roster-panel crew-cards">
-          <CrewRoster
-            you={selfId}
-            heading={<>{crew.filter((m) => m.zone?.code === code).length} of {crew.length} on this map</>}
-            members={crew.map((m): RosterMember => ({ id: m.id, name: m.name, classId: m.classId, level: m.level, here: m.zone?.code === code, outfit: state.units.find((u) => u.id === m.id)?.outfit, tags: m.zone?.fighting ? ["in a fight"] : m.zone && m.zone.code !== code ? ["on another map"] : !m.zone ? ["not on a map"] : undefined }))}
-            menu={(m) => {
-              if (ownHero(state, m.id)) return [];
-              const where = crew.find((x) => x.id === m.id)?.zone;
-              return [
-                { label: "Trade", run: () => setTradeWith(m.id) },
-                {
-                  label: where ? "Teleport to them" : "Go to the Harbor",
-                  blocked: where?.fighting && where.code !== code ? "In a fight" : where?.code === code ? "Already on this map" : !where && caves && !atMouth ? "Walk back to the cave mouth to leave" : fighting && fleeBlock ? `You are in a fight. ${fleeBlock}` : undefined,
-                  // From the middle of a fight of your own, you flee it first.
-                  run: () => (fighting ? fleeThen(() => teleportTo(m.id)) : teleportTo(m.id)),
-                },
-              ];
-            }}
-          />
-        </div>
-      )}
+      {/* Your party (and any stand-in or creature of yours) first, with their health: click one to play them. Then whoever
+          of the crew is online, here or elsewhere. The party is changed in town. */}
+      <div className="zone-crew roster-panel crew-cards party-roster">
+        <CrewRoster
+          you={selfId}
+          heading={<>{mine.length > 1 ? "Your party" : "You"}{crewOnline.length > 0 ? <> · {crewOnline.filter((m) => m.zone?.code === code).length} of the crew here</> : null}</>}
+          members={[
+            ...mine.map((u): RosterMember => ({ id: u.id, name: u.name, classId: u.kind, level: u.level, here: true, outfit: u.outfit, hp: { now: seen(u).hp, max: u.maxHp, shield: shieldOf(seen(u)) || undefined } })),
+            ...crewOnline.map((m): RosterMember => ({ id: m.id, name: m.name, classId: m.classId, level: m.level, here: m.zone?.code === code, outfit: state.units.find((u) => u.id === m.id)?.outfit, tags: m.zone?.fighting ? ["in a fight"] : m.zone && m.zone.code !== code ? ["on another map"] : m.town ? ["in the Harbor"] : undefined })),
+          ]}
+          foldId="zone"
+          party={{
+            ids: mine.map((u) => u.id),
+            acting: act.id,
+            onPick: setPlayAs,
+            blocked: (id) => {
+              const u = mine.find((x) => x.id === id);
+              return !u ? undefined : u.down ? `${u.name} is down.` : enc?.order.includes(u.id) && !ready(u) ? `It is not ${u.name}'s turn.` : undefined;
+            },
+          }}
+          menu={(m) => {
+            if (mine.some((u) => u.id === m.id)) return [];
+            const where = crew.find((x) => x.id === m.id)?.zone;
+            return [
+              { label: "Trade", run: () => setTradeWith(m.id) },
+              {
+                label: where ? "Teleport to them" : "Go to the Harbor",
+                blocked: where?.fighting && where.code !== code ? "In a fight" : where?.code === code ? "Already on this map" : !where && caves && !atMouth ? "Walk back to the cave mouth to leave" : fighting && fleeBlock ? `You are in a fight. ${fleeBlock}` : undefined,
+                // From the middle of a fight of your own, you flee it first.
+                run: () => (fighting ? fleeThen(() => teleportTo(m.id)) : teleportTo(m.id)),
+              },
+            ];
+          }}
+        />
+      </div>
       {me.character && <Trading me={me} partners={crew.filter((m) => m.id !== selfId)} withId={tradeWith} onWith={setTradeWith} refresh={refresh} nudge={zone.trades} />}
       {bag && !tradeWith && me.character && (
         <InventoryScreen

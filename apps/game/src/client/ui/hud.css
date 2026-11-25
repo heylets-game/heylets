@@ -209,3 +209,26 @@
    out), and nothing covers what you are aiming at. */
 body.mining .hud-here, body.fishing .hud-here, .harbor-view.felling .hud-here { visibility: hidden; }
 body.mining .hud-left, body.fishing .hud-left, .harbor-view.felling .hud-left { display: none !important; }
+
+/* The crew as cards is the party's display too (CrewRoster's `party`): the heroes you play outlined in gold (the one
+   you are acting as lit), everyone else's in blue. A slim bar over the cards holds the heading and folds them away. */
+/* (The last card too: its own rule gives it a bottom border, which these colour like the rest.) */
+.crew-cards .roster li.cm.yours, .crew-cards .roster li.cm.yours:last-child { border-color: #b08a2a; }
+.crew-cards .roster li.cm.yours.mine, .crew-cards .roster li.cm.yours.mine:last-child { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold), 0 0 10px rgba(255, 210, 63, 0.3), 0 3px 0 rgba(0, 0, 0, 0.4); }
+.crew-cards .roster li.cm.theirs, .crew-cards .roster li.cm.theirs:last-child { border-color: #4f7fc4; box-shadow: 0 0 0 1px #2c4f82, 0 3px 0 rgba(0, 0, 0, 0.4); }
+.crew-cards .roster-top { padding: 2px 4px 2px 8px; margin: 0 2px 6px; background: var(--panel); border: 2px solid var(--out); box-shadow: 0 0 0 1px var(--brass-lo); }
+.crew-cards .roster-top .roster-head { display: block; margin: 0; font-size: 11px; color: var(--muted); }
+.crew-cards .roster-top .roster-fold { margin: 0; }
+.crew-cards .roster-add { margin: 6px 0 0 6px; }
+
+/* The crew's cards (your party first) in the top-right corner, in the Harbor and on a map alike. Clear of the camera's
+   buttons half way down the right-hand edge: the list scrolls rather than reach them. */
+.run .crew.party-roster {
+  position: absolute; top: 16px; right: 16px; left: auto; bottom: auto; width: 250px; z-index: 10;
+  max-height: calc(50% - 140px); min-height: 120px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+  /* Room inside the scrolling box for the outlines and glows drawn just outside each card and the heading's bar. */
+  padding: 4px;
+}
+@media (max-width: 760px) {
+  .run .crew.party-roster { top: 8px; right: 8px; width: fit-content; max-width: 190px; }
+}

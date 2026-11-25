@@ -3,8 +3,14 @@
 // panel, a zone's, and the "Inside" panels of the hut and the pub. Where a
 // view offers things to do with a crewmate (trade, teleport to them), they
 // are on a right-click of that crewmate's row.
+//
+// It is the party's display too (party.ts): the heroes you play are listed
+// first, outlined in gold, and a click on one plays them; everyone else's are
+// outlined in blue. In town a "+" under the list changes the party. The list
+// folds away to its heading.
 
 import { useEffect, useState, type ReactNode } from "react";
+import { PartyPicker } from "./PartyPicker";
 import type { Outfit } from "@gantt-quest/world";
 import { label } from "./labels";
 import { spriteDataUrl, spriteKey } from "./render/sprites";
@@ -21,6 +27,19 @@ export interface RosterMember {
   outfit?: Outfit;
   /** Extra small tags after the name, e.g. "owner". */
   tags?: string[];
+  /** On a map: their health now, and any shield over it (shown for the heroes you play). */
+  hp?: { now: number; max: number; shield?: number };
+}
+
+/** The heroes you play (your party, and any stand-in or creature of yours), and which of them you are acting as. */
+export interface RosterParty {
+  ids: string[];
+  acting: string;
+  onPick(id: string): void;
+  /** Why one of them cannot be picked right now (down, not their turn). */
+  blocked?(id: string): string | undefined;
+  /** In town: the "+" under the list, to change the party. `leader` is the hero this device plays. */
+  change?: { leader: string; onChanged(): void };
 }
 
 /** One thing to do with a crewmate, offered when their row is right-clicked. */
@@ -42,6 +61,20 @@ interface Props {
   openId?: string | null;
   /** What a right-click on someone's row offers (trade, teleport to them). Nothing for an empty list. */
   menu?(member: RosterMember): RosterAction[];
+  /** The heroes you play: listed first, outlined as yours, and a click on one plays them. */
+  party?: RosterParty;
+  /** Kept folded or not between visits, under this name. Without it the list cannot be folded. */
+  foldId?: string;
+}
+
+const foldKey = (id: string) => `gq.roster.${id}.folded`;
+function loadFolded(id: string | undefined): boolean {
+  if (!id) return false;
+  try {
+    return localStorage.getItem(foldKey(id)) === "1";
+  } catch {
+    return false;
+  }
 }
 
 // toDataURL is not free: draw each look once.
@@ -55,9 +88,23 @@ function face(classId: string, outfit?: Outfit): string {
 
 const byName = (a: RosterMember, b: RosterMember) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
 
-export function CrewRoster({ members, you, heading, onOpen, openId, menu }: Props) {
-  const here = members.filter((m) => m.here).sort(byName);
-  const away = members.filter((m) => !m.here).sort(byName);
+export function CrewRoster({ members, you, heading, onOpen, openId, menu, party, foldId }: Props) {
+  const yours = (id: string) => !!party?.ids.includes(id);
+  // Yours first, in the party's own order; then whoever is here; then the rest.
+  const own = party ? party.ids.flatMap((id) => members.filter((m) => m.id === id)) : [];
+  const here = members.filter((m) => m.here && !yours(m.id)).sort(byName);
+  const away = members.filter((m) => !m.here && !yours(m.id)).sort(byName);
+  const [folded, setFolded] = useState(() => loadFolded(foldId));
+  const fold = () =>
+    setFolded((f) => {
+      try {
+        if (foldId) localStorage.setItem(foldKey(foldId), f ? "0" : "1");
+      } catch {
+        // Storage is off: folded for now only.
+      }
+      return !f;
+    });
+  const [picking, setPicking] = useState(false);
   /** The menu that is open: whose, and where on screen it was asked for. */
   const [asked, setAsked] = useState<{ id: string; x: number; y: number } | null>(null);
   useEffect(() => {
@@ -79,7 +126,9 @@ export function CrewRoster({ members, you, heading, onOpen, openId, menu }: Prop
   const offered = askedOf && menu ? menu(askedOf) : [];
 
   const row = (m: RosterMember) => {
-    const mine = m.id === you;
+    const mine = m.id === (party?.acting ?? you);
+    const ofYours = yours(m.id);
+    const blocked = ofYours && !mine ? party?.blocked?.(m.id) : undefined;
     const cls = label("class", m.classId);
     const body = (
       <>
@@ -93,24 +142,37 @@ export function CrewRoster({ members, you, heading, onOpen, openId, menu }: Prop
             {mine && <span className="cm-tag you">you</span>}
             {m.tags?.map((t) => <span key={t} className="cm-tag">{t}</span>)}
           </span>
-          <span className="cm-line">
-            <span className="cm-lv">Lv {m.level}</span>
-            <span className="cm-class">{cls}</span>
-          </span>
+          {m.hp ? (
+            <span className="cm-hp" aria-label={`${m.hp.now} of ${m.hp.max} health`}>
+              <span className="cm-hp-fill" style={{ width: `${Math.max(0, Math.min(100, (100 * m.hp.now) / Math.max(1, m.hp.max)))}%` }} />
+              <span className="cm-hp-text">{m.hp.now}/{m.hp.max}{m.hp.shield ? ` +${m.hp.shield}` : ""}</span>
+            </span>
+          ) : (
+            <span className="cm-line">
+              <span className="cm-lv">Lv {m.level}</span>
+              <span className="cm-class">{cls}</span>
+            </span>
+          )}
         </span>
       </>
     );
+    // One of yours you are not playing: a click plays them (the one you are playing opens their sheet, where there is one).
+    const pick = ofYours && !mine && party ? () => party.onPick(m.id) : null;
     return (
       <li
         key={m.id}
-        className={`cm ${m.here ? "here" : "away"}${mine ? " mine" : ""}${m.id === openId ? " open" : ""}`}
+        className={`cm ${m.here || ofYours ? "here" : "away"}${mine ? " mine" : ""}${party ? (ofYours ? " yours" : " theirs") : ""}${m.id === openId ? " open" : ""}`}
         onContextMenu={(e) => {
           if (!menu || menu(m).length === 0) return;
           e.preventDefault();
           setAsked({ id: m.id, x: e.clientX, y: e.clientY });
         }}
       >
-        {onOpen ? (
+        {pick ? (
+          <button type="button" className="cm-main" disabled={!!blocked} title={blocked ?? `Play ${m.name}`} onClick={pick}>
+            {body}
+          </button>
+        ) : onOpen ? (
           <button type="button" className="cm-main" title={`${m.name}, level ${m.level} ${cls}${m.here ? "" : " (away)"}. Look them over.`} onClick={() => onOpen(m.id)}>
             {body}
           </button>
@@ -122,13 +184,23 @@ export function CrewRoster({ members, you, heading, onOpen, openId, menu }: Prop
   };
 
   return (
-    <div className="panel crew-roster">
-      <h3 className="roster-head">{heading}</h3>
-      <ul className="roster">
-        {here.map(row)}
-        {away.length > 0 && here.length > 0 && <li className="roster-sep" aria-hidden>Away</li>}
-        {away.map(row)}
-      </ul>
+    <div className={`panel crew-roster${folded ? " roster-folded" : ""}`}>
+      <div className="roster-top">
+        <h3 className="roster-head">{heading}</h3>
+        {foldId && <button type="button" className="roster-fold" aria-expanded={!folded} title={folded ? "Show the list" : "Fold the list away"} onClick={fold}>{folded ? "+" : "\u2013"}</button>}
+      </div>
+      {!folded && (
+        <>
+          <ul className="roster">
+            {own.map(row)}
+            {here.map(row)}
+            {away.length > 0 && here.length + own.length > 0 && <li className="roster-sep" aria-hidden>Away</li>}
+            {away.map(row)}
+          </ul>
+          {party?.change && <button type="button" className="roster-add" title="Add a hero of yours to the party, or take one out" aria-label="Change the party" onClick={() => setPicking(true)}>+</button>}
+        </>
+      )}
+      {picking && party?.change && <PartyPicker leader={party.change.leader} onClose={() => setPicking(false)} onChanged={party.change.onChanged} />}
       {asked && askedOf && offered.length > 0 && (
         <div className="cm-menu panel" role="menu" aria-label={askedOf.name} style={{ left: Math.min(asked.x, innerWidth - 230), top: Math.min(asked.y, innerHeight - 40 - offered.length * 44) }} onPointerDown={(e) => e.stopPropagation()}>
           <strong className="cm-menu-name">{askedOf.name}</strong>

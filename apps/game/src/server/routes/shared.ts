@@ -25,12 +25,18 @@ export async function inOwnHut(env: Env, playerId: string): Promise<boolean> {
   }
 }
 
-/** Whoever of a crew is in the Harbor now, and the asker and their party with them: who a map made this moment is sized for. */
-export async function harborParty(env: Env, crewId: string, playerId: string) {
-  const here = await env.HARBOR_ROOM.get(env.HARBOR_ROOM.idFromName(crewId))
+/** Whoever of a crew is in its Harbor right now, as its room knows: nobody, if the room cannot be asked. */
+export async function inTown(env: Env, crewId: string): Promise<Set<string>> {
+  return env.HARBOR_ROOM.get(env.HARBOR_ROOM.idFromName(crewId))
     .fetch("https://harbor/present", { headers: { "x-crew-id": crewId } })
     .then((r) => (r.ok ? (r.json() as Promise<{ ids: string[] }>) : { ids: [] }))
-    .then((r) => new Set([...r.ids, playerId]), () => new Set([playerId]));
+    .then((r) => new Set(r.ids), () => new Set<string>());
+}
+
+/** Whoever of a crew is in the Harbor now, and the asker and their party with them: who a map made this moment is sized for. */
+export async function harborParty(env: Env, crewId: string, playerId: string) {
+  const here = await inTown(env, crewId);
+  here.add(playerId);
   // A player's party comes with them, from wherever in the world its members are.
   for (const id of await partyOf(env.DB, playerId)) here.add(id);
   return (await crewPlaces(env.DB, crewId)).filter((m) => here.has(m.id));

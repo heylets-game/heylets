@@ -6,7 +6,7 @@ import { enterProblem } from "../atlas";
 import { crewFor, getCharacter } from "../db";
 import { createZoneRow, crewPlaces, crewPlacesOf, getZoneRow, openCave, teleportTo } from "../zones";
 import { partyOf } from "../party";
-import { harborParty, type GameApp } from "./shared";
+import { harborParty, inTown, type GameApp } from "./shared";
 
 export function zoneRoutes(app: GameApp): void {
   // Down into the Haunted Caverns: the crew's cave if one is still being fought through, else a fresh one.
@@ -26,9 +26,14 @@ export function zoneRoutes(app: GameApp): void {
     return c.json({ code: await createZoneRow(c.env.DB, player.id, options, crypto.randomUUID().slice(0, 8), "caves", crew.id), fresh: true });
   });
 
-  // Where everyone in the asker's crew is: on which zone, and whether in a fight there. For the roster shown on a zone.
-  // Read straight from the asker's id (crewPlacesOf): nobody, for a player in no crew.
-  app.get("/api/crew/places", async (c) => c.json({ members: await crewPlacesOf(c.env.DB, c.get("player").id) }));
+  // Where everyone in the asker's crew is: on which zone, and whether in a fight there, or in the Harbor. For the
+  // roster shown on a zone. Read straight from the asker's id (crewPlacesOf): nobody, for a player in no crew.
+  // Who of them is in the Harbor is the Harbor's room to say: a crewmate on no map and not there is offline.
+  app.get("/api/crew/places", async (c) => {
+    const [members, crew] = await Promise.all([crewPlacesOf(c.env.DB, c.get("player").id), crewFor(c.env.DB, c.get("player").id)]);
+    const town = crew ? await inTown(c.env, crew.id) : new Set<string>();
+    return c.json({ members: members.map((m) => (town.has(m.id) ? { ...m, town: true } : m)) });
+  });
 
   // Teleport to a crewmate: says where to go. The zone they are on, if they are on one and not in a
   // fight (nobody drops into a fight); the Harbor (zone null) if they are not out on a zone at all.

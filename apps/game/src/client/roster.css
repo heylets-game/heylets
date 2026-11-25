@@ -51,6 +51,23 @@ button.cm-main:hover:not(:disabled) { border-color: var(--line); background: rgb
 .cm-tag { flex: none; font-size: 10px; line-height: 14px; padding: 0 4px; color: var(--muted); border: 1px solid var(--line); }
 .cm-tag.you { color: var(--ink); background: var(--gold); border-color: var(--gold); font-weight: bold; }
 
+/* The party (the crew as cards, ui/hud.css, outlines who plays whom): one of yours that cannot be played just now. */
+.roster li.cm .cm-main:disabled { opacity: 0.55; cursor: default; }
+.cm-hp { position: relative; display: block; height: 12px; background: #2a1620; border: 1px solid #4a2a36; }
+.cm-hp-fill { position: absolute; inset: 0 auto 0 0; background: linear-gradient(#e0525b, #a4313c); }
+.cm-hp-text { position: relative; display: block; font-size: 10px; line-height: 12px; text-align: center; text-shadow: 0 1px 1px #000; }
+
+/* The heading, with the button that folds the list away to it; and the "+" under the list that changes the party. */
+.roster-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.roster-fold { flex: none; width: 22px; height: 22px; padding: 0; margin: 0 0 6px; line-height: 20px; color: var(--gold); background: none; border: 1px solid var(--line); }
+.roster-fold:hover { border-color: var(--gold); }
+.roster-folded .roster-head, .roster-folded .roster-fold { margin-bottom: 0; }
+.roster-add {
+  display: block; width: 26px; height: 26px; padding: 0; margin: 6px 0 0 4px; font-size: 18px; line-height: 22px;
+  border-radius: 50%; border: 1px solid var(--line); background: var(--panel, #1c1933); color: var(--gold);
+}
+.roster-add:hover { border-color: var(--gold); }
+
 /* Away: greyed, but still readable. */
 .cm.away .cm-face img { filter: grayscale(1) brightness(0.7); }
 .cm.away .cm-face { background: #1a1830; border-style: dashed; }
