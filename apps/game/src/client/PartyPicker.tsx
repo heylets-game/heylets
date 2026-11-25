@@ -2,13 +2,14 @@
 //
 // The party is shown in the crew roster (CrewRoster's `party`): the heroes you
 // play first, outlined as yours. In town a "+" under the roster opens
-// PartyPicker, the account's heroes to add to the party or take out of it.
+// PartyPicker, the account's heroes to add to the party or take out of it, and a way to make a new one.
 // Out on a map the party is as it set out (the server refuses a change there).
 
 import { useEffect, useState } from "react";
 import { PARTY_MOST } from "@gantt-quest/world";
 import { api, type HeroSlot } from "./api";
 import { label } from "./labels";
+import { NEW_HERO_HASH } from "./OptionsMenu";
 import { actAs, useActingHero } from "./party";
 import { spriteDataUrl } from "./render/sprites";
 import "./party.css";
@@ -16,9 +17,17 @@ import "./party.css";
 /** The account's heroes, to add to the party of `leader` (the hero this device plays) or take out of it. */
 export function PartyPicker({ leader, onClose, onChanged }: { leader: string; onClose(): void; onChanged(): void }) {
   const [heroes, setHeroes] = useState<HeroSlot[] | null>(null);
+  const [max, setMax] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const load = () => api.heroes().then((r) => setHeroes(r.heroes), (e: Error) => setError(e.message));
+  const load = () =>
+    api.heroes().then(
+      (r) => {
+        setHeroes(r.heroes);
+        setMax(r.max);
+      },
+      (e: Error) => setError(e.message),
+    );
   useEffect(() => {
     void load();
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -52,7 +61,7 @@ export function PartyPicker({ leader, onClose, onChanged }: { leader: string; on
         </div>
         <p className="muted">Heroes in your party come onto a map with you, and you play each of them: up to {PARTY_MOST}, you among them. Each keeps their own sheet, pack and XP; the party takes one share of a place's spoils.</p>
         {!heroes && !error && <p className="muted">Looking for your heroes…</p>}
-        {heroes && others.length === 0 && <p className="muted">You have no other heroes yet. Make one from the main menu (Change hero), then add them here.</p>}
+        {heroes && others.length === 0 && <p className="muted">You have no other heroes yet. Make one, then add them here.</p>}
         <ul className="party-list">
           {others.map((h) => {
             const elsewhere = !h.party && h.crew?.id !== world?.id;
@@ -74,6 +83,18 @@ export function PartyPicker({ leader, onClose, onChanged }: { leader: string; on
           })}
         </ul>
         {error && <p className="party-error">{error}</p>}
+        {heroes && (
+          <div className="party-new">
+            <button
+              className="small"
+              disabled={busy !== null || (max > 0 && heroes.length >= max)}
+              title={max > 0 && heroes.length >= max ? `You have ${max} heroes, the most an account can have` : "Make another hero. You play them once they are made; switch back from the main menu"}
+              onClick={() => (location.hash = NEW_HERO_HASH)}
+            >
+              Make a new hero ▸
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

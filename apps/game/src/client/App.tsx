@@ -23,13 +23,13 @@ import { MainMenu } from "./MainMenu";
 import { HarborView } from "./HarborView";
 import { HutView } from "./HutView";
 import { KeeperView } from "./KeeperView";
-import { MAIN_MENU_HASH } from "./OptionsMenu";
+import { MAIN_MENU_HASH, NEW_HERO_HASH } from "./OptionsMenu";
 import { PubView } from "./PubView";
 import { ZoneView } from "./ZoneView";
 import { onActing } from "./party";
 
 const pubFromHash = () => location.hash === "#pub";
-const menuFromHash = () => location.hash === MAIN_MENU_HASH;
+const menuFromHash = () => location.hash === MAIN_MENU_HASH || location.hash === NEW_HERO_HASH;
 /** Inside the smithy, the apothecary, the galley or the Lapidary (KeeperView). */
 const keeperFromHash = (): KeeperHouse | null => {
   const house = location.hash.slice(1);

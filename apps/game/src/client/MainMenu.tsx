@@ -14,7 +14,7 @@
 // hero can belong to several worlds and is in one at a time: the one they went
 // into last. Joining another keeps their place in the others.
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { DEFAULT_APPEARANCE, parseAppearance } from "@gantt-quest/world";
 import { EmailSignIn } from "./Account";
 import { api, type AccountWorld, type HeroSlot, type Me } from "./api";
@@ -24,7 +24,7 @@ import { spriteDataUrl } from "./render/sprites";
 import { SoundButton } from "./audio/SoundButton";
 import { useAudioScene } from "./audio/useAudioScene";
 import { CharacterCreation } from "./CharacterCreation";
-import { MAIN_MENU_HASH } from "./OptionsMenu";
+import { MAIN_MENU_HASH, NEW_HERO_HASH } from "./OptionsMenu";
 import { SettingsSections } from "./Settings";
 import { AnchorMark, HarborBackdrop, HarborTitle } from "./Welcome";
 import "./mainmenu.css";
@@ -120,6 +120,14 @@ export function MainMenu({ me, refresh, invite, onContinue }: Props) {
       setBusy(false);
     }
   };
+  // Opened as #menu/new-hero (the party picker's "Make a new hero"): straight into making one. Once only, and the
+  // hash goes back to #menu before the slot is asked for, so a reload does not make another.
+  const askedNew = useRef(false);
+  useEffect(() => {
+    if (askedNew.current || location.hash !== NEW_HERO_HASH) return;
+    askedNew.current = true;
+    void newHero();
+  }, []);
 
   /** Make or join the world: straight away with a hero, or after making one. */
   const carryOut = async (then: Then) => {

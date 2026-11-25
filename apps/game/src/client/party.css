@@ -13,3 +13,4 @@
 .party-list li { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px dashed #37335a; }
 .party-list li:last-child { border-bottom: none; }
 .party-error { color: #ff9b9b; font-size: 13px; }
+.party-new { display: flex; justify-content: flex-end; margin-top: 10px; padding-top: 8px; border-top: 1px solid #37335a; }
