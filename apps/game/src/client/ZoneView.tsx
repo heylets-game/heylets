@@ -77,7 +77,7 @@ import {
   diceText,
   healDice,
   isCrateId,
-  jumpRange,
+  JUMP_RANGE,
   previewAttack,
   sameHex,
   sees,
@@ -1909,7 +1909,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       }
     } else if (pick.what === "jump") {
       // Where a leap can land: up a ledge two levels high at most, with room to stand. Down more than two is a fall (marked in red).
-      const lands = within(jumpRange(statMod(act.stats?.str ?? 5)), true).filter((t) => !checkCommon(z, act, "jump", { at: t }, null));
+      const lands = within(JUMP_RANGE, true).filter((t) => !checkCommon(z, act, "jump", { at: t }, null));
       const drop = (t: HexPos) => (tileAt(state.map, act.pos)?.elev ?? 0) - (tileAt(state.map, t)?.elev ?? 0);
       out.push({ hexes: lands.filter((t) => drop(t) <= 2), color: "#8fd3ff", fill: 0.14, line: 0.8 });
       out.push({ hexes: lands.filter((t) => drop(t) > 2), color: "#ff6b6b", fill: 0.14, line: 0.8 });

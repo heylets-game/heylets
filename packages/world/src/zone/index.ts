@@ -61,7 +61,7 @@ export {
   TAUNT,
   cleanItems,
   throwRange,
-  jumpRange,
+  JUMP_RANGE,
   JUMP_UP,
   JUMP_DOWN,
   AP_TURN,
