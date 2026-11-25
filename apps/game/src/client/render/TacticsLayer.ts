@@ -153,6 +153,8 @@ export class TacticsLayer {
   /** Markers bobbing over whoever's turn it is: each follows its unit about. */
   private marks: { id: string; mesh: THREE.Mesh }[] = [];
   private markSig = "";
+  /** A big warning sign over the enemy running to ring the alarm bell (see setBellGoer). */
+  private bellArrow: { id: string; arrow: THREE.Sprite } | null = null;
   private overlaySig = "";
   private groundSig = "";
   /** Courses charted (Chart a Course): a red X on each hex marked. */
@@ -210,9 +212,20 @@ export class TacticsLayer {
         const head = renderer.unitHead(id);
         mesh.visible = !!head;
         if (!head) continue;
-        // Clear of the name plate that sits over the head.
-        mesh.position.set(head.x, head.y + 1.05 + Math.sin(clock * 3.2) * 0.09, head.z);
+        // Clear of the name plate that sits over the head (and over the bell arrow, if it has one).
+        const above = this.bellArrow?.id === id ? 1.4 : 0;
+        mesh.position.set(head.x, head.y + 1.05 + above + Math.sin(clock * 3.2) * 0.09, head.z);
         mesh.rotation.y = clock * 1.6;
+      }
+      if (this.bellArrow) {
+        const { id, arrow } = this.bellArrow;
+        const head = renderer.unitHead(id);
+        arrow.visible = !!head;
+        if (head) {
+          // Hung over them, bobbing and throbbing like an alarm.
+          arrow.position.set(head.x, head.y + 1.25 + Math.sin(clock * 3) * 0.08, head.z);
+          arrow.scale.setScalar(1.3 * (1 + 0.08 * Math.max(0, Math.sin(clock * 7))));
+        }
       }
     });
   }
@@ -227,6 +240,7 @@ export class TacticsLayer {
     this.clear(this.charts);
     this.setArc(null);
     this.setTurnMarkers([]);
+    this.setBellGoer(null);
     for (const m of this.kept) m.dispose();
     this.kept.clear();
     this.sheets.clear();
@@ -461,6 +475,23 @@ export class TacticsLayer {
         this.charts.add(stroke);
       }
     }
+  }
+
+  /** A big triangular warning sign over the enemy making for the alarm bell; null for nobody. */
+  setBellGoer(id: string | null) {
+    if ((this.bellArrow?.id ?? null) === id) return;
+    if (this.bellArrow) {
+      this.group.remove(this.bellArrow.arrow);
+      this.bellArrow.arrow.material.map?.dispose();
+      this.bellArrow.arrow.material.dispose();
+      this.bellArrow = null;
+    }
+    if (!id) return;
+    const sign = new THREE.Sprite(new THREE.SpriteMaterial({ map: warningTexture(), depthTest: false, transparent: true }));
+    sign.renderOrder = 7;
+    sign.visible = false;
+    this.group.add(sign);
+    this.bellArrow = { id, arrow: sign };
   }
 
   /** A marker over the head of everyone whose turn it is, in the colour given: it follows them as they move. */
@@ -833,4 +864,54 @@ export class TacticsLayer {
       pos.needsUpdate = true;
     }
   }
+}
+
+/** The alarm warning sign (setBellGoer): a rounded yellow triangle in a thick red rim, with a dark "!" in it. */
+function warningTexture(): THREE.CanvasTexture {
+  const S = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = S;
+  const g = canvas.getContext("2d")!;
+  const tri = (inset: number) => {
+    const top = { x: S / 2, y: 22 + inset * 1.6 };
+    const left = { x: 18 + inset * 1.4, y: S - 30 - inset * 0.8 };
+    const right = { x: S - 18 - inset * 1.4, y: S - 30 - inset * 0.8 };
+    g.beginPath();
+    g.moveTo(top.x, top.y);
+    g.lineTo(right.x, right.y);
+    g.lineTo(left.x, left.y);
+    g.closePath();
+  };
+  g.lineJoin = "round";
+  // A dark outline, so it reads against bright ground and dark alike.
+  tri(0);
+  g.lineWidth = 34;
+  g.strokeStyle = "#3a0000";
+  g.stroke();
+  g.fillStyle = "#e11d1d";
+  g.lineWidth = 22;
+  g.strokeStyle = "#e11d1d";
+  g.stroke();
+  g.fill();
+  tri(22);
+  g.fillStyle = "#ffd23f";
+  g.lineWidth = 10;
+  g.strokeStyle = "#ffd23f";
+  g.stroke();
+  g.fill();
+  // The "!": a tapered bar and a dot.
+  g.fillStyle = "#1a1208";
+  g.beginPath();
+  g.moveTo(S / 2 - 15, 92);
+  g.lineTo(S / 2 + 15, 92);
+  g.lineTo(S / 2 + 8, 168);
+  g.lineTo(S / 2 - 8, 168);
+  g.closePath();
+  g.fill();
+  g.beginPath();
+  g.arc(S / 2, 193, 13, 0, Math.PI * 2);
+  g.fill();
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }

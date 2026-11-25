@@ -1552,6 +1552,25 @@ export class SpellFx {
     return time;
   }
 
+  /**
+   * An alarm bell rung: waves of sound pulsing out from it one after another, wide rings racing across the ground,
+   * circles swelling round the bell itself, notes flung off it, and the ground jolted at the first stroke.
+   * `at` is the bell itself, up on its frame.
+   */
+  alarm(at: THREE.Vector3, color = "#ffcf5a") {
+    const feet = at.clone().setY(at.y - 1);
+    this.renderer.shake(0.1, 0.3);
+    for (let i = 0; i < 5; i++) {
+      this.later(i * 0.32, () => {
+        this.flash(at, color, 1.8 - i * 0.2);
+        this.toll(at, color);
+        this.ring(feet, 5.5, color, 0.9);
+        this.ring(feet, 3, paler(color, 0.3), 0.6);
+        for (let n = 0; n < 4; n++) this.note(at, color, "lively", Math.random() * Math.PI * 2, rand(1, 2), 0, 0.9);
+      });
+    }
+  }
+
   /** A bell's ring round something struck: circles of sound swelling out round it, upright to the eye, one after another. */
   private toll(at: THREE.Vector3, color: string) {
     const N = 28;

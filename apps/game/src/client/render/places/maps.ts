@@ -162,7 +162,7 @@ export const crate: PlaceModel = (poi, kit) => {
   if (!poi.cleared) g.userData.door = poi.pos;
 };
 
-/** The alarm bell: a brass bell hung from a timber frame. Once rung it hangs askew, and nobody will ring it again. */
+/** The alarm bell: a brass bell hung from a timber frame, hanging straight down whether or not it has been rung. */
 export const bell: PlaceModel = (poi, kit) => {
   const { g, add, lambert } = kit;
   const wood = lambert("#5a4128");
@@ -173,13 +173,14 @@ export const bell: PlaceModel = (poi, kit) => {
   // The bell, hung from the beam by its crown; a clapper under it.
   const hung = new THREE.Group();
   hung.position.set(0, 1.19, 0);
-  hung.rotation.z = poi.cleared ? 0.5 : 0;
   const body = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.3, 0.42, 14), brass);
   body.position.y = -0.3;
   const clapper = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), lambert("#3a3226"));
   clapper.position.y = -0.55;
   hung.add(body, clapper);
   g.add(hung);
+  // Swung back and forth as it is rung (WorldRenderer ringBell).
+  g.userData.hung = hung;
   g.userData.door = poi.pos;
 };
 

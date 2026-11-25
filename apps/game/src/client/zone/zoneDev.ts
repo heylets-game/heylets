@@ -12,7 +12,7 @@ export type ZoneDevTool = { tool: "spawn"; kinds: string[] } | { tool: "paint"; 
 
 export interface ZoneDevState {
   /** The zone on screen, if there is one. */
-  open: { code: string; seed?: string; send(op: DevOp): void } | null;
+  open: { code: string; seed?: string; send(op: DevOp): void; previewBell?(): void } | null;
   tool: ZoneDevTool | null;
   /** Draw each group's alert radius on the map. */
   showAlert: boolean;

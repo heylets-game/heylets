@@ -260,6 +260,9 @@ function cardsFor(events: ZoneEvent[], many: boolean[]): Map<number, Roll> {
   return cards;
 }
 
+/** How long the camera is given to pan over to the alarm bell before it is seen to ring, in ms. */
+const BELL_PAN_MS = 500;
+
 /**
  * How long the picture dwells on each thing that happened, in ms. `many`: it is one of several that
  * land together. `next`: what follows, so that going down or catching fire comes on the heels of the blow.
@@ -287,8 +290,9 @@ function dwell(ev: ZoneEvent, many: boolean, next: ZoneEvent | undefined, carrie
     case "blinked": return 450;
     case "seen": return 200;
     case "fight_start": return 1300;
-    case "bell": return 900;
-    case "roused": return 600;
+    // The camera pans to the bell, and it swings and its waves pulse out before the place is seen to stir.
+    case "bell": return BELL_PAN_MS + 1500;
+    case "roused": return 900;
     case "fight_end": return 700;
     case "fled": return 420;
     case "cleared": return 900;
@@ -1560,9 +1564,22 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       } else if (ev.t === "bell") {
         const bell = draft.pois.find((p) => p.id === ev.poi);
         if (bell) bell.cleared = true;
+        const bellAt = bell?.pos;
+        later(() => {
+          // The camera swings over to it; then it swings hard, and waves of sound pulse out from it.
+          if (bellAt) view?.lookAt(bellAt);
+          timers.current.push(setTimeout(() => ringOut(ev.poi), bellAt ? BELL_PAN_MS : 0));
+        });
         say(`${name(ev.id)} rings the alarm bell!`, "bad");
       } else if (ev.t === "roused") {
-        // The bell has rung: the rest of the place has heard it and is on its way.
+        // The bell has rung: the rest of the place has heard it and is on its way. Each one hops, startled, with a "!".
+        later(() => {
+          for (const id of ev.units) {
+            view?.hop(id, Math.random() * 0.2);
+            const head = view?.unitHead(id);
+            if (head) spells.current?.exclaim(head, "#ff4d4d");
+          }
+        });
         say(`The alarm is up. The whole place is roused: ${ev.units.length} more ${ev.units.length === 1 ? "is" : "are"} coming.`, "bad");
       } else if (ev.t === "noise") {
         say(next.options.biome === "caves" ? "The noise carries through the tunnels. Something is coming." : "The fight is heard. More of them are coming.", "bad");
@@ -1785,9 +1802,57 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   // The dev toolbox's way in: while this zone is on screen it can send dev actions and arm a tool.
   const send = zone.send;
   useEffect(() => {
-    setZoneDev({ open: { code, send: (op) => send({ type: "dev", dev: op }) } });
+    setZoneDev({ open: { code, send: (op) => send({ type: "dev", dev: op }), previewBell: () => previewBell.current() } });
     return () => setZoneDev({ open: null, tool: null, heroes: [] });
   }, [code, send]);
+
+  /**
+   * The dev toolbox's bell preview, shown on this screen only (nothing is sent): the red arrow over the enemy
+   * nearest the bell, then the bell rung, then every enemy on the map startled. With no bell on the map, it
+   * rings out over your hero instead.
+   */
+  const previewBell = useRef(() => {});
+  previewBell.current = () => {
+    const view = renderer.current;
+    const fxs = spells.current;
+    if (!view || !fxs || !state) return;
+    const bell = state.map.pois.find((p) => p.kind === "bell");
+    const here = bell?.pos ?? act?.pos;
+    if (!here) return;
+    const enemies = state.units.filter((u) => u.side === "enemy" && !u.down);
+    const goer = [...enemies].sort((a, b) => hexDistance(a.pos, here) - hexDistance(b.pos, here))[0];
+    if (goer) layer.current?.setBellGoer(goer.id);
+    timers.current.push(
+      setTimeout(() => {
+        layer.current?.setBellGoer(bellGoerNow.current);
+        view.lookAt(here);
+      }, 2000),
+      setTimeout(() => {
+        if (bell) return ringOut(bell.id);
+        const top = point(here, 1.2);
+        fxs.alarm(top);
+        sounds.zone("bell");
+      }, 2000 + BELL_PAN_MS),
+      setTimeout(() => {
+        for (const u of enemies) {
+          view.hop(u.id, Math.random() * 0.2);
+          const head = view.unitHead(u.id);
+          if (head) fxs.exclaim(head, "#ff4d4d");
+        }
+      }, 3500 + BELL_PAN_MS),
+    );
+  };
+
+  /** An alarm bell rung where it stands: it swings, waves of sound pulse out of it, and its toll is heard. */
+  const ringOut = (poiId: string) => {
+    const view = renderer.current;
+    if (!view) return;
+    view.ringBell(poiId);
+    const top = view.poiPoint(poiId, new THREE.Vector3(0, 0.95, 0));
+    if (top) spells.current?.alarm(top);
+    // Heard across the whole map, not from where it stands: it is an alarm, and it is often far from your hero.
+    sounds.zone("bell");
+  };
 
   // In a dev build, the state and a way to act on it, for the console.
   useEffect(() => {
@@ -2044,6 +2109,12 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     }
     layer.current?.setTurnMarkers(marks);
   }, [enc, state, spot, mine]);
+
+  // A big red arrow over the enemy running for the alarm bell, while the bell is still there to ring.
+  const bellGoer = enc?.bell?.goer && state?.map.pois.some((p) => p.kind === "bell" && !p.cleared) && state.units.some((u) => u.id === enc.bell!.goer && !u.down) ? enc.bell.goer : null;
+  const bellGoerNow = useRef(bellGoer);
+  bellGoerNow.current = bellGoer;
+  useEffect(() => layer.current?.setBellGoer(bellGoer), [bellGoer]);
 
   // The line of a shot, a spell or a throw to where the pointer is: pale when it can be made, red when it cannot.
   useEffect(() => {

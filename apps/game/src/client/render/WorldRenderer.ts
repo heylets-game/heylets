@@ -595,6 +595,8 @@ interface Unit {
    * render clock and off it for `air` seconds, `high` at the top of the arc.
    */
   leap?: { to: THREE.Vector3; from: THREE.Vector3; at: number; air: number; high: number };
+  /** A startled hop on the spot (see hop): when it leaves the ground, on the render clock. */
+  hopAt?: number;
   /** Afloat: the boat under them, which kind it is, and how far it sits them down. */
   boat?: THREE.Group | null;
   boatKind?: "barrel" | "rowboat";
@@ -1147,6 +1149,8 @@ export class WorldRenderer {
   private lidsSwinging = new Map<string, number>();
   /** Crates rocking from a blow, by poi id: when it landed, and how hard. */
   private poiShakes = new Map<string, { at: number; by: number }>();
+  /** Alarm bells being rung, by poi id: when the ringing began (on the render clock). */
+  private bellsRinging = new Map<string, number>();
   /** Glints on the places that twinkle (a chest not yet opened). Gathered as the places are built. */
   private twinkles: THREE.Object3D[] = [];
   /** The turn this map opens at (RenderState.homeYaw), which the turn buttons' sixths are counted from. */
@@ -4327,6 +4331,20 @@ export class WorldRenderer {
     this.lidsSwinging.set(poiId, this.clock);
   }
 
+  /** How long an alarm bell swings once rung, in seconds. */
+  static readonly BELL_SWING = 2;
+
+  /** An alarm bell is rung: it swings hard back and forth, dying away to hang askew. */
+  ringBell(poiId: string) {
+    this.bellsRinging.set(poiId, this.clock);
+  }
+
+  /** A unit startled where it stands: a little hop straight up, `delay` seconds from now. */
+  hop(id: string, delay = 0) {
+    const unit = this.units.get(id);
+    if (unit && !unit.lying) unit.hopAt = this.clock + delay;
+  }
+
   /**
    * A blow struck by hand at a place rather than at a unit (a crate): the unit turns to it, winds up and strikes,
    * and `onImpact` runs as the blow lands.
@@ -4436,6 +4454,14 @@ export class WorldRenderer {
         body.position.y = Math.abs(Math.sin(t * 9)) * 0.06 * k;
       }
       if (t >= 1) this.poiShakes.delete(id);
+    }
+    for (const [id, start] of this.bellsRinging) {
+      const hung = this.poiObject(id)?.userData.hung as THREE.Object3D | undefined;
+      const age = this.clock - start;
+      const k = Math.min(1, age / WorldRenderer.BELL_SWING);
+      // A wide swing that dies away, back to hanging straight down; set exactly there as it ends.
+      if (hung) hung.rotation.z = k >= 1 ? 0 : 1.1 * (1 - k) ** 1.4 * Math.sin(age * 11);
+      if (k >= 1) this.bellsRinging.delete(id);
     }
     for (const o of this.twinkles) {
       const phase = o.userData.twinkle as number;
@@ -5754,7 +5780,12 @@ export class WorldRenderer {
         // Two steps per hex, with a little bounce in each, landing as each hex is reached.
         if (!unit.rush && !leap) unit.bob = Math.abs(Math.sin(unit.stride * 3.6)) * 0.07;
       } else {
-        unit.bob *= Math.exp(-dt * 18);
+        const hopK = unit.hopAt === undefined ? -1 : (this.clock - unit.hopAt) / 0.42;
+        if (hopK >= 0 && hopK < 1) unit.bob = 0.55 * 4 * hopK * (1 - hopK);
+        else {
+          if (hopK >= 1) unit.hopAt = undefined;
+          unit.bob *= Math.exp(-dt * 18);
+        }
         unit.stride = 0;
         const goal = this.restSpot.copy(unit.goal).add(unit.kick);
         // Put somewhere else with no walk to get there (sent back to its post when a fight ends, set down at the

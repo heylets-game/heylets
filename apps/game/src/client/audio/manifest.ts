@@ -112,6 +112,8 @@ export const AUDIO: AudioManifest = {
     "zone.chest_open": { files: "sfx/zone/chest_open_*", fallback: built("creak"), pitch: [-2, 1], reverb: -6 },
     "zone.crate_hit": { files: "sfx/zone/crate_hit_*", fallback: built("knock"), pitch: [-2, 2], gainDb: -2, reverb: -10 },
     "zone.crate_break": { files: "sfx/zone/crate_break_*", fallback: built("splinter"), pitch: [-2, 2], reverb: -6 },
+    // The alarm bell rung: five strokes, timed to the five waves drawn pulsing out of it.
+    "zone.bell": { files: "sfx/zone/bell_*", fallback: built("alarm"), pitch: [-1, 1], reverb: -4 },
     surface: { files: "sfx/zone/surface_*", fallback: built("splash"), gainDb: -4, reverb: -8 },
     "surface.poison": { files: "sfx/zone/surface_poison_*", fallback: built("poison"), gainDb: -2, reverb: -8 },
     "surface.fire": { files: "sfx/zone/surface_fire_*", fallback: built("ignite"), reverb: -6 },

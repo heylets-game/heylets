@@ -29,6 +29,8 @@ export type SynthCombat =
   | "sick" | "soak"
   // A delve: a chest's lid creaking open, a crate taking a blow, and a crate breaking apart.
   | "creak" | "knock" | "splinter"
+  // The alarm bell on an open map, rung by an enemy to rouse the rest.
+  | "alarm"
   // Words typed out in a conversation, a short soft note a letter.
   | "blip";
 
@@ -71,6 +73,7 @@ const COMBAT_LENGTH: Record<SynthCombat, number> = {
   ignite: 0.7, poison: 0.7, splash: 0.5, oil: 0.45, ice: 0.6,
   sick: 0.4, soak: 0.35,
   creak: 0.8, knock: 0.3, splinter: 0.9,
+  alarm: 4.8,
   blip: 0.09,
 };
 
@@ -445,6 +448,22 @@ function combat(r: Render, sound: SynthCombat) {
         noiseAt(r, at, { filter: "bandpass", freq: 700 + r.rnd() * 700, q: 2, decay: 0.03, gain: v * 0.3 });
       }
       break;
+    case "alarm": {
+      // An alarm bell rung hard: five strokes, one to each wave of sound drawn pulsing out of it (SpellFx alarm),
+      // each a clang of the clapper and a bell's out-of-tune partials ringing on under the next, the last left to die away.
+      // A great bell, not a hand bell: a low strike note with a deep hum under it, and a long ring-out.
+      const strike = 165 * p;
+      const partials: [number, number, number][] = [[0.5, 0.34, 3.2], [1, 0.32, 2.6], [1.19, 0.2, 1.9], [1.5, 0.12, 1.5], [2, 0.16, 1.3], [2.51, 0.08, 0.9], [3.03, 0.06, 0.6], [4.07, 0.03, 0.4]];
+      for (let i = 0; i < 5; i++) {
+        const at = t + i * 0.32;
+        const hard = 1 - i * 0.08;
+        // The iron clapper on bronze: a dull clank and a thump felt through the frame.
+        noiseAt(r, at, { filter: "bandpass", freq: 1400 * p, q: 1.2, decay: 0.04, gain: v * 0.4 * hard });
+        toneAt(r, at, { type: "sine", freq: strike * 0.4, freqTo: strike * 0.3, decay: 0.12, gain: v * 0.35 * hard });
+        for (const [ratio, gain, decay] of partials) toneAt(r, at, { type: "sine", freq: strike * ratio * wobble(r, 0.003), attack: 0.003, decay: i === 4 ? decay : Math.min(decay, 1.4), gain: v * gain * hard });
+      }
+      break;
+    }
     case "soak":
       // Soaked through: a short wash and two drips.
       noiseAt(r, t, { filter: "bandpass", freq: 1800 * p, freqTo: 900 * p, q: 1, attack: 0.02, decay: 0.14, gain: v * 0.4 });
