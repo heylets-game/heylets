@@ -7,6 +7,11 @@
 // release-notes.ts); this list is only for the past.
 
 export const OVERRIDES: Record<string, string[]> = {
+  // The release after game-v2026.11.24.4 (#624). Its second line said "Map:" where every other line says "Maps:".
+  "14eb0597855ab94f94e573a6d4d471ee130b2586": [
+    "Enemies: a band notices you from 3 hexes away if it can see you",
+    "Maps: a red outline shows where each band can see",
+  ],
   // The release after game-v2026.11.23 (#575). Its subject, "Sanity combat balance pass", said nothing a player could
   // use: these are the changes in it they will notice.
   "297f49e19e7416b04756d48e92c4658539848077": [
