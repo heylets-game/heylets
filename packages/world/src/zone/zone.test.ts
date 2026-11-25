@@ -296,6 +296,67 @@ describe("zone generation", () => {
 
 // ---------- walking, and walking into a fight ----------
 
+describe("a walk called off part of the way", () => {
+  const go = (to: HexPos, extra: { from?: HexPos; now?: number } = {}): ZoneAction => ({ type: "move", by: "ann", unit: "ann", to, now: 1_000, ...extra });
+
+  it("sets off again from where the hero had got to, and says where that was", () => {
+    let state = board();
+    hero(state, "ann", "qa_paladin", at(2, 6));
+    state = must(state, go(at(8, 6)));
+    const events: ZoneEvent[] = [];
+    state = must(state, go(at(4, 9), { from: at(4, 6), now: 1_500 }), events);
+    expect(unit(state, "ann").pos).toEqual(at(4, 9));
+    const moved = events.find((e) => e.t === "moved");
+    expect(moved?.t === "moved" && moved.cut).toEqual(at(4, 6));
+    // Its way there starts beside where it was called off, not back at the end of the walk before.
+    expect(moved?.t === "moved" && hexDistance(moved.path[0], at(4, 6))).toBe(1);
+  });
+
+  it("stops there and goes no further when that is the hex clicked", () => {
+    let state = board();
+    hero(state, "ann", "qa_paladin", at(2, 6));
+    state = must(state, go(at(8, 6)));
+    const events: ZoneEvent[] = [];
+    state = must(state, go(at(5, 6), { from: at(5, 6) }), events);
+    expect(unit(state, "ann").pos).toEqual(at(5, 6));
+    expect(events).toEqual([{ t: "moved", id: "ann", path: [at(5, 6)], cut: at(5, 6) }]);
+  });
+
+  it("is not called off at a hex off the way, nor once the walk would have finished playing", () => {
+    let state = board();
+    hero(state, "ann", "qa_paladin", at(2, 6));
+    state = must(state, go(at(8, 6)));
+    const off = must(state, go(at(4, 9), { from: at(4, 8), now: 1_500 }));
+    const late = must(state, go(at(4, 9), { from: at(4, 6), now: 60_000 }));
+    for (const s of [off, late]) expect(unit(s, "ann").pos).toEqual(at(4, 9));
+    const events: ZoneEvent[] = [];
+    must(state, go(at(4, 9), { from: at(4, 6), now: 60_000 }), events);
+    expect(events.some((e) => e.t === "moved" && e.cut)).toBe(false);
+  });
+
+  it("is not called off once the hero has done something else", () => {
+    let state = board();
+    hero(state, "ann", "qa_paladin", at(2, 6));
+    state = must(state, go(at(8, 6)));
+    const lit = must(state, { type: "drink", by: "ann", unit: "ann", item: "healing" });
+    const events: ZoneEvent[] = [];
+    must(lit, go(at(4, 9), { from: at(4, 6) }), events);
+    expect(events.some((e) => e.t === "moved" && e.cut)).toBe(false);
+    // Only the server keeps the walk: it is not sent.
+    expect("strolls" in zoneView(state, "ann")).toBe(false);
+  });
+
+  it("is not called off when the walk brought something about", () => {
+    let state = board();
+    state.aiOff = true;
+    hero(state, "ann", "qa_paladin", at(2, 6));
+    enemy(state, "bandit", at(12, 6));
+    // Walking up to the band: it takes notice, and a fight is on.
+    state = must(state, go(at(10, 6)));
+    expect(state.strolls?.ann).toBeUndefined();
+  });
+});
+
 describe("free walking", () => {
   it("lets a hero walk anywhere with no fight on, and takes no turns", () => {
     let state = board();

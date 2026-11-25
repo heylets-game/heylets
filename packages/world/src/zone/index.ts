@@ -86,6 +86,7 @@ export {
   enemyHp,
   ENEMY_EDGE,
   GROUP_EXTRAS,
+  STROLL_STEP_MS,
   type Tactic,
   type SummonDef,
   type SummonCall,

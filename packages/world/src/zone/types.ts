@@ -337,6 +337,12 @@ export interface ZoneState {
    * Server time, in ms, as the room told it. Missing until the room first tells the time.
    */
   clock?: { at: number; torchAt: number };
+  /**
+   * Each hero's last walk out of a fight, while nothing has come of it (zone.ts, move): where it set off, the hexes
+   * it went through, and when (server time). A walk clicked while it is still being played on screen may call it off
+   * part of the way along and set off from there instead. Kept only by the server.
+   */
+  strolls?: Record<string, { from: HexPos; path: HexPos[]; at: number }>;
   /** Keys to locked doors the party has found, all on one ring (zone/doors.ts). */
   keys?: number;
   /** The bands that carry a key: it is the party's once the band is beaten. */
@@ -407,7 +413,12 @@ export type DevOp =
 export type ZoneAction =
   /** `near`: arrive beside this unit (a crewmate teleported to) and not at the start, unless they are in a fight. */
   | { type: "join"; hero: ZoneHero; near?: string }
-  | { type: "move"; by: string; unit: string; to: HexPos }
+  /**
+   * `from`: out of a fight, the hex the hero has got to on their last walk, still being played on screen: that walk is
+   * called off there and this one sets off from it, if nothing came of the last (see ZoneState.strolls). `now`: server
+   * time, set by the room.
+   */
+  | { type: "move"; by: string; unit: string; to: HexPos; from?: HexPos; now?: number }
   /** `target`: a unit's id, or a crate's (it is a poi on the map) for an ability that does damage. */
   | { type: "use"; by: string; unit: string; ability: string; target?: string; at?: HexPos; focus?: boolean }
   | { type: "common"; by: string; unit: string; what: CommonAction; target?: string; at?: HexPos }
@@ -484,7 +495,8 @@ export interface Rolled {
 
 export type ZoneEvent =
   | { t: "joined"; id: string }
-  | { t: "moved"; id: string; path: HexPos[] }
+  /** `cut`: the walk before this one was called off at this hex, and this one sets off from it. */
+  | { t: "moved"; id: string; path: HexPos[]; cut?: HexPos }
   | { t: "alert"; group: string; by: string }
   | { t: "fight_start"; units: string[] }
   | { t: "fight_join"; id: string }
@@ -595,4 +607,4 @@ export type ZoneStep = { ok: true; state: ZoneState; events: ZoneEvent[]; effect
 /** `dark`: enemies in the fight that stand where the party cannot see them (those out of a fight are not sent at all). */
 /** `loot`: of what there is to loot, each thing holds only what is in it for you (and for your party). */
 /** `party`: the other heroes the player being told plays as well (their account's party), each a hero of their own. */
-export type ZoneView = Omit<ZoneState, "rng" | "seed"> & { you: string; party?: string[]; dark?: string[] };
+export type ZoneView = Omit<ZoneState, "rng" | "seed" | "strolls"> & { you: string; party?: string[]; dark?: string[] };

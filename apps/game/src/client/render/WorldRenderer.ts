@@ -3680,6 +3680,11 @@ export class WorldRenderer {
     return (this.units.get(id)?.path.length ?? 0) > 0;
   }
 
+  /** The hexes a unit still has to walk, in order, the one it is stepping onto now first. Empty if it is not walking. */
+  walkLeft(id: string): HexPos[] {
+    return (this.units.get(id)?.path ?? []).map((p) => worldToHex(p.x, p.z));
+  }
+
   // ---------- for a minigame's own things ----------
 
   /** The minigame being played, if any. */

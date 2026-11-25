@@ -98,7 +98,8 @@ export function zoneActionFrom(raw: unknown, by: string, dev: boolean): ZoneActi
     return null;
   }
   if (!text(a.unit)) return null;
-  if (a.type === "move") return isHex(a.to) ? { type: "move", by, unit: a.unit, to: hex(a.to)! } : null;
+  // `from`: where the hero has got to on a walk still being played, to call it off there (the reducer decides whether it may).
+  if (a.type === "move") return isHex(a.to) ? { type: "move", by, unit: a.unit, to: hex(a.to)!, ...(isHex(a.from) ? { from: hex(a.from)! } : {}) } : null;
   if (a.type === "use") return text(a.ability) ? { type: "use", by, unit: a.unit, ability: a.ability, target, at: hex(a.at), focus: !!a.focus } : null;
   if (a.type === "common") return text(a.what) ? { type: "common", by, unit: a.unit, what: a.what as never, target, at: hex(a.at) } : null;
   if (a.type === "throw") return text(a.item) && isHex(a.at) ? { type: "throw", by, unit: a.unit, item: a.item as never, at: hex(a.at)! } : null;
@@ -312,6 +313,8 @@ export class ZoneRoom extends DurableObject<Env> {
    */
   private async apply(action: ZoneAction, pack?: string, from?: Asked): Promise<string | null> {
     const db = this.env.DB;
+    // A walk is timed, so the next may call it off while it is still being played (zone.ts, cutShort).
+    if (action.type === "move") action = { ...action, now: Date.now() };
     let prev = this.zone!;
     // Time out of a fight has gone by since the last thing done here (zone/clock.ts): it passes first.
     let passed: ZoneEvent[] = [];
