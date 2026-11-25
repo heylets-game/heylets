@@ -170,6 +170,7 @@ export const NOSES = [
 
 export const MUSTACHES = [
   { id: "none", label: "None" },
+  { id: "standard", label: "Standard" },
   { id: "bushy", label: "Bushy" },
   { id: "pencil", label: "Pencil" },
   { id: "handlebar", label: "Handlebar" },
