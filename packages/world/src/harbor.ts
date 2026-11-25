@@ -758,6 +758,11 @@ export interface HarborPlayer {
    * over that building's roof instead, and `pos` is its door, where they come back out.
    */
   inside?: string;
+  /**
+   * The hero of their party they are acting as (the party member selected in town): drawn, named and levelled as that
+   * hero, where they stand. Missing: as themselves.
+   */
+  as?: string;
 }
 
 /**
@@ -864,7 +869,8 @@ export type HarborClientMessage =
   | LookRequest
   | EmoteRequest
   /** "I changed my gear or level": the server re-reads the sender's character and tells everyone. */
-  | { type: "refresh" }
+  /** Read the hero again (gear, level, look). `as`: draw them as this hero of their party from now on (their own id: as themselves). */
+  | { type: "refresh"; as?: string }
   /** "I have just rested here": lay the sender's bedroll out where they stand, for everyone to see. */
   | { type: "bedroll" }
   /** "I have sat down to fish here" (or stood up again): the sender's hero holds a rod, for everyone to see. */

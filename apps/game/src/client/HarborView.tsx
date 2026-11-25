@@ -606,6 +606,11 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
       prompt("Copy this invite link:", invite);
     }
   };
+  // Acting as another of your party: your figure is drawn as them, for everyone here. Said again on each new connection.
+  const actingAs = party?.acting ?? null;
+  useEffect(() => {
+    if (harbor.status === "open" && actingAs) harbor.send({ type: "refresh", as: actingAs });
+  }, [actingAs, harbor.status]);
   // After a change of gear, have the Harbor show everyone the new look.
   const refreshAll = async () => {
     await refresh();
