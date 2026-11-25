@@ -327,6 +327,24 @@ const MARCH_MS = 260;
 const WALK_MS = 400;
 
 /**
+ * How low on the view a shot it frames may be shown (render/fightCamera.ts), from -1 (its bottom edge) to 1 (its
+ * top): a little above the fight's own panels along the bottom, where they cross the middle of it (the turn bar,
+ * and on a narrow screen the combat log over that). Undefined with nothing to measure.
+ */
+function shotFloor(canvas: HTMLCanvasElement | undefined): number | undefined {
+  const view = canvas?.getBoundingClientRect();
+  if (!view || view.height === 0) return undefined;
+  const left = view.left + view.width * 0.2;
+  const right = view.right - view.width * 0.2;
+  const tops = [...document.querySelectorAll(".fight-turn, .fight-log")]
+    .map((el) => el.getBoundingClientRect())
+    .filter((r) => r.height > 0 && r.right > left && r.left < right)
+    .map((r) => r.top);
+  if (tops.length === 0) return undefined;
+  return 1 - (2 * (Math.min(...tops) - 10 - view.top)) / view.height;
+}
+
+/**
  * Which events are a turn that is only a far-off enemy walking. An enemy's turn has no `turn` event of its own
  * (the rules send one only when a hero's comes up), so it is told by what the enemy does: a walk (one `moved`, or
  * several on end) by an enemy that ends far from every hero, when it did nothing before the walk and what follows
@@ -539,6 +557,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     for (const t of timers.current) clearTimeout(t);
     timers.current = [];
     playing.current?.stop();
+    // Nor is any shot still in the air waited for: the view lets it go.
+    renderer.current?.shotsDone();
     // Whoever it had not yet shown walking sets off now, to where it took them: cut short, but nobody skips ground.
     for (const go of unwalked.current) go();
     unwalked.current.clear();
@@ -576,6 +596,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       return setPicture(end);
     }
     const yours = (id: string) => next.units.some((u) => u.id === id && (ownHero(next, u.id) || ownHero(next, u.controller)));
+    /** One of yours is in the fight: the view follows whoever's turn it is, and frames their shots (render/fightCamera.ts). */
+    const inFight = !!next.encounter && next.encounter.order.some(yours);
     // The turn has passed to the enemy in this: it is watched through before the turn is yours again.
     setWatching(!!next.encounter && events.some((ev) => ev.t === "turn"));
     const { many, last } = runs(events);
@@ -598,6 +620,17 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       });
     };
     const find = (id: string) => draft.units.find((u) => u.id === id);
+    /**
+     * A use or a blow from `id` at a unit or a hex further off than a hand reaches, in a fight of yours: what has the
+     * view draw back to take in both ends of it (unless they are on screen already), to be run as it is shown. What
+     * that returns lets it go, once what came of it has been seen. Null for anything nearer, and outside a fight.
+     */
+    const shotFrom = (id: string, at: HexPos | null | undefined, target?: string | null) => {
+      const user = find(id);
+      if (!inFight || !user || !at || target === id || hexDistance(user.pos, at) <= 1) return null;
+      const to = target ?? at;
+      return () => renderer.current?.frameShot(id, [to], shotFloor(renderer.current?.canvas));
+    };
     const lines: string[] = [];
     /** Who last struck each one, so one that goes down falls away from them. */
     const struck = new Map<string, string>();
@@ -615,12 +648,17 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       const where = unit?.pos;
       later(() => {
         setSpot(id);
-        // An enemy's turn is heard and announced, and the view goes to it. Your own is announced by its own event.
+        // An enemy's turn is heard and announced, and the view goes to it and, in a fight of yours, stays with it
+        // wherever it goes. Your own is announced by its own event.
         if (foe && next.encounter) {
           sounds.zone("turn.enemy");
-          if (where) renderer.current?.lookAt(where);
+          if (inFight) renderer.current?.watch(id);
+          else if (where) renderer.current?.lookAt(where);
           announce("enemy", `${unit?.name ?? "The enemy"}'s turn`);
           logAdd({ k: "turn", name: unit?.name ?? "The enemy", side: "enemy" });
+        } else if (inFight) {
+          // A hero acting (back to them after an enemy's strike as they passed it, say): the view goes with them again.
+          renderer.current?.watch(id);
         }
       });
     };
@@ -638,6 +676,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       if (!marching[i] && marchEnd > at) at = marchEnd;
       /** Run once the picture has caught up with this event (see the end of the loop). */
       let afterShown: (() => void) | null = null;
+      /** A shot of this event's that the view has drawn back to frame (shotFrom): let go once it is all seen. */
+      let framed: (() => void) | undefined;
       const say = (line: string, tone?: "good" | "bad" | "dim") => later(() => logAdd({ k: "note", text: line, ...(tone ? { tone } : {}) }));
       const sideOf = (id: string | null | undefined): "hero" | "enemy" | "none" => (id ? (find(id)?.side ?? next.units.find((u) => u.id === id)?.side ?? "none") : "none");
       const view = renderer.current;
@@ -789,7 +829,10 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
          * Not for a wave, whose reach along the ground is timed from when it set off (see shoved).
          */
         const due = wave ? undefined : at + dwell(ev, many[i], events[i + 1]);
+        // Shot or cast at someone or somewhere out of a hand's reach: the view takes in both ends from the wind-up on.
+        const shot = shotFrom(ev.id, ev.target ? find(ev.target)?.pos : ev.at, ev.target);
         later(() => {
+          framed = shot?.();
           const fxs = spells.current;
           if (!said) view?.floatOver(ev.id, ev.name, "#fff1c9");
           if (!fxs || !from || !user) return;
@@ -1144,7 +1187,10 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         const from = actor ? point(actor.pos, 0.9) : null;
         const chained = mine?.last ?? from;
         if (mine && to) mine.last = to;
+        // Anything that flies to them from further off than a hand reaches: the view takes in both ends till it lands.
+        const shot = ev.actor && kind !== "melee" && kind !== "none" && kind !== "ground" ? shotFrom(ev.actor, target?.pos, ev.target) : null;
         later(() => {
+          framed = shot?.();
           const fxs = spells.current;
           // Whatever comes of the blow (the health it costs, the line in the log, the roll's card, and everything
           // after it) waits till it lands or goes wide: the clock stops until it does.
@@ -1431,8 +1477,12 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
             logAdd({ k: "turn", name: mine?.name ?? "You", side: "hero" });
             setSpot(null);
             setWatching(false);
-            if (mine) view?.lookAt(mine.pos);
+            if (mine) view?.watch(mine.id);
           });
+        } else if (inFight && ev.ids[0]) {
+          // Another player's turn: the view goes with their hero as it goes with an enemy.
+          const theirs = ev.ids[0];
+          later(() => view?.watch(theirs));
         }
       } else if (ev.t === "fled") {
         later(() => {
@@ -1443,6 +1493,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         say(`${name(ev.id)} gets away from the fight.`);
       } else if (ev.t === "fight_end") {
         later(() => {
+          // Nobody's turn is followed now (following your own hero, if it is on, takes over).
+          view?.watch(null);
           // Getting away was heard as it happened: no stinger for a fight nobody won.
           if (ev.outcome !== "fled") sounds.stinger(ev.outcome);
           announce(ev.outcome === "victory" ? "victory" : ev.outcome === "defeat" ? "defeat" : "round", ev.outcome === "victory" ? "Victory" : ev.outcome === "defeat" ? "Defeated" : "Got away", ev.outcome === "victory" ? "Search the fallen" : ev.outcome === "defeat" ? "You wake where you started" : undefined);
@@ -1600,6 +1652,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       later(() => {
         setPicture(shown);
         then?.();
+        // (Run after everything this event held the clock for: the blow has landed, the spell has come down.)
+        framed?.();
       });
       let wait = dwell(ev, many[i], events[i + 1], ev.t === "roll" && carried.has(ev.roll));
       // Turns keep a pace that can be followed (TURN_BEAT), but nobody waits on an enemy still marching in from afar.

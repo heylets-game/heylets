@@ -48,6 +48,7 @@ import { dismissBoot } from "../boot";
 import { VoidBackdrop, type BackdropKind } from "./backdrop";
 import { CAVE_FLOOR, ZoneScenery } from "./zoneScenery";
 import { CombatView, cutawayButton, type CutSpot } from "./cutaway";
+import { FLOOR_RANGE, FightCamera, SHOT_BOX, type Box, type Lens, type ShotEnd } from "./fightCamera";
 import type { Waygate } from "./waygate";
 import { HoverGlow } from "./hoverGlow";
 import { buildTownDressing, type TownDressing } from "./townDressing";
@@ -1190,6 +1191,10 @@ export class WorldRenderer {
    * Only a view that says whether a fight is on (`setCombat`) has it.
    */
   private combat = new CombatView();
+  /** The camera in a fight (fightCamera.ts): whoever's turn it is is followed, and a shot from afar is framed whole. Ahead of following your own hero. */
+  private fight = new FightCamera();
+  /** Where on screen a framed shot must fit: clear of the fight's panels as they were last measured (see frameShot). */
+  private shotBox: Box = SHOT_BOX;
   /** How far this turn's walk reaches from your hero, in world units, and the reach it was measured for (see combatSpots). */
   private combatReach: { of: unknown; far: number } = { of: null, far: 0 };
   /**
@@ -1822,6 +1827,7 @@ export class WorldRenderer {
   walkUnit(id: string, path: HexPos[]) {
     const unit = this.units.get(id);
     if (!unit) return;
+    if (path.length > 0) this.fight.setOff(id);
     const map = this.state?.map;
     const level = (pos: HexPos) => (map ? (tileAt(map, pos)?.elev ?? 0) : 0);
     // Where it sets off from: the last hex it is already bound for, or the one it stands on (a quarter hex
@@ -1844,6 +1850,7 @@ export class WorldRenderer {
   leapUnit(id: string, to: HexPos) {
     const unit = this.units.get(id);
     if (!unit) return;
+    this.fight.setOff(id);
     const at = this.standAt(to);
     unit.path.push(at);
     (unit.leaps ??= new Map()).set(at, true);
@@ -1922,6 +1929,7 @@ export class WorldRenderer {
   blinkUnit(id: string, to: HexPos) {
     const unit = this.units.get(id);
     if (!unit) return;
+    this.fight.setOff(id);
     unit.path = [];
     unit.leaps?.clear();
     unit.leap = undefined;
@@ -3324,11 +3332,51 @@ export class WorldRenderer {
   }
 
   lookAt(pos: HexPos) {
+    // Sent to look at something else: no longer on whoever's turn it is, or on a shot.
+    this.fight.takeOver();
     this.targetGoal.copy(this.standAt(pos));
+    this.dist = this.userDist;
     if (this.follow && !this.followHeld) {
       this.followHeld = true;
       this.showFollow();
     }
+  }
+
+  /**
+   * In a fight, keep this unit centred from now on (whoever's turn it has become), wherever it goes; null for
+   * nobody (the fight is over). Ahead of following your own hero. A pan, or lookAt, stops it until the unit next
+   * sets off on a walk or a jump.
+   */
+  watch(id: string | null) {
+    this.fight.watch(id);
+  }
+
+  /**
+   * A shot from `from` at the units or hexes in `to`: unless every one of them is already well on screen where
+   * the camera is going, the view draws back to take them all in until the function returned is called (it has
+   * landed), stays a moment, and goes back. `floor`: how low on the screen they may be shown (-1 the bottom edge,
+   * 1 the top), clear of whatever the view's own panels cover along the bottom.
+   */
+  frameShot(from: string, to: (string | HexPos)[], floor?: number): () => void {
+    const ends = (): ShotEnd[] =>
+      [from, ...to].flatMap((end): ShotEnd[] => {
+        if (typeof end !== "string") return [{ feet: this.standAt(end), height: 1.2 }];
+        const unit = this.units.get(end);
+        return unit && unit.root.visible ? [{ feet: unit.feet, height: unit.head }] : [];
+      });
+    // (Measured afresh for each shot, but one box for all shots framed together: the last one's.)
+    if (floor !== undefined && Number.isFinite(floor)) this.shotBox = { ...SHOT_BOX, bottom: Math.max(FLOOR_RANGE.min, Math.min(FLOOR_RANGE.max, floor)) };
+    return this.fight.shoot(ends, this.clock, this.targetGoal, this.dist, this.lens());
+  }
+
+  /** Every shot being framed (frameShot) has landed: what was showing them was cut short. */
+  shotsDone() {
+    this.fight.landAll();
+  }
+
+  /** How the camera is set to look, apart from where and from how far (for framing a shot). */
+  private lens(): Lens {
+    return { fov: this.camera.fov, aspect: this.camera.aspect, yaw: this.yawGoal, pitch: this.pitchGoal, reach: CAMERA_REACH, box: this.shotBox };
   }
 
   /** Keep your hero centred (or stop). Turning it on brings the camera back to them, easing there. */
@@ -4958,6 +5006,8 @@ export class WorldRenderer {
    */
   setCombat(fighting: boolean, map: string) {
     this.combat.setFight(fighting, map);
+    // Out of the fight, nobody's turn is followed: following your own hero (if on) takes over again.
+    if (!fighting) this.fight.watch(null);
   }
 
   /** How far on the combat view is, 0 to 1, for what a view draws itself and would have give way with the rest. */
@@ -5045,15 +5095,21 @@ export class WorldRenderer {
   /** True while a touch is still within the slack of where a pinch began (see `panFrom`): it does not pan. */
   private holdPan(x: number, y: number): boolean {
     if (!this.panFrom) return false;
-    if (this.follow && !this.followHeld && Math.hypot(x - this.panFrom.x, y - this.panFrom.y) < PINCH_PAN_SLACK) return true;
+    if (((this.follow && !this.followHeld) || this.fight.following) && Math.hypot(x - this.panFrom.x, y - this.panFrom.y) < PINCH_PAN_SLACK) return true;
     this.panFrom = null;
     return false;
   }
 
   private panBy(dx: number, dy: number) {
     if (dx === 0 && dy === 0) return;
-    // Looking around is the player taking the camera: stop following until they ask again.
+    // Looking around is the player taking the camera: stop following until they ask again (in a fight, whoever's
+    // turn it is until they next set off), and let go of any shot being framed, from where the view is now.
     if (this.follow) this.setFollow(false);
+    if (this.fight.framing) {
+      this.targetGoal.copy(this.target);
+      this.userDist = this.dist = this.camDist;
+    }
+    this.fight.takeOver();
     const k = (this.dist / this.container.clientHeight) * 0.75;
     // Slide along the screen's own right and up, whichever way the camera is turned.
     const cos = Math.cos(this.yaw);
@@ -5407,15 +5463,25 @@ export class WorldRenderer {
       if (x || y) this.panBy(-x * speed, y * speed);
     }
 
-    // Following: the camera's goal is your hero's feet (the middle of the hex they stand on), wherever they have got to.
-    const mine = this.follow && this.state?.you ? this.units.get(this.state.you) : undefined;
+    // In a fight, a shot from afar is framed whole, from the one who lets it go to wherever it lands; then the
+    // camera goes back to where it was going.
+    const shot = this.fight.aim(this.clock, this.lens(), this.userDist, this.maxZoom);
+    if (shot) {
+      this.targetGoal.copy(shot.at);
+      this.dist = shot.dist;
+    }
+    // Following: the camera's goal is the feet (the middle of the hex they stand on) of whoever's turn it is in a
+    // fight, or else your own hero's, wherever they have got to.
+    const watched = this.fight.following && this.fight.watched ? this.units.get(this.fight.watched) : undefined;
+    const mine = !watched && this.follow && this.state?.you ? this.units.get(this.state.you) : undefined;
     if (mine) {
       if (this.followHeld && mine.path.length > 0) {
         this.followHeld = false;
         this.showFollow();
       }
-      if (!this.followHeld) this.targetGoal.set(mine.feet.x, mine.feet.y, mine.feet.z - 0.25);
     }
+    const followed = watched ?? (mine && !this.followHeld ? mine : undefined);
+    if (followed && !this.fight.framing) this.targetGoal.set(followed.feet.x, followed.feet.y, followed.feet.z - 0.25);
 
     this.target.lerp(this.targetGoal, ease);
     // Coming in from an opening view (see swoop), the camera takes its time coming down and round, and does not
