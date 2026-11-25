@@ -4,7 +4,7 @@ import type { StatKey } from "@gantt-quest/core";
 import type { FinishKind, HutFinish, Muster, MusterAnswer, SowWith } from "@gantt-quest/world";
 import type { Appearance, BaitId, BoatId, RodId, CarryState, FishSpot, GatherChoice, HarborXpStatus, GatherSpot, HarborWorks, HutSummary, ItemDef, Lodestone, ProjectAmounts, PublicHero, Resources, SalesEntry, SalesmanId, SalesmanVisit, ShopEntry, Throwable, TradeSide } from "@gantt-quest/world";
 import { devTools } from "./devTools";
-import { actingHero } from "./party";
+import { actAs, actingHero } from "./party";
 import { forcedSalesman } from "./salesmanClock";
 import type { GatherStatus } from "../server/gather";
 import type { SittingPaid } from "../server/fishing";
@@ -225,14 +225,17 @@ export const api = {
   signOut: () => request("/api/auth/sign-out", {}),
   /** The account's finished heroes, most recently played first, and how many an account may have. */
   heroes: () => request<{ heroes: HeroSlot[]; max: number }>("/api/heroes"),
-  /** Play another of the account's heroes on this device. */
-  chooseHero: (id: string) => request("/api/heroes/choose", { id }),
+  /** Play another of the account's heroes on this device, as themselves: no longer acting as one of the old party. */
+  chooseHero: (id: string) => request("/api/heroes/choose", { id }).then((r) => (actAs(null), r)),
   /** Another of the account's heroes into the party of the hero being played, brought into this world if they are not in it. */
   addToParty: (id: string) => request("/api/party/add", { id }),
   /** One of the account's heroes out of the party. */
   leaveParty: (id: string) => request("/api/party/remove", { id }),
-  /** An empty slot to make a new hero in, now the one this device plays. */
-  newHero: () => request<{ id: string }>("/api/heroes/new", {}),
+  /**
+   * An empty slot to make a new hero in, now the one this device plays. No longer acting as one of the old party: the
+   * requests that make the hero would otherwise go as that member, who has a character already.
+   */
+  newHero: () => request<{ id: string }>("/api/heroes/new", {}).then((r) => (actAs(null), r)),
   createCrew: (name: string) => request("/api/crew", { name }),
   joinCrew: (code: string) => request("/api/crew/join", { code }),
   /** Leave a world for good: the one named, or else the one the hero is in. */
