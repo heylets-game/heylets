@@ -51,6 +51,13 @@ export async function partyOf(db: D1Database, playerId: string, member = false):
   return rows.results.map((r) => r.id);
 }
 
+/** How many heroes these players bring onto a map: each of them, and each one's party with them. */
+export async function heroesOf(db: D1Database, playerIds: readonly string[]): Promise<number> {
+  const heroes = new Set(playerIds);
+  for (const party of await Promise.all(playerIds.map((id) => partyOf(db, id)))) for (const id of party) heroes.add(id);
+  return heroes.size;
+}
+
 /** Is `heroId` one of the heroes on `userId`'s account, with a finished character? */
 async function ownHero(db: D1Database, userId: string, heroId: string): Promise<boolean> {
   return !!(await db

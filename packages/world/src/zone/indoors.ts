@@ -34,7 +34,7 @@ import { GROUP_EXTRAS } from "./kit";
 import type { Laid, LaidGroup } from "./lay";
 import { modsOf } from "./mods";
 import { propOf } from "./props";
-import { SITES, backdropOf, bandOf, factionsOf, type SiteDef, type SiteId } from "./sites";
+import { SITES, backdropOf, bandOf, bandsBeside, factionsOf, type SiteDef, type SiteId } from "./sites";
 import type { GroundSurface, ZoneOptions } from "./types";
 
 const LASTING_ROUNDS = 99;
@@ -600,17 +600,17 @@ export function layInside(seed: string, options: ZoneOptions, siteId: SiteId, gr
     for (const p of room.chests) chestKeys.add(posKey(p));
   }
   const standable = (p: HexPos) => walk(p) && at(p)!.prop !== "arch" && at(p)!.prop !== "stairs" && !at(p)!.ladder && !chestKeys.has(posKey(p)) && !taken.has(posKey(p)) && far(p) > Math.max(3, options.clear + 1);
-  const size = Math.max(2, Math.min(8, options.party + GROUP_EXTRAS + mods.extras + (options.party >= 3 ? 1 : 0)));
+  const sizeFor = (party: number) => Math.max(2, Math.min(8, party + GROUP_EXTRAS + mods.extras + (party >= 3 ? 1 : 0)));
   const factions = factionsOf(siteId, clime);
   const groups: (LaidGroup & { room: number })[] = [];
-  const bandFor = (i: number): { kind: string; role: Role }[] => {
+  const bandAt = (i: number, size: number, pick: <T>(list: readonly T[]) => T): { kind: string; role: Role }[] => {
     const lead = options.kinds.length > 0 ? options.kinds[i % options.kinds.length] : null;
     const faction = factions[i % factions.length];
-    if (!lead) return bandOf(faction, size, rng.pick);
+    if (!lead) return bandOf(faction, size, pick);
     if (lead === "dummy") return [{ kind: "dummy", role: "front" }];
     if (ENEMIES[lead]?.boss) {
-      if (groups.some((g) => g.kinds.includes(lead))) return bandOf(faction, size, rng.pick);
-      return [{ kind: lead, role: "heavy" }, ...bandOf(faction, Math.max(1, size - 1), rng.pick).filter((m) => m.role !== "heavy")];
+      if (groups.some((g) => g.kinds.includes(lead))) return bandOf(faction, size, pick);
+      return [{ kind: lead, role: "heavy" }, ...bandOf(faction, Math.max(1, size - 1), pick).filter((m) => m.role !== "heavy")];
     }
     return Array.from({ length: size }, (_, k) => ({ kind: lead, role: (k > 0 && k % 3 === 2 ? "shot" : "front") as Role }));
   };
@@ -622,7 +622,10 @@ export function layInside(seed: string, options: ZoneOptions, siteId: SiteId, gr
     const near = [...room.floor].sort((a, b) => hexDistance(a, room.centre) - hexDistance(b, room.centre));
     const kinds: string[] = [];
     const posts: HexPos[] = [];
-    for (const member of bandFor(i)) {
+    // The band for the party the map is made for, and what it would be for every other (sites.ts bandsBeside).
+    const band = bandAt(i, sizeFor(options.party), rng.pick);
+    const bands = bandsBeside(band, options.party, (p, pick) => bandAt(i, sizeFor(p), pick), `${seed}|${i}`);
+    for (const member of band) {
       const mine = room.posts.find((o) => o.role === member.role && standable(o.pos));
       const spot = mine?.pos ?? (member.role === "shot" ? near.filter(standable).sort((a, b) => elev(b) - elev(a) || hexDistance(a, room.centre) - hexDistance(b, room.centre))[0] : near.find(standable));
       if (!spot) continue;
@@ -630,7 +633,7 @@ export function layInside(seed: string, options: ZoneOptions, siteId: SiteId, gr
       kinds.push(member.kind);
       posts.push({ q: spot.q, r: spot.r });
     }
-    if (kinds.length > 0) groups.push({ id: `band${i + 1}`, kinds, posts, room: room.cell });
+    if (kinds.length > 0) groups.push({ id: `band${i + 1}`, kinds, posts, room: room.cell, bands });
   }
 
   // ---------- chests ----------
@@ -704,7 +707,7 @@ export function layInside(seed: string, options: ZoneOptions, siteId: SiteId, gr
   return {
     map: { grid, tiles: laid, pois },
     start,
-    groups: groups.filter((g) => g.kinds.length > 0).map(({ id, kinds, posts }) => ({ id, kinds, posts })),
+    groups: groups.filter((g) => g.kinds.length > 0).map(({ id, kinds, posts, bands }) => ({ id, kinds, posts, ...(bands ? { bands } : {}) })),
     ...(surfaces && Object.keys(surfaces).length > 0 ? { surfaces } : {}),
     scene: { site: siteId, backdrop: backdropOf(siteId, clime) },
   };

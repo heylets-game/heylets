@@ -33,12 +33,22 @@ export async function inTown(env: Env, crewId: string): Promise<Set<string>> {
     .then((r) => new Set(r.ids), () => new Set<string>());
 }
 
-/** Whoever of a crew is in the Harbor now, and the asker and their party with them: who a map made this moment is sized for. */
+/**
+ * Whether anyone but `playerId` and their own party is on map `code` right now. Walking on beside them makes the party
+ * there bigger, and its enemies with it (zone.ts growGroups), so the player is asked first.
+ */
+export async function othersOn(db: D1Database, crewId: string, playerId: string, code: string): Promise<boolean> {
+  const [places, party] = await Promise.all([crewPlaces(db, crewId), partyOf(db, playerId)]);
+  const mine = new Set([playerId, ...party]);
+  return places.some((m) => m.zone?.code === code && !mine.has(m.id));
+}
+
+/** Whoever of a crew is in the Harbor now, everyone's party with them, and the asker and theirs: who a map made this moment is sized for. */
 export async function harborParty(env: Env, crewId: string, playerId: string) {
   const here = await inTown(env, crewId);
   here.add(playerId);
-  // A player's party comes with them, from wherever in the world its members are.
-  for (const id of await partyOf(env.DB, playerId)) here.add(id);
+  // A player's party comes with them, from wherever in the world its members are: the asker's, and everyone else's here.
+  for (const party of await Promise.all([...here].map((id) => partyOf(env.DB, id)))) for (const id of party) here.add(id);
   return (await crewPlaces(env.DB, crewId)).filter((m) => here.has(m.id));
 }
 

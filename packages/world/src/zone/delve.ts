@@ -29,6 +29,7 @@ import { makeRng, seedFromString, type Rng } from "../rng";
 import { CRATE_HP } from "./crates";
 import { GROUP_EXTRAS } from "./kit";
 import { modsOf } from "./mods";
+import { PARTY_SIZES } from "./sites";
 import type { ZoneOptions } from "./types";
 import type { ZonePlan } from "./gen";
 
@@ -182,9 +183,13 @@ export function generateDelve(seed: string, options: ZoneOptions): ZonePlan {
 
   const groups: ZonePlan["groups"] = [];
   for (const camp of map.pois.filter((p) => p.kind === "camp" || p.kind === "lair")) {
-    const kinds = camp.kind === "lair" ? guardsFor(camp.enemies, options.party) : bandFor(camp.enemies, options.party);
-    // Each band has more than its leader would bring (not round the haunt, nor with a troll that lives alone).
-    if (camp.kind === "camp" && kinds[0] !== "troll") for (let n = 0; n < GROUP_EXTRAS + modsOf(options).extras; n++) kinds.push(kinds[kinds.length - 1]);
+    const kindsAt = (party: number) => {
+      const kinds = camp.kind === "lair" ? guardsFor(camp.enemies, party) : bandFor(camp.enemies, party);
+      // Each band has more than its leader would bring (not round the haunt, nor with a troll that lives alone).
+      if (camp.kind === "camp" && kinds[0] !== "troll") for (let n = 0; n < GROUP_EXTRAS + modsOf(options).extras; n++) kinds.push(kinds[kinds.length - 1]);
+      return kinds;
+    };
+    const kinds = kindsAt(options.party);
     // They stand in their chamber: on its middle and the open floor nearest it.
     const posts = map.tiles
       .filter((t) => t.biome === "cave" && hexDistance(t, camp.pos) <= 3 && !taken.has(posKey(t)))
@@ -193,7 +198,7 @@ export function generateDelve(seed: string, options: ZoneOptions): ZonePlan {
       .slice(0, kinds.length);
     for (const p of posts) taken.add(posKey(p));
     if (posts.length > 0) {
-      groups.push({ id: camp.id, kinds: kinds.slice(0, posts.length), posts });
+      groups.push({ id: camp.id, kinds: kinds.slice(0, posts.length), posts, bands: PARTY_SIZES.map(kindsAt) });
       if (camp.key) keys.push(camp.id);
     }
   }

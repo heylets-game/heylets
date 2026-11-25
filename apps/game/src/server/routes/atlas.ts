@@ -3,7 +3,8 @@
 
 import { chartFor, openNode, scoutNode } from "../atlas";
 import { crewFor, getCharacter, refreshHarbor, type Env } from "../db";
-import { harborParty, type GameApp } from "./shared";
+import { heroesOf } from "../party";
+import { harborParty, othersOn, type GameApp } from "./shared";
 
 /** Ask the crew's Harbor room about its muster. */
 async function musterRoom(env: Env, crewId: string, path: "" | "/call" | "/answer", body?: unknown): Promise<{ status: number; json: Record<string, unknown> }> {
@@ -38,7 +39,8 @@ export function atlasRoutes(app: GameApp): void {
     if ("error" in went) return c.json({ error: went.error }, went.status);
     // Crewmates looking at the chart see that someone has put in there.
     if (went.fresh) c.executionCtx.waitUntil(refreshHarbor(c.env, crew.id));
-    return c.json(went);
+    // A map already begun, with others on it: the client asks first, since walking on makes its enemies more.
+    return c.json(went.fresh ? went : { ...went, others: await othersOn(c.env.DB, crew.id, player.id, went.code) });
   });
 
   // ---------- the muster: setting out together ----------
@@ -62,10 +64,11 @@ export function atlasRoutes(app: GameApp): void {
     const body = await c.req.json<{ node?: unknown; stone?: unknown }>().catch(() => ({}) as { node?: unknown; stone?: unknown });
     const seen = await scoutNode(c.env.DB, crew.id, body.node, body.stone);
     if ("error" in seen) return c.json({ error: seen.error }, seen.status);
-    if ("live" in seen) return c.json({ code: seen.live, fresh: false });
+    if ("live" in seen) return c.json({ code: seen.live, fresh: false, others: await othersOn(c.env.DB, crew.id, player.id, seen.live) });
     const called = await musterRoom(c.env, crew.id, "/call", { by: { id: player.id, name: character.name }, to: seen, stone: body.stone });
     if (called.json.alone) {
-      const went = await openNode(c.env.DB, crew.id, player.id, body.node, 1, body.stone);
+      // Alone in town, but perhaps with a party: the map is made for all of them.
+      const went = await openNode(c.env.DB, crew.id, player.id, body.node, await heroesOf(c.env.DB, [player.id]), body.stone);
       if ("error" in went) return c.json({ error: went.error }, went.status);
       if (went.fresh) c.executionCtx.waitUntil(refreshHarbor(c.env, crew.id));
       return c.json(went);

@@ -38,7 +38,7 @@ import { layInside } from "./indoors";
 import { GROUP_EXTRAS } from "./kit";
 import { modsOf } from "./mods";
 import { propOf } from "./props";
-import { SITES, backdropOf, bandOf, factionsOf, siteFor, type Backdrop, type PieceKind, type SiteDef, type SiteId } from "./sites";
+import { SITES, backdropOf, bandOf, bandsBeside, factionsOf, siteFor, type Backdrop, type PieceKind, type SiteDef, type SiteId } from "./sites";
 import type { GroundSurface, ZoneOptions, ZoneSize } from "./types";
 
 /** How big a map of each size is, in hexes: the land takes up rather more than half of it. */
@@ -59,6 +59,8 @@ export interface LaidGroup {
   id: string;
   kinds: string[];
   posts: HexPos[];
+  /** What it would be for each party of one to four (index: the party less one), to grow it by as heroes come (zone.ts growGroups). */
+  bands?: string[][];
 }
 
 export interface Laid {
@@ -725,11 +727,11 @@ export function layZone(seed: string, asked: ZoneOptions): Laid {
   const standable = (p: HexPos) => !solidAt(p) && !chestKeys.has(posKey(p)) && !taken.has(posKey(p)) && far(p) > clear + ALERT + 1;
   // How many stand in a band: about one to a hero, and one more (another for a big party), never
   // fewer than two. What makes a map a long fight is how many bands there are, and that they come to each other's aid.
-  const size = Math.max(2, Math.min(8, options.party + GROUP_EXTRAS + mods.extras + (options.party >= 3 ? 1 : 0)));
+  const sizeFor = (party: number) => Math.max(2, Math.min(8, party + GROUP_EXTRAS + mods.extras + (party >= 3 ? 1 : 0)));
   const factions = factionsOf(siteId, clime);
   const groups: (LaidGroup & { centre: HexPos })[] = [];
   /** Post a band of `kinds` (each with its part) at a place: its own posts by part first, then whatever open ground is nearest. */
-  const post = (id: string, centre: HexPos, band: { kind: string; role: Role }[], own: Post[]) => {
+  const post = (id: string, centre: HexPos, band: { kind: string; role: Role }[], bands: string[][], own: Post[]) => {
     const near = disk(centre, 5).filter(standable);
     const kinds: string[] = [];
     const posts: HexPos[] = [];
@@ -742,33 +744,38 @@ export function layZone(seed: string, asked: ZoneOptions): Laid {
       kinds.push(member.kind);
       posts.push({ q: spot.q, r: spot.r });
     }
-    if (kinds.length > 0) groups.push({ id, kinds, posts, centre });
+    if (kinds.length > 0) groups.push({ id, kinds, posts, centre, bands });
   };
-  const bandFor = (i: number): { kind: string; role: Role }[] => {
+  const bandAt = (i: number, size: number, pick: <T>(list: readonly T[]) => T): { kind: string; role: Role }[] => {
     const lead = options.kinds.length > 0 ? options.kinds[i % options.kinds.length] : null;
     const faction = factions[i % factions.length];
-    if (!lead) return bandOf(faction, size, rng.pick);
+    if (!lead) return bandOf(faction, size, pick);
     // A named leader: a boss with a band of the place's own behind it (once: there is one of it, and the other
     // bands are the place's own); a training dummy alone; anything else with its own kind.
     if (lead === "dummy") return [{ kind: "dummy", role: "front" }];
     if (ENEMIES[lead]?.boss) {
-      if (groups.some((g) => g.kinds.includes(lead))) return bandOf(faction, size, rng.pick);
-      return [{ kind: lead, role: "heavy" }, ...bandOf(faction, Math.max(1, size - 1), rng.pick).filter((m) => m.role !== "heavy")];
+      if (groups.some((g) => g.kinds.includes(lead))) return bandOf(faction, size, pick);
+      return [{ kind: lead, role: "heavy" }, ...bandOf(faction, Math.max(1, size - 1), pick).filter((m) => m.role !== "heavy")];
     }
     return Array.from({ length: size }, (_, k) => ({ kind: lead, role: (k > 0 && k % 3 === 2 ? "shot" : "front") as Role }));
+  };
+  /** Band `i` for the party the map is made for, and what it would be for every other (sites.ts bandsBeside). */
+  const bandFor = (i: number): [{ kind: string; role: Role }[], string[][]] => {
+    const band = bandAt(i, sizeFor(options.party), rng.pick);
+    return [band, bandsBeside(band, options.party, (p, pick) => bandAt(i, sizeFor(p), pick), `${seed}|${i}`)];
   };
   // A band to each set piece (as many as there are bands for), the rest out in the wilds, well apart.
   for (let i = 0; i < options.groups; i++) {
     const piece = pieces[i];
     if (piece) {
-      post(`band${i + 1}`, piece.centre, bandFor(i), piece.posts);
+      post(`band${i + 1}`, piece.centre, ...bandFor(i), piece.posts);
       continue;
     }
     let centre: HexPos | null = null;
     for (let apart = 9; apart >= 4 && !centre; apart--) {
       centre = somewhere((p) => standable(p) && far(p) > clear + ALERT + 4 && !groups.some((g) => hexDistance(g.centre, p) < apart) && !pieces.some((o) => hexDistance(o.centre, p) < o.radius + 3));
     }
-    if (centre) post(`band${i + 1}`, centre, bandFor(i), []);
+    if (centre) post(`band${i + 1}`, centre, ...bandFor(i), []);
   }
 
   // ---------- chests ----------
@@ -895,7 +902,7 @@ export function layZone(seed: string, asked: ZoneOptions): Laid {
   return {
     map: { grid, tiles: laid, pois },
     start,
-    groups: groups.filter((g) => g.kinds.length > 0).map(({ id, kinds, posts }) => ({ id, kinds, posts })),
+    groups: groups.filter((g) => g.kinds.length > 0).map(({ id, kinds, posts, bands }) => ({ id, kinds, posts, ...(bands ? { bands } : {}) })),
     ...(surfaces && Object.keys(surfaces).length > 0 ? { surfaces } : {}),
     scene: { site: siteId, backdrop },
   };

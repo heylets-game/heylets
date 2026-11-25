@@ -320,16 +320,16 @@ export const api = {
   /** Everyone in your crew and the zone each is on, if any. */
   crewPlaces: () => request<{ members: { id: string; name: string; classId: string; level: number; zone: { code: string; fighting: boolean } | null; town?: boolean }[] }>("/api/crew/places"),
   /** Where to go to join a crewmate: the zone they are on, or null for the Harbor. Refused while they are in a fight. */
-  teleport: (to: string) => request<{ zone: string | null; name: string }>("/api/crew/teleport", { to }),
+  teleport: (to: string) => request<{ zone: string | null; name: string; others?: boolean }>("/api/crew/teleport", { to }),
   /** The crew's chart: the Harbor, what is cleared, what is open, the fog beyond, and who is out on what. */
   atlas: () => request<Chart>("/api/atlas"),
   /** Set out for a place (the map the crew is fighting through there, or a fresh one), with the lodestone put into its slot (what it carries, joined with "+"; "" for a plain one). It comes out of your pack. */
-  openNode: (node: string, stone?: string) => request<{ code: string; fresh: boolean }>("/api/atlas/open", { node, stone }),
+  openNode: (node: string, stone?: string) => request<{ code: string; fresh: boolean; others?: boolean }>("/api/atlas/open", { node, stone }),
   /**
    * Set out for a place, asking the crew first. Gives the map's `code` where nobody needs asking (a map already
    * begun there, or nobody else in town), and otherwise the `muster` that was called: the map is made when it starts.
    */
-  callMuster: (node: string, stone?: string) => request<{ code?: string; muster?: Muster }>("/api/atlas/muster", { node, stone }),
+  callMuster: (node: string, stone?: string) => request<{ code?: string; muster?: Muster; others?: boolean }>("/api/atlas/muster", { node, stone }),
   /** The crew's muster, if one is on or ended a moment ago. */
   muster: () => request<{ muster: Muster | null }>("/api/atlas/muster"),
   /** Answer the crew's muster: "ready" or "no"; for whoever called it, "start" or "cancel". */
@@ -374,7 +374,7 @@ export const api = {
   cutStone: () => request<{ lodestones: HeldStone[] }>("/api/atlas/cut", {}),
   devAtlas: (op: "clear" | "reset" | "stone", node?: string) => request<Chart>("/api/dev/atlas", { op, node }),
   /** Down into the caves: the crew's cave still being fought through, or a fresh one. */
-  caves: () => request<{ code: string; fresh: boolean }>("/api/caves", {}),
+  caves: () => request<{ code: string; fresh: boolean; others?: boolean }>("/api/caves", {}),
   /** Make a zone to try fights in, from these options (and a seed, or a fresh one), and get its code. */
   devZone: (options: Record<string, unknown>) => request<{ code: string; seed: string }>("/api/dev/zone", options),
   devGold: (amount: number) => request<{ gold: number }>("/api/dev/gold", { amount }),

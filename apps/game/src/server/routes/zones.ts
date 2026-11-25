@@ -6,7 +6,7 @@ import { enterProblem } from "../atlas";
 import { crewFor, getCharacter } from "../db";
 import { createZoneRow, crewPlaces, crewPlacesOf, getZoneRow, openCave, teleportTo } from "../zones";
 import { partyOf } from "../party";
-import { harborParty, inTown, type GameApp } from "./shared";
+import { harborParty, inTown, othersOn, type GameApp } from "./shared";
 
 export function zoneRoutes(app: GameApp): void {
   // Down into the Haunted Caverns: the crew's cave if one is still being fought through, else a fresh one.
@@ -18,7 +18,8 @@ export function zoneRoutes(app: GameApp): void {
     if (!crew) return c.json({ error: "You are not in a crew." }, 403);
     if (character?.status !== "active") return c.json({ error: "Create a character first." }, 409);
     const open = await openCave(c.env.DB, crew.id);
-    if (open) return c.json({ code: open, fresh: false });
+    // Others down there already: the client asks first, since walking on makes the cave's enemies more.
+    if (open) return c.json({ code: open, fresh: false, others: await othersOn(c.env.DB, crew.id, player.id, open) });
     const party = await harborParty(c.env, crew.id, player.id);
     const level = party.length > 0 ? party.reduce((sum, m) => sum + m.level, 0) / party.length : character.level;
     // A delve: the caverns' chambers and tunnels, with chests to open and the hoard in the deepest (zone/delve.ts).
@@ -42,7 +43,9 @@ export function zoneRoutes(app: GameApp): void {
     const body = await c.req.json<{ to?: string }>().catch(() => ({}) as { to?: string });
     const crew = await crewFor(c.env.DB, c.get("player").id);
     const go = teleportTo(crew ? await crewPlaces(c.env.DB, crew.id) : [], c.get("player").id, body.to);
-    return "error" in go ? c.json({ error: go.error }, go.status) : c.json(go);
+    if ("error" in go) return c.json({ error: go.error }, go.status);
+    // Onto a map with others on it: the client asks first, since walking on makes its enemies more.
+    return c.json(crew && go.zone ? { ...go, others: await othersOn(c.env.DB, crew.id, c.get("player").id, go.zone) } : go);
   });
 
   // A zone's socket. Anyone with a hero and the code can walk in, but a landfall on a crew's chart is that crew's

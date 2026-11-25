@@ -153,6 +153,7 @@ import { InitiativeStrip } from "./zone/InitiativeStrip";
 import "./zone/fight.css";
 import { LootPanel } from "./zone/LootPanel";
 import type { BackdropKind } from "./render/backdrop";
+import { joinOk } from "./joinWarning";
 
 /** What is waiting for a click on the map. */
 /** `first`: for an ability aimed in two clicks (a blink: Smuggler's Route, Tactical Retreat), who was clicked first. */
@@ -465,8 +466,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   }, [note]);
   /** Go to where a crewmate is: their map (beside them), or the Harbor if they are not out on one. */
   const teleportTo = (id: string) => {
-    api.teleport(id).then(({ zone: to }) => {
+    api.teleport(id).then(({ zone: to, others }) => {
       if (!to) return onLeave();
+      if (!joinOk(others)) return;
       try {
         sessionStorage.setItem("gq.zone.near", id);
       } catch {

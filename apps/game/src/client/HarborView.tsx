@@ -53,6 +53,7 @@ import { useConversation } from "./useConversation";
 import { regularHero, regularOn, regularUnit, useRegularsAbout } from "./useRegularsAbout";
 import { useBanter } from "./useBanter";
 import "./pub.css";
+import { joinOk } from "./joinWarning";
 
 const same = (a: HexPos, b: HexPos) => a.q === b.q && a.r === b.r;
 /**
@@ -244,8 +245,9 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
   const ownOutfit = useOwnLook(players.find((p) => p.id === you)?.outfit);
   /** Go to where a crewmate is: the zone they are on (beside them), if the server says they can be joined. */
   const teleportTo = (id: string) => {
-    api.teleport(id).then(({ zone, name }) => {
+    api.teleport(id).then(({ zone, name, others }) => {
       if (!zone) return setNote(`${name} is not out on a map.`);
+      if (!joinOk(others)) return;
       try {
         sessionStorage.setItem("gq.zone.near", id);
       } catch {
@@ -794,7 +796,7 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
   };
   /** Down into the caves: the crew's cave if one is still being fought through, else a fresh one. Leaving it comes back to the mouth. */
   const goDown = () => {
-    api.caves().then(({ code }) => goInside(`${HARBOR_CAVE.q},${HARBOR_CAVE.r}`, `zone/${code}`), (e: Error) => setNote(e.message));
+    api.caves().then(({ code, others }) => joinOk(others) && goInside(`${HARBOR_CAVE.q},${HARBOR_CAVE.r}`, `zone/${code}`), (e: Error) => setNote(e.message));
   };
   // Flotsam bobbing beside the hero (or under their boat): fished out from the beach or from a boat.
   const flotsamHere = self ? flotsamWithin(flotsam.pieces, self.pos) : null;

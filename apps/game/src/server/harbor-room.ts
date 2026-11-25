@@ -46,7 +46,7 @@ import { gildedRod, ownedVessel } from "./fishmarket";
 import { clearPresence } from "./zones";
 import { openNode } from "./atlas";
 import { Walkers, hexAsked, tellTrades, walkerFrom, withHero } from "./walk-room";
-import { partyOf } from "./party";
+import { heroesOf, partyOf } from "./party";
 
 /** A muster as it is kept: with the crew it is for and the lodestone set into the place, neither of which is sent to anyone. */
 interface KeptMuster {
@@ -249,7 +249,7 @@ export class HarborRoom extends DurableObject<Env> {
     return muster;
   }
 
-  /** They set out: the map is made for as many as are ready, with the caller's lodestone, and everyone is told its code. */
+  /** They set out: the map is made for as many heroes as the ready bring (their parties too), with the caller's lodestone, and everyone is told its code. */
   private async startMuster(kept: KeptMuster): Promise<Muster> {
     // Making the map waits on the database, and the room hears other things meanwhile (an answer, the alarm, the
     // caller's "start"): it is marked as starting first, in the room's own storage, so none of them starts it again.
@@ -259,7 +259,7 @@ export class HarborRoom extends DurableObject<Env> {
     if (now && now.muster.id === kept.muster.id && (now.starting || !musterOpen(now.muster))) return now.muster;
     await this.ctx.storage.put("muster", { ...kept, starting: true } satisfies KeptMuster);
     const { muster } = kept;
-    const went = await openNode(this.env.DB, kept.crewId, muster.by.id, muster.node, muster.ready.length, kept.stone).catch((err: unknown) => ({ error: err instanceof Error ? err.message : "The map could not be made.", status: 409 as const }));
+    const went = await openNode(this.env.DB, kept.crewId, muster.by.id, muster.node, await heroesOf(this.env.DB, muster.ready.map((r) => r.id)), kept.stone).catch((err: unknown) => ({ error: err instanceof Error ? err.message : "The map could not be made.", status: 409 as const }));
     const ended = await this.endMuster({ ...kept, muster: "error" in went ? { ...muster, failed: went.error } : { ...muster, code: went.code } });
     // The chart has changed: the board says so.
     if (!("error" in went) && this.ctx.getWebSockets().length > 0) this.here.broadcast({ type: "board", ...(await harborBoard(this.env.DB, kept.crewId)) });
