@@ -11,6 +11,8 @@
 .split-prompt input { width: 100%; }
 /* Asked from the bag or a chest, it stands in their overlay, which lets presses through and sizes its windows. */
 .overlay.bag-overlay > .split-prompt { pointer-events: auto; width: 270px; max-width: none; }
+/* A window opened from the bag over it (the catch) is clicked as any other, though the bag's layer lets clicks through. */
+.overlay.bag-overlay > .overlay { pointer-events: auto; }
 
 /* ---------- The sea bag: down the right-hand side of the view ----------
    As tall as what is in it, centred top to bottom on the right edge. The view and the bottom bar stay as they

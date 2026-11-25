@@ -778,8 +778,10 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
       setTimeout(() => removeEventListener("click", swallow, { capture: true }), 0);
     };
     const key = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || catchOpen) return;
-      if (held) setHeld(null);
+      if (e.key !== "Escape") return;
+      // The catch, open over the bag, shuts first.
+      if (catchOpen) setCatchOpen(false);
+      else if (held) setHeld(null);
       else if (chest) chest.onClose();
       else onClose();
     };
