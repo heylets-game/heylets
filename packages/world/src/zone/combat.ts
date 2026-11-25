@@ -8,7 +8,7 @@
 import { hexDistance, hexNeighbors, hexSegment, posKey, type HexPos } from "@gantt-quest/core";
 import { ABILITIES, BARD_AURA, ENEMIES, type AbilityDef, type EffectKind } from "../content";
 import { tileAt, type Poi } from "../map";
-import { DEBUFFS, addCondition, addShield, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, kindle, removeCondition, saveBonus, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
+import { DEBUFFS, addCondition, addShield, addStacks, inflict, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, removeCondition, saveBonus, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
 import { cratesOn, crateById, hurtCrate, isCrateId } from "./crates";
 import { HEX_DIRS, close, blast, blockerAt, courseShare, directionToward, elevOf, flies, heldAgainst, inFight, lineFrom, pathIn, pitAt, reachFrom, roomAt, sameHex, sees, seesFor, solid, stepCost, strikes, unitById, zoneReach, type Course, type Pit } from "./geometry";
 import { ACTION_AP, CHART, COMMON_ACTIONS, CORAL_ARMOR, ENEMY_EDGE, RALLY, SHANTY, SUMMON_CALLS, ENEMY_BURST, FLEE_RANGE, JUMP_DOWN, JUMP_UP, POTION_EDGE, SAVE_STAT, SMUGGLED, THROWABLES, TORCH_GROUND_ROUNDS, abilityDice, abilityStrikes, enemySave, unitStrikes, healDice, JUMP_RANGE, reactionStrike, tacticOf, throwRange, type EnemyStrike, type Tactic } from "./kit";
@@ -594,15 +594,9 @@ function afflict(ctx: Ctx, unit: Unit, def: AbilityDef, target: Unit, save: bool
   if (target.down) return;
   if (def.perfect) {
     const effect = def.perfect.effect;
-    if (!save || !saveRoll(ctx, target, SAVE_STAT[effect], saveDc(unit, def), `Resist ${def.name}`).ok) give(ctx, unit, target, effect, def.perfect.turns);
+    if (!save || !saveRoll(ctx, target, SAVE_STAT[effect], saveDc(unit, def), `Resist ${def.name}`).ok) inflict(ctx, target, def.perfect);
   }
-  if (def.targetEffect && !target.down) give(ctx, unit, target, def.targetEffect.effect, def.targetEffect.turns);
-}
-
-/** An ability's condition on a target: Burning is set by the user's hand, a stack more under North Star. */
-function give(ctx: Ctx, unit: Unit, target: Unit, effect: EffectKind, turns: number): void {
-  if (effect === "burning") kindle(ctx, unit, target, turns);
-  else addCondition(ctx, target, effect, turns);
+  if (def.targetEffect && !target.down) inflict(ctx, target, def.targetEffect);
 }
 
 /** One attack roll with an ability against one target. Returns whether it landed. */
@@ -633,7 +627,7 @@ function strike(ctx: Ctx, unit: Unit, def: AbilityDef, tactic: Tactic, target: U
     const c = target.conditions.find((x) => x.kind === "taunted");
     if (c) c.by = unit.id;
   }
-  if (tactic.kindleLit && !target.down && has(target, "guiding_light")) kindle(ctx, unit, target, tactic.kindleLit);
+  if (tactic.kindleLit && !target.down && has(target, "guiding_light")) addStacks(ctx, target, "burning");
   // Water Burst: the drench reaches whoever stands beside the target, no roll to hit.
   if (tactic.spray) {
     for (const foe of ctx.state.units.filter((u) => u.id !== target.id && u.side !== unit.side && !u.down && close(u.pos, target.pos))) {
@@ -927,7 +921,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
       Object.assign(shantyOf(unit)!, { joined: [], joinedOwn: [], surge: 0 });
       retune(ctx);
     }
-    if (def.targetEffect) addCondition(ctx, target, def.targetEffect.effect, def.targetEffect.turns);
+    if (def.targetEffect) inflict(ctx, target, def.targetEffect);
     if (tactic.aura) addCondition(ctx, unit, tactic.aura.kind, tactic.aura.rounds);
     if (tactic.steady) addCondition(ctx, target, "inspired", tactic.steady);
     // Wind's Blessing: more movement for each AP, now for one in the middle of their turn, else on their next.
@@ -970,7 +964,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
     }
     landed = true;
   }
-  if (landed && def.selfEffect && !unit.down) addCondition(ctx, unit, def.selfEffect.effect, def.selfEffect.turns);
+  if (landed && def.selfEffect && !unit.down) inflict(ctx, unit, def.selfEffect);
   if (tactic.stride && !unit.down) moveMore(state, unit, tactic.stride);
   if (wasUnseen && !tactic.hide && !tactic.steal) giveAway(ctx, unit);
   if (rallied) removeCondition(unit, "rallied");
@@ -1018,7 +1012,7 @@ export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Uni
   const leave = (victim: Unit, save: boolean) => {
     if (victim.down || !attack.perfect) return;
     const effect = attack.perfect.effect;
-    if (!save || !saveRoll(ctx, victim, SAVE_STAT[effect], dc, `Resist ${attack.name}`).ok) addCondition(ctx, victim, effect, attack.perfect.turns);
+    if (!save || !saveRoll(ctx, victim, SAVE_STAT[effect], dc, `Resist ${attack.name}`).ok) inflict(ctx, victim, attack.perfect);
   };
   if (attack.burst) {
     const dice = rollShown(ctx.rng, attack.dice);

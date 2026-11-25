@@ -7,7 +7,7 @@ import { ABILITIES, EFFECT_TICK, ENEMIES, HERO_CLASSES, SUNDERED_DEFENCE, WEAPON
 import { CLIMES, type Tile } from "../map";
 import { makeRng } from "../rng";
 import { abilityArea, checkAbility, checkCommon, courseFor, crateBlow, enemyAct, moveLeft, walk, walkAp, wayBetween } from "./combat";
-import { addCondition, attackContext, burnOf, damage, defenceOf, kindle, shieldOf, type Ctx } from "./engine";
+import { addCondition, addStacks, attackContext, burnOf, damage, defenceOf, shieldOf, type Ctx } from "./engine";
 import { shantyOf, shantyRadius, songsOn } from "./song";
 import { chartOf, constellationLinks } from "./stars";
 import { ALERT_RANGE, DEFAULT_ZONE_OPTIONS, JOIN_RANGE, generateZone, zoneOptions } from "./gen";
@@ -4299,17 +4299,17 @@ describe("the Sage's stars", () => {
     expect(burned).toBe(true);
   });
 
-  it("North Star: a blow that would set a fire anyway sets one more stack, and each stack burns", () => {
+  it("North Star: every blow adds a stack of Burning, and each stack burns", () => {
     const { state, foes } = party();
     const ctx: Ctx = { state, rng: makeRng(3), events: [], effects: [] };
     const target = unit(state, foes[0]);
-    kindle(ctx, unit(state, "bo"), target, 3);
+    addStacks(ctx, target, "burning");
     expect(burnOf(target)).toBe(EFFECT_TICK.burning);
     addCondition(ctx, unit(state, "bo"), "north_star", 3);
     damage(ctx, target, 1, { actor: "bo", what: "bash" });
-    expect(burnOf(target)).toBe(EFFECT_TICK.burning);
-    kindle(ctx, unit(state, "bo"), target, 3);
-    expect(burnOf(target)).toBe(2 * EFFECT_TICK.burning!);
+    expect(burnOf(target)).toBe(2 * EFFECT_TICK.burning);
+    damage(ctx, target, 1, { actor: "bo", what: "bash" });
+    expect(burnOf(target)).toBe(3 * EFFECT_TICK.burning);
   });
 });
 
@@ -4876,7 +4876,7 @@ describe("Rogue weapons", () => {
     expect(tacticOf("eviscerate").cooldown).toBe(3);
     expect(tacticOf("take_aim").cost).toBe(BONUS_AP);
     expect(tacticOf("stab").edge).toBeGreaterThan(0);
-    expect(ABILITIES.tear.perfect).toEqual({ effect: "bleeding", turns: 3 });
+    expect(ABILITIES.tear.perfect).toEqual({ effect: "bleeding" });
     expect(ABILITIES.snag.perfect).toEqual({ effect: "slowed", turns: 2 });
   });
 

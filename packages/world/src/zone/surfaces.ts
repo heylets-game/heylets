@@ -9,14 +9,14 @@
 import { hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/core";
 import { tileAt } from "../map";
 import { cratesOn, hurtCrate } from "./crates";
-import { addCondition, saveRoll, tick, type Ctx } from "./engine";
+import { addCondition, addStacks, saveRoll, tick, type Ctx } from "./engine";
 import { flies, solid } from "./geometry";
 import type { GroundSurface, SurfaceKind, Unit } from "./types";
 import { TORCH_HELD_ROUNDS } from "./kit";
 
 export const SURFACE_INFO: Record<SurfaceKind, { name: string; blurb: string; color: string }> = {
   poison: { name: "Poison", blurb: "Hurts and Poisons whoever enters it or starts a turn in it. Fire sets it off.", color: "#84cc16" },
-  fire: { name: "Fire", blurb: "Burns whoever enters it or starts a turn in it. Water puts it out.", color: "#f97316" },
+  fire: { name: "Fire", blurb: "Whoever enters it or starts a turn in it takes 2 damage and a stack of Burning. Water puts it out.", color: "#f97316" },
   oil: { name: "Oil", blurb: "Slick: costs one more to cross. A spark turns every hex of it to fire.", color: "#57534e" },
   water: { name: "Water", blurb: "Leaves whoever crosses it Wet. Cold freezes it.", color: "#38bdf8" },
   ice: { name: "Ice", blurb: "Save or fall Prone and stop. Fire melts it.", color: "#bae6fd" },
@@ -32,6 +32,8 @@ export const HINDERING: ReadonlySet<SurfaceKind> = new Set(["poison", "fire", "o
 /** What a fire burning through oil or poison lasts. */
 const SPREAD_FIRE_ROUNDS = 2;
 const ICE_SAVE = 12;
+/** What fire does to whoever enters it or starts a turn in it, besides a stack of Burning. */
+export const FIRE_TILE_DAMAGE = 2;
 
 const d = (ctx: Ctx, sides: number) => ctx.rng.int(1, sides);
 
@@ -45,8 +47,9 @@ function act(ctx: Ctx, unit: Unit, kind: SurfaceKind, moving: boolean): boolean 
     tick(ctx, unit, "poison", d(ctx, 4));
     addCondition(ctx, unit, "poisoned", 2);
   } else if (kind === "fire") {
-    tick(ctx, unit, "fire", d(ctx, 6));
-    addCondition(ctx, unit, "burning", 2);
+    // A little at once, and a stack of Burning every time it does.
+    tick(ctx, unit, "fire", FIRE_TILE_DAMAGE);
+    addStacks(ctx, unit, "burning");
   } else if (kind === "water") {
     addCondition(ctx, unit, "wet", 2);
   } else if (kind === "slime" && moving) {

@@ -1536,8 +1536,8 @@ describe("the alarm bell rouses the place", () => {
     expect(goers.size).toBe(1);
   });
 
-  it("the pick is the enemy nearest the bell, unless some are not beside a hero: then the nearest of those; and it is told", () => {
-    const pick = (edit: (state: ZoneState, made: ReturnType<typeof place>) => void) => {
+  it("the pick is at random from those not beside a hero, and from all of them when every one is, the nearer the bell the likelier; and it is told", () => {
+    const pick = (seed: number, edit: (state: ZoneState, made: ReturnType<typeof place>) => void) => {
       const made = place();
       const state = must(made.state, { type: "dev", by: "ann", dev: { op: "start_fight" } });
       edit(state, made);
@@ -1545,26 +1545,36 @@ describe("the alarm bell rouses the place", () => {
       state.encounter!.round = 4;
       state.encounter!.bell = { goer: null, rolled: 0 };
       state.encounter!.order = ["ann", made.first, made.mate];
-      const ctx = { state, rng: makeRng(1), events: [] as ZoneEvent[], effects: [] };
+      const ctx = { state, rng: makeRng(seed), events: [] as ZoneEvent[], effects: [] };
       pickBellGoer(ctx);
       return { made, goer: state.encounter!.bell!.goer, events: ctx.events };
     };
-    // One beside Ann and one not: the one not beside her, though both are close to the bell.
-    const free = pick((state, { first, mate }) => {
-      unit(state, first).pos = at(2, 6);
-      unit(state, mate).pos = at(3, 7);
-    });
-    expect(free.goer).toBe(free.made.mate);
-    expect(free.events).toEqual([{ t: "bell_goer", id: free.made.mate }]);
-    // Both beside her: the nearer to the bell.
-    const held = pick((state, { first, mate }) => {
-      const beside = hexNeighbors(at(1, 6), state.map.grid).filter((p) => !solid(state.map.tiles.find((t) => t.q === p.q && t.r === p.r)));
-      const bell = state.map.pois.find((p) => p.kind === "bell")!.pos;
-      beside.sort((a, b) => hexDistance(a, bell) - hexDistance(b, bell));
-      unit(state, first).pos = beside[0];
-      unit(state, mate).pos = beside[beside.length - 1];
-    });
-    expect(held.goer).toBe(held.made.first);
+    // One beside Ann and one not: always the one not beside her.
+    for (let seed = 1; seed <= 20; seed++) {
+      const free = pick(seed, (state, { first, mate }) => {
+        unit(state, first).pos = at(2, 6);
+        unit(state, mate).pos = at(3, 7);
+      });
+      expect(free.goer, `seed ${seed}`).toBe(free.made.mate);
+      expect(free.events).toEqual([{ t: "bell_goer", id: free.made.mate }]);
+    }
+    // Both beside her: either may go, the nearer to the bell more often.
+    const went: Record<string, number> = {};
+    let made!: ReturnType<typeof place>;
+    for (let seed = 1; seed <= 60; seed++) {
+      const held = pick(seed, (state, { first, mate }) => {
+        const beside = hexNeighbors(at(1, 6), state.map.grid).filter((p) => !solid(state.map.tiles.find((t) => t.q === p.q && t.r === p.r)));
+        const bell = state.map.pois.find((p) => p.kind === "bell")!.pos;
+        beside.sort((a, b) => hexDistance(a, bell) - hexDistance(b, bell));
+        unit(state, first).pos = beside[0];
+        unit(state, mate).pos = beside[beside.length - 1];
+      });
+      expect([held.made.first, held.made.mate]).toContain(held.goer);
+      went[held.goer!] = (went[held.goer!] ?? 0) + 1;
+      made = held.made;
+    }
+    expect(went[made.mate]).toBeGreaterThan(0);
+    expect(went[made.first]).toBeGreaterThan(went[made.mate]);
   });
 
   it("an enemy beside the bell rings it, for 4 AP, not in the first round, and every band that can get to the fight is in it, told as one crowd", () => {

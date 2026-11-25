@@ -37,8 +37,10 @@ export interface UnitCondition {
   rounds: number;
   /** Put on during the bearer's own turn: the end of that turn does not count against it. */
   fresh?: boolean;
-  /** Bolstered: the points of shield left, spent before HP. Burning: its stacks (none said is one), each burning for the full tick. Drowning: its stacks. Tailwind: the movement it adds. */
+  /** Bolstered: the points of shield left, spent before HP. Bleeding, Burning: its stacks (none said is one), each hurting for the full tick. Drowning: its stacks. Tailwind: the movement it adds. */
   amount?: number;
+  /** Burning: each stack's own count of turns (`rounds` is the longest of them, `amount` how many there are). */
+  stacks?: { rounds: number; fresh?: boolean }[];
   /** A course charted (Chart a Course): the hex marked. */
   at?: HexPos;
   /** A shanty: the allies who have joined it (each once), each widening it a hex. */

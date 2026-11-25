@@ -23,7 +23,24 @@ export const EFFECT_INFO: Record<EffectKind, { name: string; blurb: string; colo
 /** Sundered targets have this much less Defence. */
 export const SUNDERED_DEFENCE = 2;
 
-export const EFFECT_TICK: Partial<Record<EffectKind, number>> = { bleeding: 2, burning: 3 };
+/** The effects that stack, each stack hurting for its tick at the start of the bearer's turn. */
+export type StackingEffect = "bleeding" | "burning";
+export const STACKING: readonly StackingEffect[] = ["bleeding", "burning"];
+export const isStacking = (kind: string): kind is StackingEffect => (STACKING as readonly string[]).includes(kind);
+
+/** What each stack takes off its bearer at the start of each of its turns. */
+export const EFFECT_TICK: Record<StackingEffect, number> = { bleeding: 2, burning: 3 };
+
+/**
+ * The turns a stack lasts, the same wherever it comes from. A new stack of Bleeding starts every stack's count over;
+ * each stack of Burning keeps its own count, and goes out on its own (engine.ts addStacks).
+ */
+export const STACK_TURNS: Record<StackingEffect, number> = { bleeding: 3, burning: 2 };
+
+/**
+ * An effect an ability leaves: a stacking one (a stack of it, lasting STACK_TURNS), or any other for the turns it says.
+ */
+export type Inflict = { effect: StackingEffect } | { effect: Exclude<EffectKind, StackingEffect>; turns: number };
 
 // ---------- classes ----------
 
@@ -125,11 +142,11 @@ export interface AbilityDef {
   /** How much it heals, turned into dice the same way (healDice). */
   heal?: number;
   /** Applied to the user when the ability lands. */
-  selfEffect?: { effect: EffectKind; turns: number };
+  selfEffect?: Inflict;
   /** Applied to a target it gets through to, unless the target makes its save (where the ability allows one). */
-  perfect?: { effect: EffectKind; turns: number };
+  perfect?: Inflict;
   /** Applied to each target it gets through to, with no save. */
-  targetEffect?: { effect: EffectKind; turns: number };
+  targetEffect?: Inflict;
   /** Heals the user this share of the damage it deals. */
   drain?: number;
   blurb: string;
@@ -138,7 +155,7 @@ export interface AbilityDef {
 export const ABILITIES: Record<string, AbilityDef> = {
   // Bare hands: what a hero has with no weapon. Weak on purpose, and never on a weapon.
   // A lit torch swung in the main hand (zones only): the weapon is put away while it is held.
-  torch_swing: { id: "torch_swing", name: "Torch Swing", stat: "str", target: "enemy", damage: 6, perfect: { effect: "burning", turns: 2 }, blurb: "A swing of a lit torch. Whoever it hits may catch fire." },
+  torch_swing: { id: "torch_swing", name: "Torch Swing", stat: "str", target: "enemy", damage: 6, perfect: { effect: "burning" }, blurb: "A swing of a lit torch. Whoever it hits may catch fire." },
   // Paladin weapons. Mace: Bash and Recover. Greatsword: Cleave and Block. Flail: Strike and Armor Crush.
   bash: { id: "bash", name: "Bash", stat: "str", target: "enemy", damage: 8, perfect: { effect: "prone", turns: 1 }, blurb: "A heavy blow with the mace. On a hit, the target must save or be knocked Prone." },
   recover: { id: "recover", name: "Recover", stat: "vit", target: "self", heal: 7, blurb: "Catch your breath and heal yourself a fair amount." },
@@ -154,7 +171,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   lightning_strike: { id: "lightning_strike", name: "Lightning Strike", stat: "int_stat", target: "enemy", damage: 12, perfect: { effect: "stunned", turns: 1 }, blurb: "Lightning out of the sky: a heavy blow, 3 harder on anything Wet. On a hit, the target must save or be Stunned." },
   // Rogue weapons. Knives: Stab and Eviscerate. Shortbow: Shot and Take Aim. Gaff Hook: Tear and Snag.
   stab: { id: "stab", name: "Stab", stat: "dex", target: "enemy", damage: 8, blurb: "A quick stab with the knives. Made with advantage, it finds a gap: 3 more damage." },
-  eviscerate: { id: "eviscerate", name: "Eviscerate", stat: "dex", target: "enemy", damage: 14, perfect: { effect: "bleeding", turns: 3 }, blurb: "Open them up with both knives: a heavy blow, and on a hit the target must save or start Bleeding." },
+  eviscerate: { id: "eviscerate", name: "Eviscerate", stat: "dex", target: "enemy", damage: 14, perfect: { effect: "bleeding" }, blurb: "Open them up with both knives: a heavy blow, and on a hit the target must save or start Bleeding." },
   bow_shot: { id: "bow_shot", name: "Shot", stat: "dex", target: "enemy", damage: 7, blurb: "An arrow from the shortbow." },
   take_aim: { id: "take_aim", name: "Take Aim", stat: "dex", target: "self", blurb: "Steady your hand. Your next roll to hit has advantage." },
   // Ship's guns, for anyone. Pistol: Pistol Shot and Pistol Whip. Blunderbuss: Scattershot and Butt Stroke. Harpoon gun: Harpoon and Barbed Line.
@@ -164,12 +181,12 @@ export const ABILITIES: Record<string, AbilityDef> = {
   butt_stroke: { id: "butt_stroke", name: "Bludgeon", stat: "str", target: "enemy", damage: 7, perfect: { effect: "prone", turns: 1 }, blurb: "Swing the stock at an enemy beside you. On a hit, the target must save or be knocked Prone." },
   harpoon_shot: { id: "harpoon_shot", name: "Harpoon", stat: "dex", target: "enemy", damage: 8, blurb: "Fire the harpoon up to 6 hexes. On a hit, the line hauls the target 2 hexes toward you." },
   barbed_line: { id: "barbed_line", name: "Barbed Line", stat: "dex", target: "enemy", damage: 7, perfect: { effect: "slowed", turns: 2 }, blurb: "A barb on a short line, 3 hexes. On a hit, the target must save or be Slowed." },
-  tear: { id: "tear", name: "Tear", stat: "dex", target: "enemy", damage: 8, perfect: { effect: "bleeding", turns: 3 }, blurb: "A tearing swing of the hook. On a hit, the target must save or start Bleeding." },
+  tear: { id: "tear", name: "Tear", stat: "dex", target: "enemy", damage: 8, perfect: { effect: "bleeding" }, blurb: "A tearing swing of the hook. On a hit, the target must save or start Bleeding." },
   snag: { id: "snag", name: "Snag", stat: "dex", target: "enemy", damage: 8, perfect: { effect: "slowed", turns: 2 }, blurb: "Throw the hook at an enemy up to 3 hexes off. On a hit, the target must save or be Slowed." },
   // Druid weapons. Driftwood Staff: Thornlash and Rejuvenate. Sickle: Sea Slash and Binding Kelp. Coral Staff: Coral Burst and Restore.
   sea_slash: { id: "sea_slash", name: "Sea Slash", stat: "int_stat", target: "enemy", damage: 8, blurb: "A slash of the sickle with the sea behind it. On a hit, water pools under the target and under you." },
   binding_kelp: { id: "binding_kelp", name: "Binding Kelp", stat: "int_stat", target: "enemy", blurb: "Kelp lashes round an enemy up to 4 hexes off, no roll to hit. It must save or be Slowed for 1 turn. Standing in water, it must instead save against being Stunned for 1 turn." },
-  coral_burst: { id: "coral_burst", name: "Coral Burst", stat: "int_stat", target: "all_enemies", damage: 6, perfect: { effect: "bleeding", turns: 3 }, blurb: "Coral bursts out in a cone 3 hexes long: 1 hex, then 2, then 3. Every enemy in it takes a little damage (half if they brace), and those that fail to brace are cut and start Bleeding." },
+  coral_burst: { id: "coral_burst", name: "Coral Burst", stat: "int_stat", target: "all_enemies", damage: 6, perfect: { effect: "bleeding" }, blurb: "Coral bursts out in a cone 3 hexes long: 1 hex, then 2, then 3. Every enemy in it takes a little damage (half if they brace), and those that fail to brace are cut and start Bleeding." },
   restore: { id: "restore", name: "Restore", stat: "int_stat", target: "ally", heal: 4, blurb: "Heal an ally (or yourself) a little and lift every harmful condition off them." },
   // Bard weapons. Lute: Dissonance and Second Wind. Bosun's Pipe: Blasting Tone and Soothing Tone. Squeeze Box: Bellows Blast and Hornpipe. Ship's Bell: Peal and Clarion Call.
   dissonance: { id: "dissonance", name: "Dissonance", stat: "int_stat", target: "enemy", damage: 7, targetEffect: { effect: "glitched", turns: 1 }, blurb: "A note nobody can think through. On a hit, the target's next roll to hit is made with disadvantage. No save." },
@@ -210,7 +227,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   // Paladin. The two auras are conditions on the Paladin in a fight (zone/kit.ts AURAS).
   beacon_aura: { id: "beacon_aura", name: "Beacon Aura", stat: "vit", target: "self", blurb: "For 4 turns you shine: you light the dark around you, and you and allies within 2 hexes get +2 to hit." },
   healing_aura: { id: "healing_aura", name: "Healing Aura", stat: "vit", target: "self", blurb: "For 4 turns, at the start of each of your turns, you and every ally within 2 hexes heal a little." },
-  branding_strike: { id: "branding_strike", name: "Branding Strike", stat: "str", target: "enemy", damage: 11, targetEffect: { effect: "burning", turns: 2 }, blurb: "A searing blow that hits harder than most, and sets the target Burning." },
+  branding_strike: { id: "branding_strike", name: "Branding Strike", stat: "str", target: "enemy", damage: 11, targetEffect: { effect: "burning" }, blurb: "A searing blow that hits harder than most, and sets the target Burning." },
   soothing_rain: { id: "soothing_rain", name: "Soothing Rain", stat: "int_stat", target: "ally", blurb: "A rain cloud over 3 hexes for 3 turns. It lays water under itself, and heals your side a little as it comes, as each of you starts a turn in it, and the first time on a turn each of you walks into it." },
   chain_lightning: { id: "chain_lightning", name: "Chain Lightning", stat: "int_stat", target: "enemy", damage: 9, blurb: "Lightning strikes an enemy, then leaps to the nearest enemy within 2 hexes it has not struck yet, and on, as long as there is one. +3 against anything Wet." },
   roar_of_thunder: { id: "roar_of_thunder", name: "Roar of Thunder", stat: "int_stat", target: "enemy", perfect: { effect: "stunned", turns: 1 }, blurb: "A thunderclap that never misses: the enemy is thrown a hex back from you, and must save or be Stunned." },
@@ -234,7 +251,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   windgod_shanty: { id: "windgod_shanty", name: "Wind-god's Shanty", stat: "int_stat", target: "self", blurb: "Strike up a shanty to the wind-god for 4 turns: you and every ally within 2 hexes move 1 further for each AP of movement and cannot be Slowed. An ally in it can join the song (1 AP, once): it reaches a hex further, they Disengage (no blows drawn moving away this turn), and everyone in it moves 1 further for each AP until your next turn. One shanty at a time." },
   chorus: { id: "chorus", name: "Chorus", stat: "int_stat", target: "all_enemies", damage: 8, targetEffect: { effect: "slowed", turns: 2 }, blurb: "A roar of voices over 7 hexes: every enemy in it is struck (half if they brace) and those who fail are Slowed. Your allies in it are not hurt: each one sings along, for +3 damage." },
   lead_by_example: { id: "lead_by_example", name: "Lead by Example", stat: "int_stat", target: "enemy", damage: 13, blurb: "A heavy blow of sound at an enemy. If it lands, the ally nearest the target is Inspired: advantage on their next attack." },
-  falling_star: { id: "falling_star", name: "Falling Star", stat: "int_stat", target: "enemy", damage: 13, targetEffect: { effect: "burning", turns: 3 }, blurb: "Bring a star down on an enemy up to 7 hexes off: a heavy blow that, if it lands, sets them Burning and lights them with Guiding Light for 3 turns (every attack on them has advantage)." },
+  falling_star: { id: "falling_star", name: "Falling Star", stat: "int_stat", target: "enemy", damage: 13, targetEffect: { effect: "burning" }, blurb: "Bring a star down on an enemy up to 7 hexes off: a heavy blow that, if it lands, sets them Burning and lights them with Guiding Light for 3 turns (every attack on them has advantage)." },
   constellation: { id: "constellation", name: "Constellation", stat: "int_stat", target: "self", damage: 5, blurb: "Draw lines of starlight from you to the nearest ally within 4 hexes, from them to the next, and on through every ally it can reach. Your side is untouched; every enemy a line crosses takes a little damage and is lit with Guiding Light for 3 turns." },
   new_moon: { id: "new_moon", name: "New Moon", stat: "int_stat", target: "all_enemies", damage: 15, blurb: "Put out every Guiding Light at once, wherever it is: each enemy that was lit takes heavy damage, no roll to dodge it." },
   chart_a_course: { id: "chart_a_course", name: "Chart a Course", stat: "int_stat", target: "self", blurb: "Mark a hex up to 8 off with a red X for 4 turns: you and your allies move 1 further for each AP of movement, on steps that bring you nearer the mark. A new mark takes the place of the old." },
@@ -251,7 +268,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   the_black_spot: { id: "the_black_spot", name: "The Black Spot", stat: "int_stat", target: "enemy", blurb: "Press the Black Spot on an enemy up to 5 hexes off, no roll, for 4 turns: it attacks with disadvantage, and takes a stack of Drowning at the end of each of its turns. If it falls before the Spot runs out, the Spot passes to the nearest of its side." },
   sailor_pistol: { id: "sailor_pistol", name: "Pistol", stat: "dex", target: "enemy", damage: 7, blurb: "A drowned gunner's pistol, somehow still dry enough to fire. Reaches 4 hexes." },
   sailor_scimitar: { id: "sailor_scimitar", name: "Scimitar", stat: "str", target: "enemy", damage: 8, blurb: "A drowned sailor's scimitar, rusted but sharp enough." },
-  stoke_the_fire: { id: "stoke_the_fire", name: "Stoke the Fire", stat: "str", target: "all_enemies", damage: 6, targetEffect: { effect: "burning", turns: 2 }, blurb: "Flame bursts off you: every enemy beside you is struck and set Burning." },
+  stoke_the_fire: { id: "stoke_the_fire", name: "Stoke the Fire", stat: "str", target: "all_enemies", damage: 6, targetEffect: { effect: "burning" }, blurb: "Flame bursts off you: every enemy beside you is struck and set Burning." },
   // Signature abilities: one per class, on its signature weapon.
 };
 

@@ -5,7 +5,7 @@
 // puts them on a map. A test fails if an ability or an enemy has no entry.
 
 import type { StatKey, Stats } from "@gantt-quest/core";
-import { ABILITIES, EFFECT_INFO, ENEMIES, SUNDERED_DEFENCE, type AbilityDef, type EffectKind } from "../content";
+import { ABILITIES, EFFECT_INFO, EFFECT_TICK, ENEMIES, STACK_TURNS, SUNDERED_DEFENCE, type AbilityDef, type EffectKind } from "../content";
 import type { BehaviourId } from "./behaviours";
 import { ENEMY_ABILITIES, type EnemyAbilityDef } from "./enemyabilities";
 import { modsOf } from "./mods";
@@ -76,8 +76,8 @@ export interface Tactic {
   standStrong?: typeof STAND_STRONG;
   /** Single: a hit leaves the target Taunted by the user for this many of its turns, unless it saves (Goading Strike). */
   goad?: number;
-  /** Single: a hit also sets the target Burning for this many turns if it is lit by Guiding Light (Focus Light). */
-  kindleLit?: number;
+  /** Single: a hit also adds a stack of Burning to the target if it is lit by Guiding Light (Focus Light). */
+  kindleLit?: boolean;
   /** With `guide`: the enemy saves against being lit (Starbeam). */
   guideSave?: boolean;
   /** Ally: leaves the ally with North Star for this many of their turns, no strike (St. Elmo's Fire). */
@@ -320,7 +320,7 @@ export const SMUGGLED: Throwable = "fire";
 export const GUIDING_LIGHT = { rounds: 3 };
 export const CONSTELLATION = { link: 4 };
 export const CHART = { range: 8, speed: 1, rounds: 4 };
-export const NORTH_STAR = { rounds: 3, burn: 2 };
+export const NORTH_STAR = { rounds: 3 };
 
 /**
  * The Warlock's (drowning.ts). Drowning is stacks on an enemy, for `rounds` of its turns, each stack laid on starting the count
@@ -419,7 +419,7 @@ export const TACTICS: Record<string, Tactic> = {
   lead_by_example: spell(5, { cooldown: 3, inspire: true }),
   // Sage
   moonlight: spell(7, { shape: "blast", cluster: 3, foesOnly: true, guide: GUIDING_LIGHT.rounds, dice: { n: 1, d: 4, plus: 2 } }),
-  focus_light: spell(5, { cost: 1, kindleLit: 3, cooldown: 1, dice: { n: 1, d: 4, plus: 2 } }),
+  focus_light: spell(5, { cost: 1, kindleLit: true, cooldown: 1, dice: { n: 1, d: 4, plus: 2 } }),
   starbeam: spell(6, { guide: GUIDING_LIGHT.rounds, guideSave: true, dice: { n: 1, d: 6, plus: 3 } }),
   st_elmos_fire: mend(4, { cost: 1, cooldown: 3, starlit: NORTH_STAR.rounds }),
   water_burst: spell(5, { spray: 4 }),
@@ -531,8 +531,8 @@ const info = (kind: EffectKind, blurb: string) => ({ name: EFFECT_INFO[kind].nam
 
 /** Every condition as it works on the tiles. Names and colours are the old ones where there was one. */
 export const CONDITION_INFO: Record<Condition, { name: string; blurb: string; color: string }> = {
-  bleeding: info("bleeding", "Loses 2 HP at the start of each of its turns."),
-  burning: info("burning", "Loses 3 HP at the start of each of its turns, 3 more for each stack past the first. Water puts it out."),
+  bleeding: info("bleeding", `Loses ${EFFECT_TICK.bleeding} HP for each stack at the start of each of its turns. Lasts ${STACK_TURNS.bleeding} turns; a new stack starts them all over. Any healing closes one stack.`),
+  burning: info("burning", `Loses ${EFFECT_TICK.burning} HP for each stack at the start of each of its turns. Each stack burns out ${STACK_TURNS.burning} turns after it caught. Water puts it all out.`),
   stunned: info("stunned", "Loses its next turn. Attacks against it have advantage."),
   guarded: info("guarded", "Takes half damage until its next turn."),
   taunting: info("taunting", "Enemies that can reach it go for it, until its next turn."),

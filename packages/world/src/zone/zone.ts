@@ -29,7 +29,7 @@ import { makeRng, seedFromString } from "../rng";
 import { enemyTurn } from "./ai";
 import { pickBellGoer, placeBell } from "./bell";
 import { abilityArea, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, doCommon, drinkItem, moveLeft, resolveAbility, throwItem, walk } from "./combat";
-import { UNTIMED, burnOf, has, heal, regrow, removeCondition, tick, unseen, type Ctx } from "./engine";
+import { countDown, has, heal, regrow, removeCondition, tick, tickStacks, unseen, type Ctx } from "./engine";
 import { ALERT_RANGE, JOIN_RANGE, freeHexNear, generateZone } from "./gen";
 import { generateDelve } from "./delve";
 import { checkLoot, checkOpen, leaveBody, look, lootFor, openChest, payBounty, take } from "./loot";
@@ -501,7 +501,7 @@ function beginTurn(ctx: Ctx, enc: Encounter, unit: Unit): boolean {
   // A Lively Shanty's lift from those who joined it lasts until its Bard's turn comes round again.
   const song = shantyOf(unit);
   if (song) song.surge = 0;
-  for (const kind of ["bleeding", "burning"] as const) if (has(unit, kind)) tick(ctx, unit, kind, kind === "burning" ? burnOf(unit) : (EFFECT_TICK[kind] ?? 0));
+  tickStacks(ctx, unit);
   if (unit.down) return false;
   // A Druid mends a little every turn.
   if (unit.kind === "backend_druid" && unit.hp < unit.maxHp) heal(ctx, unit, DRUID_REGEN, { actor: unit.id, what: "regen" });
@@ -566,12 +566,7 @@ function endTurn(ctx: Ctx, unit: Unit): void {
     if (unit.cooldowns[key] <= 0) delete unit.cooldowns[key];
   }
   const owed = drowningOwed(ctx.state, unit);
-  for (const c of unit.conditions) {
-    if (UNTIMED.has(c.kind)) continue;
-    if (c.fresh) c.fresh = false;
-    else c.rounds -= 1;
-  }
-  unit.conditions = unit.conditions.filter((c) => c.rounds > 0);
+  countDown(unit);
   drown(ctx, unit, owed);
 }
 

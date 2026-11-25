@@ -300,7 +300,7 @@ function dwell(ev: ZoneEvent, many: boolean, next: ZoneEvent | undefined, carrie
   }
 }
 /** Conditions that come in stacks (the condition's `amount`), shown with how many. */
-const STACKED = new Set(["burning", "drowning"]);
+const STACKED = new Set(["bleeding", "burning", "drowning"]);
 const stacksOf = (c: { kind: string; amount?: number }): number => (STACKED.has(c.kind) ? (c.amount ?? 1) : 0);
 
 /** The conditions on a unit, as badges over its head: in CONDITION_INFO's colours, with rounds left, and stacks where there are more than one. */

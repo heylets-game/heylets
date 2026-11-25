@@ -6,8 +6,8 @@ import { hexDistance, posKey, type StatKey } from "@gantt-quest/core";
 import { tileAt } from "../map";
 import type { Rng } from "../rng";
 import { adjacent, close, elevOf, inFight } from "./geometry";
-import { ABILITIES, EFFECT_TICK, SUNDERED_DEFENCE } from "../content";
-import { AQUEOUS, AURAS, CORAL_ARMOR, ENEMY_KIT, FORTIFY, NORTH_STAR, SHIELD_SET_ASIDE, enemyDefence, enemySave, healDice } from "./kit";
+import { ABILITIES, EFFECT_TICK, STACK_TURNS, SUNDERED_DEFENCE, isStacking, type Inflict, type StackingEffect } from "../content";
+import { AQUEOUS, AURAS, CORAL_ARMOR, ENEMY_KIT, FORTIFY, SHIELD_SET_ASIDE, enemyDefence, enemySave, healDice } from "./kit";
 import { inDark } from "./light";
 import { d20, heroDefence, mod, netAdvantage, rollShown, statOf } from "./rules";
 import { songDefence, songHit, windward } from "./song";
@@ -36,8 +36,9 @@ export function removeCondition(unit: Unit, kind: Condition): void {
  * `amount`: a shield's points (Bolstered); a bigger one replaces a smaller.
  */
 export function addCondition(ctx: Ctx, unit: Unit, kind: Condition, rounds: number, amount?: number): void {
+  // Bleeding and Burning come in stacks that last as long as they always do, whatever asked for them.
+  if (isStacking(kind)) return addStacks(ctx, unit, kind, amount ?? 1);
   if (unit.down || rounds <= 0) return;
-  if (kind === "burning" && has(unit, "wet")) return;
   // A Wind-god's Shanty keeps everyone in it light on their feet.
   if (kind === "slowed" && windward(ctx.state, unit)) return;
   if (kind === "wet") removeCondition(unit, "burning");
@@ -62,20 +63,86 @@ export function addCondition(ctx: Ctx, unit: Unit, kind: Condition, rounds: numb
   }
   const now = unit.conditions.find((c) => c.kind === kind)!;
   if (amount !== undefined) now.amount = Math.max(now.amount ?? 0, amount);
-  // Burning's stacks: none said is one, and a burning set alight again keeps the stacks it has.
-  if (kind === "burning" && (now.amount ?? 1) <= 1) delete now.amount;
   ctx.events.push({ t: "condition", target: unit.id, kind, rounds, ...(now.amount !== undefined ? { amount: now.amount } : {}) });
 }
 
-/** What Burning takes off a unit at the start of its turn: the tick for each of its stacks. */
-export const burnOf = (unit: Unit): number => (EFFECT_TICK.burning ?? 0) * (unit.conditions.find((c) => c.kind === "burning")?.amount ?? 1);
+/** Each stack of a Burning: one count of turns apiece (a Burning from before stacks had their own is read as that many of its `rounds`). */
+const burnStacks = (c: UnitCondition): { rounds: number; fresh?: boolean }[] => (c.stacks ??= Array.from({ length: c.amount ?? 1 }, () => ({ rounds: c.rounds })));
 
 /**
- * Set a unit Burning by a blow of `by`'s: under North Star, one stack more than the blow would give (one, if it gives
- * none). `stacks` is what the blow gives itself.
+ * Add `n` stacks of Bleeding or Burning, each lasting STACK_TURNS. A new stack of Bleeding starts the count of every
+ * stack over; each stack of Burning has its own, and the others burn on as they were. Something soaked cannot be set burning.
  */
-export function kindle(ctx: Ctx, by: Unit | undefined, target: Unit, rounds: number, stacks = 1): void {
-  addCondition(ctx, target, "burning", rounds, stacks + (by && has(by, "north_star") ? 1 : 0));
+export function addStacks(ctx: Ctx, unit: Unit, kind: StackingEffect, n = 1): void {
+  if (unit.down || n <= 0) return;
+  if (kind === "burning" && has(unit, "wet")) return;
+  const enc = ctx.state.encounter;
+  // Put on during its own turn, the end of that turn does not count against it.
+  const fresh = !!enc && enc.acting.includes(unit.id) && !enc.done.includes(unit.id);
+  const turns = STACK_TURNS[kind];
+  let now = unit.conditions.find((c) => c.kind === kind);
+  if (!now) unit.conditions.push((now = { kind, rounds: 0, amount: 0 }));
+  if (kind === "bleeding") {
+    now.amount = (now.amount ?? 1) + n;
+    now.rounds = turns;
+    if (fresh) now.fresh = true;
+    else delete now.fresh;
+  } else {
+    const stacks = burnStacks(now);
+    for (let i = 0; i < n; i++) stacks.push(fresh ? { rounds: turns, fresh: true } : { rounds: turns });
+    now.amount = stacks.length;
+    now.rounds = Math.max(...stacks.map((s) => s.rounds));
+  }
+  ctx.events.push({ t: "condition", target: unit.id, kind, rounds: now.rounds, amount: now.amount });
+}
+
+/** One stack of Bleeding closes (any healing does it): the rest bleed on, and the last gone, it stops. */
+export function staunch(unit: Unit): void {
+  const bleed = unit.conditions.find((c) => c.kind === "bleeding");
+  if (!bleed) return;
+  bleed.amount = (bleed.amount ?? 1) - 1;
+  if (bleed.amount <= 0) removeCondition(unit, "bleeding");
+}
+
+/** What a stacking effect takes off a unit at the start of its turn: the tick for each of its stacks. */
+export const dotOf = (unit: Unit, kind: StackingEffect): number => EFFECT_TICK[kind] * (unit.conditions.find((c) => c.kind === kind)?.amount ?? 1);
+
+/** What Burning takes off a unit at the start of its turn. */
+export const burnOf = (unit: Unit): number => dotOf(unit, "burning");
+
+/** The start of a unit's turn (or a round out of a fight): each of its Bleeding and Burning stacks hurts it. */
+export function tickStacks(ctx: Ctx, unit: Unit): void {
+  for (const kind of ["bleeding", "burning"] as const) if (has(unit, kind)) tick(ctx, unit, kind, dotOf(unit, kind));
+}
+
+/**
+ * The end of a unit's turn (or a round out of a fight): each condition has a turn less to run, bar those put on during
+ * that very turn; each stack of Burning counts down on its own.
+ */
+export function countDown(unit: Unit): void {
+  for (const c of unit.conditions) {
+    if (UNTIMED.has(c.kind)) continue;
+    if (c.kind === "burning") {
+      const stacks = burnStacks(c).filter((s) => {
+        if (s.fresh) delete s.fresh;
+        else s.rounds -= 1;
+        return s.rounds > 0;
+      });
+      c.stacks = stacks;
+      c.amount = stacks.length;
+      c.rounds = stacks.length > 0 ? Math.max(...stacks.map((s) => s.rounds)) : 0;
+      continue;
+    }
+    if (c.fresh) c.fresh = false;
+    else c.rounds -= 1;
+  }
+  unit.conditions = unit.conditions.filter((c) => c.rounds > 0);
+}
+
+/** Leave an ability's effect on a unit: a stack of a stacking one, or any other for the turns it says. */
+export function inflict(ctx: Ctx, unit: Unit, what: Inflict): void {
+  if (isStacking(what.effect)) addStacks(ctx, unit, what.effect);
+  else if ("turns" in what) addCondition(ctx, unit, what.effect, what.turns);
 }
 
 /** Whether a unit is Unseen (Sneak): no enemy can attack it, or pick it out to. */
@@ -194,7 +261,7 @@ export function damage(ctx: Ctx, target: Unit, amount: number, opts: { actor: st
   if (target.hp <= 0) fall(ctx, target);
   // North Star: whatever its bearer strikes on the other side catches fire.
   const by = opts.actor ? ctx.state.units.find((u) => u.id === opts.actor) : undefined;
-  if (by && by.side !== target.side && has(by, "north_star")) addCondition(ctx, target, "burning", NORTH_STAR.burn);
+  if (by && by.side !== target.side && has(by, "north_star")) addStacks(ctx, target, "burning");
   return dealt;
 }
 
@@ -207,8 +274,9 @@ export function tick(ctx: Ctx, target: Unit, kind: Condition | "poison" | "fire"
   if (target.hp <= 0) fall(ctx, target);
 }
 
-/** Heal a unit. Someone down is back on their feet. Returns what was healed. */
+/** Heal a unit. Someone down is back on their feet. Any healing closes one stack of Bleeding. Returns what was healed. */
 export function heal(ctx: Ctx, target: Unit, amount: number, opts: { actor: string | null; what: string; dice?: Rolled }): number {
+  if (amount > 0) staunch(target);
   if (target.down) {
     target.down = false;
     ctx.events.push({ t: "up", id: target.id });
