@@ -204,6 +204,8 @@ export interface Encounter {
    * blow, flask or help for anyone in it until they are back.
    */
   fled?: string[];
+  /** Who has taken Disengage in this fight: once a fight each. Missing: nobody yet. */
+  disengaged?: string[];
   /** The alarm bell (bell.ts): which enemy is going to ring it, and the last round the enemy side rolled for one to. */
   bell?: { goer: string | null; rolled: number };
   /**

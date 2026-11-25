@@ -1055,7 +1055,10 @@ export const foesWithin = (state: ZoneState, unit: Unit, range: number): Unit[] 
 /** Why `unit` cannot take this common action, in words, or null if it can. `budget` is null out of a fight. */
 export function checkCommon(state: ZoneState, unit: Unit, what: CommonAction, aim: Aim, budget: Budget | null): string | null {
   if (!COMMON_ACTIONS[what]) return "No such action.";
-  if (what === "disengage") return budget ? null : "That is for a fight.";
+  if (what === "disengage") {
+    if (!budget) return "That is for a fight.";
+    return state.encounter?.disengaged?.includes(unit.id) ? "You have already disengaged this fight." : null;
+  }
   if (what === "flee") {
     if (!budget) return "That is for a fight.";
     if (unit.summon) return "It was called to this fight, and stays in it.";
@@ -1101,7 +1104,11 @@ export function shoveBonus(state: Pick<ZoneState, "options">, unit: Unit): numbe
 export function doCommon(ctx: Ctx, unit: Unit, what: CommonAction, aim: Aim, budget: Budget | null): void {
   ctx.events.push({ t: "used", id: unit.id, what, name: COMMON_ACTIONS[what].name, target: aim.target, at: aim.at });
   if (what === "join") joinSong(ctx, unit, aim, budget);
-  else if (what === "disengage" && budget) budget.disengaged = true;
+  else if (what === "disengage" && budget) {
+    budget.disengaged = true;
+    const enc = ctx.state.encounter;
+    if (enc) enc.disengaged = [...(enc.disengaged ?? []), unit.id];
+  }
   else if (what === "help") {
     const target = unitById(ctx.state, aim.target!)!;
     target.down = false;
@@ -1141,8 +1148,14 @@ function joinSong(ctx: Ctx, unit: Unit, aim: Aim, budget: Budget | null): void {
   }
   if (song.kind === "lively_shanty") addCondition(ctx, unit, "inspired", 2);
   else if (song.kind === "dour_shanty") addCondition(ctx, unit, "guarded", 1);
-  // Wind-god's: away on the wind, drawing no blows for the rest of the turn.
-  else if (budget) budget.disengaged = true;
+  // Wind-god's: away on the wind, drawing no blows for the rest of the turn. That is this fight's Disengage, and there is only one.
+  else if (budget) {
+    const enc = ctx.state.encounter;
+    if (!enc?.disengaged?.includes(unit.id)) {
+      budget.disengaged = true;
+      if (enc) enc.disengaged = [...(enc.disengaged ?? []), unit.id];
+    }
+  }
   retune(ctx);
 }
 

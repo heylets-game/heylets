@@ -1939,10 +1939,10 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     if (got.cost === 0) return null;
     const from = near ? reach : far!;
     const path = pathIn(from, hover) ?? [];
-    // Enemies whose reach the way out of here leaves, and who still have a blow to answer it with.
+    // Enemies whose reach the way out of here leaves, and who still have a blow to answer it with. Unseen, nobody strikes.
     const drawn = new Set<string>();
     let at = act.pos;
-    if (!budget.disengaged) {
+    if (!budget.disengaged && !act.conditions.some((c) => c.kind === "invisible")) {
       for (const step of path) {
         for (const u of state.units) {
           if (u.side !== act.side && !u.down && enc.order.includes(u.id) && !enc.reacted.includes(u.id) && leavesReach(state, u.pos, at, step)) drawn.add(u.id);
@@ -2396,6 +2396,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   // Getting away: on your turn, with the AP for it (fewer for a Rogue), and no enemy in the fight within FLEE_RANGE.
   const fleeCost = commonCost("flee", act.kind);
   const fleeBlock = !fighting ? "That is for a fight." : !myTurn ? "Wait for your turn." : !canPay(fleeCost) ? short(fleeCost) : checkCommon(asState(state), act, "flee", {}, budget ?? null);
+  // Disengage is once a fight.
+  const disengaged = !!state.encounter?.disengaged?.includes(act.id);
   /** From the middle of a fight: flee it, then `go` once out of it. */
   const fleeThen = (go: () => void) => {
     zone.clearError();
@@ -2433,9 +2435,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       icon: { ...COMMON_ICON[what], flat: true },
       name: COMMON_ACTIONS[what].name,
       line: costName(cost),
-      more: what === "flee" && myTurn && fleeBlock ? `${COMMON_ACTIONS[what].blurb} ${fleeBlock}` : COMMON_ACTIONS[what].blurb,
+      more: what === "flee" && myTurn && fleeBlock ? `${COMMON_ACTIONS[what].blurb} ${fleeBlock}` : what === "disengage" && disengaged ? `${COMMON_ACTIONS[what].blurb} You have already disengaged this fight.` : COMMON_ACTIONS[what].blurb,
       picked: (pick?.kind === "common" && pick.what === what) || taken.has(`do:${what}`),
-      spent: !canPay(cost) || (needsFight && !fighting) || (what === "flee" && !!fleeBlock),
+      spent: !canPay(cost) || (needsFight && !fighting) || (what === "flee" && !!fleeBlock) || (what === "disengage" && disengaged),
       run: () => (needsFight ? common(what) : setPick((p) => (p?.kind === "common" && p.what === what ? null : { kind: "common", what }))),
     };
   }

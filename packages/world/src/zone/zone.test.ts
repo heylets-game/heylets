@@ -6,7 +6,7 @@ import { ENEMY_ABILITIES } from "./enemyabilities";
 import { ABILITIES, EFFECT_TICK, ENEMIES, HERO_CLASSES, SUNDERED_DEFENCE, WEAPONS, abilitiesFor } from "../content";
 import { CLIMES, type Tile } from "../map";
 import { makeRng } from "../rng";
-import { abilityArea, checkAbility, courseFor, crateBlow, enemyAct, moveLeft, walk, walkAp, wayBetween } from "./combat";
+import { abilityArea, checkAbility, checkCommon, courseFor, crateBlow, enemyAct, moveLeft, walk, walkAp, wayBetween } from "./combat";
 import { addCondition, attackContext, burnOf, damage, defenceOf, kindle, shieldOf, type Ctx } from "./engine";
 import { shantyOf, shantyRadius, songsOn } from "./song";
 import { chartOf, constellationLinks } from "./stars";
@@ -732,6 +732,16 @@ describe("opportunity attacks", () => {
     const away: ZoneEvent[] = [];
     state = must(state, { type: "move", by: "ann", unit: "ann", to: at(5, 4) }, away);
     expect(away.some((e) => e.t === "reaction")).toBe(false);
+  });
+
+  it("lets a hero disengage only once a fight", () => {
+    let { state } = duel("bandit", "qa_paladin", at(6, 6), at(8, 6));
+    state = must(state, { type: "common", by: "ann", unit: "ann", what: "disengage" });
+    expect(state.encounter!.disengaged).toEqual(["ann"]);
+    expect(fails(state, { type: "common", by: "ann", unit: "ann", what: "disengage" })).toMatch(/already disengaged/);
+    // Nor on a later turn of the same fight.
+    state.encounter!.budgets.ann = { ap: AP_TURN, move: 0, stride: 2, disengaged: false };
+    expect(fails(state, { type: "common", by: "ann", unit: "ann", what: "disengage" })).toMatch(/already disengaged/);
   });
 
   it("lets a hero strike an enemy that walks away from them", () => {
@@ -4018,6 +4028,9 @@ describe("the Bard's shanties", () => {
     state = must(state, join("bo"));
     expect(state.encounter!.budgets.bo.disengaged).toBe(true);
     expect(state.encounter!.budgets.ann.disengaged).toBe(false);
+    // That was bo's one Disengage this fight.
+    expect(state.encounter!.disengaged).toEqual(["bo"]);
+    expect(checkCommon(state, unit(state, "bo"), "disengage", {}, state.encounter!.budgets.bo)).toMatch(/already disengaged/);
     expect(state.encounter!.budgets.bo.stride).toBe(boStride + 1);
     expect(state.encounter!.budgets.ann.stride).toBe(annStride + 1);
     state = nextTurn(state);

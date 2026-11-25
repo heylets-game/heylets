@@ -573,7 +573,7 @@ export const CONDITION_INFO: Record<Condition, { name: string; blurb: string; co
 // ---------- common actions ----------
 
 export const COMMON_ACTIONS: Record<CommonAction, { name: string; cost: number; blurb: string }> = {
-  disengage: { name: "Disengage", cost: 2, blurb: "Moving away from enemies draws no opportunity attacks this turn." },
+  disengage: { name: "Disengage", cost: 2, blurb: "Moving away from enemies draws no opportunity attacks this turn. Once a fight." },
   help: { name: "Help", cost: 2, blurb: "Get a fallen ally beside you back on their feet with 1 HP." },
   shove: { name: "Shove", cost: 1, blurb: "An attack that does no harm: on a hit, push an enemy beside you one hex away: into fire, out of reach, off a height (they fall: a d4 for each level past the first, and land flat), or into deep water, lava or off the edge of the land, where they are lost. Toward a drop or a pit they roll to catch the edge." },
   jump: { name: "Jump", cost: 2, blurb: "Leap a few hexes, over whatever lies between: up a ledge two levels high, or down one. Further down than two levels is a fall." },
