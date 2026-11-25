@@ -10,7 +10,7 @@
 
 const KEY = "gq.uiScale";
 
-export const UI_SCALE_MIN = 0.8;
+export const UI_SCALE_MIN = 0.5;
 export const UI_SCALE_MAX = 1.5;
 export const UI_SCALE_STEP = 0.1;
 /**
