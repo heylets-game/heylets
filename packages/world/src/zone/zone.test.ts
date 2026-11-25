@@ -15,7 +15,7 @@ import { HEX_ROOM, adjacent, blast, blockerAt, flies, isDead, sameHex, seesFor, 
 import { propOf } from "./props";
 import { SITE_IDS, backdropOf, siteInside, type SiteId } from "./sites";
 import { ACTION_AP, AP_MAX, AP_TURN, AQUEOUS, RALLY, SUMMON_AP_TURN, AURAS, CHART, COMMON_ACTIONS, BLOCK, BONUS_AP, BOLSTER, AGAINST_WAVES, ENDURE, STAND_STRONG, STURDY, ENEMY_BURST, ENEMY_KIT, ENEMY_MOVE_AP, EXPLORE_ROUND_MS, FLEE_RANGE, LIGHT_RADIUS, SHIELD_SET_ASIDE, TACTICS, TORCH_GROUND_ROUNDS, TORCH_HELD_ROUNDS, TORCH_ROUND_MS, abilityDice as abilityDiceFor, commonCost, enemyHp, DEFAULT_MIND, abilityStrikes, enemyMove, enemyStrikes, mindOf, tacticOf, unitStrikes } from "./kit";
-import { MAX_CATCHUP_ROUNDS } from "./clock";
+import { MAX_CATCHUP_ROUNDS, nextTick } from "./clock";
 import { d20, diceAverage, diceFor, heroMove, hitChance } from "./rules";
 import { createZone, ensureMouth, loadZone, spentOut, standInHero, stepZone, zoneView } from "./zone";
 import { DELVE_CRATES, DELVE_GLOWCAPS as GLOWCAP_COUNT, generateDelve } from "./delve";
@@ -1015,7 +1015,25 @@ describe("time out of a fight", () => {
     expect(unit(state, "ann").torch).toBe(3);
   });
 
-  it("counts every six seconds out of a fight as a round: the ground wears, burning burns, conditions run down", () => {
+  it("runs cooldowns down a round at a time, and says when the next round is due while anything is running out", () => {
+    let state = board();
+    hero(state, "ann", "qa_paladin", at(3, 6));
+    state = tell(state, T0);
+    // Nothing running out: no round to wait for.
+    expect(nextTick(state)).toBeNull();
+    unit(state, "ann").cooldowns = { bash: 2 };
+    expect(nextTick(state)).toBe(T0 + EXPLORE_ROUND_MS);
+    state = tell(state, T0 + EXPLORE_ROUND_MS);
+    expect(unit(state, "ann").cooldowns).toEqual({ bash: 1 });
+    state = tell(state, T0 + 2 * EXPLORE_ROUND_MS);
+    expect(unit(state, "ann").cooldowns).toEqual({});
+    expect(nextTick(state)).toBeNull();
+    // Only a torch alight: the torch's own, far slower clock.
+    unit(state, "ann").torch = 3;
+    expect(nextTick(state)).toBe(T0 + TORCH_ROUND_MS);
+  });
+
+  it("counts every three seconds out of a fight as a round: the ground wears, burning burns, conditions run down", () => {
     let state = board();
     const ann = hero(state, "ann", "qa_paladin", at(3, 6));
     ann.conditions = [{ kind: "burning", rounds: 2 }, { kind: "slowed", rounds: 5 }];
@@ -2670,14 +2688,17 @@ describe("crates", () => {
     quiet(state);
     expect(step.effects.map((e) => e.heroId)).toEqual(["bo"]);
 
-    // A bomb thrown, and a blast with a wait on it used twice running: out of a fight neither Action nor wait counts.
+    // A bomb thrown, and a blast with a wait on it: out of a fight no Action counts, but the wait does, and it runs
+    // down on the clock (clock.ts), so it cannot be used again at once.
     const events: ZoneEvent[] = [];
     state = must(state, { type: "throw", by: "cy", unit: "cy", item: "fire", at: at(7, 3) }, events);
     state = must(state, { type: "use", by: "cy", unit: "cy", ability: "chorus", at: at(7, 3) }, events);
-    state = must(state, { type: "use", by: "cy", unit: "cy", ability: "chorus", at: at(7, 3) }, events);
+    expect(fails(state, { type: "use", by: "cy", unit: "cy", ability: "chorus", at: at(7, 3) })).toMatch(/not ready yet/);
     quiet(state);
-    expect(hits(events, "crate3").map((h) => h.what)).toEqual(["throw:fire", "fire", "chorus", "chorus"]);
-    expect(unit(state, "cy").cooldowns).toEqual({});
+    expect(hits(events, "crate3").map((h) => h.what)).toEqual(["throw:fire", "fire", "chorus"]);
+    expect(unit(state, "cy").cooldowns.chorus).toBeGreaterThan(0);
+    // As if its rounds had run out.
+    unit(state, "cy").cooldowns = {};
 
     // A blast that catches the band as well as a crate: that one starts a fight, with the band that was hit.
     const both: ZoneEvent[] = [];

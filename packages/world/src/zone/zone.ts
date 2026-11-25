@@ -917,19 +917,18 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
     const touched = state.units.filter((u) => u.id === action.target || area.has(posKey(u.pos)));
     const back = reachBack(state, unit, touched);
     if (back) return back;
-    if (budget && (unit.cooldowns[action.ability] ?? 0) > 0) return `${def.name} is not ready yet.`;
+    // Out of a fight too: there its cooldown runs down a round at a time on the clock (clock.ts).
+    if ((unit.cooldowns[action.ability] ?? 0) > 0) return `${def.name} is not ready yet.`;
     if (aim.focus && unit.focus <= 0) return "You have no Focus left.";
     const cost = spend(budget, tactic.cost);
     if (cost) return cost;
     if (aim.focus) unit.focus -= 1;
-    if (budget && tactic.cooldown) unit.cooldowns[action.ability] = tactic.cooldown;
+    if (tactic.cooldown) unit.cooldowns[action.ability] = tactic.cooldown;
     // A heal splashed among enemies is a kindness, as a healing potion thrown is: it starts nothing.
     const struck = tactic.splash ? [] : touched.filter((u) => u.side === "enemy" && !u.down).map((u) => u.group!);
     resolveAbility(ctx, unit, action.ability, aim);
     engage(ctx, struck, unit);
     reachIn(ctx, unit, touched);
-    // Cast out of a fight, one with a wait on it that draws the caster into a fight goes in waiting, as if spent on their first turn (their AP are whole).
-    if (!budget && tactic.cooldown && state.encounter?.order.includes(unit.id)) unit.cooldowns[action.ability] = tactic.cooldown;
     return null;
   }
   if (action.type === "common") {

@@ -1,15 +1,17 @@
 // Time out of a fight, the way Divinity keeps it: everyone walks freely and
 // at once, but time still passes. Every EXPLORE_ROUND_MS of real time is a
 // round, as a turn is in a fight: burning and bleeding tick, the ground acts
-// on whoever stands in it, conditions run down a round, and the ground's
-// surfaces wear a round. Torches, held or lying on the ground, burn on a far
+// on whoever stands in it, conditions and cooldowns run down a round, and the
+// ground's surfaces wear a round. Torches, held or lying on the ground, burn on a far
 // kinder clock out there (TORCH_ROUND_MS), so a torch lasts for a good long
 // look round.
 //
-// Nothing runs on a timer. The room tells the reducer the time with each
-// action (a `time` action first), and whatever time has gone by since is
-// counted then, a few rounds at most: a map left alone for an hour has long
-// since burnt out, and saying so round by round would tell nobody anything.
+// The room tells the reducer the time with each action (a `time` action
+// first), and whatever time has gone by since is counted then, a few rounds at
+// most: a map left alone for an hour has long since burnt out, and saying so
+// round by round would tell nobody anything. While someone is there and
+// something is running out, the room also tells it the time as each round
+// falls due (nextTick), so a round is seen to pass when it passes.
 // In a fight, rounds are the fight's own, and the clock only keeps up.
 
 import { DRUID_REGEN, EFFECT_TICK, ENEMIES } from "../content";
@@ -17,7 +19,7 @@ import { UNTIMED, burnOf, has, heal, regrow, removeCondition, tick, type Ctx } f
 import { EXPLORE_ROUND_MS, TORCH_ROUND_MS } from "./kit";
 import { tickWeather } from "./weather";
 import { standInSurface, tickLights, tickSurfaces } from "./surfaces";
-import type { Unit } from "./types";
+import type { Unit, ZoneState } from "./types";
 
 /** The most rounds counted at once, out of a fight; anything longer has run its course all the same. */
 export const MAX_CATCHUP_ROUNDS = 10;
@@ -40,6 +42,10 @@ export function exploreRound(ctx: Ctx, unit: Unit): void {
   const grows = unit.side === "enemy" ? ENEMIES[unit.kind]?.regen : undefined;
   if (grows && unit.hp < unit.maxHp && !has(unit, grows.unless)) heal(ctx, unit, grows.amount, { actor: unit.id, what: grows.name });
   standInSurface(ctx, unit);
+  for (const key of Object.keys(unit.cooldowns)) {
+    unit.cooldowns[key] -= 1;
+    if (unit.cooldowns[key] <= 0) delete unit.cooldowns[key];
+  }
   for (const c of unit.conditions) {
     if (UNTIMED.has(c.kind)) continue;
     if (c.fresh) c.fresh = false;
@@ -70,4 +76,26 @@ export function passTime(ctx: Ctx, now: number): void {
     state.clock.torchAt += burns * TORCH_ROUND_MS;
     for (let n = 0; n < Math.min(burns, MAX_TORCH_CATCHUP); n++) tickLights(ctx);
   }
+}
+
+/** Whether a round out of a fight would change anything: something on someone runs out, hurts or mends, or the ground or the air wears. */
+function roundDue(state: ZoneState): boolean {
+  if (Object.values(state.surfaces).some((s) => !s.lasting) || (state.weather?.length ?? 0) > 0) return true;
+  return state.units.some((u) => {
+    if (u.down) return false;
+    if (Object.keys(u.cooldowns).length > 0 || u.conditions.some((c) => !UNTIMED.has(c.kind))) return true;
+    if (u.hp < u.maxHp && (u.kind === "backend_druid" || (u.side === "enemy" && ENEMIES[u.kind]?.regen))) return true;
+    return !!state.surfaces[`${u.pos.q},${u.pos.r}`];
+  });
+}
+
+/**
+ * When the room should next tell the reducer the time, out of a fight, so the next round (or a torch's) is counted
+ * as it falls due; null when nothing is running out, or a fight keeps its own time.
+ */
+export function nextTick(state: ZoneState): number | null {
+  if (state.encounter || !state.clock) return null;
+  if (roundDue(state)) return state.clock.at + EXPLORE_ROUND_MS;
+  const lit = state.units.some((u) => !!u.torch) || Object.keys(state.lights ?? {}).length > 0;
+  return lit ? state.clock.torchAt + TORCH_ROUND_MS : null;
 }
