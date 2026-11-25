@@ -6,7 +6,7 @@
 // Nobody keeps the stall, so it opens in the middle of the Harbor rather than beside someone, over a dimmed view.
 
 import { useEffect, useMemo, useState } from "react";
-import { BONEMEAL_PER_BONE, CAN_CAPACITY, CAN_PRICE, CARRY_FORMULA, GROW_MS, RARITY_COLOR, RESOURCE_KINDS, SEED_PRICE, SLOT_LABEL, STALL_BUYS, STALL_FURNITURE, carryProblem, equipProblem, sellPrice, type ItemDef, type Resources } from "@gantt-quest/world";
+import { BONEMEAL_PER_BONE, CAN_CAPACITY, CAN_PRICE, CARRY_FORMULA, GROW_MS, RARITY_COLOR, RESOURCE_KINDS, SEED_PRICE, SLOT_LABEL, STALL_BUYS, STALL_FURNITURE, carryProblem, equipProblem, perkLine, sellPrice, type ItemDef, type Resources } from "@gantt-quest/world";
 import { api, type Me, type Shop } from "./api";
 import { Icon, ItemDetail, VerdictTag, bonusSummary, compare, powerLabel, toOwned } from "./items";
 import { blurb, itemName, label } from "./labels";
@@ -15,7 +15,7 @@ import { GOLD_ICON, ThingIcon, furnishingIcon, resourceIcon } from "./thingIcons
 
 const price = (g: number) => <span className="keeper-price"><ThingIcon icon={GOLD_ICON} size={16} /><strong>{g}g</strong></span>;
 const pays = (g: number) => <>Pays <ThingIcon icon={GOLD_ICON} size={16} />{g}g</>;
-const gearBrief = (item: ItemDef) => [SLOT_LABEL[item.slot], item.power > 0 ? `+${item.power} ${powerLabel(item).toLowerCase()}` : "", bonusSummary(item)].filter(Boolean).join(" · ");
+const gearBrief = (item: ItemDef) => [SLOT_LABEL[item.slot], item.power > 0 ? `+${item.power} ${powerLabel(item).toLowerCase()}` : "", bonusSummary(item), perkLine(item) ? `✦ ${perkLine(item)!.name}` : ""].filter(Boolean).join(" · ");
 
 export function ShopScreen({ me, refresh, onClose }: { me: Me; refresh(): Promise<unknown>; onClose(): void }) {
   const c = me.character!;

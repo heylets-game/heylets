@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GARB_HAT, LANTERN_HELM_ICON, parseGarbIcon, starterGarb, wearsLanternHelm } from "./gear";
+import { GARB_HAT, GEAR_BASES, LANTERN_HELM_ICON, itemOfRef, parseGarbIcon, perkLine, perkOfRef, perksOf, rarityIndex, starterGarb, wearsLanternHelm } from "./gear";
 import { gearSheet } from "./hero";
 import {
   ABILITIES,
@@ -175,5 +175,67 @@ describe("the Lighthouse Paladin's Lantern Helm", () => {
     expect(sheet.lantern).toBe(true);
     expect(gearSheet("qa_paladin", []).lantern).toBeUndefined();
     expect(gearSheet("refactor_rogue", [{ ...starterGarb("refactor_rogue").find((i) => i.ref === GARB_HAT)!, hidden: true }]).lantern).toBeUndefined();
+  });
+});
+
+describe("gear with powers of its own", () => {
+  const rolls = (n: number, quality = 0.9) => {
+    const rng = makeRng(99);
+    return Array.from({ length: n }, () => rollItem(rng, "qa_paladin", quality, 6));
+  };
+
+  it("is never made below its base's rarity floor, and every new base turns up", () => {
+    const seen = new Set<string>();
+    for (const it of rolls(20000)) {
+      seen.add(it.ref);
+      const base = GEAR_BASES.find((b) => b.ref === it.ref);
+      if (base?.min) expect(rarityIndex(it.rarity)).toBeGreaterThanOrEqual(rarityIndex(base.min));
+    }
+    for (const b of GEAR_BASES) expect(seen.has(b.ref)).toBe(true);
+  });
+
+  it("rolls its power's strength with it, and only gear with a numbered power carries one", () => {
+    const amounts: Record<string, Set<number>> = {};
+    for (const it of rolls(20000)) {
+      const perk = perkOfRef(it.ref);
+      if (it.perkAmount === undefined) continue;
+      expect(perk).toBeDefined();
+      (amounts[it.ref] ??= new Set()).add(it.perkAmount);
+    }
+    const rng = makeRng(7);
+    for (let i = 0; i < 2000; i++) {
+      const it = rollItem(rng, "qa_paladin", 0.5, 6, "boots", "legendary");
+      if (it.perkAmount !== undefined) (amounts[it.ref] ??= new Set()).add(it.perkAmount);
+    }
+    // Phase Treads blink 5 to 7 hexes; Springheel Boots jump 1 or 2 farther.
+    expect([...amounts.phase_treads].sort()).toEqual([5, 6, 7]);
+    for (const n of amounts.springheels) expect([1, 2]).toContain(n);
+    // On/off powers carry no number.
+    expect(amounts.cloudsteps).toBeUndefined();
+    expect(amounts.storm_crown).toBeUndefined();
+  });
+
+  it("made by ref is lifted to its floor and given the strongest roll", () => {
+    const boots = itemOfRef(makeRng(1), "qa_paladin", "phase_treads", "common", 5)!;
+    expect(boots).toMatchObject({ rarity: "legendary", perkAmount: 7 });
+  });
+
+  it("works hidden: a hero gets every power they wear, with its strength", () => {
+    const worn = [
+      item({ ref: "springheels", slot: "boots", kind: "trinket", rarity: "epic", perkAmount: 2, hidden: true }),
+      item({ ref: "storm_crown", slot: "helmet", rarity: "legendary" }),
+      item({ ref: "miners_lamp", slot: "helmet", rarity: "rare" }),
+    ];
+    expect(perksOf(worn)).toEqual({ long_jump: 2, clear_head: 1, lamp: 1 });
+    expect(gearSheet("qa_paladin", worn.slice(2))).toMatchObject({ lantern: true, perks: { lamp: 1 } });
+    expect(gearSheet("qa_paladin", [])).not.toHaveProperty("perks");
+  });
+
+  it("says what it does with its own number, and costs a quarter more", () => {
+    const boots = item({ ref: "springheels", slot: "boots", kind: "trinket", rarity: "epic", perkAmount: 2 });
+    expect(perkLine(boots)).toEqual({ perk: "long_jump", name: "Spring heels", blurb: "Jump reaches 2 hexes farther and costs 1 AP less" });
+    expect(perkLine(item({ ref: "boots" }))).toBeNull();
+    const plain = item({ ref: "clogs", slot: "boots", kind: "trinket", rarity: "epic" });
+    expect(itemPrice(boots)).toBe(Math.round(itemPrice(plain) * 1.25));
   });
 });

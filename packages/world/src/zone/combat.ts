@@ -10,8 +10,8 @@ import { ABILITIES, BARD_AURA, ENEMIES, type AbilityDef, type EffectKind } from 
 import { tileAt, type Poi } from "../map";
 import { DEBUFFS, addCondition, addShield, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, kindle, removeCondition, saveBonus, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
 import { cratesOn, crateById, hurtCrate, isCrateId } from "./crates";
-import { HEX_DIRS, close, blast, blockerAt, courseShare, directionToward, elevOf, flies, heldAgainst, inFight, lineFrom, pathIn, pitAt, reachFrom, roomAt, sameHex, sees, seesFor, solid, stepCost, strikes, unitById, zoneReach, type Course, type Pit } from "./geometry";
-import { ACTION_AP, CHART, COMMON_ACTIONS, CORAL_ARMOR, ENEMY_EDGE, RALLY, SHANTY, SUMMON_CALLS, ENEMY_BURST, FLEE_RANGE, JUMP_DOWN, JUMP_UP, POTION_EDGE, SAVE_STAT, SMUGGLED, THROWABLES, TORCH_GROUND_ROUNDS, abilityDice, abilityStrikes, enemySave, unitStrikes, healDice, JUMP_RANGE, reactionStrike, tacticOf, throwRange, type EnemyStrike, type Tactic } from "./kit";
+import { HEX_DIRS, close, blast, blockerAt, courseShare, directionToward, elevOf, flies, heldAgainst, inFight, lineFrom, pathIn, perkOf, pitAt, reachFrom, roomAt, sameHex, sees, seesFor, solid, stepCost, strikes, unitById, zoneReach, type Course, type Pit } from "./geometry";
+import { ACTION_AP, CHART, COMMON_ACTIONS, CORAL_ARMOR, ENEMY_EDGE, RALLY, SHANTY, SUMMON_CALLS, ENEMY_BURST, FLEE_RANGE, JUMP_DOWN, JUMP_UP, blinkRange, jumpRange, POTION_EDGE, SAVE_STAT, SMUGGLED, THROWABLES, TORCH_GROUND_ROUNDS, abilityDice, abilityStrikes, enemySave, unitStrikes, healDice, reactionStrike, tacticOf, throwRange, type EnemyStrike, type Tactic } from "./kit";
 import { modsOf } from "./mods";
 import { d20, diceFor, hitChance, mod, proficiency, rollDice, rollShown, statOf } from "./rules";
 import { seenByHeroes } from "./light";
@@ -49,7 +49,8 @@ export const leavesReach = (state: Pick<ZoneState, "map">, foe: HexPos, from: He
 function provoke(ctx: Ctx, unit: Unit, next: HexPos, budget: Budget | null, flush: () => void): void {
   const enc = ctx.state.encounter;
   // Nobody strikes at what they cannot see.
-  if (!enc || !inFight(ctx.state, unit.id) || budget?.disengaged || unseen(unit)) return;
+  // Soft-Sole Sneaks: away without a sound, as if Disengaged.
+  if (!enc || !inFight(ctx.state, unit.id) || budget?.disengaged || unseen(unit) || perkOf(unit, "light_step") > 0) return;
   for (const foe of ctx.state.units) {
     if (unit.down) return;
     if (foe.side === unit.side || foe.down || !inFight(ctx.state, foe.id)) continue;
@@ -399,11 +400,11 @@ export function carrySpot(state: ZoneState, unit: Unit, ally: Unit, dest: HexPos
 }
 
 /** Put a unit on another hex at once, crossing nothing: no blows drawn on the way, only the ground where it lands. */
-function blinkTo(ctx: Ctx, unit: Unit, to: HexPos): void {
+function blinkTo(ctx: Ctx, unit: Unit, to: HexPos, phase = false): void {
   if (sameHex(unit.pos, to)) return;
   const from = unit.pos;
   unit.pos = to;
-  ctx.events.push({ t: "blinked", id: unit.id, from, to });
+  ctx.events.push({ t: "blinked", id: unit.id, from, to, ...(phase ? { phase: true as const } : {}) });
   if (!enterSurface(ctx, unit) && !unit.down) enterWeather(ctx, unit);
 }
 
@@ -654,11 +655,15 @@ function bind(ctx: Ctx, unit: Unit, def: AbilityDef, target: Unit, turns: { slow
   return true;
 }
 
-/** Coral Armor: whoever lands a blow up close on one wearing it is cut by it. */
+/** Coral Armor, and Barnacle Mail: whoever lands a blow up close on one wearing it is cut by it. */
 function thorns(ctx: Ctx, attacker: Unit, target: Unit): void {
-  if (attacker.down || !has(target, "coral_armor")) return;
-  const rolled = rollShown(ctx.rng, CORAL_ARMOR.thorns);
-  damage(ctx, attacker, rolled.total, { actor: target.id, what: "coral_armor", dice: rolled });
+  if (attacker.down) return;
+  if (has(target, "coral_armor")) {
+    const rolled = rollShown(ctx.rng, CORAL_ARMOR.thorns);
+    damage(ctx, attacker, rolled.total, { actor: target.id, what: "coral_armor", dice: rolled });
+  }
+  const barbs = perkOf(target, "thorns");
+  if (barbs > 0 && !attacker.down) damage(ctx, attacker, barbs, { actor: target.id, what: "thorns" });
 }
 
 /** The crates beside a unit. */
@@ -1081,13 +1086,29 @@ export function checkCommon(state: ZoneState, unit: Unit, what: CommonAction, ai
     if (!target || target.side === unit.side || target.down) return "Pick an enemy.";
     return strikes(state.map, unit.pos, target.pos) ? null : "You have to be next to it.";
   }
-  // Jump.
+  // Jump: a leap, or in Phase Treads a blink where no leap would get there.
   if (!aim.at || sameHex(aim.at, unit.pos)) return "Pick a hex to jump to.";
-  if (hexDistance(unit.pos, aim.at) > JUMP_RANGE) return "Too far to jump.";
-  if (solid(tileAt(state.map, aim.at)) || blockerAt(state, aim.at) || !roomAt(state, aim.at, unit)) return "There is nowhere to land.";
-  if (elevOf(state.map, aim.at) - elevOf(state.map, unit.pos) > JUMP_UP) return "Too high to jump up to.";
-  if (!sees(state.map, unit.pos, aim.at)) return "Something is in the way.";
+  const leap = leapWrong(state, unit, aim.at);
+  return leap && !isBlink(state, unit, aim.at) ? leap : null;
+}
+
+/** Why `unit` cannot leap to `at` (a Jump made on foot), or null if it can. */
+function leapWrong(state: ZoneState, unit: Unit, at: HexPos): string | null {
+  if (hexDistance(unit.pos, at) > jumpRange(unit)) return "Too far to jump.";
+  if (solid(tileAt(state.map, at)) || blockerAt(state, at) || !roomAt(state, at, unit)) return "There is nowhere to land.";
+  if (elevOf(state.map, at) - elevOf(state.map, unit.pos) > JUMP_UP) return "Too high to jump up to.";
+  if (!sees(state.map, unit.pos, at)) return "Something is in the way.";
   return null;
+}
+
+/**
+ * Whether a Jump to `at` is made as a blink, through Phase Treads: one a leap cannot make (too far, too high, or
+ * something in the way) that a blink can, from nothing in between to anywhere within their reach there is room to
+ * stand. It costs BLINK_AP in place of the Jump's AP (commonCostFor).
+ */
+export function isBlink(state: ZoneState, unit: Unit, at: HexPos | undefined): boolean {
+  const reach = blinkRange(unit);
+  return reach > 0 && !!at && !!leapWrong(state, unit, at) && !blinkWrong(state, unit, at, reach);
 }
 
 /**
@@ -1121,6 +1142,10 @@ export function doCommon(ctx: Ctx, unit: Unit, what: CommonAction, aim: Aim, bud
     giveAway(ctx, unit);
     if (roll.ok) push(ctx, unit.pos, target, unit.id);
     else ctx.events.push({ t: "miss", actor: unit.id, target: target.id, what: "shove" });
+  } else if (what === "jump" && isBlink(ctx.state, unit, aim.at)) {
+    // Phase Treads: there at once, crossing nothing, drawing no blow on the way.
+    blinkTo(ctx, unit, aim.at!, true);
+    if (!unit.down) ctx.onStep?.(unit, () => {});
   } else if (what === "jump") {
     const from = unit.pos;
     provoke(ctx, unit, aim.at!, budget, () => {});

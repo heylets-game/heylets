@@ -365,6 +365,8 @@ export interface StowedGear {
   level_req: number;
   stat_bonus_json: string;
   upgrades?: number;
+  /** How strong its power is (ItemDef.perkAmount), or null. */
+  perk_amount?: number | null;
 }
 
 /** Everything about a player's hut and what they could put in it. */

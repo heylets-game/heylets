@@ -72,6 +72,11 @@ export interface ItemDef {
   upgrades?: number;
   /** Worn but not drawn: it still counts for everything, but the hero is shown without it. */
   hidden?: boolean;
+  /**
+   * How strong this piece's power is (GearPerk, from its base), rolled when it was made: "Jump reaches 2 hexes
+   * farther". Only for a base whose power has a number (PERK_RANGE); absent for every other item.
+   */
+  perkAmount?: number;
 }
 
 export const rarityIndex = (r: Rarity) => RARITIES.indexOf(r);
@@ -115,6 +120,95 @@ export interface Base {
   ref: string;
   name: string;
   icon: string;
+  /** The lowest rarity it is ever made in: a piece with a power is only found rare or better. */
+  min?: Rarity;
+  /** What it does besides its stats, the same for every piece of this base (how strong is rolled: perkAmount). */
+  perk?: GearPerk;
+}
+
+// ---------- powers of gear ----------
+
+/**
+ * What a piece of gear can do besides carrying stats. It belongs to the base (every pair of Cloudstep Boots
+ * hovers), so it is looked up from the item's ref and never saved; how strong it is, for the powers that have a
+ * number, is rolled per item and saved (ItemDef.perkAmount).
+ */
+export type GearPerk =
+  | "hover" | "sure_footed" | "long_jump" | "blink" | "swift" | "light_step"
+  | "quick" | "lamp" | "clear_head"
+  | "fireproof" | "thorns" | "ghostly"
+  | "steady" | "trailblazer" | "fleet";
+
+/** The strength of each power that has one, by rarity index: the lowest and highest a piece can roll. */
+const PERK_RANGE: Partial<Record<GearPerk, (ri: number) => [number, number]>> = {
+  // Extra hexes of jump reach.
+  long_jump: (ri) => (ri >= 4 ? [2, 2] : ri === 3 ? [1, 2] : [1, 1]),
+  // Extra hexes per AP of walking.
+  swift: (ri) => (ri >= 4 ? [1, 2] : [1, 1]),
+  // How far a blink reaches.
+  blink: () => [5, 7],
+  // Added to going first.
+  quick: (ri) => [Math.min(3, ri), Math.min(4, ri + 1)],
+  // Damage dealt back to whoever hits in melee.
+  thorns: (ri) => (ri >= 4 ? [3, 4] : [2, 3]),
+  // Attacks that miss at the start of each fight.
+  ghostly: () => [1, 2],
+  // Free hexes of walking at the start of each turn.
+  fleet: () => [1, 2],
+};
+
+/** What each power is called and says on an item, with the piece's own number in it. Plain words for players. */
+export const PERK_INFO: Record<GearPerk, { name: string; blurb: (n: number) => string }> = {
+  hover: { name: "Hover", blurb: () => "Floats above the ground: nothing on it touches you but fire, and oil and slime don't slow you" },
+  sure_footed: { name: "Sure-footed", blurb: () => "Never slip on ice, and oil and slime don't slow you" },
+  long_jump: { name: "Spring heels", blurb: (n) => `Jump reaches ${n} ${n === 1 ? "hex" : "hexes"} farther and costs 1 AP less` },
+  blink: { name: "Blink", blurb: (n) => `Jump can teleport you up to ${n} hexes for ${BLINK_AP} AP, past anything in the way` },
+  swift: { name: "Swift", blurb: (n) => `Each AP of walking carries you ${n} ${n === 1 ? "hex" : "hexes"} farther` },
+  light_step: { name: "Light step", blurb: () => "Walking away from an enemy draws no free attack" },
+  quick: { name: "Quick off the mark", blurb: (n) => `+${n} to going first in a fight` },
+  lamp: { name: "Lamp", blurb: () => "Lights the dark around you, like a lantern that never burns down" },
+  clear_head: { name: "Clear head", blurb: () => "Can't be Stunned" },
+  fireproof: { name: "Fireproof", blurb: () => "Can't be set Burning (fire on the ground still scorches as you cross)" },
+  thorns: { name: "Thorns", blurb: (n) => `Enemies that hit you in melee take ${n} damage` },
+  ghostly: { name: "Ghostly", blurb: (n) => (n === 1 ? "The first attack against you each fight misses" : `The first ${n} attacks against you each fight miss`) },
+  steady: { name: "Steady", blurb: () => "Can't be knocked Prone" },
+  trailblazer: { name: "Trailblazer", blurb: () => "Forest and hills cost no extra walking" },
+  fleet: { name: "Fleet", blurb: (n) => `Can't be Slowed, and each turn starts with ${n} free ${n === 1 ? "hex" : "hexes"} of walking` },
+};
+
+/** What a blink through Phase Treads costs. */
+export const BLINK_AP = 3;
+
+/** The power gear of this ref has, if any. */
+export function perkOfRef(ref: string): GearPerk | undefined {
+  return BASE_BY_REF.get(ref)?.perk;
+}
+
+/** The strength of a piece's power: its rolled amount, or the lowest it could be for an item saved without one. 1 for a power with no number. */
+export function perkAmount(item: Pick<ItemDef, "ref" | "rarity" | "perkAmount">): number {
+  const perk = perkOfRef(item.ref);
+  const range = perk && PERK_RANGE[perk];
+  if (!range) return 1;
+  return item.perkAmount ?? range(rarityIndex(item.rarity))[0];
+}
+
+/** The power a piece has and how it reads on it ("Spring heels: Jump reaches 2 hexes farther…"), or null. */
+export function perkLine(item: Pick<ItemDef, "ref" | "rarity" | "perkAmount">): { perk: GearPerk; name: string; blurb: string } | null {
+  const perk = perkOfRef(item.ref);
+  if (!perk) return null;
+  return { perk, name: PERK_INFO[perk].name, blurb: PERK_INFO[perk].blurb(perkAmount(item)) };
+}
+
+/** Powers a hero has from what they wear, with each one's strength (1 for a power with no number). Hidden gear counts: it is worn for what it does. */
+export type Perks = Partial<Record<GearPerk, number>>;
+
+export function perksOf(worn: ItemDef[]): Perks {
+  const out: Perks = {};
+  for (const item of worn) {
+    const perk = perkOfRef(item.ref);
+    if (perk) out[perk] = Math.max(out[perk] ?? 0, perkAmount(item));
+  }
+  return out;
 }
 
 const BASES: Record<Exclude<Slot, "main_hand">, Base[]> = {
@@ -127,21 +221,48 @@ const BASES: Record<Exclude<Slot, "main_hand">, Base[]> = {
     { ref: "greatcoat", name: "Oilskin Greatcoat", icon: "oilskin-coat" },
     // The diving set (with the Diving Helm): riveted iron and brass, as worn on the sea floor.
     { ref: "diving_plate", name: "Diver's Plate", icon: "diving-plate" },
+    { ref: "jersey", name: "Striped Jersey", icon: "striped-jersey" },
+    { ref: "jerkin", name: "Leather Jerkin", icon: "leather-jerkin" },
+    { ref: "gambeson", name: "Quilted Gambeson", icon: "gambeson" },
+    { ref: "stoker_apron", name: "Stoker's Apron", icon: "stoker-apron", min: "rare", perk: "fireproof" },
+    { ref: "barnacle_mail", name: "Barnacle Mail", icon: "barnacle-mail", min: "epic", perk: "thorns" },
+    { ref: "ghostsail", name: "Ghostsail Cloak", icon: "ghostsail-cloak", min: "legendary", perk: "ghostly" },
   ],
   helmet: [
     { ref: "hardhat", name: "Diving Helm", icon: "heavy-helm" },
     { ref: "hood", name: "Squall Hood", icon: "hood" },
     { ref: "visor", name: "Spyglass Visor", icon: "brutal-helm" },
+    { ref: "tricorn", name: "Tricorn", icon: "tricorn" },
+    { ref: "sun_hat", name: "Straw Sun Hat", icon: "sun-hat" },
+    { ref: "bandana", name: "Bandana", icon: "bandana" },
+    { ref: "lookout_cap", name: "Lookout's Cap", icon: "lookout-cap", min: "uncommon", perk: "quick" },
+    { ref: "miners_lamp", name: "Miner's Lamp", icon: "miners-lamp", min: "rare", perk: "lamp" },
+    { ref: "storm_crown", name: "Storm Crown", icon: "storm-crown", min: "legendary", perk: "clear_head" },
   ],
   legs: [
     { ref: "greaves", name: "Deckhand Greaves", icon: "armored-pants" },
     { ref: "trousers", name: "Sailcloth Trousers", icon: "sailcloth-trousers" },
     { ref: "diving_legs", name: "Riveted Leggings", icon: "riveted-leggings" },
+    { ref: "breeches", name: "Striped Breeches", icon: "striped-breeches" },
+    { ref: "chaps", name: "Leather Chaps", icon: "leather-chaps" },
+    { ref: "kilt", name: "Kilt", icon: "kilt" },
+    { ref: "sea_legs", name: "Sea-Legs Slops", icon: "sea-legs", min: "uncommon", perk: "steady" },
+    { ref: "pathfinders", name: "Pathfinder's Breeches", icon: "pathfinder-breeches", min: "rare", perk: "trailblazer" },
+    { ref: "windrunners", name: "Windrunner Leggings", icon: "windrunner-leggings", min: "legendary", perk: "fleet" },
   ],
   boots: [
     { ref: "boots", name: "Sea Boots", icon: "boots" },
     { ref: "treads", name: "Gangplank Treads", icon: "treads" },
     { ref: "lead_boots", name: "Lead Boots", icon: "lead-boots" },
+    { ref: "clogs", name: "Cork Clogs", icon: "cork-clogs" },
+    { ref: "sandals", name: "Rope Sandals", icon: "rope-sandals" },
+    { ref: "buckled_shoes", name: "Buckled Shoes", icon: "buckled-shoes" },
+    { ref: "cleats", name: "Ice Cleats", icon: "ice-cleats", min: "uncommon", perk: "sure_footed" },
+    { ref: "springheels", name: "Springheel Boots", icon: "springheel-boots", min: "rare", perk: "long_jump" },
+    { ref: "couriers", name: "Courier's Shoes", icon: "courier-shoes", min: "rare", perk: "swift" },
+    { ref: "sneaks", name: "Soft-Sole Sneaks", icon: "soft-sneaks", min: "epic", perk: "light_step" },
+    { ref: "cloudsteps", name: "Cloudstep Boots", icon: "cloudstep-boots", min: "legendary", perk: "hover" },
+    { ref: "phase_treads", name: "Phase Treads", icon: "phase-treads", min: "legendary", perk: "blink" },
   ],
   ring: [
     { ref: "ring", name: "Ring of Steady Tides", icon: "ring" },
@@ -156,6 +277,7 @@ const BASES: Record<Exclude<Slot, "main_hand">, Base[]> = {
 
 /** Every armor and trinket base, for the content catalogue. Read-only: the rules use BASES. */
 export const GEAR_BASES: readonly Base[] = Object.values(BASES).flat();
+const BASE_BY_REF = new Map(GEAR_BASES.map((b) => [b.ref, b]));
 
 /**
  * Starting clothes: a class's own hat, tunic, trousers and shoes as items, worn from the first day. They
@@ -305,7 +427,21 @@ export function rollItem(rng: Rng, classId: string, quality: number, level: numb
     const pick = rng.pick(gun ? SHIPS_GUNS : own);
     return weaponItem(pick, rarity, level, statBonus);
   }
-  return baseItem(slot as Exclude<Slot, "main_hand">, rng.pick(BASES[slot as Exclude<Slot, "main_hand">]), rarity, level, statBonus);
+  // Only the bases that are made in this rarity: a piece with a power is never found below its floor. Still one draw.
+  const base = rng.pick(BASES[slot as Exclude<Slot, "main_hand">].filter((b) => madeIn(b, rarity)));
+  return withPerk(rng, baseItem(slot as Exclude<Slot, "main_hand">, base, rarity, level, statBonus), "roll");
+}
+
+/** Whether a base is ever made in this rarity. */
+const madeIn = (b: Base, rarity: Rarity) => rarityIndex(rarity) >= rarityIndex(b.min ?? "common");
+
+/** A base piece with its power's strength rolled (or, for "best", the strongest it can be). Draws only for a base whose power has a number. */
+function withPerk(rng: Rng, item: ItemDef, how: "roll" | "best"): ItemDef {
+  const perk = perkOfRef(item.ref);
+  const range = perk && PERK_RANGE[perk];
+  if (!range) return item;
+  const [lo, hi] = range(rarityIndex(item.rarity));
+  return { ...item, perkAmount: how === "best" ? hi : rng.int(lo, hi) };
 }
 
 /** The stat points an item of this kind and rarity carries. They lean toward what the class levels up in. */
@@ -352,9 +488,13 @@ export function slotOfRef(ref: string): Slot | undefined {
 export function itemOfRef(rng: Rng, classId: string, ref: string, rarity: Rarity, level: number): ItemDef | undefined {
   const slot = slotOfRef(ref);
   if (!slot) return undefined;
+  if (slot === "main_hand") return weaponItem(ref, rarity, level, rollStatBonus(rng, classId, "weapon", rarity));
+  const base = BASES[slot].find((b) => b.ref === ref);
+  // Starting clothes are never made this way; a base with a power is never made below its floor.
+  if (!base) return undefined;
+  if (!madeIn(base, rarity)) rarity = base.min!;
   const statBonus = rollStatBonus(rng, classId, kindOfSlot(slot), rarity);
-  if (slot === "main_hand") return weaponItem(ref, rarity, level, statBonus);
-  return baseItem(slot, BASES[slot].find((b) => b.ref === ref)!, rarity, level, statBonus);
+  return withPerk(rng, baseItem(slot, base, rarity, level, statBonus), "best");
 }
 
 // ---------- what gear does ----------
@@ -427,7 +567,9 @@ export function equipProblem(item: ItemDef, classId: string, level: number): str
 const RARITY_PRICE = [20, 45, 100, 220, 500];
 
 export function itemPrice(item: ItemDef): number {
-  return RARITY_PRICE[rarityIndex(item.rarity)] + item.power * 6 + statPoints(item) * 10;
+  const price = RARITY_PRICE[rarityIndex(item.rarity)] + item.power * 6 + statPoints(item) * 10;
+  // A piece with a power of its own costs a quarter more.
+  return perkOfRef(item.ref) ? Math.round(price * 1.25) : price;
 }
 
 /** What the market stall pays for an item. */

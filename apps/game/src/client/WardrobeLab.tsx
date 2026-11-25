@@ -1,6 +1,7 @@
-// The wardrobe lab: a dev-only page for looking at what a hero wears on the body, the legs and the feet, each piece on a
-// hero (render/figures.ts) beside its icons (itemArt.ts and its little model, render/gearModels.ts), so the
-// look can be held up against the name. Click a piece to see it on one large hero, and pick how large.
+// The wardrobe lab: a dev-only page for looking at what a hero wears on the head, the body, the legs and the feet, each
+// piece on a hero (render/figures.ts) beside its icons (itemArt.ts and its little model, render/gearModels.ts), so the
+// look can be held up against the name. Pick the slot to show; click a piece to see it on one large hero, pick
+// how large, and step through the rest with Prev and Next.
 // Opened at #lab/wardrobe on the dev server.
 //
 // Nothing here touches the server or a game being played.
@@ -11,10 +12,13 @@ import { FigurePreview } from "./FigurePreview";
 import { itemArtUrl } from "./itemArt";
 import { voxelIconUrl } from "./ui/voxel";
 
-const BODY = ["hauberk", "greatcoat", "diving_plate"];
-const LEGS = ["greaves", "trousers", "diving_legs"];
-const FEET = ["boots", "treads", "lead_boots"];
-type Worn = "body" | "legs" | "boots";
+const HATS = ["hardhat", "hood", "visor", "tricorn", "sun_hat", "bandana", "lookout_cap", "miners_lamp", "storm_crown"];
+const BODY = ["hauberk", "greatcoat", "diving_plate", "jersey", "jerkin", "gambeson", "stoker_apron", "barnacle_mail", "ghostsail"];
+const LEGS = ["greaves", "trousers", "diving_legs", "breeches", "chaps", "kilt", "sea_legs", "pathfinders", "windrunners"];
+const FEET = ["boots", "treads", "lead_boots", "clogs", "sandals", "buckled_shoes", "cleats", "springheels", "couriers", "sneaks", "cloudsteps", "phase_treads"];
+type Worn = "helmet" | "body" | "legs" | "boots";
+// One slot at a time: every piece at once is more little heroes than the browser will draw.
+const SHOWN: [string, Worn][] = [["Hats", "helmet"], ["Tops", "body"], ["Pants", "legs"], ["Footwear", "boots"]];
 const RARITIES: Rarity[] = ["common", "uncommon", "rare", "epic", "legendary"];
 const TURNS: [string, number][] = [["Front", 0.3], ["Side", Math.PI / 2], ["Back", Math.PI]];
 
@@ -26,6 +30,7 @@ export default function WardrobeLab() {
   const [big, setBig] = useState(400);
   // One piece looked at closely, on one large hero, with its icons large.
   const [focus, setFocus] = useState<[Worn, string] | null>(null);
+  const [shown, setShown] = useState<Worn>("helmet");
   const garb = useMemo(() => starterGarb(classId), [classId]);
   const piece = (ref: string) => {
     const base = GEAR_BASES.find((b) => b.ref === ref);
@@ -42,10 +47,17 @@ export default function WardrobeLab() {
     return out;
   };
   const rows: [Worn, string][] = [
+    ...(["garb_hat", ...HATS].map((r) => ["helmet", r]) as [Worn, string][]),
     ...(["garb_tunic", ...BODY].map((r) => ["body", r]) as [Worn, string][]),
     ...(["garb_trousers", ...LEGS].map((r) => ["legs", r]) as [Worn, string][]),
     ...(["garb_shoes", ...FEET].map((r) => ["boots", r]) as [Worn, string][]),
-  ];
+  ].filter(([slot]) => slot === shown);
+  // Step the close-up on to the piece before or after it in the list shown.
+  const step = (by: number) => {
+    if (!focus) return;
+    const i = rows.findIndex(([, ref]) => ref === focus[1]);
+    setFocus(rows[(i + by + rows.length) % rows.length]);
+  };
   const accent = RARITY_COLOR[rarity];
   return (
     <div style={{ padding: 16, color: "#eee", background: "#1d2233", minHeight: "100vh", overflow: "auto" }}>
@@ -58,6 +70,9 @@ export default function WardrobeLab() {
         </select>
         {TURNS.map(([label, turn]) => <button key={label} onClick={() => setAim((a) => ({ turn, n: a.n + 1 }))}>{label}</button>)}
         <button onClick={() => setWalk((w) => !w)}>{walk ? "Stand" : "Walk"}</button>
+        <select value={shown} onChange={(e) => setShown(e.target.value as Worn)} aria-label="Which pieces to show">
+          {SHOWN.map(([label, slot]) => <option key={slot} value={slot}>{label}</option>)}
+        </select>
         <select value={big} onChange={(e) => setBig(Number(e.target.value))} aria-label="Size of the close-up">
           {[400, 700, 1000].map((n) => <option key={n} value={n}>{n}px</option>)}
         </select>
@@ -82,6 +97,8 @@ export default function WardrobeLab() {
             <img src={voxelIconUrl(piece(focus[1]).icon, accent)} width={96} height={96} alt="" />
             <img src={itemArtUrl(piece(focus[1]).icon, accent)} width={96} height={96} alt="" style={{ imageRendering: "pixelated" }} />
             <span>{piece(focus[1]).name}</span>
+            <button onClick={() => step(-1)}>Prev</button>
+            <button onClick={() => step(1)}>Next</button>
             <button onClick={() => setFocus(null)}>Close</button>
           </div>
         </div>

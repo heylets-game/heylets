@@ -28,14 +28,14 @@ import { addStats, maxHpFor } from "../progression";
 import { makeRng, seedFromString } from "../rng";
 import { enemyTurn } from "./ai";
 import { pickBellGoer, placeBell } from "./bell";
-import { abilityArea, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, doCommon, drinkItem, moveLeft, resolveAbility, throwItem, walk } from "./combat";
+import { abilityArea, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, doCommon, drinkItem, isBlink, moveLeft, resolveAbility, throwItem, walk } from "./combat";
 import { UNTIMED, burnOf, has, heal, regrow, removeCondition, tick, unseen, type Ctx } from "./engine";
 import { ALERT_RANGE, JOIN_RANGE, freeHexNear, generateZone } from "./gen";
 import { generateDelve } from "./delve";
 import { checkLoot, checkOpen, leaveBody, look, lootFor, openChest, payBounty, take } from "./loot";
 import { PARTY_SIZES, siteOpen } from "./sites";
-import { FREE_WALK, blast, blockerAt, inFight, isDead, pathIn, roomAt, sameHex, sees, solid, unitAt, unitById, zoneReach } from "./geometry";
-import { AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, ENEMY_MOVE_AP, FLEE_RANGE, ITEM_AP, STROLL_GRACE_MS, STROLL_STEP_MS, SUMMONS, STARTING_ITEMS, THROWABLES, THROWABLE_KINDS, cleanItems, commonCost, enemyHp, enemyMove, tacticOf } from "./kit";
+import { FREE_WALK, blast, blockerAt, inFight, isDead, pathIn, perkOf, roomAt, sameHex, sees, solid, unitAt, unitById, zoneReach } from "./geometry";
+import { AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, ENEMY_MOVE_AP, FLEE_RANGE, ITEM_AP, STROLL_GRACE_MS, STROLL_STEP_MS, SUMMONS, STARTING_ITEMS, THROWABLES, THROWABLE_KINDS, cleanItems, commonCostFor, enemyHp, enemyMove, tacticOf } from "./kit";
 import { d20, heroMove, mod, rollDice, statOf } from "./rules";
 import { hiddenEnemies, sentToClient } from "./light";
 import { tickWeather, weatherAtTurn } from "./weather";
@@ -209,6 +209,7 @@ function heroUnit(hero: ZoneHero, pos: HexPos, controller?: string): Unit {
     abilities: heroAbilities(hero),
     outfit: hero.outfit,
     ...(hero.lantern ? { lantern: true } : {}),
+    ...(hero.perks ? { perks: hero.perks } : {}),
     conditions: hero.luck && hero.luck > 0 ? [{ kind: "lucky", rounds: hero.luck }] : [],
     down: false,
     cooldowns: {},
@@ -224,6 +225,7 @@ export function zoneHero(sheet: HeroSheet, items?: Partial<Record<Throwable, num
   return {
     id: sheet.id, name: sheet.name, classId: sheet.classId, level: sheet.level, stats, weapon: sheet.weapon, weaponPower: sheet.weaponPower ?? 0, armor: sheet.armor ?? 0, outfit: sheet.outfit,
     ...(sheet.lantern ? { lantern: true } : {}),
+    ...(sheet.perks ? { perks: sheet.perks } : {}),
     maxHp: maxHpFor(stats, sheet.level),
     classAbilities: classAbilitiesOf(sheet.classId, sheet.level, sheet.abilityLoadout),
     ...(items ? { items: cleanItems(items) } : {}),
@@ -281,7 +283,8 @@ function rollOff(ctx: Ctx, enc: Encounter, unit: Unit): void {
 function enter(ctx: Ctx, enc: Encounter, unit: Unit): void {
   if (enc.order.includes(unit.id)) return;
   if (enc.init[unit.id] === undefined) {
-    const bonus = unit.side === "hero" ? mod(statOf(unit, "agi")) : (ENEMIES[unit.kind]?.init ?? 0);
+    // A Lookout's Cap: quicker off the mark.
+    const bonus = unit.side === "hero" ? mod(statOf(unit, "agi")) + perkOf(unit, "quick") : (ENEMIES[unit.kind]?.init ?? 0);
     const roll = d20(ctx.rng, { kind: "initiative", id: unit.id, label: "Initiative", bonus, vs: 0, adv: 0 });
     ctx.events.push({ t: "roll", roll });
     enc.init[unit.id] = roll.total;
@@ -526,7 +529,8 @@ function beginTurn(ctx: Ctx, enc: Encounter, unit: Unit): boolean {
   // A Wind-god's Shanty: further, and no Slowing.
   const sung = base > 0 ? songMove(ctx.state, unit) : 0;
   // A Tailwind given since its last turn: the wind at its back.
-  let stride = base > 0 ? base + sung + (unit.conditions.find((c) => c.kind === "tailwind")?.amount ?? 0) : 0;
+  // Courier's Shoes: further for every AP walked.
+  let stride = base > 0 ? base + sung + perkOf(unit, "swift") + (unit.conditions.find((c) => c.kind === "tailwind")?.amount ?? 0) : 0;
   if (has(unit, "slowed") && windward(ctx.state, unit)) removeCondition(unit, "slowed");
   if (has(unit, "slowed") && stride > 0) stride = Math.max(1, Math.floor(stride / 2));
   if (has(unit, "hasted")) stride *= 2;
@@ -540,7 +544,8 @@ function beginTurn(ctx: Ctx, enc: Encounter, unit: Unit): boolean {
     // Said, so the getting up is seen before anything else it does this turn.
     ctx.events.push({ t: "stood", id: unit.id });
   }
-  enc.budgets[unit.id] = { ap, move: 0, stride, disengaged: false, ...(sung > 0 ? { song: sung } : {}) };
+  // Windrunner Leggings: a few steps free at the start of every turn (none for one knocked flat).
+  enc.budgets[unit.id] = { ap, move: stride > 0 ? perkOf(unit, "fleet") : 0, stride, disengaged: false, ...(sung > 0 ? { song: sung } : {}) };
   // An enemy puts only so much of a turn into getting about.
   if (unit.side === "enemy" && !unit.summon) enc.budgets[unit.id].walk = ENEMY_MOVE_AP;
   // A course charted by one of its side: further, on the steps that bring it nearer the mark.
@@ -938,7 +943,7 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
       // Back again, perhaps with different gear: the sheet is refreshed, and where they stand and how hurt they are is kept.
       // Not in a fight, though: that is fought in the gear it was started in. Nor a hero given a dev kit.
       if (inFight(state, here.id) || here.devKit) return null;
-      Object.assign(here, { name: hero.name, kind: hero.classId, level: hero.level, stats: hero.stats, armor: hero.armor, power: hero.weaponPower, outfit: hero.outfit, lantern: hero.lantern, maxHp: hero.maxHp });
+      Object.assign(here, { name: hero.name, kind: hero.classId, level: hero.level, stats: hero.stats, armor: hero.armor, power: hero.weaponPower, outfit: hero.outfit, lantern: hero.lantern, perks: hero.perks, maxHp: hero.maxHp });
       // A torch swung in the main hand stays there: the new weapon is what is taken up when it goes.
       if (here.torchHand === "main") here.stowed = heroAbilities(hero);
       else here.abilities = heroAbilities(hero);
@@ -1034,7 +1039,7 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
     const target = action.what === "shove" || action.what === "help" ? unitById(state, action.target!) : undefined;
     const back = reachBack(state, unit, target ? [target] : []);
     if (back) return back;
-    const cost = spend(budget, commonCost(action.what, unit.kind));
+    const cost = spend(budget, commonCostFor(unit, action.what, action.what === "jump" && isBlink(state, unit, aim.at)));
     if (cost) return cost;
     doCommon(ctx, unit, action.what, aim, budget);
     if (action.what === "shove" && target?.group) engage(ctx, [target.group], unit);

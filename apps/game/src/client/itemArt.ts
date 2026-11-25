@@ -494,6 +494,132 @@ const ART: Record<string, Art> = {
     p.r(5, 11, 1, 1, "#8f7a4a");
     p.r(5, 12, 1, 2, rope);
   },
+  "striped-jersey": (p) => {
+    // A Striped Jersey: a sailor's long-sleeved jersey in blue and white bands, a boat neck in the accent.
+    const [white, blue] = ["#e8edf2", "#2f5a9a"];
+    for (let y = 3; y <= 14; y++) {
+      const c = y % 2 ? white : blue;
+      p.r(4, y, 8, 1, c);
+      if (y <= 11) {
+        p.r(2, y + 1, 2, 1, c);
+        p.r(12, y + 1, 2, 1, c);
+      }
+    }
+    p.r(3, 3, 10, 1, white);
+    p.r(2, 12, 2, 1, blue);
+    p.r(12, 12, 2, 1, blue);
+    p.r(5, 2, 6, 2, p.accent);
+    p.r(6, 2, 4, 1, C.dark);
+    p.r(4, 14, 8, 1, "#24467a");
+  },
+  "leather-jerkin": (p) => {
+    // A Leather Jerkin: a sleeveless brown jerkin, open down the front and laced in the accent over a pale shirt,
+    // the shirt's full sleeves showing at the arms.
+    const [shirt, fold] = ["#e8e0cc", "#c9bfa6"];
+    p.r(1, 4, 3, 8, shirt);
+    p.r(12, 4, 3, 8, shirt);
+    p.r(1, 7, 3, 1, fold);
+    p.r(12, 7, 3, 1, fold);
+    p.r(1, 11, 3, 1, fold);
+    p.r(12, 11, 3, 1, fold);
+    p.r(4, 3, 8, 11, C.leather);
+    p.r(3, 12, 10, 2, C.leather);
+    p.r(3, 3, 3, 2, C.leather);
+    p.r(10, 3, 3, 2, C.leather);
+    p.r(6, 2, 4, 2, shirt);
+    p.r(7, 4, 2, 7, shirt);
+    for (const y of [5, 7, 9]) {
+      p.r(7, y, 1, 1, p.accent);
+      p.r(8, y + 1, 1, 1, p.accent);
+    }
+    p.r(4, 3, 1, 11, C.hide);
+    p.r(11, 3, 1, 11, C.hide);
+    p.r(3, 13, 10, 1, C.hide);
+  },
+  gambeson: (p) => {
+    // A Quilted Gambeson: a thick padded coat in undyed cloth, quilted in diamonds, a standing collar, and
+    // toggles of the accent down the front.
+    const [cloth, stitch, edge] = ["#d9ccaa", "#a8996f", "#b8a983"];
+    p.r(3, 3, 10, 12, cloth);
+    p.r(1, 4, 2, 8, cloth);
+    p.r(13, 4, 2, 8, cloth);
+    p.r(5, 1, 6, 2, cloth);
+    for (let y = 3; y <= 14; y++) {
+      for (let x = 1; x <= 14; x++) {
+        const inSleeve = (x <= 2 || x >= 13) && y >= 4 && y <= 11;
+        if ((x >= 3 && x <= 12) || inSleeve) if ((x + y) % 4 === 0 || (x - y + 16) % 4 === 0) p.r(x, y, 1, 1, stitch);
+      }
+    }
+    p.r(1, 11, 2, 1, edge);
+    p.r(13, 11, 2, 1, edge);
+    p.r(6, 2, 4, 1, C.dark);
+    p.r(7, 3, 2, 12, edge);
+    for (const y of [5, 8, 11]) p.r(7, y, 2, 1, p.accent);
+    p.r(3, 14, 10, 1, stitch);
+  },
+  "stoker-apron": (p) => {
+    // The Stoker's Apron: a heavy scorched leather smith's apron over a dark shirt, brass rivets at the bib and
+    // waist, soot on it, and a pocket of the accent.
+    const [shirt, leather, scorch, soot] = ["#3f3f4a", "#7a4a2a", "#5a3420", "#2e2620"];
+    p.r(3, 3, 10, 8, shirt);
+    p.r(1, 4, 2, 5, shirt);
+    p.r(13, 4, 2, 5, shirt);
+    p.r(1, 9, 2, 1, "#5b5b68");
+    p.r(13, 9, 2, 1, "#5b5b68");
+    p.r(5, 1, 1, 3, C.hide);
+    p.r(10, 1, 1, 3, C.hide);
+    p.r(5, 3, 6, 5, leather);
+    p.r(4, 8, 8, 8, leather);
+    p.r(2, 8, 2, 1, C.hide);
+    p.r(12, 8, 2, 1, C.hide);
+    p.r(4, 15, 8, 1, scorch);
+    p.r(4, 14, 1, 1, scorch);
+    p.r(11, 13, 1, 2, scorch);
+    for (const [x, y] of [[5, 3], [10, 3], [4, 8], [11, 8]]) p.r(x, y, 1, 1, C.gold);
+    for (const [x, y] of [[6, 5], [9, 13], [10, 12], [5, 12]]) p.r(x, y, 1, 1, soot);
+    p.r(6, 9, 4, 3, p.accent);
+    p.r(6, 9, 4, 1, p.shade);
+  },
+  "barnacle-mail": (p) => {
+    // Barnacle Mail: a mail shirt gone green with the sea, crusted with barnacles, a scallop shell of the accent
+    // clinging to the chest.
+    const [mail, course, verdi, barn, pit] = ["#6f8f86", "#4f6d66", "#5fb39a", "#d9d2bc", "#8a8270"];
+    p.r(4, 3, 8, 12, mail);
+    p.r(2, 3, 3, 7, mail);
+    p.r(11, 3, 3, 7, mail);
+    for (const y of [4, 6, 8, 10, 12, 14]) p.r(4, y, 8, 1, course);
+    for (const y of [5, 7, 9]) {
+      p.r(2, y, 2, 1, course);
+      p.r(12, y, 2, 1, course);
+    }
+    p.r(6, 2, 4, 1, C.dark);
+    p.r(5, 2, 1, 1, mail);
+    p.r(10, 2, 1, 1, mail);
+    for (const [x, y] of [[2, 3], [5, 12], [10, 13], [12, 8], [9, 4]]) p.r(x, y, 2, 1, verdi);
+    for (const [x, y] of [[3, 5], [10, 10], [5, 9], [12, 3]]) {
+      p.r(x, y, 2, 2, barn);
+      p.r(x, y, 1, 1, pit);
+    }
+    spans(p, p.accent, [[5, 7, 8], [6, 6, 9], [7, 6, 9], [8, 7, 8]]);
+    p.r(7, 6, 1, 2, p.shade);
+  },
+  "ghostsail-cloak": (p) => {
+    // The Ghostsail Cloak: a hooded cloak of pale old sailcloth, faintly glowing, the hood's shadow lit by two
+    // cold eyes, a clasp of the accent, and the hem torn to rags you can see through.
+    const [sail, fold, mist, glow] = ["#dfe4ea", "#b8c0ca", "#c9d6e4", "#bfe8ff"];
+    spans(p, sail, [[0, 7, 8], [1, 6, 9], [2, 5, 10], [3, 4, 11], [4, 4, 11], [5, 3, 12], [6, 3, 12], [7, 2, 13], [8, 2, 13], [9, 2, 13], [10, 1, 14], [11, 1, 14], [12, 1, 14]]);
+    spans(p, C.dark, [[2, 7, 8], [3, 6, 9], [4, 6, 9], [5, 7, 8]]);
+    p.r(6, 3, 1, 1, glow);
+    p.r(9, 3, 1, 1, glow);
+    p.r(5, 8, 1, 5, fold);
+    p.r(10, 8, 1, 5, fold);
+    p.r(7, 7, 2, 1, p.accent);
+    for (const x of [1, 3, 4, 7, 8, 11, 12, 14]) p.r(x, 13, 1, 1, mist);
+    for (const x of [1, 4, 8, 12]) p.r(x, 14, 1, 1, mist);
+    p.r(4, 15, 1, 1, mist);
+    p.r(12, 15, 1, 1, mist);
+    for (const [x, y] of [[0, 7], [15, 9], [2, 2], [13, 3]]) p.r(x, y, 1, 1, glow);
+  },
   "heavy-helm": (p) => {
     p.r(7, 0, 2, 2, p.accent);
     p.r(5, 2, 6, 2, C.steel);
@@ -529,6 +655,84 @@ const ART: Record<string, Art> = {
     p.r(6, 7, 1, 1, C.shine);
     p.r(9, 7, 1, 1, C.shine);
     p.r(7, 12, 2, 1, C.gold);
+  },
+  tricorn: (p) => {
+    // A Tricorn: a black three-cornered hat edged in gold, a corner up at each side and one to the front, a
+    // cockade of the accent on the left.
+    const [felt, lit] = ["#2e2a38", "#4a4458"];
+    spans(p, felt, [[2, 6, 9], [3, 5, 10], [4, 1, 2], [4, 4, 11], [4, 13, 14], [5, 1, 14], [6, 1, 14], [7, 1, 14], [8, 2, 13], [9, 4, 11], [10, 5, 10], [11, 6, 9], [12, 7, 8]]);
+    spans(p, lit, [[2, 7, 8], [3, 6, 7]]);
+    spans(p, C.gold, [[4, 1, 1], [4, 14, 14], [8, 2, 3], [8, 12, 13], [9, 4, 5], [9, 10, 11], [10, 5, 5], [10, 10, 10], [11, 6, 6], [11, 9, 9], [12, 7, 8]]);
+    p.r(5, 7, 6, 1, "#1f1c28");
+    p.r(3, 5, 2, 2, p.accent);
+    p.r(3, 5, 1, 1, C.shine);
+  },
+  "sun-hat": (p) => {
+    // A Straw Sun Hat: a wide woven straw brim and a low crown, a band of the accent round it.
+    const [straw, weave, under] = ["#e3c77a", "#c4a55a", "#a8893f"];
+    spans(p, straw, [[2, 6, 9], [3, 5, 10], [4, 5, 10], [5, 5, 10], [6, 5, 10], [7, 1, 14], [8, 0, 15], [9, 0, 15], [10, 1, 14]]);
+    for (let y = 3; y <= 9; y++) {
+      const [a, b] = y < 7 ? [5, 10] : y === 7 ? [1, 14] : [0, 15];
+      for (let x = a; x <= b; x++) if ((x + 2 * y) % 4 === 0) p.r(x, y, 1, 1, weave);
+    }
+    spans(p, under, [[10, 1, 14], [11, 3, 12]]);
+    p.r(5, 6, 6, 1, p.accent);
+    p.r(6, 3, 1, 2, "#f2dc9a");
+  },
+  bandana: (p) => {
+    // A Bandana: red cloth tied over the head, spotted with the accent, knotted at the back with two tails hanging.
+    const [red, deep, lit] = ["#c0392b", "#8e2a20", "#d9584a"];
+    spans(p, red, [[3, 6, 9], [4, 4, 11], [5, 3, 12], [6, 3, 12], [7, 3, 12], [8, 3, 12], [9, 3, 12]]);
+    spans(p, lit, [[4, 5, 7], [5, 4, 5]]);
+    p.r(3, 10, 10, 1, deep);
+    p.r(12, 8, 2, 3, red);
+    p.r(13, 9, 1, 1, deep);
+    p.l(12, 11, 13, 14, red);
+    p.l(14, 11, 15, 13, deep);
+    for (const [x, y] of [[8, 4], [5, 7], [10, 6], [7, 9], [11, 9]]) p.r(x, y, 1, 1, p.accent);
+  },
+  "lookout-cap": (p) => {
+    // The Lookout's Cap: a navy peaked cap with a little brass spyglass for a badge, its band and peak in the accent.
+    const [navy, lit] = ["#2c3e63", "#3d5384"];
+    spans(p, navy, [[3, 4, 11], [4, 2, 13], [5, 2, 13], [6, 3, 12], [7, 3, 12], [8, 3, 12]]);
+    p.r(4, 3, 8, 1, lit);
+    p.r(3, 9, 10, 2, p.accent);
+    spans(p, p.shade, [[11, 3, 12], [12, 4, 11]]);
+    p.r(5, 6, 4, 1, C.gold);
+    p.r(9, 5, 2, 3, C.gold);
+    p.r(5, 6, 1, 1, "#a07a22");
+    p.r(10, 6, 1, 1, C.shine);
+  },
+  "miners-lamp": (p) => {
+    // The Miner's Lamp: a leather cap with a brass lamp strapped on the front, lit and throwing a warm glow.
+    const [lens, glow, ray] = ["#fff6c8", "#ffcf6a", "#ffe9a0"];
+    spans(p, C.leather, [[4, 5, 10], [5, 4, 11], [6, 3, 12], [7, 3, 12], [8, 3, 12], [9, 3, 12], [10, 3, 12], [11, 2, 13], [12, 2, 13]]);
+    p.r(4, 5, 2, 2, "#b98050");
+    p.r(3, 10, 10, 1, p.accent);
+    p.r(2, 12, 12, 1, C.hide);
+    p.r(5, 5, 6, 5, C.gold);
+    p.r(5, 9, 6, 1, "#a07a22");
+    p.r(6, 6, 4, 3, glow);
+    p.r(7, 6, 2, 2, lens);
+    p.r(7, 2, 2, 2, ray);
+    p.r(3, 3, 1, 1, ray);
+    p.r(12, 3, 1, 1, ray);
+  },
+  "storm-crown": (p) => {
+    // The Storm Crown: a dark silver band with lightning bolts for its points, a gem of the accent at the front,
+    // and pale blue sparks crackling round it.
+    const [silver, lit, deep, bolt, spark] = ["#7d8798", "#a3acba", "#5b6474", "#dbe6f2", "#bfe8ff"];
+    spans(p, bolt, [[0, 9, 9], [1, 8, 9], [2, 7, 9], [3, 6, 9], [4, 8, 9], [5, 7, 9], [6, 7, 8], [7, 6, 8], [8, 6, 9]]);
+    spans(p, bolt, [[4, 3, 3], [5, 2, 3], [6, 1, 3], [7, 2, 3], [8, 1, 3]]);
+    spans(p, bolt, [[4, 12, 12], [5, 12, 13], [6, 12, 14], [7, 12, 13], [8, 12, 14]]);
+    for (const [x, y] of [[9, 1], [9, 2], [9, 5], [8, 7], [3, 5], [3, 7], [13, 6]]) p.r(x, y, 1, 1, lit);
+    p.r(2, 9, 12, 4, silver);
+    p.r(2, 9, 12, 1, lit);
+    p.r(2, 12, 12, 1, deep);
+    for (const x of [3, 5, 10, 12]) p.r(x, 10, 1, 1, lit);
+    p.r(7, 10, 2, 2, p.accent);
+    p.r(7, 10, 1, 1, C.shine);
+    for (const [x, y] of [[5, 2], [12, 1], [0, 3], [15, 4]]) p.r(x, y, 1, 1, spark);
   },
   "armored-pants": (p) => {
     // Deckhand Greaves: iron over the legs, steel knee cops, steel down the front of the shins strapped on in the
@@ -589,6 +793,140 @@ const ART: Record<string, Art> = {
     p.r(4, 12, 3, 1, brass);
     p.r(9, 12, 3, 1, brass);
   },
+  "striped-breeches": (p) => {
+    // Striped Breeches: knee breeches in navy and cream stripes, tied below the knee with garters of the accent
+    // over pale stockings.
+    const [navy, cream, hose, hoseShade] = ["#3a4a7a", "#e3d9bf", "#f1ece0", "#cfc8b6"];
+    p.r(4, 1, 8, 2, C.hide);
+    p.r(7, 1, 2, 1, C.gold);
+    for (let x = 3; x <= 12; x++) {
+      const c = x % 2 ? navy : cream;
+      if (x >= 4 && x <= 11) p.r(x, 3, 1, 3, c);
+      if (x <= 6 || x >= 9) p.r(x, 6, 1, 4, c);
+    }
+    p.r(4, 10, 3, 1, p.accent);
+    p.r(9, 10, 3, 1, p.accent);
+    p.r(3, 10, 1, 2, p.accent);
+    p.r(12, 10, 1, 2, p.accent);
+    p.r(4, 11, 3, 4, hose);
+    p.r(9, 11, 3, 4, hose);
+    p.r(6, 11, 1, 4, hoseShade);
+    p.r(9, 11, 1, 4, hoseShade);
+    p.r(4, 15, 3, 1, C.dark);
+    p.r(9, 15, 3, 1, C.dark);
+  },
+  "leather-chaps": (p) => {
+    // Leather Chaps: brown leather over the front of each leg on dark trousers, belted with a brass buckle, a
+    // stud of the accent on each thigh and a fringe down the outside.
+    const trousers = "#3a3a48";
+    p.r(4, 1, 8, 5, trousers);
+    p.r(4, 6, 3, 10, trousers);
+    p.r(9, 6, 3, 10, trousers);
+    p.r(3, 2, 10, 1, C.hide);
+    p.r(7, 2, 2, 1, C.gold);
+    p.r(3, 3, 4, 12, C.leather);
+    p.r(9, 3, 4, 12, C.leather);
+    p.r(6, 3, 1, 12, C.hide);
+    p.r(9, 3, 1, 12, C.hide);
+    p.r(4, 4, 2, 1, C.gold);
+    p.r(10, 4, 2, 1, C.gold);
+    p.r(4, 6, 1, 1, p.accent);
+    p.r(11, 6, 1, 1, p.accent);
+    for (let y = 4; y <= 14; y += 2) {
+      p.r(2, y, 1, 1, C.hide);
+      p.r(13, y, 1, 1, C.hide);
+    }
+  },
+  kilt: (p) => {
+    // A Kilt: green tartan crossed with lines of the accent, pleated at the hem, a sporran at the front, bare knees
+    // and knee socks.
+    const [green, dark, skin, sock] = ["#2f5a3a", "#1f3a28", "#e0b08a", "#e8e0cc"];
+    p.r(4, 1, 8, 1, C.hide);
+    p.r(7, 1, 2, 1, C.gold);
+    spans(p, green, [[2, 4, 11], [3, 4, 11], [4, 3, 12], [5, 3, 12], [6, 3, 12], [7, 2, 13], [8, 2, 13]]);
+    for (const y of [4, 7]) p.r(2, y, 12, 1, dark);
+    p.r(3, 4, 1, 1, dark);
+    for (const x of [5, 10]) p.r(x, 2, 1, 7, p.accent);
+    for (const x of [3, 7, 12]) p.r(x, 2, 1, 7, dark);
+    p.r(2, 8, 12, 1, dark);
+    for (const x of [3, 5, 7, 9, 11, 13]) p.r(x, 8, 1, 1, green);
+    p.r(6, 3, 4, 4, C.hide);
+    p.r(6, 3, 4, 1, C.leather);
+    p.r(7, 5, 2, 1, C.paper);
+    p.r(7, 7, 1, 1, C.paper);
+    p.r(8, 7, 1, 1, C.gold);
+    p.r(4, 9, 3, 2, skin);
+    p.r(9, 9, 3, 2, skin);
+    p.r(4, 11, 3, 4, sock);
+    p.r(9, 11, 3, 4, sock);
+    p.r(4, 11, 3, 1, "#c9bfa6");
+    p.r(9, 11, 3, 1, "#c9bfa6");
+    p.r(4, 15, 3, 1, C.dark);
+    p.r(9, 15, 3, 1, C.dark);
+  },
+  "sea-legs": (p) => {
+    // Sea-Legs Slops: wide navy bell-bottoms flaring to tarred hems, gathered at the waist on a drawstring of the
+    // accent.
+    const [navy, lit, tar] = ["#2c3e63", "#3d5384", "#26262e"];
+    p.r(3, 1, 10, 5, navy);
+    p.r(3, 2, 10, 1, "#24344f");
+    p.r(4, 2, 8, 1, p.accent);
+    p.r(7, 3, 1, 2, p.accent);
+    p.r(9, 3, 1, 3, p.accent);
+    spans(p, navy, [[6, 3, 6], [7, 3, 6], [8, 3, 6], [9, 2, 6], [10, 2, 6], [11, 2, 6], [12, 1, 6], [13, 1, 6], [14, 1, 6]]);
+    spans(p, navy, [[6, 9, 12], [7, 9, 12], [8, 9, 12], [9, 9, 13], [10, 9, 13], [11, 9, 13], [12, 9, 14], [13, 9, 14], [14, 9, 14]]);
+    p.l(4, 6, 3, 13, lit);
+    p.l(11, 6, 12, 13, lit);
+    p.r(1, 14, 6, 2, tar);
+    p.r(9, 14, 6, 2, tar);
+  },
+  "pathfinder-breeches": (p) => {
+    // Pathfinder's Breeches: hard-wearing olive breeches with a pocket on the thigh and a leaf patch of the accent on
+    // the knee, and puttees wound round the shins.
+    const [olive, deep, pocket, wrap, wrapLine] = ["#5e6b3a", "#47522a", "#6f7c46", "#b8a57a", "#8f7f58"];
+    p.r(4, 1, 8, 2, C.hide);
+    p.r(7, 1, 2, 1, C.gold);
+    p.r(4, 3, 8, 3, olive);
+    p.r(3, 6, 4, 5, olive);
+    p.r(9, 6, 4, 5, olive);
+    p.r(6, 6, 1, 5, deep);
+    p.r(9, 6, 1, 5, deep);
+    p.r(3, 5, 3, 3, pocket);
+    p.r(3, 5, 3, 1, deep);
+    p.r(4, 6, 1, 1, C.hide);
+    spans(p, p.accent, [[7, 11, 11], [8, 10, 12], [9, 10, 11]]);
+    p.r(12, 7, 1, 1, p.shade);
+    p.r(4, 11, 3, 4, wrap);
+    p.r(9, 11, 3, 4, wrap);
+    for (const y of [11, 13]) {
+      p.l(4, y + 1, 6, y, wrapLine);
+      p.l(9, y + 1, 11, y, wrapLine);
+    }
+    p.r(4, 15, 3, 1, C.bark);
+    p.r(9, 15, 3, 1, C.bark);
+  },
+  "windrunner-leggings": (p) => {
+    // Windrunner Leggings: sleek pale leggings, a sash at the waist and bands at the knees whose ribbons of the
+    // accent stream out behind, and gold at the ankles.
+    const [pale, shade, lit] = ["#dfe6ee", "#b9c4d1", "#f4f7fb"];
+    p.r(5, 1, 6, 5, pale);
+    p.r(5, 6, 2, 9, pale);
+    p.r(9, 6, 2, 9, pale);
+    p.r(6, 6, 1, 9, shade);
+    p.r(10, 6, 1, 9, shade);
+    p.r(5, 3, 1, 3, lit);
+    p.r(5, 2, 6, 1, p.accent);
+    p.l(4, 2, 1, 4, p.accent);
+    p.l(4, 3, 0, 6, p.shade);
+    p.r(5, 9, 2, 1, p.accent);
+    p.r(9, 9, 2, 1, p.accent);
+    p.l(4, 9, 1, 11, p.accent);
+    p.l(4, 10, 2, 12, p.shade);
+    p.r(5, 15, 2, 1, C.gold);
+    p.r(9, 15, 2, 1, C.gold);
+    p.r(12, 3, 1, 1, lit);
+    p.r(13, 8, 1, 1, lit);
+  },
 
   // ---- trinkets ----
   boots: (p) => {
@@ -623,6 +961,145 @@ const ART: Record<string, Art> = {
     p.r(11, 10, 3, 3, brass);
     p.r(12, 10, 1, 1, "#d9ac55");
     p.r(4, 13, 11, 1, C.dark);
+  },
+  "cork-clogs": (p) => {
+    // Cork Clogs: a chunky pale wooden clog with a rounded, upturned toe, a band of the accent over the instep, on a
+    // thick speckled cork sole.
+    const [wood, lit, low, cork, fleck] = ["#d9b98a", "#ead2a8", "#b8955e", "#8f6a45", "#6e4f32"];
+    spans(p, wood, [[4, 2, 3], [5, 2, 3], [6, 2, 9], [7, 2, 12], [8, 2, 13], [9, 2, 14], [10, 2, 14], [11, 2, 14]]);
+    p.r(4, 5, 5, 1, C.dark);
+    spans(p, lit, [[6, 4, 7], [7, 10, 12], [8, 12, 13]]);
+    p.r(14, 8, 1, 1, lit);
+    p.r(2, 11, 13, 1, low);
+    p.r(8, 6, 2, 6, p.accent);
+    p.r(8, 11, 2, 1, p.shade);
+    p.r(2, 12, 13, 2, cork);
+    for (const [x, y] of [[4, 12], [7, 13], [10, 12], [13, 13]]) p.r(x, y, 1, 1, fleck);
+  },
+  "rope-sandals": (p) => {
+    // Rope Sandals: a sole of plaited rope, leather straps crossed over the foot and wound up the ankle, and a toe
+    // strap of the accent.
+    const [rope, twist] = ["#c9ad74", "#a88a52"];
+    p.r(1, 12, 14, 2, rope);
+    for (let x = 1; x <= 14; x += 2) p.r(x, 12, 1, 1, twist);
+    for (let x = 2; x <= 14; x += 2) p.r(x, 13, 1, 1, twist);
+    p.r(2, 9, 1, 3, C.leather);
+    p.r(2, 9, 2, 1, C.leather);
+    p.l(4, 11, 9, 7, C.leather);
+    p.l(9, 11, 4, 7, C.leather);
+    p.l(4, 7, 7, 2, C.hide);
+    p.l(7, 7, 4, 2, C.hide);
+    p.r(4, 2, 4, 1, C.leather);
+    spans(p, p.accent, [[10, 11, 13], [11, 11, 11], [11, 13, 13]]);
+  },
+  "buckled-shoes": (p) => {
+    // Buckled Shoes: low black leather shoes with a tall tongue, a big square brass buckle on it, a small heel, and a
+    // little bow of the accent at the back.
+    const [black, lit] = ["#3a3546", "#5a536c"];
+    spans(p, black, [[7, 3, 6], [8, 2, 10], [9, 2, 12], [10, 2, 13], [11, 2, 14], [12, 5, 14]]);
+    p.r(7, 4, 4, 5, black);
+    p.r(6, 8, 1, 1, black);
+    p.r(11, 9, 2, 1, lit);
+    p.r(3, 8, 2, 1, lit);
+    p.r(7, 5, 4, 4, C.gold);
+    p.r(8, 6, 2, 2, black);
+    p.r(7, 5, 1, 1, C.shine);
+    p.r(2, 12, 3, 2, C.bark);
+    p.r(5, 13, 10, 1, C.hide);
+    spans(p, p.accent, [[5, 2, 2], [5, 4, 4], [6, 2, 4]]);
+  },
+  "ice-cleats": (p) => {
+    // Ice Cleats: stout boots topped with white fur, a strap of the accent buckled across, and iron spikes
+    // under the sole.
+    const [boot, fur, furShade] = ["#6b5038", "#ece6d8", "#c9c0ac"];
+    p.r(4, 4, 6, 7, boot);
+    p.r(4, 9, 10, 3, boot);
+    p.r(11, 9, 2, 1, "#7f6248");
+    spans(p, fur, [[1, 5, 5], [1, 8, 8], [2, 3, 10], [3, 3, 11], [4, 3, 11]]);
+    for (const [x, y] of [[4, 3], [7, 4], [10, 3], [6, 2]]) p.r(x, y, 1, 1, furShade);
+    p.r(4, 7, 6, 1, p.accent);
+    p.r(8, 7, 1, 1, C.gold);
+    p.r(3, 12, 12, 1, C.iron);
+    for (const x of [3, 6, 9, 12]) {
+      p.r(x, 13, 2, 1, C.steel);
+      p.r(x, 14, 1, 1, C.shine);
+    }
+  },
+  "springheel-boots": (p) => {
+    // Springheel Boots: tall leather boots laced up the front in the accent, a turned-down cuff, and a coiled brass
+    // spring under the heel.
+    p.r(4, 1, 6, 2, C.hide);
+    p.r(4, 3, 5, 7, C.leather);
+    p.r(4, 8, 9, 3, C.leather);
+    p.r(10, 8, 2, 1, "#b87c4a");
+    p.r(5, 4, 1, 4, "#b87c4a");
+    for (const y of [4, 6]) p.r(7, y, 2, 1, p.accent);
+    p.r(3, 11, 11, 1, C.bark);
+    p.l(4, 12, 7, 13, C.gold);
+    p.l(7, 13, 4, 14, C.gold);
+    p.l(4, 14, 7, 15, C.gold);
+    p.r(4, 15, 1, 1, "#a07a22");
+  },
+  "courier-shoes": (p) => {
+    // Courier's Shoes: light running shoes of pale leather on a white sole, laced, with a little wing of the accent
+    // at each ankle.
+    const [pale, shade] = ["#e2cfa8", "#bfa67a"];
+    spans(p, pale, [[8, 4, 9], [9, 3, 11], [10, 3, 13], [11, 3, 14], [12, 3, 14]]);
+    p.r(7, 7, 3, 2, pale);
+    p.r(12, 11, 2, 2, shade);
+    p.r(3, 12, 3, 1, shade);
+    for (const [x, y] of [[9, 9], [11, 10]]) p.r(x, y, 1, 1, C.bark);
+    p.r(3, 13, 12, 1, C.bone);
+    spans(p, p.accent, [[4, 1, 3], [5, 1, 5], [6, 2, 6], [7, 1, 6], [8, 3, 3]]);
+    spans(p, p.shade, [[5, 1, 2], [7, 1, 2]]);
+  },
+  "soft-sneaks": (p) => {
+    // Soft-Sole Sneaks: soft dark felt slippers with no hard sole, bound up the ankle in cloth wraps, one wrap in the
+    // accent and a loose end trailing.
+    const [felt, deep, wrap] = ["#45405a", "#332f44", "#8a8270"];
+    p.r(4, 3, 5, 7, felt);
+    spans(p, felt, [[9, 3, 10], [10, 2, 12], [11, 2, 13], [12, 3, 13]]);
+    p.r(3, 12, 10, 1, deep);
+    p.r(10, 10, 2, 1, "#5a5472");
+    for (const y of [5, 9]) p.l(4, y, 8, y - 2, wrap);
+    p.l(4, 7, 8, 5, p.accent);
+    p.r(4, 3, 5, 1, wrap);
+    p.r(3, 2, 1, 3, wrap);
+  },
+  "cloudstep-boots": (p) => {
+    // Cloudstep Boots: white boots trimmed in gold and banded in sky blue, a gem of the accent at the cuff, standing
+    // on puffs of cloud, with a glint of light about them.
+    const [white, sky, cloud, cloudShade] = ["#eef4fb", "#7fb9e6", "#f7fbff", "#a9d4f2"];
+    p.r(5, 2, 5, 9, white);
+    p.r(5, 8, 8, 3, white);
+    p.r(5, 6, 5, 2, sky);
+    p.r(10, 8, 3, 3, sky);
+    p.r(4, 1, 7, 1, C.gold);
+    p.r(5, 5, 5, 1, C.gold);
+    p.r(6, 2, 2, 2, p.accent);
+    p.r(6, 2, 1, 1, C.shine);
+    spans(p, cloud, [[10, 1, 3], [10, 13, 14], [11, 0, 15], [12, 1, 14], [13, 3, 12]]);
+    spans(p, cloud, [[9, 2, 2], [9, 14, 14]]);
+    spans(p, cloudShade, [[12, 2, 4], [12, 11, 13], [13, 5, 10]]);
+    for (const [x, y] of [[13, 3], [2, 5], [14, 6]]) p.r(x, y, 1, 1, C.gold);
+  },
+  "phase-treads": (p) => {
+    // Phase Treads: dark violet boots with runes glowing in the accent along them, their back edges flickering out of
+    // true, an afterimage of them trailing behind.
+    const [violet, deep, edge, ghost] = ["#3b2a5c", "#2a1d44", "#6b55a0", "#7a62b0"];
+    p.r(5, 2, 5, 9, violet);
+    p.r(5, 10, 9, 3, violet);
+    p.r(4, 1, 7, 2, deep);
+    for (const y of [3, 5, 7, 9, 11]) p.r(5, y, 1, 1, edge);
+    for (const x of [6, 8, 10]) p.r(x, 1, 1, 1, edge);
+    p.r(7, 4, 1, 5, p.accent);
+    p.r(6, 5, 1, 1, p.accent);
+    p.r(8, 7, 1, 1, p.accent);
+    p.r(8, 11, 4, 1, p.accent);
+    p.r(12, 10, 1, 1, p.shade);
+    p.r(5, 13, 10, 1, deep);
+    p.r(13, 13, 1, 1, p.accent);
+    for (const [x, y] of [[3, 3], [3, 6], [2, 9], [3, 11], [4, 13], [2, 5]]) p.r(x, y, 1, 1, ghost);
   },
   ring: (p) => {
     spans(p, C.gold, [[6, 5, 10], [7, 4, 5], [7, 10, 11], [8, 4, 4], [8, 11, 11], [9, 4, 4], [9, 11, 11], [10, 4, 4], [10, 11, 11], [11, 4, 5], [11, 10, 11], [12, 5, 10]]);

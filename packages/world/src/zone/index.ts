@@ -8,7 +8,7 @@ export { createZone, ensureEnemyAbilities, ensureMouth, loadZone, stepZone, zone
 export { ZONE_GRIDS, ALERT_RANGE, JOIN_RANGE, DEFAULT_ZONE_OPTIONS, BIOME_LEADS, zoneOptions, generateZone, groupKinds, type ZonePlan } from "./gen";
 export {
   FREE_WALK, MAX_ELEV, HEX_ROOM, HIGH_REACH,
-  zoneReach, pathIn, sees, sameHex, elevOf, inFight, flies, unitAt, unitsAt, roomAt, heldAgainst, unitById, isDead, lineFrom, stepCost, blockerAt, seesFor, wallAt, ladderBetween, strikes, reachFrom, pitAt, solid as zoneSolid,
+  zoneReach, pathIn, sees, sameHex, elevOf, inFight, flies, hovers, perkOf, unitAt, unitsAt, roomAt, heldAgainst, unitById, isDead, lineFrom, stepCost, blockerAt, seesFor, wallAt, ladderBetween, strikes, reachFrom, pitAt, solid as zoneSolid,
   blast as zoneBlast, type Reached, type Course, type Pit,
 } from "./geometry";
 export { PROPS, PROP_KINDS, propOf, type PropKind, type PropDef } from "./props";
@@ -22,6 +22,9 @@ export {
   CONDITION_INFO,
   COMMON_ACTIONS,
   commonCost,
+  commonCostFor,
+  jumpRange,
+  blinkRange,
   FLEE_RANGE,
   THROWABLES,
   STARTING_ITEMS,
@@ -96,7 +99,7 @@ export {
 } from "./kit";
 export { mod as statMod, proficiency, heroMove, heroDefence, diceFor, diceText, diceAverage, hitChance, rollShown, type Dice } from "./rules";
 export { attackContext, defenceOf, has as hasCondition, shieldOf, unseen, type AttackContext } from "./engine";
-export { abilityArea, carrySpot, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, crateBlow, moveLeft, walkAp, apForMove, payMove, previewAttack, leavesReach, shiftInto, shoveDest, edgeDc, EDGE_DC, BARD_AURA_RANGE, type Aim, type Shift } from "./combat";
+export { abilityArea, carrySpot, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, crateBlow, isBlink, moveLeft, walkAp, apForMove, payMove, previewAttack, leavesReach, shiftInto, shoveDest, edgeDc, EDGE_DC, BARD_AURA_RANGE, type Aim, type Shift } from "./combat";
 export { chartOf, constellationHexes, constellationLinks, courseMarks, litFoes } from "./stars";
 export { SURFACE_INFO, HARMFUL as HARMFUL_SURFACES } from "./surfaces";
 export { WEATHER_INFO, wallHexes } from "./weather";

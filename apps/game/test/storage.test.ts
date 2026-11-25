@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CARRY_BASE, FURNISHINGS, itemCells, GATHER_DAILY_OUTINGS, STORAGE_CHEST, gatherDay, type ItemDef } from "@gantt-quest/world";
 import { applyZoneGrant, buyShopItem, carryState, craftFurnishing, equipItem, getInventory, getShop, sellItem, setAbilitySlot, stashMaterial, storeItem, stowGear, unstowGear } from "../src/server/db";
 import { rest } from "../src/server/gather";
+import { rowToItem } from "../src/server/db/rows";
 import { setPresence } from "../src/server/zones";
 import { buyFromSalesman, getSalesman } from "../src/server/salesman";
 import { acceptTrade, openTrade, setTradeSide } from "../src/server/trade";
@@ -42,6 +43,16 @@ beforeEach(() => {
   for (const [id, name, str] of [["ann", "Ann", 2], ["bo", "Bo", 9]] as const) addHero(sql, { id, name, str, gold: 5000, crew: "CREWAA", at });
   // Ann wears a mace; worn gear does not count against the pack.
   sql.prepare("INSERT INTO inventory (player_id, kind, ref, name, rarity, slot, equipped, created_at) VALUES ('ann', 'weapon', 'mace', 'Mace', 'common', 'main_hand', 1, ?)").run(at);
+});
+
+describe("a piece with a power", () => {
+  it("is saved with how strong its power is, and read back with it", async () => {
+    const boots: ItemDef = { kind: "trinket", ref: "springheels", name: "Masterwork Springheel Boots", rarity: "epic", slot: "boots", power: 0, statBonus: { agi: 2 }, levelReq: 3, icon: "springheel-boots", perkAmount: 2 };
+    await grant(boots);
+    const [row] = (await getInventory(db, "ann")).filter((i) => i.ref === "springheels");
+    expect(row).toMatchObject({ perk_amount: 2 });
+    expect(rowToItem(row)).toMatchObject({ ref: "springheels", perkAmount: 2 });
+  });
 });
 
 describe("materials in the pack", () => {

@@ -5,7 +5,7 @@
 import { hexDistance, posKey, type StatKey } from "@gantt-quest/core";
 import { tileAt } from "../map";
 import type { Rng } from "../rng";
-import { adjacent, close, elevOf, inFight } from "./geometry";
+import { adjacent, close, elevOf, inFight, perkOf } from "./geometry";
 import { ABILITIES, EFFECT_TICK, SUNDERED_DEFENCE } from "../content";
 import { AQUEOUS, AURAS, CORAL_ARMOR, ENEMY_KIT, FORTIFY, NORTH_STAR, SHIELD_SET_ASIDE, enemyDefence, enemySave, healDice } from "./kit";
 import { inDark } from "./light";
@@ -38,6 +38,8 @@ export function removeCondition(unit: Unit, kind: Condition): void {
 export function addCondition(ctx: Ctx, unit: Unit, kind: Condition, rounds: number, amount?: number): void {
   if (unit.down || rounds <= 0) return;
   if (kind === "burning" && has(unit, "wet")) return;
+  // What gear keeps off: a Storm Crown Stunning, a Stoker's Apron Burning, Sea-Legs Slops a fall, Windrunner Leggings Slowing.
+  if (gearWards(unit, kind)) return;
   // A Wind-god's Shanty keeps everyone in it light on their feet.
   if (kind === "slowed" && windward(ctx.state, unit)) return;
   if (kind === "wet") removeCondition(unit, "burning");
@@ -65,6 +67,15 @@ export function addCondition(ctx: Ctx, unit: Unit, kind: Condition, rounds: numb
   // Burning's stacks: none said is one, and a burning set alight again keeps the stacks it has.
   if (kind === "burning" && (now.amount ?? 1) <= 1) delete now.amount;
   ctx.events.push({ t: "condition", target: unit.id, kind, rounds, ...(now.amount !== undefined ? { amount: now.amount } : {}) });
+}
+
+/** Whether a power of a hero's gear keeps this condition off them. */
+export function gearWards(unit: Unit, kind: Condition): boolean {
+  if (kind === "stunned") return perkOf(unit, "clear_head") > 0;
+  if (kind === "burning") return perkOf(unit, "fireproof") > 0;
+  if (kind === "prone") return perkOf(unit, "steady") > 0;
+  if (kind === "slowed") return perkOf(unit, "fleet") > 0;
+  return false;
 }
 
 /** What Burning takes off a unit at the start of its turn: the tick for each of its stacks. */
@@ -285,6 +296,15 @@ export function attackContext(state: ZoneState, attacker: Unit, target: Unit, op
 export function attackRoll(ctx: Ctx, attacker: Unit, target: Unit, opts: { label: string; bonus: number; melee: boolean }): Roll {
   const c = attackContext(ctx.state, attacker, target, opts);
   const roll = d20(ctx.rng, { kind: "attack", id: attacker.id, target: target.id, label: opts.label, bonus: opts.bonus + c.mods, vs: defenceOf(target, ctx.state), adv: c.adv });
+  // A Ghostsail Cloak: the first attacks against its wearer each fight pass through them, whatever was rolled.
+  const enc = ctx.state.encounter;
+  const ghostly = perkOf(target, "ghostly");
+  if (enc && ghostly > 0 && (enc.ghosted?.[target.id] ?? 0) < ghostly) {
+    (enc.ghosted ??= {})[target.id] = (enc.ghosted[target.id] ?? 0) + 1;
+    roll.ok = false;
+    roll.crit = false;
+    roll.label = `${roll.label} (Ghostly: passes through)`;
+  }
   removeCondition(attacker, "glitched");
   removeCondition(attacker, "inspired");
   spendLuck(attacker);
