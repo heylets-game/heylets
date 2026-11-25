@@ -406,8 +406,6 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
       else if (what === "trade" || what === "contracts") setDealing(what);
       else if (what === "errand" && talkingRegular.current) setTalkTo(talkingRegular.current);
     },
-    ask: api.pubTalk,
-    askLeft: api.pubTalkLeft,
     panelOpen: barOpen || sellingFish || records || !!dealing || !!talkTo || trading,
     closePanels: () => {
       for (const shut of [setBarOpen, setSellingFish, setRecords, setTrading]) shut(false);

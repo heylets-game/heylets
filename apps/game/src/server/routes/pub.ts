@@ -2,29 +2,16 @@
 // traveling salesman, the regulars and their errands, and a word with the
 // barkeep.
 
-import { PUB_BARKEEP, PUB_DEALER, PUB_MAX_TALK, PUB_MENU, TALK_PER_DAY, dueIn, nextSalesmanVisit, salesman, salesmanVisitAt } from "@gantt-quest/world";
-import { RELEASES } from "../../releases";
-import { barkeepReply } from "../ai";
-import { crewFor, getCharacter,orderAtPub, refreshHut } from "../db";
+import { TALK_PER_DAY } from "@gantt-quest/world";
+import { orderAtPub, refreshHut } from "../db";
 import { dropErrand, handInErrand, regularsView, takeErrand, tradeWithRegular } from "../errands";
 import { announceXp } from "../harbor-xp";
 import { enterPub } from "../pub-room";
 import { pubLeaderboard } from "../pub-scores";
 import { buyFromSalesman, getSalesman } from "../salesman";
-import { spendTalk, talkLeft } from "../talk";
+import { talkLeft } from "../talk";
 import type { GameApp } from "./shared";
-
-/** What the barkeep knows about traveling salesmen: who is in, or who is due next. */
-function salesmanFact(crewId: string): string {
-  const at = Date.now();
-  const here = salesmanVisitAt(crewId, at);
-  const who = (id: string) => salesman(id)!;
-  if (here) return `A traveling salesman is in the pub now, in the corner by the far wall: ${who(here.salesmanId).name}, ${who(here.salesmanId).trade}. Gone ${dueIn(here.endsAt - at)}.`;
-  const next = nextSalesmanVisit(crewId, at);
-  return next
-    ? `No traveling salesman is in. Word is ${who(next.salesmanId).name}, ${who(next.salesmanId).trade}, is due ${dueIn(next.startsAt - at)}.`
-    : "No traveling salesman is in, and none is due that you know of.";
-}
+import { askTownsperson } from "./talk";
 
 export function pubRoutes(app: GameApp): void {
   // ---------- the pub ----------
@@ -92,35 +79,10 @@ export function pubRoutes(app: GameApp): void {
     return c.json({ error: "Accept, hand in, trade or drop." }, 400);
   });
 
-  // How many questions the player may still ask today (each is a call to the model).
+  // A word with the barkeep, for a page still open from before anyone else could be asked (now /api/talk, for anyone).
   app.get("/api/pub/talk", async (c) => c.json({ left: await talkLeft(c.env.DB, c.get("player").id), cap: TALK_PER_DAY }));
-
-  // A word with the barkeep. He only talks: nothing he says changes anything.
   app.post("/api/pub/talk", async (c) => {
-    const player = c.get("player");
     const body = await c.req.json<{ text?: unknown }>().catch(() => ({}) as { text?: unknown });
-    const text = String(body.text ?? "").replace(/\s+/g, " ").trim().slice(0, PUB_MAX_TALK);
-    if (!text) return c.json({ error: "Say something first." }, 400);
-    const [character, crew] = await Promise.all([getCharacter(c.env.DB, player.id), crewFor(c.env.DB, player.id)]);
-    if (character?.status !== "active" || !crew) return c.json({ error: "The pub is for crews." }, 409);
-    // Counted before the model is asked, so a question past the day's limit is never sent.
-    const left = await spendTalk(c.env.DB, player.id);
-    if (left === null) return c.json({ error: `That is all the talk for today: ${TALK_PER_DAY} questions a day.`, left: 0 }, 429);
-    // Everyone in the pub sees the exchange over the two heads; the conversation itself stays in the asker's panel.
-    const room = c.env.PUB_ROOM.get(c.env.PUB_ROOM.idFromName(crew.id));
-    const bubble = (id: string, line: string) => room.fetch("https://pub/bubble", { method: "POST", body: JSON.stringify({ id, text: line }) }).then(() => {}, () => {});
-    c.executionCtx.waitUntil(bubble(player.id, text));
-    const news = RELEASES.find((r) => !r.unreleased && r.notes.length > 0);
-    const facts = [
-      ...PUB_MENU.map((i) => `On the board: ${i.name}, ${i.price} gold. ${i.blurb}`),
-      "The board is meals only: no drink is sold. A meal gives a hero back one gathering outing, once a day.",
-      "There is a dice table in the pub where crewmates bluff each other for a small stake.",
-      salesmanFact(crew.id),
-      `${PUB_DEALER.name}, ${PUB_DEALER.trade}, leans on the pillar at the end of the bar: he buys wood, stone, iron and the rest, sells what people are short of at prices that move through the day, and offers supply contracts that run a few days. The regulars hand out their own small jobs; find them in here at night or about the Harbor by day. The Harbor's notice board outside is for news of the Harbor itself.`,
-      ...(news ? news.notes.slice(0, 4).map((n) => `News pinned on the Harbor's notice board: ${n.area ? `${n.area}: ` : ""}${n.text}.`) : []),
-    ];
-    const say = await barkeepReply(c.env, { hero: character.name, crew: crew.name, text, facts });
-    c.executionCtx.waitUntil(bubble(PUB_BARKEEP.id, say));
-    return c.json({ say, left });
+    return askTownsperson(c, "barkeep", body.text);
   });
 }
