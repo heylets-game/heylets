@@ -166,7 +166,7 @@
   .run .hud-left > .crew { width: fit-content; max-width: 190px; gap: 4px; }
   .crew-cards .roster { gap: 4px; }
   .crew-cards .roster li.cm { padding: 2px 6px 2px 4px; }
-  .run:has(.bag-overlay) .camera-rotate { display: none; }
+  .run:has(.bag-overlay > .bag.panel:not(.folded)) .camera-rotate { display: none; }
   /* The talk sits just above the bar and the strip over it, wherever their top is (--hud-all-h, measured in
      Hud.tsx), and never taller than the room left above that. */
   .run:has(> .hud) .harbor-chat, .run:has(> .hud) .chat { bottom: calc(var(--hud-all-h, 150px) / var(--ui-z, 1) + 6px); }

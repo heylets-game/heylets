@@ -14,15 +14,19 @@
 
 /* ---------- The sea bag: down the right-hand side of the view ----------
    As tall as what is in it, centred top to bottom on the right edge. The view and the bottom bar stay as they
-   are; the camera's buttons sit at the bag's left. */
+   are, and so do the camera's buttons: the bag goes over them, and can be moved or minimized off them. */
 .overlay.bag-overlay { background: none; pointer-events: none; justify-content: flex-end; align-items: center; padding: 44px 22px 22px; z-index: 50; }
 /* Centred in the room above the bottom bar, so the bar and its buttons stay clear. */
 .run:has(> .hud) .overlay.bag-overlay { padding-top: 38px; padding-bottom: 150px; }
-.run:has(.bag-overlay) .camera-rotate { right: calc(724px * var(--ui-z, 1)); }
 .overlay .bag.panel { --u: 51px; position: relative; pointer-events: auto; width: calc(var(--u) * 12 + 46px); max-width: 100%; max-height: 100%; display: flex; flex-direction: column; gap: 8px; padding: 22px 18px 14px; gap: 10px; }
 .bag-close { position: absolute; top: -6px; right: -6px; width: 30px; height: 30px; font-size: 20px; line-height: 1; z-index: 5; }
 .bag-top { display: flex; align-items: center; gap: 10px; flex: none; }
 .bag-top .bag-close { position: relative; top: auto; right: auto; }
+.bag-top .bag-min { font-size: 18px; font-weight: bold; }
+/* Minimized: only its top row, the rest put away. */
+.overlay .bag.panel.folded { width: auto; padding: 12px 16px; }
+.bag.folded > :not(.bag-top) { display: none; }
+.bag-folded-name { font-family: var(--font-head); font-size: 17px; letter-spacing: 0.04em; color: var(--brass-hi); white-space: nowrap; padding-right: 6px; touch-action: none; }
 
 /* The figure's slots: each the size of what it holds, set out as it is worn. */
 .bag-doll {
@@ -119,14 +123,21 @@
 .mat-detail { display: flex; flex-direction: column; gap: 8px; }
 .mat-detail p { margin: 0; }
 /* The bag's worn gear and pack, under its top row. Where the bag has less height than these need (a short
-   window, a phone on its side) the pack's own grid shrinks first, and then this scrolls. */
+   window, a phone on its side) this scrolls, as one: the pack is always shown whole, never scrolled on its own. */
 .bag-body { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; overflow: hidden auto; overscroll-behavior: contain; }
+.bag-body > .pack-wrap { flex: none; max-height: none; overflow: visible; }
+/* The bag is moved by its frame (InventoryScreen's useMovable): its plate, top and bottom rows, and the strip
+   between the gear and the pack. On touch, by its plate. */
+.overlay .bag.panel:not(.chest-window):not(.trade-window), .bag .bag-top, .bag .bag-strip, .bag .bag-foot { cursor: grab; }
+.bag .bag-top button, .bag .bag-strip button, .bag .bag-foot button { cursor: pointer; }
+.bag .bag-body, .bag .bag-doll, .bag .pack-wrap { cursor: auto; }
+.bag:not(.chest-window):not(.trade-window) > .win-plate { pointer-events: auto; cursor: grab; touch-action: none; }
+.bag.dragging, .bag.dragging * { cursor: grabbing; user-select: none; }
 /* A short screen (a phone on its side): the bag takes the full height, over the bottom bar, and the whole pack
    scrolls up from under what is worn. */
 @media (max-height: 520px) {
   .run:has(> .hud) .overlay.bag-overlay, .overlay.bag-overlay { padding-top: 34px; padding-bottom: 10px; }
   .overlay .bag.panel { padding: 18px 10px 10px; }
-  .bag-body > .pack-wrap { flex: none; max-height: none; }
 }
 @media (max-width: 760px) {
   .overlay.bag-overlay { padding: 34px 14px 14px; }

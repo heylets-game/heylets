@@ -121,6 +121,7 @@ import { DollChart, type ChartSlot } from "./ui/DollChart";
 import { SplitPrompt, StackIcon, stackName, toStacks, type Stack } from "./ui/Slots";
 import { ITEM_ICON, STONE_ICON } from "./zone/actionIcons";
 import { uiZoom } from "./uiScale";
+import { useMovable } from "./DragPanel";
 import { useDropTarget } from "./dragDrop";
 import { ownLook } from "./ownLook";
 import { withLook } from "./render/sprites";
@@ -444,6 +445,9 @@ function EyeGlyph({ shut }: { shut: boolean }) {
 
 export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = false, chest = null, trade = null, town = null, usable, gearLocked, stones, torch, onLootDrop }: Props) {
   /** Loot dragged from a body or chest is dropped on the bag: it is taken. The bag lights up while it is over it. */
+  // The bag is moved by its frame: its plate, its top and bottom rows and the strip between the gear and the pack,
+  // never from the gear or the pack, where a press picks something up.
+  const move = useMovable<HTMLDivElement>("bag", (target, panel) => target === panel || !!target.closest(".win-plate, .bag-top, .bag-strip, .bag-foot"));
   const lootDrop = useDropTarget(
     (thing) => thing.kind === "loot" && !!onLootDrop,
     (thing) => {
@@ -468,6 +472,8 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
   const c = me.character!;
   const { busy, error, act } = useAct(refresh);
   const [catchOpen, setCatchOpen] = useState(false);
+  /** Minimized to its title, as the other windows can be. Only while it is open: it opens again whole. */
+  const [folded, setFolded] = useState(false);
   const [saved, setSaved] = useState<Saved>(() => loadSaved(me.player.id));
   /** What is in hand: lifted out of the pack or the chest, or off the figure. */
   const [held, setHeld] = useState<Held | null>(null);
@@ -1272,11 +1278,31 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
         </div>
       )}
 
-      <div className={`bag panel window ${held ? "holding" : ""}`} role="dialog" aria-label="Sea bag" style={{ "--u": `${bu}px` } as CSSProperties} onContextMenu={putBack} {...lootDrop}>
+      <div
+        {...move.bind}
+        className={`bag panel window ${held ? "holding" : ""} ${move.dragging ? "dragging" : ""} ${folded ? "folded" : ""}`}
+        role="dialog"
+        aria-label="Sea bag"
+        style={{ ...move.bind.style, "--u": `${bu}px` } as CSSProperties}
+        onContextMenu={putBack}
+        {...lootDrop}
+      >
         <span className="win-plate">Sea Bag</span>
-        {/* The close button, and the way into the logbook beside it. */}
+        {/* The close button and the one that minimizes it, and the way into the logbook beside them. Minimized, the
+            bag is only this row: whatever was in hand goes back where it was. */}
         <div className="bag-top">
           <button className="bag-close hud-btn" aria-label="Close" title="Close (Esc)" onClick={onClose}>×</button>
+          <button
+            className="bag-close bag-min hud-btn"
+            aria-expanded={!folded}
+            aria-label={folded ? "Show the sea bag" : "Minimize the sea bag"}
+            title={folded ? "Show" : "Minimize"}
+            // The bag grows and shrinks around this button: it stays where it is on screen, and the × beside it.
+            onClick={(e) => (move.keep.before(e.currentTarget), setHeld(null), setFolded((f) => !f))}
+          >
+            {folded ? "+" : "–"}
+          </button>
+          {folded && <span className="bag-folded-name">Sea Bag</span>}
           {onLogbook && <LogbookButton hero={c} onOpen={onLogbook} />}
         </div>
         {(error ?? (trade ? null : refused)) && <div className="banner error">{error ?? refused}</div>}

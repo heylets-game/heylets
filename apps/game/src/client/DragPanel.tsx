@@ -23,7 +23,7 @@
 //
 // Options can also put every panel back as it started: `resetPanels()`.
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type HTMLAttributes, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { onUiScaleChange, uiZoom } from "./uiScale";
 
 interface Offset {
@@ -113,6 +113,143 @@ function save(id: string, offset: Offset) {
   } catch {
     // Storage unavailable (private mode): the panel just will not remember.
   }
+}
+
+/**
+ * Follow a press on a panel as a move, once it has gone past THRESHOLD: `set` is given each new offset (from
+ * `from`, in the panel's own zoomed pixels) and `done` the last, on release. A strip of the panel stays on screen.
+ */
+function startMove(e: ReactPointerEvent<HTMLElement>, panel: HTMLElement, from: Offset, set: (o: Offset) => void, dragging: (on: boolean) => void, done: (o: Offset) => void) {
+  const start = { x: e.clientX, y: e.clientY };
+  const rect = panel.getBoundingClientRect();
+  const z = uiZoom();
+  let moved = false;
+  // Tracked here as well as in state, so the release saves the final position even if React has not re-rendered yet.
+  let latest = from;
+
+  const move = (ev: PointerEvent) => {
+    let dx = ev.clientX - start.x;
+    let dy = ev.clientY - start.y;
+    if (!moved && Math.hypot(dx, dy) < THRESHOLD) return;
+    moved = true;
+    dragging(true);
+    // Keep a strip of the panel on screen so it can always be grabbed again.
+    dx = Math.max(KEEP - rect.right, Math.min(innerWidth - KEEP - rect.left, dx));
+    dy = Math.max(-rect.top, Math.min(innerHeight - KEEP - rect.top, dy));
+    latest = { x: Math.round(from.x + dx / z), y: Math.round(from.y + dy / z) };
+    set(latest);
+  };
+  const up = () => {
+    removeEventListener("pointermove", move);
+    removeEventListener("pointerup", up);
+    removeEventListener("pointercancel", up);
+    if (!moved) return;
+    dragging(false);
+    done(latest);
+    // The release would otherwise count as a click on whatever is under it.
+    const swallow = (ev: MouseEvent) => {
+      ev.stopPropagation();
+      ev.preventDefault();
+    };
+    addEventListener("click", swallow, { capture: true, once: true });
+    setTimeout(() => removeEventListener("click", swallow, { capture: true }), 0);
+  };
+  addEventListener("pointermove", move);
+  addEventListener("pointerup", up);
+  addEventListener("pointercancel", up);
+}
+
+/**
+ * A window of its own make (not a DragPanel: the sea bag) that can be dragged about, and remembers where it was
+ * left, as a DragPanel does. `grab` says whether a press on `target` picks the window up; one on a control never
+ * does. Double-clicking where it is grabbed puts it back. Spread `bind` on the window.
+ *
+ * `keep` holds something in it where it is on screen while the window changes shape around it (the bag's buttons,
+ * as it is minimized): call `keep.before(thing)` just before the change. That shift is for as long as the window
+ * is shown, and is never remembered as where it was left.
+ */
+export function useMovable<T extends HTMLElement>(id: string, grab: (target: HTMLElement, panel: T) => boolean) {
+  const el = useRef<T>(null);
+  /** Where it was left, as remembered. */
+  const [offset, setOffset] = useState<Offset>(() => load(id));
+  /** Added to that while it is shown, to keep something in it in place as it changes shape. */
+  const [shift, setShift] = useState<Offset>(ZERO);
+  const [dragging, setDragging] = useState(false);
+  const at = { x: offset.x + shift.x, y: offset.y + shift.y };
+  const live = useRef(at);
+  live.current = at;
+  const shiftNow = useRef(shift);
+  shiftNow.current = shift;
+  const held = useRef<{ thing: HTMLElement; x: number; y: number } | null>(null);
+  const reset = useCallback(() => {
+    setOffset(ZERO);
+    setShift(ZERO);
+    save(id, ZERO);
+  }, [id]);
+  // Out of reach on a smaller screen than it was left on: back where it starts. And back with every panel, from Options.
+  useEffect(() => {
+    const check = () => {
+      const r = el.current?.getBoundingClientRect();
+      if (!r || (live.current.x === 0 && live.current.y === 0)) return;
+      if (r.right < KEEP || r.left > innerWidth - KEEP || r.bottom < KEEP || r.top > innerHeight - KEEP) reset();
+    };
+    check();
+    addEventListener("resize", check);
+    const stop = onUiScaleChange(() => requestAnimationFrame(check));
+    const back = () => (setOffset(ZERO), setShift(ZERO));
+    resetListeners.add(back);
+    return () => {
+      removeEventListener("resize", check);
+      stop();
+      resetListeners.delete(back);
+    };
+  }, [reset]);
+  // After the change `keep.before` was told of: whatever it named is put back where it was, before it is painted.
+  useLayoutEffect(() => {
+    const h = held.current;
+    if (!h) return;
+    held.current = null;
+    const r = h.thing.getBoundingClientRect();
+    const box = el.current?.getBoundingClientRect();
+    const z = uiZoom();
+    let sx = h.x - r.left;
+    let sy = h.y - r.top;
+    // But the window, grown, stays on the screen (its top-left corner first, where it is too big for it).
+    if (box) {
+      sx = Math.max(Math.min(sx, innerWidth - box.right), -box.left);
+      sy = Math.max(Math.min(sy, innerHeight - box.bottom), -box.top);
+    }
+    const dx = sx / z;
+    const dy = sy / z;
+    if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) setShift((s) => ({ x: Math.round(s.x + dx), y: Math.round(s.y + dy) }));
+  });
+  const grabbed = (e: { target: EventTarget }) => {
+    const target = e.target as HTMLElement;
+    return !!el.current && !target.closest(INTERACTIVE) && grab(target, el.current);
+  };
+  /** A move sets where it is shown; what is remembered is that less the shift. */
+  const moveTo = (o: Offset) => setOffset({ x: o.x - shiftNow.current.x, y: o.y - shiftNow.current.y });
+  return {
+    dragging,
+    keep: {
+      before(thing: HTMLElement | null) {
+        const r = thing?.getBoundingClientRect();
+        held.current = thing && r ? { thing, x: r.left, y: r.top } : null;
+      },
+    },
+    bind: {
+      ref: el,
+      // No offset, no translate: one would make the window the frame of anything fixed inside it (the bag's card, on a phone).
+      style: (at.x || at.y ? { translate: `${at.x}px ${at.y}px` } : {}) as CSSProperties,
+      onPointerDown: (e: ReactPointerEvent<T>) => {
+        if (e.button !== 0 || !grabbed(e)) return;
+        startMove(e, el.current!, live.current, moveTo, setDragging, (o) => save(id, { x: o.x - shiftNow.current.x, y: o.y - shiftNow.current.y }));
+      },
+      onDoubleClick: (e: ReactMouseEvent<T>) => {
+        if (grabbed(e)) reset();
+      },
+    },
+  };
 }
 
 interface Props extends HTMLAttributes<HTMLDivElement> {
@@ -331,45 +468,7 @@ export function DragPanel({ id, title, compact = false, resizable = false, expan
     if (target.closest(".resize")) return;
     const onGrip = !!target.closest(".grip");
     if (!onGrip && (e.pointerType !== "mouse" || target.closest(INTERACTIVE))) return;
-
-    const start = { x: e.clientX, y: e.clientY };
-    const from = live.current;
-    const rect = el.current.getBoundingClientRect();
-    const z = uiZoom();
-    let moved = false;
-    // Tracked here as well as in state, so the release saves the final position even if React has not re-rendered yet.
-    let latest = from;
-
-    const move = (ev: PointerEvent) => {
-      let dx = ev.clientX - start.x;
-      let dy = ev.clientY - start.y;
-      if (!moved && Math.hypot(dx, dy) < THRESHOLD) return;
-      moved = true;
-      setDragging(true);
-      // Keep a strip of the panel on screen so it can always be grabbed again.
-      dx = Math.max(KEEP - rect.right, Math.min(innerWidth - KEEP - rect.left, dx));
-      dy = Math.max(-rect.top, Math.min(innerHeight - KEEP - rect.top, dy));
-      latest = { x: Math.round(from.x + dx / z), y: Math.round(from.y + dy / z) };
-      setOffset(latest);
-    };
-    const up = () => {
-      removeEventListener("pointermove", move);
-      removeEventListener("pointerup", up);
-      removeEventListener("pointercancel", up);
-      if (!moved) return;
-      setDragging(false);
-      save(id, latest);
-      // The release would otherwise count as a click on whatever is under it.
-      const swallow = (ev: MouseEvent) => {
-        ev.stopPropagation();
-        ev.preventDefault();
-      };
-      addEventListener("click", swallow, { capture: true, once: true });
-      setTimeout(() => removeEventListener("click", swallow, { capture: true }), 0);
-    };
-    addEventListener("pointermove", move);
-    addEventListener("pointerup", up);
-    addEventListener("pointercancel", up);
+    startMove(e, el.current, live.current, setOffset, setDragging, (at) => save(id, at));
   };
 
   return (
