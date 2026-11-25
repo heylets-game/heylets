@@ -528,8 +528,9 @@ function endTurn(ctx: Ctx, unit: Unit): void {
 }
 
 /**
- * If the fight is decided, end it. Won: the fallen heroes get up on 1 HP and the enemy dead are cleared
- * away. Lost: the heroes wake at the start on 1 HP, and the enemy are back at their posts, healed.
+ * If the fight is decided, end it. Every hero who was in it is back to full HP, whichever way it went. Won: the
+ * fallen heroes get up and the enemy dead are cleared away. Lost: the heroes wake at the start, and the enemy are
+ * back at their posts, healed.
  * Fled (every hero still standing got away, and none is left in it): nobody wins. The enemy go back to
  * their posts and bind their wounds, but those of them that fell stay fallen: fleeing gets a party out,
  * and what it killed stays killed, but it is no way to wear a band down. It never costs more than losing:
@@ -551,19 +552,22 @@ function settle(ctx: Ctx): boolean {
   // What was called into it goes with it.
   for (const u of state.units.filter((x) => x.summon)) dismiss(ctx, u);
   state.encounter = null;
+  // However it ended, every hero who was in it is whole again: the fallen get up, and nobody carries a wound out.
   for (const h of heroes) {
     if (h.down) {
       h.down = false;
-      h.hp = 1;
       ctx.events.push({ t: "up", id: h.id });
     }
+    h.hp = h.maxHp;
     h.conditions = [];
     h.cooldowns = {};
   }
-  // Those who got away took part too: what they were waiting on in it is over with it.
+  // Those who got away took part too: what they were waiting on in it is over with it, and they are whole again too.
   for (const id of enc.fled ?? []) {
     const h = unitById(state, id);
-    if (h) h.cooldowns = {};
+    if (!h || h.side !== "hero") continue;
+    h.cooldowns = {};
+    if (!h.down) h.hp = h.maxHp;
   }
   if (won) {
     // Every hero who fought takes the whole XP. A stand-in takes nothing. What the fallen had on them stays on
@@ -607,10 +611,7 @@ function settle(ctx: Ctx): boolean {
       f.conditions = [];
       f.pos = { q: -99, r: -99 };
     }
-    for (const h of heroes) {
-      h.hp = 1;
-      h.pos = { q: -99, r: -99 };
-    }
+    for (const h of heroes) h.pos = { q: -99, r: -99 };
     for (const f of band) {
       const post = f.home ?? was.get(f.id)!;
       f.pos = freeHexNear(state.map, post, (p) => !!unitAt(state, p) || blockerAt(state, p), (p) => tileAt(state.map, p)) ?? post;

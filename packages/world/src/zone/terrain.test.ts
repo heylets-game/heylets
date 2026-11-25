@@ -1367,7 +1367,7 @@ describe("the enemy uses the ground", () => {
     expect(sunk.events).toContainEqual({ t: "sunk", id: "ann", by: foe, from: at(7, 6), into: at(8, 6), pit: "water" });
     // The only hero in it is down: the fight is lost, and she wakes at the start like anyone beaten.
     expect(sunk.events).toContainEqual({ t: "fight_end", outcome: "defeat" });
-    expect(unit(sunk.state, "ann")).toMatchObject({ down: false, hp: 1 });
+    expect(unit(sunk.state, "ann")).toMatchObject({ down: false, hp: unit(sunk.state, "ann").maxHp });
     expect(unit(sunk.state, "ann").lost).toBeUndefined();
     expect(hexDistance(unit(sunk.state, "ann").pos, sunk.state.start)).toBeLessThanOrEqual(1);
   });

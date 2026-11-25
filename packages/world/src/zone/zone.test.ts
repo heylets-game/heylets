@@ -1468,7 +1468,7 @@ describe("the end of a fight", () => {
     expect(events.some((e) => e.t === "fight_end" && e.outcome === "victory")).toBe(true);
     expect(state.units.some((u) => u.side === "enemy")).toBe(false);
     expect(state.groups).toEqual({});
-    expect(unit(state, "bo")).toMatchObject({ down: false, hp: 1 });
+    expect(unit(state, "bo")).toMatchObject({ down: false, hp: unit(state, "bo").maxHp });
     expect(bo.id).toBe("bo");
   });
 
@@ -1483,10 +1483,22 @@ describe("the end of a fight", () => {
     for (let i = 0; i < 60 && state.encounter; i++) state = must(state, { type: "timeout" }, events);
     expect(events.some((e) => e.t === "fight_end" && e.outcome === "defeat")).toBe(true);
     expect(state.encounter).toBeNull();
-    expect(unit(state, "ann")).toMatchObject({ down: false, hp: 1 });
+    expect(unit(state, "ann")).toMatchObject({ down: false, hp: unit(state, "ann").maxHp });
     expect(hexDistance(unit(state, "ann").pos, state.start)).toBeLessThanOrEqual(1);
     expect(unit(state, bear.id)).toMatchObject({ hp: unit(state, bear.id).maxHp, pos: bear.home });
     expect(state.groups.g1.alerted).toBe(false);
+  });
+
+  it("sends every hero out of a won fight whole, the wounded and the fallen alike", () => {
+    let { state } = duel("skeleton");
+    const bo = hero(state, "bo", "devops_mage", at(3, 9));
+    state.encounter!.order.push("bo");
+    unit(state, "ann").hp = 2;
+    Object.assign(bo, { hp: 0, down: true });
+    state = must(state, { type: "dev", by: "ann", dev: { op: "end_fight" } });
+    expect(state.encounter).toBeNull();
+    expect(unit(state, "ann")).toMatchObject({ down: false, hp: unit(state, "ann").maxHp });
+    expect(unit(state, "bo")).toMatchObject({ down: false, hp: unit(state, "bo").maxHp });
   });
 
   it("pays a won fight's XP to each player's hero, never a stand-in's, leaves the fallen lying to be searched, and says when the map is cleared", () => {
@@ -1789,8 +1801,8 @@ describe("fleeing", () => {
     expect(step.events.some((e) => e.t === "spoils" || e.t === "cleared")).toBe(false);
     expect(step.effects).toEqual([]);
     expect(state.encounter).toBeNull();
-    // No worse off than losing: where she stood, as hurt as she was, never knocked down to 1 HP.
-    expect(unit(state, "ann")).toMatchObject({ pos: before.pos, hp: before.hp, down: false, cooldowns: {} });
+    // No worse off than losing: where she stood, and whole again, as anyone out of a fight is.
+    expect(unit(state, "ann")).toMatchObject({ pos: before.pos, hp: before.maxHp, down: false, cooldowns: {} });
     // The bandit is back at its post with its wounds bound, so fleeing is no way to wear it down, and has stopped looking.
     expect(unit(state, foe)).toMatchObject({ pos: at(9, 6), hp: bandit.maxHp, down: false, conditions: [] });
     expect(state.groups.g1.alerted).toBe(false);
@@ -1947,7 +1959,7 @@ describe("fleeing", () => {
     expect(events).toContainEqual({ t: "fight_end", outcome: "defeat" });
     expect(state.encounter).toBeNull();
     // The fallen wake at the start, as from any lost fight; the one who ran is where she ran to.
-    expect(unit(state, "bo")).toMatchObject({ down: false, hp: 1 });
+    expect(unit(state, "bo")).toMatchObject({ down: false, hp: unit(state, "bo").maxHp });
     expect(hexDistance(unit(state, "bo").pos, state.start)).toBeLessThanOrEqual(1);
     expect(unit(state, "ann")).toMatchObject({ pos: annBefore.pos, hp: annBefore.hp });
     expect(unit(state, wolf)).toMatchObject({ hp: unit(state, wolf).maxHp, pos: at(9, 6) });
