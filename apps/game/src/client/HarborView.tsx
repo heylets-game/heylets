@@ -254,7 +254,8 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
   // and whoever is out on a map marked as that.
   // Someone inside one of the town's buildings is here too, tagged with where.
   // Your party: one figure (yours) walks the town for all of them, and the rest are listed with it as yours.
-  const party = useTownParty(you, me.crew?.id ?? null);
+  // Out on a map (resting, and not inside one of the town's buildings) the map says who is acted as.
+  const party = useTownParty(you, me.crew?.id ?? null, !resting || !!inside);
   const partyKey = party?.ids.join(",") ?? "";
   // Whoever is online: in town, or out on a map. Nobody offline is listed, but the heroes of your party always are.
   const roster: RosterMember[] = useMemo(() => board.members.flatMap((m) => {

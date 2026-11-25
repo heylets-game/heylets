@@ -81,8 +81,12 @@ export function PartyPicker({ leader, onClose, onChanged }: { leader: string; on
  * The party in town: the hero this device plays (`you`, who walks the town for all of them) and the rest of the party
  * in the same world, in that order; which of them is being acted as; and the way to act as another, or to read the
  * party again once it has changed. A hero no longer in it is no longer acted as.
+ *
+ * `inTown`: false while the player is out on a map or at the atlas (the Harbor kept behind). Who is acted as is then
+ * the map's to say (ZoneView), and is left alone here: the town's own list may not be read yet, or name nobody at all
+ * (with the Harbor never joined, as on opening a map straight from its link), and would take it back to the device's hero.
  */
-export function useTownParty(you: string | null, worldId: string | null): { ids: string[]; acting: string; pick(id: string): void; reload(): void } | null {
+export function useTownParty(you: string | null, worldId: string | null, inTown = true): { ids: string[]; acting: string; pick(id: string): void; reload(): void } | null {
   const [heroes, setHeroes] = useState<HeroSlot[] | null>(null);
   const selected = useActingHero();
   const reload = () => void api.heroes().then((r) => setHeroes(r.heroes), () => {});
@@ -90,8 +94,8 @@ export function useTownParty(you: string | null, worldId: string | null): { ids:
   const ids = you ? [you, ...(heroes ?? []).filter((h) => h.id !== you && h.party && h.crew?.id === worldId).map((h) => h.id)] : [];
   const acting = selected && ids.includes(selected) ? selected : you;
   useEffect(() => {
-    if (heroes && selected && acting !== selected) actAs(null);
-  }, [heroes, selected, acting]);
+    if (inTown && heroes && selected && acting !== selected) actAs(null);
+  }, [inTown, heroes, selected, acting]);
   if (!you || !acting) return null;
   return { ids, acting, pick: (id) => actAs(id === you ? null : id), reload };
 }
