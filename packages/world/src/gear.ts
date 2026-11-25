@@ -124,9 +124,9 @@ const BASES: Record<Exclude<Slot, "main_hand">, Base[]> = {
   ],
   body: [
     { ref: "hauberk", name: "Hauberk of Calm Seas", icon: "chest-armor" },
-    { ref: "greatcoat", name: "Oilskin Greatcoat", icon: "chest-armor" },
+    { ref: "greatcoat", name: "Oilskin Greatcoat", icon: "oilskin-coat" },
     // The diving set (with the Diving Helm): riveted iron and brass, as worn on the sea floor.
-    { ref: "diving_plate", name: "Diver's Plate", icon: "chest-armor" },
+    { ref: "diving_plate", name: "Diver's Plate", icon: "diving-plate" },
   ],
   helmet: [
     { ref: "hardhat", name: "Diving Helm", icon: "heavy-helm" },
@@ -135,13 +135,13 @@ const BASES: Record<Exclude<Slot, "main_hand">, Base[]> = {
   ],
   legs: [
     { ref: "greaves", name: "Deckhand Greaves", icon: "armored-pants" },
-    { ref: "trousers", name: "Sailcloth Trousers", icon: "armored-pants" },
-    { ref: "diving_legs", name: "Riveted Leggings", icon: "armored-pants" },
+    { ref: "trousers", name: "Sailcloth Trousers", icon: "sailcloth-trousers" },
+    { ref: "diving_legs", name: "Riveted Leggings", icon: "riveted-leggings" },
   ],
   boots: [
     { ref: "boots", name: "Sea Boots", icon: "boots" },
-    { ref: "treads", name: "Gangplank Treads", icon: "boots" },
-    { ref: "lead_boots", name: "Lead Boots", icon: "boots" },
+    { ref: "treads", name: "Gangplank Treads", icon: "treads" },
+    { ref: "lead_boots", name: "Lead Boots", icon: "lead-boots" },
   ],
   ring: [
     { ref: "ring", name: "Ring of Steady Tides", icon: "ring" },
@@ -397,10 +397,13 @@ export function outfitOf(equipped: ItemDef[]): Outfit {
   return out;
 }
 
-/** Stable string for an outfit, for caching whatever is drawn from it. */
+/**
+ * Stable string for an outfit, for caching whatever is drawn from it. A piece is drawn from its ref (and, for a
+ * class's own clothes or a lantern helm, its icon), so both are in it: two bases can share an icon.
+ */
 export function outfitKey(outfit: Outfit | undefined): string {
   if (!outfit) return "";
-  return SLOTS.map((s) => (outfit[s] ? `${outfit[s]!.icon}:${outfit[s]!.rarity[0]}` : "-")).join(",") + (outfit.appearance ? `|${appearanceKey(outfit.appearance)}` : "");
+  return SLOTS.map((s) => (outfit[s] ? `${outfit[s]!.ref}/${outfit[s]!.icon}:${outfit[s]!.rarity[0]}` : "-")).join(",") + (outfit.appearance ? `|${appearanceKey(outfit.appearance)}` : "");
 }
 
 /**

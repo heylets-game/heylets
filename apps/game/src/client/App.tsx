@@ -51,6 +51,8 @@ const DevToolbox = lazy(() => import("./DevToolbox").then((m) => ({ default: m.D
 const FightUiLab = import.meta.env.DEV ? lazy(() => import("./zone/FightUiLab")) : null;
 /** A sample map carrying every kind of zone scenery, in any climate and over any backdrop (development only): #lab/scenery. */
 const SceneryLab = import.meta.env.DEV ? lazy(() => import("./SceneryLab")) : null;
+/** Every piece worn on the body and the legs, on a hero beside its icons (development only): #lab/wardrobe. */
+const WardrobeLab = import.meta.env.DEV ? lazy(() => import("./WardrobeLab")) : null;
 
 export function App() {
   const [me, setMe] = useState<Me | null>(null);
@@ -120,6 +122,7 @@ function Screen({ me, refresh, zone, atlas, invite, hut, pub, keeper, admin, cat
   // Somewhere that is not the town: a lab, the admin page, a map, the atlas.
   const elsewhere = FightUiLab && location.hash === "#lab/fightui" ? <Suspense fallback={null}><FightUiLab me={me} refresh={refresh} /></Suspense>
     : SceneryLab && location.hash === "#lab/scenery" ? <Suspense fallback={null}><SceneryLab /></Suspense>
+    : WardrobeLab && location.hash === "#lab/wardrobe" ? <Suspense fallback={null}><WardrobeLab /></Suspense>
     : admin ? <Suspense fallback={null}><AdminView me={me} onLeave={leave} /></Suspense>
     // Every catch's sprite and model, side by side: for admins, and on a development deployment.
     : catches && (me.isAdmin || me.devTools || import.meta.env.DEV) ? <Suspense fallback={null}><CatchGallery onLeave={leave} /></Suspense>
