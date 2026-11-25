@@ -317,7 +317,7 @@ export interface EnemyDef {
   move: number;
   /** Added to its initiative roll, as a hero's AGI modifier is. */
   init: number;
-  /** Added to every saving throw it makes, and to the DC of saves against what it does (as 10 + this). */
+  /** Added to every saving throw it makes, and to the DC of catching the edge when it shoves (as 10 + this). Saves against its abilities are made against their potency (zone/enemyabilities.ts). */
   save: number;
   xp: number;
   boss?: boolean;

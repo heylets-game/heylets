@@ -1291,7 +1291,7 @@ describe("enemy strength", () => {
   it("rises with level, and each band has as many as its leader would bring", () => {
     expect(enemyHp("wolf", 1)).toBe(ENEMIES.wolf.hp);
     expect(enemyHp("wolf", 4)).toBeGreaterThan(enemyHp("wolf", 1));
-    expect(enemyStrikes("wolf", 5)[0].bonus).toBe(enemyStrikes("wolf", 1)[0].bonus + 1);
+    expect(enemyStrikes("wolf", 5)[0].potency).toBe(enemyStrikes("wolf", 1)[0].potency + 1);
     // A band is as many as the party (one more, for a party of three or four): never fewer than two.
     const bands = (party: number) => {
       const zone = createZone("T", "bands", zoneOptions({ groups: 2, kinds: ["wolf"], party }));

@@ -817,7 +817,7 @@ describe("knocked toward a drop", () => {
     expect(unit(hit.state, foe).pos).toEqual(at(7, 6));
     // An enemy shoves with the best to-hit of its own blows.
     const blows = enemyStrikes(ENEMIES.bandit.kind, 1).filter((b) => b.range === 1 && !b.burst);
-    expect(shoveBonus(state, unit(state, foe))).toBe(Math.max(...blows.map((b) => b.bonus)));
+    expect(shoveBonus(state, unit(state, foe))).toBe(Math.max(...blows.map((b) => b.potency)));
   });
 
   it("a shove first has to hit; then whoever is shoved rolls Agility to catch the edge, against the shover's strength", () => {
@@ -1442,7 +1442,7 @@ describe("the enemy uses the ground", () => {
     foe.abilities = [ability];
     return { state, foe: foe.id };
   }
-  const own = { id: "test_haymaker", name: "Haymaker", damage: 6, toHit: 3, weight: 1 };
+  const own = { id: "test_haymaker", name: "Haymaker", damage: 6, potency: 3, weight: 1 };
 
   it("plans its walk round what the ability it means to use costs: with a 3 AP blow it walks only as far as leaves 3", () => {
     ENEMY_ABILITIES.test_haymaker = { ...own, cost: 3 };

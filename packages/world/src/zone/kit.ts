@@ -753,7 +753,8 @@ export interface EnemyStrike {
   dice: Dice;
   /** It does no harm when it lands (a shove): only what it does besides. */
   harmless: boolean;
-  bonus: number;
+  /** Its potency at this level, with edge: added to its roll to hit, and the DC of saves against it is 8 + this. */
+  potency: number;
   perfect?: EnemyAbilityDef["perfect"];
   weight: number;
   /** Which behaviour weighs it up (behaviours.ts BEHAVIOURS). */
@@ -775,7 +776,7 @@ export const ENEMY_EDGE = 0;
 
 /**
  * Enemy abilities (by id) as they work on the tiles, for an enemy of this level. `more` is what
- * the map's modifiers add to every attack's damage and its bonus to hit (zone/mods.ts). An id the pool does not
+ * the map's modifiers add to every attack's damage and its potency (zone/mods.ts). An id the pool does not
  * have is passed over.
  */
 export function abilityStrikes(ids: readonly string[], level: number, more = 0): EnemyStrike[] {
@@ -792,7 +793,7 @@ export function abilityStrikes(ids: readonly string[], level: number, more = 0):
         burst,
         dice: diceFor(a.damage + Math.floor(level / 2) + edge),
         harmless: a.damage <= 0,
-        bonus: a.toHit + Math.floor((Math.max(1, level) - 1) / 4) + edge,
+        potency: a.potency + Math.floor((Math.max(1, level) - 1) / 4) + edge,
         perfect: a.perfect,
         weight: a.weight,
         behaviour: (a.behaviour ?? (burst ? "burst" : "strike")) as BehaviourId,

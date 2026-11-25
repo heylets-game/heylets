@@ -1013,7 +1013,7 @@ export function retune(ctx: Ctx): void {
 /** One of an enemy's attacks: a blow or a shot at `target`, or (an attack on every hero) a burst around itself. */
 export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | null): void {
   const { state } = ctx;
-  const dc = 8 + attack.bonus;
+  const dc = 8 + attack.potency;
   ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name, target: target?.id });
   const leave = (victim: Unit, save: boolean) => {
     if (victim.down || !attack.perfect) return;
@@ -1032,7 +1032,7 @@ export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Uni
     return;
   }
   if (!target) return;
-  const roll = attackRoll(ctx, enemy, target, { label: attack.name, bonus: attack.bonus, melee: attack.range === 1 });
+  const roll = attackRoll(ctx, enemy, target, { label: attack.name, bonus: attack.potency, melee: attack.range === 1 });
   if (!roll.ok) {
     ctx.events.push({ t: "miss", actor: enemy.id, target: target.id, what: attack.name });
     return;
@@ -1099,7 +1099,7 @@ export function checkCommon(state: ZoneState, unit: Unit, what: CommonAction, ai
 export function shoveBonus(state: Pick<ZoneState, "options">, unit: Unit): number {
   if (unit.stats) return proficiency(unit.level) + mod(statOf(unit, "str"));
   const blows = abilityStrikes(unit.abilities, unit.level, modsOf(state.options).edge).filter((s) => s.range === 1 && !s.burst);
-  return blows.length > 0 ? Math.max(...blows.map((s) => s.bonus)) : 0;
+  return blows.length > 0 ? Math.max(...blows.map((s) => s.potency)) : 0;
 }
 
 /** Take a common action that has passed its check. */
