@@ -2232,7 +2232,8 @@ describe("a delve", () => {
       expect(events).toContainEqual({ t: "door", id: "ann", poi: door.id, how: ok ? "forced" : "held" });
       // Heard either way, if a band is near enough.
       expect(events.some((e) => e.t === "noise")).toBe(near.length > 0);
-      if (near.length > 0) expect(step.state.encounter).not.toBeNull();
+      // A fight starts (it may be over within the step: a lone hero stunned by a band can go down before it ends).
+      if (near.length > 0) expect(events.some((e) => e.t === "fight_start")).toBe(true);
       if (ok) forced = true;
       else held = true;
     }

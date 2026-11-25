@@ -33,7 +33,7 @@ import { UNTIMED, burnOf, has, heal, regrow, removeCondition, tick, unseen, type
 import { ALERT_RANGE, JOIN_RANGE, freeHexNear, generateZone } from "./gen";
 import { generateDelve } from "./delve";
 import { checkLoot, checkOpen, leaveBody, look, lootFor, openChest, payBounty, take } from "./loot";
-import { PARTY_SIZES, siteOpen } from "./sites";
+import { PARTY_SIZES, siteOpen, spaced } from "./sites";
 import { FREE_WALK, blast, blockerAt, inFight, isDead, pathIn, roomAt, sameHex, sees, solid, unitAt, unitById, zoneReach } from "./geometry";
 import { AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, ENEMY_MOVE_AP, FLEE_RANGE, ITEM_AP, STROLL_GRACE_MS, STROLL_STEP_MS, SUMMONS, STARTING_ITEMS, THROWABLES, THROWABLE_KINDS, cleanItems, commonCost, enemyHp, enemyMove, tacticOf } from "./kit";
 import { d20, heroMove, mod, rollDice, statOf } from "./rules";
@@ -118,7 +118,11 @@ export function growGroups(state: ZoneState): string[] {
     const post = standing.home ?? standing.pos;
     for (const kind of beyond(group.bands[to - 1] ?? [], group.bands[from - 1] ?? [])) {
       if (!ENEMIES[kind]) continue;
-      const pos = freeHexNear(state.map, post, (p) => !!unitAt(state, p) || blockerAt(state, p), (p) => tileAt(state.map, p));
+      // Round its post, spread out from the rest of its band (sites.ts spaced) where there is room, else the nearest free hex.
+      const held = (p: HexPos) => !!unitAt(state, p) || blockerAt(state, p);
+      const band = state.units.filter((u) => u.side === "enemy" && u.group === id && !u.down).map((u) => u.pos);
+      const tile = (p: HexPos) => tileAt(state.map, p);
+      const pos = freeHexNear(state.map, post, (p) => held(p) || !spaced(p, band) || hexDistance(p, post) > 3, tile) ?? freeHexNear(state.map, post, held, tile);
       if (!pos) break;
       const enemy = enemyUnit(state, kind, pos, id);
       state.units.push(enemy);

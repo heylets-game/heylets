@@ -12,7 +12,7 @@ import { hexesBetween, solid } from "./geometry";
 import { GROUP_EXTRAS } from "./kit";
 import { cleanMods, modsOf } from "./mods";
 import { layZone } from "./lay";
-import { PARTY_SIZES, SITES } from "./sites";
+import { PARTY_SIZES, SITES, spreadPosts } from "./sites";
 import type { GroundSurface, ZoneBiome, ZoneOptions, ZoneSize } from "./types";
 
 /** How big a map of open cave floor is (a dev map: the atlas's caves are delves). Every other map is laid by lay.ts, on its own grids (`LAY_GRIDS`). */
@@ -228,10 +228,11 @@ function generateCaveFloor(seed: string, asked: ZoneOptions): ZonePlan {
       return kinds;
     };
     const kinds = kindsAt(options.party);
-    const posts = inner
-      .filter((p) => hexDistance(p, c) <= 3 && open.has(posKey(p)) && !taken.has(posKey(p)))
-      .sort((a, b) => hexDistance(a, c) - hexDistance(b, c) || a.q - b.q || a.r - b.r)
-      .slice(0, kinds.length);
+    // Round its centre, spread out where the ground allows.
+    const posts = spreadPosts(
+      inner.filter((p) => hexDistance(p, c) <= 3 && open.has(posKey(p)) && !taken.has(posKey(p))).sort((a, b) => hexDistance(a, c) - hexDistance(b, c) || a.q - b.q || a.r - b.r),
+      kinds.length,
+    );
     for (const p of posts) taken.add(posKey(p));
     return { kinds: kinds.slice(0, posts.length), posts, bands: PARTY_SIZES.map(kindsAt) };
   });

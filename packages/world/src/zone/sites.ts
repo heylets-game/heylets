@@ -19,6 +19,7 @@
 //   crag      a hill in steps, ladders from one to the next, a beacon on top
 //   den       a hollow ringed with boulders and bones
 
+import { hexDistance, type HexPos } from "@gantt-quest/core";
 import type { Clime } from "../map";
 import { makeRng, seedFromString } from "../rng";
 import type { ZoneBiome } from "./types";
@@ -210,6 +211,23 @@ export function bandOf(faction: FactionId, size: number, pick: <T>(list: readonl
 }
 
 type Member = { kind: string; role: "front" | "shot" | "heavy" };
+
+/** How far apart a band's members stand where the ground allows: not shoulder to shoulder, but a free hex between. */
+export const BAND_SPACING = 2;
+
+/** Whether `p` keeps BAND_SPACING from every post the band has already taken. */
+export const spaced = (p: HexPos, posts: readonly HexPos[]): boolean => posts.every((o) => hexDistance(o, p) >= BAND_SPACING);
+
+/**
+ * `n` posts from `candidates`, taken in their order: first only those spaced from what is already taken (spaced), then,
+ * if the ground is too tight for that, the rest in order.
+ */
+export function spreadPosts<T extends HexPos>(candidates: readonly T[], n: number): T[] {
+  const out: T[] = [];
+  for (const p of candidates) if (out.length < n && spaced(p, out)) out.push(p);
+  for (const p of candidates) if (out.length < n && !out.includes(p)) out.push(p);
+  return out;
+}
 
 /** How many heroes a map's groups can be sized for: one to six, the most a map takes (zone.ts MAX_PARTY). */
 export const PARTY_SIZES = [1, 2, 3, 4, 5, 6] as const;
