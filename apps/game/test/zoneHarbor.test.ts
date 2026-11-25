@@ -4,7 +4,8 @@
 
 import type { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
-import { zoneOptions, type ZoneView } from "@gantt-quest/world";
+import { hexDistance } from "@gantt-quest/core";
+import { ALERT_RANGE, zoneOptions, type ZoneView } from "@gantt-quest/world";
 import { createZoneRow } from "../src/server/zones";
 import { addHero, openDb } from "./d1";
 import { FakeSocket as RoomSocket, fakeRoomState, fakeUpgrades } from "./rooms";
@@ -86,8 +87,9 @@ describe("ZoneRoom and the crew's Harbor", () => {
     let ann!: FakeSocket;
     expect(await told(async () => (ann = await connect(code, "ann")))).toEqual([CREW]);
     expect(presence("ann")).toEqual({ code, fighting: 0 });
-    // Nothing the board shows changes with a walk.
-    const to = ann.state.map.tiles.find((t) => t.biome === "plains" && !ann.state.units.some((u) => u.pos.q === t.q && u.pos.r === t.r))!;
+    // Nothing the board shows changes with a walk: a step aside, out of every enemy's sight.
+    const me = ann.state.units.find((u) => u.id === "ann")!;
+    const to = ann.state.map.tiles.find((t) => t.biome === "plains" && hexDistance(t, me.pos) === 1 && ann.state.units.every((u) => u.side === "hero" || hexDistance(t, u.pos) > ALERT_RANGE))!;
     expect(await told(() => act(ann, { type: "move", unit: "ann", to: { q: to.q, r: to.r } }))).toEqual([]);
     ann.close();
     expect(await told(() => zone.webSocketClose(ann as unknown as WebSocket, 1000))).toEqual([CREW]);

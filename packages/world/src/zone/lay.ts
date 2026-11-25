@@ -49,7 +49,7 @@ export const LAY_GRIDS: Record<ZoneSize, HexGrid> = {
 };
 
 /** How near a hero has to come, in plain sight, for an enemy group to turn on them (as gen.ts has it). */
-const ALERT = 1;
+const ALERT = 3;
 /** Rounds written on ground that stays: it is never counted down. */
 const LASTING_ROUNDS = 99;
 const HAZARD_PATCHES = 6;

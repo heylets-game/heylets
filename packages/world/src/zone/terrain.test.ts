@@ -428,12 +428,12 @@ describe("a hex is one side's or the other's", () => {
   });
 
   it("is shuffled off by a walker who is stopped on one that is full", () => {
-    // Bo and Cy stand together on the straight way; a wolf beside their hex notices Ann the moment she steps onto it.
+    // Bo and Cy stand together on the straight way; a wolf further along it notices Ann the moment she steps onto their hex.
     let state = board();
     hero(state, "ann", "qa_paladin", at(2, 6));
     hero(state, "bo", "qa_paladin", at(4, 6));
     hero(state, "cy", "qa_paladin", at(4, 6));
-    const wolf = enemy(state, "wolf", at(4, 5));
+    const wolf = enemy(state, "wolf", at(4 + ALERT_RANGE, 6));
     expect(hexDistance(wolf.pos, at(3, 6))).toBeGreaterThan(ALERT_RANGE);
     expect(hexDistance(wolf.pos, at(4, 6))).toBe(ALERT_RANGE);
     const events: ZoneEvent[] = [];

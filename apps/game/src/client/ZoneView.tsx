@@ -1794,12 +1794,14 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const overlays = useMemo<Overlay[]>(() => {
     const out: Overlay[] = [];
     if (!state || !z || !act) return out;
-    if (dev.showAlert) {
-      for (const group of Object.keys(state.groups)) {
-        if (state.groups[group].alerted) continue;
-        const members = state.units.filter((u) => u.group === group && !u.down);
-        out.push({ hexes: state.map.tiles.filter((t) => members.some((m) => hexDistance(m.pos, t) <= ALERT_RANGE && sees(state.map, m.pos, t))), color: "#ff3b3b", fill: 0.08, line: 0.7 });
-      }
+    // Where each band that has noticed nobody can see: a thin red outline, its dashes crawling round, so the way past
+    // it can be told. Walk into it in plain sight and the band turns on you. The dev toolbox fills it in as well.
+    for (const group of Object.keys(state.groups)) {
+      if (state.groups[group].alerted) continue;
+      const members = state.units.filter((u) => u.group === group && !u.down);
+      if (members.length === 0) continue;
+      const seen = state.map.tiles.filter((t) => members.some((m) => hexDistance(m.pos, t) <= ALERT_RANGE && sees(state.map, m.pos, t)));
+      out.push({ hexes: seen, color: "#ff3b3b", line: 0.7, march: true, ...(dev.showAlert ? { fill: 0.08 } : {}) });
     }
     if (dev.tool?.tool === "paint" && hover) out.push({ hexes: dev.tool.wide ? zoneBlast(state.map, hover, 1) : [hover], color: dev.tool.surface ? SURFACE_INFO[dev.tool.surface].color : "#ffffff", fill: 0.35, line: 0.9 });
     if (dev.tool?.tool === "spawn" && hover) out.push({ hexes: [hover], color: "#ff3b3b", fill: 0.35, line: 0.9 });

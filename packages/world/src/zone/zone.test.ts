@@ -328,18 +328,18 @@ describe("free walking", () => {
 });
 
 describe("starting a fight", () => {
-  it("starts when a hero runs right up to an enemy, and not before", () => {
+  it("starts when a hero comes within an enemy's sight, and not before", () => {
     let state = board();
     state.aiOff = true;
     hero(state, "ann", "qa_paladin", at(1, 6));
     const wolf = enemy(state, "wolf", at(10, 6));
     const mate = enemy(state, "wolf", at(11, 6));
-    // Two hexes off, in plain sight: nothing.
-    state = must(state, { type: "move", by: "ann", unit: "ann", to: at(8, 6) });
+    // One hex further off than it sees, in plain sight: nothing.
+    state = must(state, { type: "move", by: "ann", unit: "ann", to: at(9 - ALERT_RANGE, 6) });
     expect(state.encounter).toBeNull();
-    expect(unit(state, "ann").pos).toEqual(at(8, 6));
+    expect(unit(state, "ann").pos).toEqual(at(9 - ALERT_RANGE, 6));
     const events: ZoneEvent[] = [];
-    state = must(state, { type: "move", by: "ann", unit: "ann", to: at(9, 6) }, events);
+    state = must(state, { type: "move", by: "ann", unit: "ann", to: at(10 - ALERT_RANGE, 6) }, events);
     expect(hexDistance(unit(state, "ann").pos, wolf.pos)).toBe(ALERT_RANGE);
     expect(state.encounter).not.toBeNull();
     expect(new Set(state.encounter!.order)).toEqual(new Set(["ann", wolf.id, mate.id]));
@@ -354,7 +354,7 @@ describe("starting a fight", () => {
     expect(new Set(places).size).toBe(3);
   });
 
-  it("stops a hero who walks past an enemy on the first hex beside it", () => {
+  it("stops a hero who walks past an enemy on the first hex it can see", () => {
     let state = board();
     state.aiOff = true;
     hero(state, "ann", "qa_paladin", at(3, 6));
@@ -362,7 +362,7 @@ describe("starting a fight", () => {
     // The straight way to the far side runs right under its nose.
     state = must(state, { type: "move", by: "ann", unit: "ann", to: at(12, 6) });
     expect(state.encounter).not.toBeNull();
-    expect(hexDistance(unit(state, "ann").pos, wolf.pos)).toBe(1);
+    expect(hexDistance(unit(state, "ann").pos, wolf.pos)).toBe(ALERT_RANGE);
     expect(unit(state, "ann").pos).not.toEqual(at(12, 6));
   });
 
@@ -390,7 +390,7 @@ describe("starting a fight", () => {
     state.aiOff = true;
     hero(state, "ann", "refactor_rogue", at(4, 2));
     enemy(state, "wolf", at(6, 2), "g1");
-    const far = enemy(state, "bandit", at(4, 4), "g2");
+    const far = enemy(state, "bandit", at(4, 3 + ALERT_RANGE), "g2");
     state = must(state, { type: "move", by: "ann", unit: "ann", to: at(5, 2) });
     expect(state.encounter!.order).not.toContain(far.id);
     while (state.encounter!.acting[0] !== "ann") state = must(state, { type: "timeout" });
@@ -411,7 +411,7 @@ describe("turns", () => {
     state.shareTurns = share;
     hero(state, "ann", "qa_paladin", at(5, 6));
     hero(state, "bo", "qa_paladin", at(5, 7));
-    const dummy = enemy(state, "dummy", at(9, 6));
+    const dummy = enemy(state, "dummy", at(7 + ALERT_RANGE, 6));
     state = provoke(must(state, { type: "move", by: "ann", unit: "ann", to: at(6, 6) }));
     Object.assign(state.encounter!, { order: ["ann", "bo", dummy.id], init: { ...init, [dummy.id]: 1 }, acting: [dummy.id], done: [dummy.id], budgets: {} });
     return must(state, { type: "timeout" });
@@ -529,7 +529,7 @@ describe("turns", () => {
     let state = board((t) => { tileEdit(at(7, 6), { biome: "forest" })(t); tileEdit(at(6, 5), { elev: 1 })(t); });
     state.aiOff = true;
     hero(state, "ann", "qa_paladin", at(5, 6));
-    enemy(state, "dummy", at(9, 6));
+    enemy(state, "dummy", at(7 + ALERT_RANGE, 6));
     state = provoke(must(state, { type: "move", by: "ann", unit: "ann", to: at(6, 6) }));
     const budget = () => state.encounter!.budgets.ann;
     budget().stride = 2;
@@ -862,7 +862,8 @@ describe("light and the dark", () => {
     expect(lit.has(posKey(at(3 + LIGHT_RADIUS, 6)))).toBe(true);
     expect(lit.has(posKey(at(4 + LIGHT_RADIUS, 6)))).toBe(false);
     expect(zoneView(state, "ann").units.map((u) => u.id)).toContain(wolf.id);
-    // Lit as it walks, with no torch in hand to burn down.
+    // Lit as it walks, with no torch in hand to burn down (the wolf gone, so the walk is not stopped by its seeing her).
+    state.units = state.units.filter((u) => u.id !== wolf.id);
     state = must(state, { type: "move", by: "ann", unit: "ann", to: at(5, 6) });
     lit = litHexes(state)!;
     expect(lit.has(posKey(at(5 + LIGHT_RADIUS, 6)))).toBe(true);
@@ -1714,10 +1715,10 @@ describe("fleeing", () => {
     // The bandit is back at its post with its wounds bound, so fleeing is no way to wear it down, and has stopped looking.
     expect(unit(state, foe)).toMatchObject({ pos: at(9, 6), hp: bandit.maxHp, down: false, conditions: [] });
     expect(state.groups.g1.alerted).toBe(false);
-    // She walks free, and walking right up to it again starts a new fight.
-    state = must(state, { type: "move", by: "ann", unit: "ann", to: at(6, 6) });
+    // She walks free, and coming within its sight again starts a new fight.
+    state = must(state, { type: "move", by: "ann", unit: "ann", to: at(8 - ALERT_RANGE, 6) });
     expect(state.encounter).toBeNull();
-    state = must(state, { type: "move", by: "ann", unit: "ann", to: at(8, 6) });
+    state = must(state, { type: "move", by: "ann", unit: "ann", to: at(9 - ALERT_RANGE, 6) });
     expect(state.encounter?.order).toContain(foe);
   });
 

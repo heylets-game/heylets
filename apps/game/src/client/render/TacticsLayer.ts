@@ -118,7 +118,17 @@ export interface Overlay {
   line?: number;
   /** The outline dashed, not solid: what lasts on the ground (an aura's reach), told apart from what is being aimed. */
   dashed?: boolean;
+  /** Dashed, with the dashes crawling round the outline: what is watching (an enemy band's sight). */
+  march?: boolean;
 }
+
+/**
+ * A marching outline's dash and gap: a third of a hex side between them, so the dashes run on unbroken from one
+ * side to the next. How fast they crawl, in hex sides a second.
+ */
+const MARCH_DASH = 0.2;
+const MARCH_GAP = 1 / 3 - MARCH_DASH;
+const MARCH_SPEED = 0.35;
 
 /** A signature no list of marks has: set after the map changes, so the next list is drawn whatever it is. */
 const STALE = "\u0000stale";
@@ -175,6 +185,8 @@ export class TacticsLayer {
   private sheets = new Map<SurfaceKind, THREE.ShaderMaterial>();
   private inks = new Map<string, THREE.Material>();
   private kept = new Set<THREE.Material>();
+  /** How far the dashes of every marching outline have crawled: one uniform, shared by all their materials. */
+  private marchOffset = { value: 0 };
 
   constructor(private renderer: WorldRenderer) {
     this.group.add(this.ground, this.sky, this.overlays, this.charts, this.path);
@@ -184,6 +196,7 @@ export class TacticsLayer {
       tickGround(clock, this.goo, this.flames, this.sparks, 1 - 0.7 * renderer.night);
       tickFumes(clock, this.fumes, 1 - 0.7 * renderer.night);
       this.tickSky(clock);
+      this.marchOffset.value = (clock * MARCH_SPEED) % 1;
       if (this.compass) {
         // Breathing a little, and its glow pulsing; turned to point its north along the course.
         const { rose, glow, turn, wrong } = this.compass;
@@ -219,6 +232,23 @@ export class TacticsLayer {
     this.sheets.clear();
     this.inks.clear();
     this.renderer.removeObject(this.group);
+  }
+
+  /**
+   * A dashed line whose dashes are moved along by marchOffset. Each edge of an outline runs from corner i to corner i+1
+   * of its own hex, the same way round for every hex, so the dashes all crawl the same way round the outline.
+   */
+  private marching(color: string, opacity: number): THREE.LineDashedMaterial {
+    const material = new THREE.LineDashedMaterial({ color, transparent: true, opacity, depthTest: false, dashSize: MARCH_DASH, gapSize: MARCH_GAP });
+    material.onBeforeCompile = (shader) => {
+      shader.uniforms.marchOffset = this.marchOffset;
+      shader.vertexShader = shader.vertexShader
+        .replace("void main() {", "uniform float marchOffset;\nvoid main() {")
+        .replace("vLineDistance = scale * lineDistance;", "vLineDistance = scale * lineDistance - marchOffset;");
+    };
+    // Its shader is not the plain dashed one, so it is not shared with it.
+    material.customProgramCacheKey = () => "march";
+    return material;
   }
 
   /** The material kept under `key` in `store`, made the first time it is asked for. */
@@ -298,7 +328,7 @@ export class TacticsLayer {
 
   /** Mark these regions, replacing whatever was marked before. Later ones are drawn over earlier ones. */
   setOverlays(list: Overlay[]) {
-    const sig = list.map((o) => `${o.color}:${o.fill ?? 0}:${o.line ?? 0}:${o.dashed ? "d" : ""}:${o.hexes.map(posKey).join(" ")}`).join("|");
+    const sig = list.map((o) => `${o.color}:${o.fill ?? 0}:${o.line ?? 0}:${o.march ? "m" : o.dashed ? "d" : ""}:${o.hexes.map(posKey).join(" ")}`).join("|");
     if (sig === this.overlaySig) return;
     this.overlaySig = sig;
     this.clear(this.overlays);
@@ -314,11 +344,14 @@ export class TacticsLayer {
       if (o.line) {
         const { color, line } = o;
         // Each edge of the outline is its own segment, a hex side long: dashes measured along it start afresh at each corner.
-        const material = o.dashed
+        const dashed = o.dashed || o.march;
+        const material = o.march
+          ? this.keep(this.inks, `march|${color}|${line}`, () => this.marching(color, line))
+          : o.dashed
           ? this.keep(this.inks, `dashed|${color}|${line}`, () => new THREE.LineDashedMaterial({ color, transparent: true, opacity: line, depthTest: false, dashSize: 0.22, gapSize: 0.16 }))
           : this.keep(this.inks, `line|${color}|${line}`, () => new THREE.LineBasicMaterial({ color, transparent: true, opacity: line, depthTest: false }));
         const lines = new THREE.LineSegments(this.outline(o.hexes, 0.07 + i * 0.004), material);
-        if (o.dashed) lines.computeLineDistances();
+        if (dashed) lines.computeLineDistances();
         lines.renderOrder = 3;
         this.overlays.add(lines);
       }
