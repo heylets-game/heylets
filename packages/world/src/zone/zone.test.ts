@@ -1231,8 +1231,8 @@ describe("the enemy's turn", () => {
     // What each of them covers for 1 AP on open ground. An ordinary hero covers 2 (rules.ts heroMove).
     const strides: Record<string, number> = {
       dummy: 0,
-      bandit: 2, skeleton: 2, cultist: 2, brute: 2, bear: 2, ogre: 2, troll: 2, slime: 2, snow_bear: 2, wraith: 2, witch: 2,
-      wolf: 3, frost_wolf: 3, ember_hound: 3, spider: 3, archer: 3, shade: 3, bat: 3,
+      bandit: 2, skeleton: 2, cultist: 2, brute: 2, bear: 2, ogre: 2, troll: 2, slime: 2, snow_bear: 2, wraith: 2, witch: 2, archer: 2,
+      wolf: 3, frost_wolf: 3, ember_hound: 3, spider: 3, shade: 3, bat: 3,
       alpha: 3, great_bear: 2, guardian: 2, haunt: 2, broodmother: 2, villain: 2,
     };
     expect(Object.keys(strides).sort()).toEqual(Object.keys(ENEMIES).sort());

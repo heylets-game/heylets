@@ -372,7 +372,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
     abilities: ["maul", "brute_shove"],
   },
   archer: {
-    kind: "archer", name: "Archer", hp: 10, defence: 12, move: 3, save: 0, init: 1, xp: 13,
+    kind: "archer", name: "Archer", hp: 10, defence: 12, move: 2, save: 0, init: 1, xp: 13,
     abilities: ["volley", "barbed_arrow"],
   },
   // A beast boss: fast, and it makes its victims bleed.
