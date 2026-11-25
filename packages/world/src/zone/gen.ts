@@ -28,7 +28,7 @@ export const ZONE_GRIDS: Record<ZoneSize, HexGrid> = {
  */
 export const ALERT_RANGE = 3;
 /** How near a fight a hero has to be to be drawn into it. */
-export const JOIN_RANGE = 6;
+export const JOIN_RANGE = 3;
 
 export const DEFAULT_ZONE_OPTIONS: ZoneOptions = { size: "medium", biome: "meadow", groups: 2, kinds: [], elevation: 1, obstacles: 1, clear: 4, party: 2, level: 1 };
 

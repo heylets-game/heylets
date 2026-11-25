@@ -407,7 +407,7 @@ describe("a hex is one side's or the other's", () => {
     let state = board(gap("rock"));
     state.aiOff = false;
     hero(state, "ann", "qa_paladin", at(7, 6));
-    Object.assign(hero(state, "bo", "qa_paladin", at(3, 6)), { hp: 40, maxHp: 40 });
+    Object.assign(hero(state, "bo", "qa_paladin", at(4, 6)), { hp: 40, maxHp: 40 });
     const band = [at(9, 6), at(10, 6), at(10, 5)].map((p) => enemy(state, "bandit", p, "g1", 200).id);
     const events: ZoneEvent[] = [];
     state = must(state, { type: "dev", by: "ann", dev: { op: "start_fight" } }, events);
