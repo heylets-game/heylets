@@ -9,7 +9,7 @@
 // outlined in blue. In town a "+" under the list changes the party. The list
 // folds away to its heading.
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import { PartyPicker } from "./PartyPicker";
 import type { Outfit } from "@gantt-quest/world";
 import { label } from "./labels";
@@ -35,7 +35,13 @@ export interface RosterMember {
 export interface RosterParty {
   ids: string[];
   acting: string;
-  onPick(id: string): void;
+  /**
+   * A click on one of them: "only" (a plain click) plays them alone; where the roster takes a group (`selected` given),
+   * shift-click is "add", to the group walking with the one being played, and alt-click (Option on a Mac) is "drop".
+   */
+  onPick(id: string, how?: "only" | "add" | "drop"): void;
+  /** On a map: the others of yours selected to walk with the one being played. */
+  selected?: string[];
   /** Why one of them cannot be picked right now (down, not their turn). */
   blocked?(id: string): string | undefined;
   /** In town: the "+" under the list, to change the party. `leader` is the hero this device plays. */
@@ -156,12 +162,17 @@ export function CrewRoster({ members, you, heading, onOpen, openId, menu, party,
         </span>
       </>
     );
+    const grouped = !mine && !!party?.selected?.includes(m.id);
+    // A click that changes the group: shift adds to it, alt (Option on a Mac) takes out of it.
+    const how = (e: MouseEvent): "only" | "add" | "drop" => (!party?.selected ? "only" : e.shiftKey ? "add" : e.altKey ? "drop" : "only");
     // One of yours you are not playing: a click plays them (the one you are playing opens their sheet, where there is one).
-    const pick = ofYours && !mine && party ? () => party.onPick(m.id) : null;
+    // With a group walking (on a map), the one you are playing is a click too: back to playing them alone, or (alt) the
+    // next of the group leads.
+    const pick = ofYours && party && (!mine || (party.selected?.length && !onOpen)) ? (e: MouseEvent) => party.onPick(m.id, how(e)) : null;
     return (
       <li
         key={m.id}
-        className={`cm ${m.here || ofYours ? "here" : "away"}${mine ? " mine" : ""}${party ? (ofYours ? " yours" : " theirs") : ""}${m.id === openId ? " open" : ""}`}
+        className={`cm ${m.here || ofYours ? "here" : "away"}${mine ? " mine" : ""}${grouped ? " grouped" : ""}${party ? (ofYours ? " yours" : " theirs") : ""}${m.id === openId ? " open" : ""}`}
         onContextMenu={(e) => {
           if (!menu || menu(m).length === 0) return;
           e.preventDefault();
@@ -169,7 +180,7 @@ export function CrewRoster({ members, you, heading, onOpen, openId, menu, party,
         }}
       >
         {pick ? (
-          <button type="button" className="cm-main" disabled={!!blocked} title={blocked ?? `Play ${m.name}`} onClick={pick}>
+          <button type="button" className="cm-main" disabled={!!blocked} title={blocked ?? (mine ? `Play ${m.name} alone. Alt-click: leave them, and the next of the group leads` : party?.selected ? `Play ${m.name}. Shift-click: walk with them too; Alt-click: leave them behind; P: everyone` : `Play ${m.name}`)} onClick={pick}>
             {body}
           </button>
         ) : onOpen ? (

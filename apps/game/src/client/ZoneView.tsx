@@ -429,6 +429,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const [hover, setHover] = useState<HexPos | null>(null);
   // Whoever of the party was selected before coming onto the map is played first (party.ts).
   const [playAs, setPlayAs] = useState<string | null>(actingHero);
+  /** More of your own selected to walk with the one being played, out of a fight: shift-click on the roster, or P for everyone. */
+  const [group, setGroup] = useState<string[]>([]);
   /** The bar's eighteen slots, by key (zone/hotbar.ts), and the slot whose contents are being chosen. */
   const [bar, setBar] = useState<string[]>([]);
   const [barMenu, setBarMenu] = useState<number | null>(null);
@@ -510,7 +512,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
    * The hero whose last walk out of a fight may still be called off part of the way, by clicking somewhere else while it
    * plays (walkTo): nothing has come of it but the walk, as far as has been heard. The server has the last word.
    */
-  const strolling = useRef<string | null>(null);
+  const strolling = useRef(new Set<string>());
   /**
    * A walk shown setting off from part of the way along the one before (walkTo) was answered: if the server did not
    * call the one before off there after all, the hero walks the rest of it first, and the server's walk goes on from its end.
@@ -556,7 +558,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       setAhead(told.ahead);
       // Something came of a walk (a band took notice, the ground acted): it is not to be called off part of the way.
       const entry = told.entry;
-      if (entry?.kind === "walk" && !events.every((ev) => ev.t === "moved" && ev.id === entry.unit)) strolling.current = null;
+      if (entry?.kind === "walk" && !events.every((ev) => ev.t === "moved" && ev.id === entry.unit)) strolling.current.delete(entry.unit);
     }
     const walked = told?.walk ?? null;
     if (walked && walked.kept > 0 && told?.entry?.kind === "walk" && from) {
@@ -1684,6 +1686,36 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     if (carried !== "null") void refresh();
   }, [carried]);
   const fighting = !!act && !!enc?.order.includes(act.id);
+  // The rest of the group who walk with the one being played: only out of a fight, and only those up and out of one.
+  const followers = !act || fighting ? [] : mine.filter((u) => u.id !== act.id && group.includes(u.id) && !u.down && !enc?.order.includes(u.id));
+  /** A roster click: plain plays that one alone, shift adds them to the group, alt (Option on a Mac) takes them out of it. */
+  const pickHero = (id: string, how: "only" | "add" | "drop" = "only") => {
+    if (how === "only") {
+      setPlayAs(id);
+      return setGroup([]);
+    }
+    if (how === "add") return setGroup((g) => (g.includes(id) ? g : [...g, id]));
+    // Taking the one being played out of the group: the next of it leads instead.
+    if (id === act?.id) {
+      const next = followers[0];
+      if (!next) return;
+      setPlayAs(next.id);
+      return setGroup((g) => g.filter((x) => x !== id && x !== next.id));
+    }
+    setGroup((g) => g.filter((x) => x !== id));
+  };
+  /** P: everyone of yours selected, to walk together. */
+  const selectAll = useRef(() => {});
+  selectAll.current = () => setGroup(mine.filter((u) => u.id !== act?.id).map((u) => u.id));
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)))) return;
+      if (e.key === "p" || e.key === "P") selectAll.current();
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, []);
   // While an enemy's turn is still being shown the turn is not yet yours to play, though the server already
   // waits on you: what they did is seen through, and the health it cost is on the bars, before you answer it.
   const myTurn = !!act && fighting && ready(act) && !watching;
@@ -1988,8 +2020,13 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       if (spot) marks.push({ id: spot, color: state.units.find((u) => u.id === spot)?.side === "enemy" ? "#ff4d4d" : "#fff1c9" });
       else for (const id of enc.acting) if (!enc.done.includes(id)) marks.push({ id, color: mine.some((u) => u.id === id) ? "#ffd23f" : "#fff1c9" });
     }
+    // Out of a fight, a group selected to walk together: a marker over each of them, gold over the one being played.
+    if (!fighting && act && followers.length > 0) {
+      marks.push({ id: act.id, color: "#ffd23f" });
+      for (const u of followers) marks.push({ id: u.id, color: "#7dff9a" });
+    }
     layer.current?.setTurnMarkers(marks);
-  }, [enc, state, spot, mine]);
+  }, [enc, state, spot, mine, fighting, act?.id, followers.map((u) => u.id).join()]);
 
   // The line of a shot, a spell or a throw to where the pointer is: pale when it can be made, red when it cannot.
   useEffect(() => {
@@ -2034,21 +2071,39 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     // What the enemy did is still being shown: nothing is sent into the middle of it. (The server already waits on
     // you and would take it, and its answer would cut short everything not yet shown.)
     if (fighting && watching) return;
+    const shown: Ahead[] = [];
+    walkOne(act, to, shown);
+    // The rest of the group, out of a fight: each to the free hex nearest where the lead is going that they can reach.
+    const claimed: HexPos[] = [to];
+    for (const f of followers) {
+      const theirs = zoneReach(asState(state), f, FREE_WALK, undefined, courseFor(asState(state), f, null));
+      const spot = [...theirs.values()]
+        .filter((r) => r.stop && !claimed.some((c) => sameHex(c, r.pos)))
+        .sort((a, b) => hexDistance(a.pos, to) - hexDistance(b.pos, to) || a.cost - b.cost)[0];
+      if (!spot) continue;
+      claimed.push(spot.pos);
+      if (!sameHex(spot.pos, f.pos)) walkOne(f, spot.pos, shown);
+    }
+    if (shown.length > 0) setAhead([...aheadNow.current, ...shown]);
+  };
+  /** One hero's walk (walkTo), with what can be foreseen of it put in `shown`. */
+  const walkOne = (unit: Unit, to: HexPos, shown: Ahead[]) => {
+    if (!state) return;
     const view = renderer.current;
-    const unsure = owed.current.has(act.id) || aheadNow.current.some((a) => a.kind === "walk" && a.off && a.unit === act.id);
-    const free = !state.encounter?.order.includes(act.id) && strolling.current === act.id;
-    const left = !unsure && free && view ? view.walkLeft(act.id) : [];
-    const held = (pos: HexPos) => state.units.some((u) => u.id !== act.id && !(u.down && u.side === "enemy") && sameHex(u.pos, pos));
+    const unsure = owed.current.has(unit.id) || aheadNow.current.some((a) => a.kind === "walk" && a.off && a.unit === unit.id);
+    const free = !state.encounter?.order.includes(unit.id) && strolling.current.has(unit.id);
+    const left = !unsure && free && view ? view.walkLeft(unit.id) : [];
+    const held = (pos: HexPos) => state.units.some((u) => u.id !== unit.id && !(u.down && u.side === "enemy") && sameHex(u.pos, pos));
     const cut = left.length > 1 && !held(left[0]) ? left[0] : null;
-    const from = cut ? { ...state, units: state.units.map((u) => (u.id === act.id ? { ...u, pos: cut } : u)) } : state;
-    const seen = unsure ? null : foreseeWalk(from, act.id, to);
-    const n = zone.send({ type: "move", unit: act.id, to, ...(cut ? { from: cut } : {}) });
-    strolling.current = act.id;
+    const from = cut ? { ...state, units: state.units.map((u) => (u.id === unit.id ? { ...u, pos: cut } : u)) } : state;
+    const seen = unsure ? null : foreseeWalk(from, unit.id, to);
+    const n = zone.send({ type: "move", unit: unit.id, to, ...(cut ? { from: cut } : {}) });
+    strolling.current.add(unit.id);
     if (n === null) return;
-    if (cut) view?.stopWalkAt(act.id, cut);
+    if (cut) view?.stopWalkAt(unit.id, cut);
     if (!seen) return;
-    view?.walkUnit(act.id, seen.path);
-    setAhead([...aheadNow.current, { n, kind: "walk", unit: act.id, from: cut ?? act.pos, path: seen.path, cost: seen.cost, at: performance.now(), ...(cut ? { cut: left.slice(1) } : {}) }]);
+    view?.walkUnit(unit.id, seen.path);
+    shown.push({ n, kind: "walk", unit: unit.id, from: cut ?? unit.pos, path: seen.path, cost: seen.cost, at: performance.now(), ...(cut ? { cut: left.slice(1) } : {}) });
   };
 
   /**
@@ -2061,7 +2116,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     // (Nor into the middle of an enemy's turn still being shown: see walkTo.)
     if (!act || (fighting && watching)) return;
     // Done something besides walking: the walk before it is no longer to be called off.
-    strolling.current = null;
+    strolling.current.delete(act.id);
     const n = zone.send(action);
     if (n === null || !sure || !canPay(shown.cost)) return;
     const view = renderer.current;
@@ -2841,7 +2896,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           party={{
             ids: mine.map((u) => u.id),
             acting: act.id,
-            onPick: setPlayAs,
+            onPick: pickHero,
+            selected: followers.map((u) => u.id),
             blocked: (id) => {
               const u = mine.find((x) => x.id === id);
               return !u ? undefined : u.down ? `${u.name} is down.` : enc?.order.includes(u.id) && !ready(u) ? `It is not ${u.name}'s turn.` : undefined;
