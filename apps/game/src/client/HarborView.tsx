@@ -245,10 +245,10 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
   const ownOutfit = useOwnLook(players.find((p) => p.id === you)?.outfit);
   /** Go to where a crewmate is: the zone they are on (beside them), if the server says they can be joined. */
   const teleportTo = (id: string) => {
-    api.teleport(id).then((went) => {
+    api.teleport(id).then(async (went) => {
       const { zone, name } = went;
       if (!zone) return setNote(`${name} is not out on a map.`);
-      if (!joinOk(went)) return;
+      if (!(await joinOk(went))) return;
       try {
         sessionStorage.setItem("gq.zone.near", id);
       } catch {
@@ -658,7 +658,7 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
     const there = board.members.filter((m) => !mine.has(m.id) && m.zone?.code === code).length;
     const bringing = Math.max(1, mine.size);
     const room = Math.max(0, MAX_PARTY - there);
-    if (joinOk({ others: there > 0, ...(bringing > room ? { room, bringing } : {}) })) location.hash = `zone/${code}`;
+    void joinOk({ others: there > 0, ...(bringing > room ? { room, bringing } : {}) }).then((ok) => ok && (location.hash = `zone/${code}`));
   };
   const gateOpen = !!openMap || !!harbor.muster?.code;
   // Shut, the gate is a knot of stone and brass asleep on its plinth; a map being opened bursts it out into the air.
@@ -805,7 +805,7 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
   };
   /** Down into the caves: the crew's cave if one is still being fought through, else a fresh one. Leaving it comes back to the mouth. */
   const goDown = () => {
-    api.caves().then((went) => joinOk(went) && goInside(`${HARBOR_CAVE.q},${HARBOR_CAVE.r}`, `zone/${went.code}`), (e: Error) => setNote(e.message));
+    api.caves().then(async (went) => (await joinOk(went)) && goInside(`${HARBOR_CAVE.q},${HARBOR_CAVE.r}`, `zone/${went.code}`), (e: Error) => setNote(e.message));
   };
   // Flotsam bobbing beside the hero (or under their boat): fished out from the beach or from a boat.
   const flotsamHere = self ? flotsamWithin(flotsam.pieces, self.pos) : null;

@@ -1,6 +1,9 @@
 // Asked before walking onto a map others are already on: more heroes there means more enemies for all of them
 // (packages/world zone.ts growGroups). The server says whether anyone else is there, and whether the player's whole
 // party fits (routes/shared.ts othersOn): a map takes so many, and the last of a party who do not fit stay behind.
+// It is asked in the game's own frame (ui/Ask.tsx).
+
+import { ask } from "./ui/Ask";
 
 export const JOIN_WARNING = "Others are already on this map. Joining them makes it harder for everyone there: each band not yet beaten gets more fighters, to match the bigger party. Join them?";
 
@@ -23,12 +26,12 @@ export function joinQuestion(news: JoinNews): string | null {
 }
 
 /** Go on: there is nobody else there, or the player says yes. A full map is only said, never gone onto. */
-export function joinOk(news: JoinNews | boolean | undefined): boolean {
-  const ask = joinQuestion(typeof news === "object" ? news : { others: !!news });
-  if (!ask) return true;
+export async function joinOk(news: JoinNews | boolean | undefined): Promise<boolean> {
+  const question = joinQuestion(typeof news === "object" ? news : { others: !!news });
+  if (!question) return true;
   if (news && typeof news === "object" && news.room === 0) {
-    alert(ask);
+    await ask(question, { yes: "Back" });
     return false;
   }
-  return confirm(ask);
+  return ask(question, { yes: "Join them", no: "Stay here" });
 }
