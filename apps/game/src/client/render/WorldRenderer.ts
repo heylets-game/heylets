@@ -1059,6 +1059,9 @@ export class WorldRenderer {
   private hoverGlow = new HoverGlow();
   private glowWhat: GlowTarget = null;
   private glowAt = new THREE.Vector3();
+  /** The halo round a figure the view points out (a which-one menu's row under the pointer; see `setUnitGlow`), and whose. */
+  private unitGlow = new HoverGlow();
+  private unitGlowId: string | null = null;
   private sea: THREE.Mesh;
   private unitGroup = new THREE.Group();
   private fxGroup = new THREE.Group();
@@ -1523,6 +1526,7 @@ export class WorldRenderer {
     this.endMinigame();
     this.post?.dispose();
     this.hoverGlow.dispose();
+    this.unitGlow.dispose();
     this.pathDot.geometry.dispose();
     this.pathDot.material.dispose();
     this.renderer.dispose();
@@ -3522,6 +3526,35 @@ export class WorldRenderer {
     this.glowWhat = what;
     this.renderer.domElement.style.cursor = what === null ? "" : "pointer";
     this.hoverGlow.set(this.glowRoot());
+  }
+
+  /** Put a glowing halo round one figure's whole body (by unit id), or (null) let it fade. Apart from `setGlow`: both can be lit at once. */
+  setUnitGlow(id: string | null) {
+    if (id === this.unitGlowId) return;
+    this.unitGlowId = id;
+    this.unitGlow.set(id === null ? null : (this.units.get(id)?.root ?? null));
+  }
+
+  /**
+   * Just above the highest head of these figures, in container pixels: where a menu about them can hang without
+   * covering any of them. Null when none of them is on screen.
+   */
+  screenAboveUnits(ids: string[], lift = 0.25): { x: number; y: number } | null {
+    let best: { x: number; y: number } | null = null;
+    let xs = 0, n = 0;
+    for (const id of ids) {
+      const unit = this.units.get(id);
+      if (!unit) continue;
+      const v = unit.root.position.clone();
+      v.y += unit.head - unit.bob + lift;
+      v.project(this.camera);
+      if (v.z < -1 || v.z > 1) continue;
+      const at = { x: ((v.x + 1) / 2) * this.container.clientWidth, y: ((1 - v.y) / 2) * this.container.clientHeight };
+      xs += at.x;
+      n++;
+      if (!best || at.y < best.y) best = at;
+    }
+    return best && { x: xs / n, y: best.y };
   }
 
   /** The structure `setGlow` named, as it stands now: a place's model, or the waygate over that hex of a battle map. */
@@ -5909,6 +5942,8 @@ export class WorldRenderer {
     // was lit is found again here; with nothing lit this is two comparisons.)
     if (this.glowWhat !== null && !this.hoverGlow.lit) this.hoverGlow.set(this.glowRoot());
     if (!this.minigame) this.hoverGlow.draw(this.renderer, this.camera, dt, this.clock);
+    if (this.unitGlowId !== null && !this.unitGlow.lit) this.unitGlow.set(this.units.get(this.unitGlowId)?.root ?? null);
+    if (!this.minigame) this.unitGlow.draw(this.renderer, this.camera, dt, this.clock);
     this.combat.clear();
     this.rise?.clear();
     this.reveal(dt);

@@ -448,7 +448,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   /** Where the pointer last went down, on the screen: a menu opened by the click it began is put there. */
   const pointerAt = useRef({ x: 0, y: 0 });
   /** More than one there to aim at on the hex clicked: which of them is meant, asked in a little menu at the pointer. */
-  const [whichOne, setWhichOne] = useState<{ pos: HexPos; ids: string[]; x: number; y: number } | null>(null);
+  /** The which-one menu: `over` when x, y is the point above the figures' heads it hangs from, else the pointer it opens beside. */
+  const [whichOne, setWhichOne] = useState<{ pos: HexPos; ids: string[]; x: number; y: number; over?: boolean } | null>(null);
   useEffect(() => {
     let live = true;
     const ask = () => api.crewPlaces().then((r) => live && setCrew(r.members), () => undefined);
@@ -2132,7 +2133,12 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         const ally = want === "friend" || (tactic?.blink && tactic.shape === "self");
         const suits = (u: Unit) => (ally ? u.side === act.side && !(tactic?.blink && u.id === act.id) : u.side !== act.side && !u.down);
         const ids = unitsAt(z, pos).filter((u) => !u.lost && !state.dark?.includes(u.id) && suits(u)).map((u) => u.id);
-        if (ids.length > 1) return setWhichOne({ pos, ids, ...pointerAt.current });
+        if (ids.length > 1) {
+          // The menu hangs over their heads, so both of them stay in sight; by the pointer if they are not on screen.
+          const above = renderer.current?.screenAboveUnits(ids);
+          const stage = mount.current?.getBoundingClientRect();
+          return setWhichOne({ pos, ids, ...(above && stage ? { x: stage.left + above.x, y: stage.top + above.y, over: true } : pointerAt.current) });
+        }
       }
     }
     const there = unitFor(pos, want, clicked);
@@ -2178,11 +2184,11 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         return;
       }
       // A click on something to search (a fallen enemy, a chest standing open, the spoils) looks into it from
-      // beside it, or walks up to it first and looks on getting there. Not in the middle of a fight.
-      const spot = lootOn(pos);
+      // beside it, or walks up to it first and looks on getting there. In the middle of a fight there is no
+      // searching at all: a click there is a click on the ground, and walks you onto it like any other.
+      const spot = fighting ? undefined : lootOn(pos);
       if (spot && !(there && !there.down && there.side === "enemy")) {
         if (act.id !== selfId) return setNote("Only your own hero can search it.");
-        if (fighting) return setNote("Not in the middle of a fight: it will keep.");
         if (hexDistance(spot.pos, act.pos) <= 1) return search(spot);
         const beside = [...reach.values()].filter((r) => r.stop && hexDistance(r.pos, spot.pos) <= 1).sort((a, b) => a.cost - b.cost)[0];
         if (beside) {
@@ -2262,6 +2268,10 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   useEffect(() => setPick(null), [act?.id, myTurn]);
   // Nor does the which-one menu outlive the pick it was asked for.
   useEffect(() => setWhichOne(null), [pick, act?.id, myTurn]);
+  // A figure lit from the menu goes dark with it.
+  useEffect(() => {
+    if (!whichOne) renderer.current?.setUnitGlow(null);
+  }, [whichOne]);
   // Walked up to something to search it: once there (and the walk answered), look into it. A fight breaking out calls it off.
   const ownAt = self?.pos;
   const ownFighting = !!state && !!enc?.order.includes(selfId);
@@ -2620,13 +2630,29 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
 
       {/* More than one there to aim at on the hex clicked: which of them is meant. */}
       {whichOne && (
-        <div className="zone-which panel" role="menu" aria-label="Which one?" style={{ left: Math.min(whichOne.x + 8, innerWidth - 190), top: Math.min(whichOne.y + 8, innerHeight - 30 - whichOne.ids.length * 30) }}>
+        <div
+          className="zone-which panel"
+          role="menu"
+          aria-label="Which one?"
+          style={whichOne.over
+            // Centred over the heads, its foot just above the highest, and kept on screen.
+            ? { left: Math.max(8, Math.min(whichOne.x - 95, innerWidth - 198)), top: Math.max(8, Math.min(whichOne.y - (34 + whichOne.ids.length * 30), innerHeight - 30 - whichOne.ids.length * 30)) }
+            : { left: Math.min(whichOne.x + 8, innerWidth - 190), top: Math.min(whichOne.y + 8, innerHeight - 30 - whichOne.ids.length * 30) }}
+          onPointerLeave={() => renderer.current?.setUnitGlow(null)}
+        >
           <div className="zone-which-head">Which one?</div>
           {whichOne.ids.map((id) => {
             const u = state.units.find((x) => x.id === id);
             if (!u) return null;
             return (
-              <button key={id} role="menuitem" className={`small zone-which-${u.side}`} onClick={() => click.current(whichOne.pos, id, true)}>
+              <button
+                key={id}
+                role="menuitem"
+                className={`small zone-which-${u.side}`}
+                onClick={() => click.current(whichOne.pos, id, true)}
+                onPointerEnter={() => renderer.current?.setUnitGlow(id)}
+                onFocus={() => renderer.current?.setUnitGlow(id)}
+              >
                 <span className="zone-which-name">{u.name}{u.id === act.id ? " (you)" : ""}</span>
                 <span className="zone-which-hp">{u.down ? "down" : `${u.hp}/${u.maxHp}`}</span>
               </button>
