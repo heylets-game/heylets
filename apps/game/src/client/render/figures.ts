@@ -292,9 +292,16 @@ interface LoftShape {
    * not a face, at +z, so the point is a point.
    */
   apex?: readonly number[];
+  /**
+   * Only the front of each ring, this far (in radians) either side of +z: a beard round the jaw, not the neck.
+   * The rings keep the corners a whole loft's would have, so the piece lies evenly over a loft of the same
+   * sides, and are cut where they reach the arc; each cut end is closed to the rings' middles, a wedge.
+   */
+  arc?: number;
 }
 
 function loftGeometry(rings: readonly Ring[], sides: number, shape: LoftShape = {}): THREE.BufferGeometry {
+  if (shape.arc !== undefined) return arcGeometry(rings, sides, shape.arc);
   const sorted = [...rings].sort((p, q) => p[0] - q[0]);
   const loops = sorted.map(([y, rx, rz, dz = 0], i) =>
     Array.from({ length: sides }, (_, k) => {
@@ -325,6 +332,53 @@ function loftGeometry(rings: readonly Ring[], sides: number, shape: LoftShape = 
   };
   if (!shape.open) cap(0, false);
   if (shape.open !== "both") cap(loops.length - 1, true);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(out, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
+/** The front of a loft, `arc` either side of +z, closed to its middle at both cut ends and at top and bottom (see LoftShape). */
+function arcGeometry(rings: readonly Ring[], sides: number, arc: number): THREE.BufferGeometry {
+  const sorted = [...rings].sort((p, q) => p[0] - q[0]);
+  const step = (Math.PI * 2) / sides;
+  // The corners' angles from -arc to arc through +z: the cut ends, and between them each corner a whole loft has.
+  const angles = [-arc];
+  for (let k = 0; k < sides; k++) {
+    const a = (k + 0.5) * step - Math.PI;
+    if (a > -arc && a < arc) angles.push(a);
+  }
+  angles.push(arc);
+  const loops = sorted.map(([y, rx, rz, dz = 0]) => {
+    const corner = (a: number) => new THREE.Vector3(Math.sin(a) * rx, y, Math.cos(a) * rz + dz);
+    return angles.map((a) => {
+      // A cut end lies on the side between the two corners either side of it, as the whole loft's would.
+      const k = Math.floor(a / step + sides / 2 - 0.5);
+      const a0 = (k + 0.5) * step - Math.PI;
+      return corner(a0).lerp(corner(a0 + step), (a - a0) / step);
+    });
+  });
+  const middles = sorted.map(([y, , , dz = 0]) => new THREE.Vector3(0, y, dz));
+  const out: number[] = [];
+  const tri = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3) => out.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+  const last = angles.length - 1;
+  for (let i = 0; i + 1 < loops.length; i++) {
+    const [lo, hi, m0, m1] = [loops[i], loops[i + 1], middles[i], middles[i + 1]];
+    for (let k = 0; k < last; k++) {
+      tri(lo[k], lo[k + 1], hi[k + 1]);
+      tri(lo[k], hi[k + 1], hi[k]);
+    }
+    // The two cut ends, each facing away from the other.
+    tri(lo[0], m1, m0);
+    tri(lo[0], hi[0], m1);
+    tri(lo[last], m0, m1);
+    tri(lo[last], m1, hi[last]);
+  }
+  for (let k = 0; k < last; k++) {
+    tri(middles[0], loops[0][k + 1], loops[0][k]);
+    const top = loops.length - 1;
+    tri(middles[top], loops[top][k], loops[top][k + 1]);
+  }
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute(out, 3));
   g.computeVertexNormals();
@@ -663,6 +717,11 @@ class Part {
   /** A faceted tube through `rings` (see loftGeometry), in this joint's space offset by (x, y, z). */
   loft(color: string, rings: readonly Ring[], sides = 8, x = 0, y = 0, z = 0, rot?: Rot): this {
     return this.add(loftGeometry(rings, sides), color, x, y, z, rot, false, true);
+  }
+
+  /** Only the front of a loft through `rings`, `arc` (radians) either side of +z: a beard (see LoftShape). */
+  frontLoft(color: string, rings: readonly Ring[], arc: number, sides = 8): this {
+    return this.add(loftGeometry(rings, sides, { arc }), color, 0, 0, 0, undefined, false, true);
   }
 
   /**
@@ -3593,14 +3652,17 @@ function lowWizardBeard(head: Part, c: string, rings: readonly Ring[], chinY: nu
   const upper = mid.clone().sub(from);
   aimDown(root.skin, upper);
   const a = upper.length();
-  root.loft(c, [[0.4, 2.1, 0.95], [-a * 0.35, 2.35, 1.0], [-a * 0.7, 2.2, 0.95], [-a - 0.3, 1.9, 0.85]], 8);
+  // As wide at the top as the beard on the jaw above it (in the body's units, not the head's), so it carries on
+  // down from the cheeks rather than hanging narrower from the chin; narrowing to the point.
+  const w = (ringAt(rings, 1.6).rx + 0.2) * k;
+  root.loft(c, [[0.4, w * 0.95, 0.95], [-a * 0.35, w * 0.88, 1.0], [-a * 0.7, w * 0.75, 0.95], [-a - 0.3, w * 0.62, 0.85]], 8);
   // An amulet is worn over it, where it would otherwise be hidden (see lowAmulet).
   beardFront = { part: root, at: [0, -a * 0.5, 1.0] };
   const end = new Part(root.joint, upper.x, upper.y, upper.z);
   const lower = tip.clone().sub(mid);
   aimDown(end.skin, lower);
   const b = lower.length();
-  end.loft(c, [[0.3, 1.9, 0.85], [-b * 0.35, 1.6, 0.75], [-b * 0.7, 0.95, 0.55], [-b, 0.15, 0.15, 0.25]], 8);
+  end.loft(c, [[0.3, w * 0.62, 0.85], [-b * 0.35, w * 0.5, 0.75], [-b * 0.7, w * 0.3, 0.55], [-b, 0.15, 0.15, 0.25]], 8);
   hang(root, end, 0, 1);
 }
 
@@ -4063,7 +4125,9 @@ function lowNose(head: Part, c: string, kind: string, z: number) {
   }
 }
 
-/** Facial hair of each kind, around a head of these rings. */
+/** How far round the head facial hair grows from the front of the face, either side: back to under the ears, not round the neck. */
+const JAW_ARC = (110 / 180) * Math.PI;
+
 /** How far forward the face is at height `y`, `x` across it: on its rings' front, flat face or not. */
 function faceZ(rings: readonly Ring[], x: number, y: number): number {
   const pts = section(rings, 8, y);
@@ -4077,6 +4141,7 @@ function faceZ(rings: readonly Ring[], x: number, y: number): number {
   return Number.isFinite(best) ? best : faceAt(rings, y);
 }
 
+/** Facial hair of each kind, around a head of these rings. */
 function lowFacialHair(head: Part, beard: string, mustache: string, skin: string, hair: string, rings: readonly Ring[], chinY: number, mouthY: number) {
   const c = tone(hair, -0.04);
   const out = (y: number, by: number): Ring => {
@@ -4086,7 +4151,7 @@ function lowFacialHair(head: Part, beard: string, mustache: string, skin: string
   switch (beard) {
     case "stubble": {
       const shade = `#${new THREE.Color(skin).lerp(new THREE.Color(hair), 0.45).getHexString()}`;
-      head.loft(shade, [out(chinY - 0.02, 0.05), out(chinY + 0.4, 0.06), out(mouthY - 0.22, 0.06)]);
+      head.frontLoft(shade, [out(chinY - 0.02, 0.05), out(chinY + 0.4, 0.06), out(mouthY - 0.22, 0.06)], JAW_ARC);
       break;
     }
     case "goatee": {
@@ -4096,13 +4161,13 @@ function lowFacialHair(head: Part, beard: string, mustache: string, skin: string
     }
     case "full": {
       const chin = ringAt(rings, chinY);
-      head.loft(c, [[chinY - 0.9, chin.rx * 0.5, chin.rz * 0.45, chin.dz + 0.4], out(chinY + 0.1, 0.28), out(1.6, 0.2), out(2.5, 0.12)]);
+      head.frontLoft(c, [[chinY - 0.9, chin.rx * 0.5, chin.rz * 0.45, chin.dz + 0.4], out(chinY + 0.1, 0.28), out(1.6, 0.2), out(2.5, 0.12)], JAW_ARC);
       break;
     }
     case "wizard": {
       // A full beard on the jaw, and from the chin a long one down the chest in two pieces that swing.
       const chin = ringAt(rings, chinY);
-      head.loft(c, [[chinY - 0.4, chin.rx * 0.75, chin.rz * 0.6, chin.dz + 0.45], out(chinY + 0.1, 0.28), out(1.6, 0.2), out(2.5, 0.12)]);
+      head.frontLoft(c, [[chinY - 0.4, chin.rx * 0.75, chin.rz * 0.6, chin.dz + 0.45], out(chinY + 0.1, 0.28), out(1.6, 0.2), out(2.5, 0.12)], JAW_ARC);
       lowWizardBeard(head, c, rings, chinY);
       break;
     }
