@@ -2,17 +2,27 @@
 // ABILITIES). An enemy kind starts with a list of them (content.ts ENEMIES `abilities`), and each enemy carries its
 // own copy (`Unit.abilities`), so one enemy can be given more, or fewer, than the rest of its kind.
 //
-// An ability's numbers are its own: how hard it hits and its potency, before the enemy's level, the edge every
-// enemy has (kit.ts ENEMY_EDGE) and the map's modifiers are added (kit.ts enemyStrikes). Nothing about it is tied to a kind, so any enemy can be given any of them.
+// An ability's numbers are its own: how hard it hits and its potency at level 1, how its numbers grow with level
+// (`scales`), before the edge every enemy has (kit.ts ENEMY_EDGE) and the map's modifiers are added (kit.ts
+// enemyStrikes). Nothing about it is tied to a kind, so any enemy can be given any of them.
 
 import type { EffectKind } from "../content";
+import type { ScaleRate } from "./rules";
 import type { SurfaceKind } from "./types";
+
+/**
+ * How each of an ability's numbers grows with its user's level, by name (rules.ts SCALE_RATES: a share more for
+ * every level past the first). A number not named grows at rules.ts DEFAULT_SCALE.
+ */
+export interface AbilityScales {
+  damage?: ScaleRate;
+}
 
 export interface EnemyAbilityDef {
   id: string;
   /** What it is called in the fight's log and on the enemy's card. */
   name: string;
-  /** How hard it hits, before level and edge: turned into dice (rules.ts diceFor). 0: it does no harm (a shove). */
+  /** How hard it hits at level 1, before edge: grown by `scales.damage`, then turned into dice (rules.ts diceFor). 0: it does no harm (a shove). */
   damage: number;
   /**
    * How sure and how strong it is, before level and edge: added to its roll to hit, and what saves against what it
@@ -42,6 +52,8 @@ export interface EnemyAbilityDef {
   behaviour?: string;
   /** How much its user favours it, beside its other abilities: the favourite wins a close call. */
   weight: number;
+  /** How its numbers grow with level. */
+  scales?: AbilityScales;
 }
 
 export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {

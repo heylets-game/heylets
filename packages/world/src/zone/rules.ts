@@ -45,6 +45,18 @@ export function diceFor(amount: number): Dice {
   return { n, d, plus };
 }
 
+/** How fast a number on an ability grows with level: its share more for every level past the first (SCALE_RATES). */
+export type ScaleRate = "none" | "low" | "standard" | "high" | "extreme";
+
+/** What each rate adds, per level past the first, as a share of the number at level 1. */
+export const SCALE_RATES: Record<ScaleRate, number> = { none: 0, low: 0.05, standard: 0.1, high: 0.15, extreme: 0.2 };
+
+/** The rate a number grows at when an ability does not say. */
+export const DEFAULT_SCALE: ScaleRate = "standard";
+
+/** `base` (its level-1 value) at `level`, growing at `rate`: 6 at standard is 6 at level 1, 11.4 at 10, 17.4 at 20. */
+export const scaled = (base: number, rate: ScaleRate, level: number): number => base * (1 + SCALE_RATES[rate] * Math.max(0, level - 1));
+
 export const diceAverage = (dice: Dice): number => (dice.n * (dice.d + 1)) / 2 + dice.plus;
 
 export const diceText = (dice: Dice): string => `${dice.n}d${dice.d}${dice.plus > 0 ? `+${dice.plus}` : dice.plus < 0 ? `${dice.plus}` : ""}`;

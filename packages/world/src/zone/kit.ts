@@ -9,7 +9,7 @@ import { ABILITIES, EFFECT_INFO, ENEMIES, SUNDERED_DEFENCE, type AbilityDef, typ
 import type { BehaviourId } from "./behaviours";
 import { ENEMY_ABILITIES, type EnemyAbilityDef } from "./enemyabilities";
 import { modsOf } from "./mods";
-import { diceFor, type Dice } from "./rules";
+import { DEFAULT_SCALE, diceFor, scaled, type Dice } from "./rules";
 import type { CommonAction, Condition, ShantyKind, SurfaceKind, Throwable, Unit, WeatherKind, ZoneState } from "./types";
 
 /**
@@ -791,7 +791,7 @@ export function abilityStrikes(ids: readonly string[], level: number, more = 0):
         name: a.name,
         range: burst ? ENEMY_BURST : (a.range ?? 1),
         burst,
-        dice: diceFor(a.damage + Math.floor(level / 2) + edge),
+        dice: diceFor(scaled(a.damage, a.scales?.damage ?? DEFAULT_SCALE, level) + edge),
         harmless: a.damage <= 0,
         potency: a.potency + Math.floor((Math.max(1, level) - 1) / 4) + edge,
         perfect: a.perfect,

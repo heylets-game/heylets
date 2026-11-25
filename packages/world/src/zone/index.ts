@@ -94,7 +94,7 @@ export {
   type ThrowableDef,
   type EnemyStrike,
 } from "./kit";
-export { mod as statMod, proficiency, heroMove, heroDefence, diceFor, diceText, diceAverage, hitChance, rollShown, type Dice } from "./rules";
+export { mod as statMod, proficiency, heroMove, heroDefence, diceFor, diceText, diceAverage, hitChance, rollShown, scaled, SCALE_RATES, DEFAULT_SCALE, type Dice, type ScaleRate } from "./rules";
 export { attackContext, defenceOf, has as hasCondition, shieldOf, unseen, type AttackContext } from "./engine";
 export { abilityArea, carrySpot, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, crateBlow, moveLeft, walkAp, apForMove, payMove, previewAttack, leavesReach, shiftInto, shoveDest, edgeDc, EDGE_DC, BARD_AURA_RANGE, type Aim, type Shift } from "./combat";
 export { chartOf, constellationHexes, constellationLinks, courseMarks, litFoes } from "./stars";
@@ -111,7 +111,7 @@ export { HEAR_RANGE } from "./zone";
 export { FORCE_DC, NOISE_RANGE, checkUnlock, doorAt } from "./doors";
 export { GLOWCAP_LIGHT, GLOWCAP_MUSHROOMS, checkForage } from "./forage";
 export { CRATE_HP, CRATE_PAY, crateAt, crateById, crateHp, isCrateId } from "./crates";
-export { ENEMY_ABILITIES, type EnemyAbilityDef } from "./enemyabilities";
+export { ENEMY_ABILITIES, type AbilityScales, type EnemyAbilityDef } from "./enemyabilities";
 export { TURN_STEPS, type Turn, type TurnStep } from "./ai";
 export { BEHAVIOURS, behaviourOf, type Behaviour, type BehaviourId, type Look, type Use } from "./behaviours";
 export { BELL_AP, BELL_CHANCE, BELL_RUSH, liveBell } from "./bell";
