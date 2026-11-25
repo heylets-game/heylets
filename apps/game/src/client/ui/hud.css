@@ -222,11 +222,12 @@ body.mining .hud-left, body.fishing .hud-left, .harbor-view.felling .hud-left { 
 .crew-cards .roster-add { margin: 6px 0 0 6px; }
 
 /* The crew's cards (your party first) in the top-right corner, in the Harbor and on a map alike. Clear of the camera's
-   buttons half way down the right-hand edge: the list scrolls rather than reach them. */
-.run .party-roster {
-  position: absolute; top: 16px; right: 16px; left: auto; bottom: auto; width: 250px; z-index: 10;
-  max-height: calc(50% - 140px); min-height: 120px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
-  /* Room inside the scrolling box for the outlines and glows drawn just outside each card and the heading's bar. */
+   buttons half way down the right-hand edge: the cards scroll rather than reach them, between the heading's bar and
+   the "+" under them, which stay where they are. */
+.run .party-roster { position: absolute; top: 16px; right: 16px; left: auto; bottom: auto; width: 250px; z-index: 10; padding: 2px; }
+.run .party-roster .roster {
+  max-height: max(100px, calc(50vh / var(--ui-z, 1) - 220px)); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+  /* Room inside the scrolling box for the outlines and glows drawn just outside each card. */
   padding: 4px;
 }
 @media (max-width: 760px) {
