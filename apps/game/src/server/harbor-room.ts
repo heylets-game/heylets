@@ -44,7 +44,7 @@ import {
   type MusterMember, } from "@gantt-quest/world";
 import type { HexPos } from "@gantt-quest/core";
 import { getCrew, harborBoard, heroInitFor, type Env } from "./db";
-import { gildedRod, ownedVessel } from "./fishmarket";
+import { gildedRod, partyVessel } from "./fishmarket";
 import { clearPresence } from "./zones";
 import { openNode } from "./atlas";
 import { Walkers, hexAsked, tellTrades, walkerFrom, withHero } from "./walk-room";
@@ -181,10 +181,10 @@ export class HarborRoom extends DurableObject<Env> {
     if (request.headers.get("Upgrade") !== "websocket") return new Response("expected websocket", { status: 426 });
     const id = request.headers.get("x-player-id");
     if (!id) return new Response("missing player or crew", { status: 400 });
-    // The crew, and what everyone will see of this hero (their boat, their look, a gilded rod). The four readings
+    // The crew, and what everyone will see of this hero (their party's best boat, their look, a gilded rod). The four readings
     // do not wait on one another, so they are asked for together.
     const db = this.env.DB;
-    const [crew, vessel, hero, gilded] = await Promise.all([getCrew(db, crewId), ownedVessel(db, id), heroInitFor(db, id), gildedRod(db, id)]);
+    const [crew, vessel, hero, gilded] = await Promise.all([getCrew(db, crewId), partyVessel(db, id), heroInitFor(db, id), gildedRod(db, id)]);
     if (!crew) return new Response("missing player or crew", { status: 400 });
 
     // Here, so not out on a zone: whatever a room that went away without saying so left written down is cleared.
@@ -353,10 +353,10 @@ export class HarborRoom extends DurableObject<Env> {
     } else if (msg.type === "refresh") {
       // They changed gear or levelled: re-read the character and show everyone the new look. The three
       // readings do not wait on one another, so they are asked for together. One figure walks the town for a whole
-      // party (party.ts): it is drawn as whichever of the party they are acting as, and only as one of their party.
+      // party (party.ts): it is drawn as whichever of the party they are acting as, and only as one of their party, and rows the best boat any of them owns.
       const asked = typeof msg.as === "string" ? msg.as : player.as ?? player.id;
       const as = asked === player.id || (await partyOf(this.env.DB, player.id)).includes(asked) ? asked : player.id;
-      const [hero, vessel, gilded] = await Promise.all([heroInitFor(this.env.DB, as), ownedVessel(this.env.DB, player.id), gildedRod(this.env.DB, player.id)]);
+      const [hero, vessel, gilded] = await Promise.all([heroInitFor(this.env.DB, as), partyVessel(this.env.DB, player.id), gildedRod(this.env.DB, player.id)]);
       if (hero) this.here.show(ws, { ...withHero(player, hero), vessel, gilded, as: as === player.id ? undefined : as });
     } else if (msg.type === "bedroll") {
       // Purely for show: the rest itself is decided by the server over HTTP. Not on a place, a street corner is fine.

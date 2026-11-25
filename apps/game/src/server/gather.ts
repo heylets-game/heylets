@@ -53,13 +53,18 @@ import type { HexPos } from "@gantt-quest/core";
 import { baitOf, ownedRod, spendBaitAfter } from "./bait";
 import { heroInitFor } from "./db";
 import { closeSitting, type SittingPaid } from "./fishing";
-import { ownedVessel } from "./fishmarket";
+import { partyVessel } from "./fishmarket";
 import { prepareXp, readHarborXp, xpOutcome, type XpResult } from "./harbor-xp";
 
 /** Where a hero stands in their crew's Harbor, as its room knows it: never as the client says. */
 export interface Standing {
   crewId: string;
   pos: HexPos;
+  /**
+   * The hero whose figure stands there, if not the hero themselves: one figure walks the town for a whole party
+   * (party.ts), and it rows the best boat any of them owns (partyVessel).
+   */
+  by?: string;
 }
 
 const HARBOR = generateHarbor();
@@ -204,7 +209,7 @@ export async function startOuting(db: D1Database, playerId: string, spot: unknow
  */
 async function startSittingOuting(db: D1Database, playerId: string, pier: unknown, where: Standing | null, stats: Record<GatherSpot, number>): Promise<GatherStatus | string> {
   if (!FISH_SPOT_IDS.includes(pier as FishSpot)) return "You cannot fish from there.";
-  const [angler, vessel] = await Promise.all([anglerStats(db, playerId), ownedVessel(db, playerId)]);
+  const [angler, vessel] = await Promise.all([anglerStats(db, playerId), partyVessel(db, where?.by ?? playerId)]);
   if (!angler) return "Create a character first.";
   const from = where ? fishFrom(HARBOR, where.pos, vessel) : null;
   if (!from) return NOT_AT_WATER;
@@ -281,9 +286,9 @@ export async function stepOuting(db: D1Database, playerId: string, choice: unkno
   const current = JSON.parse(row.session_json) as GatherState;
   let asked = (choice ?? {}) as GatherChoice;
   if (current.sitting && asked.t === "cast") {
-    // A cast is made from where the hero really is, in the boat they really own, at whichever of the crew's holes
-    // is there: none of it is taken from the client.
-    const [vessel, rod] = await Promise.all([ownedVessel(db, playerId), ownedRod(db, playerId)]);
+    // A cast is made from where the hero really is, in the boat their party really owns, at whichever of the crew's
+    // holes is there: none of it is taken from the client.
+    const [vessel, rod] = await Promise.all([partyVessel(db, where?.by ?? playerId), ownedRod(db, playerId)]);
     const from = where ? fishFrom(HARBOR, where.pos, vessel) : null;
     if (!from || !where) return NOT_AT_WATER;
     // The bait named goes on the hook only if the hero has some (bought from the fishmonger); it is taken below,

@@ -19,6 +19,7 @@ import {
   BOOK_TITLE,
 } from "@gantt-quest/world";
 import { crewFor } from "./db";
+import { partyOf } from "./party";
 
 export interface KeptFish {
   id: string;
@@ -56,10 +57,26 @@ interface Row {
   place: "icebox" | "trophy";
 }
 
+/** The best boat any of these heroes owns (crafted at home, kept at the pier), or null. */
+async function bestBoatOf(db: D1Database, heroIds: readonly string[]): Promise<Vessel | null> {
+  const rows = await db
+    .prepare(`SELECT def_id FROM furnishings WHERE player_id IN (${heroIds.map(() => "?").join(",")}) AND def_id IN ('rowboat', 'float_barrel')`)
+    .bind(...heroIds)
+    .all<{ def_id: string }>();
+  return bestVessel(rows.results.map((r) => r.def_id));
+}
+
 /** The best boat a player owns (crafted at home, kept at the pier), or null. */
 export async function ownedVessel(db: D1Database, playerId: string): Promise<Vessel | null> {
-  const rows = await db.prepare("SELECT def_id FROM furnishings WHERE player_id = ? AND def_id IN ('rowboat', 'float_barrel')").bind(playerId).all<{ def_id: string }>();
-  return bestVessel(rows.results.map((r) => r.def_id));
+  return bestBoatOf(db, [playerId]);
+}
+
+/**
+ * The boat the figure of hero `walker` rows about the Harbor: one figure walks the town for a whole party (party.ts),
+ * so it is the best boat any of them owns, whichever of them the player is acting as.
+ */
+export async function partyVessel(db: D1Database, walker: string): Promise<Vessel | null> {
+  return bestBoatOf(db, [walker, ...(await partyOf(db, walker))]);
 }
 
 /** Whether a player has filled the Catch Book, and so fishes with a gilded rod. */

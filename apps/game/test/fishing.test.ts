@@ -338,6 +338,16 @@ describe("fishing from a boat", () => {
     expect(cast.outing!.sitting!.spot).toBe("coast_west");
   });
 
+  it("fishes from the party's boat, when another of the party walks the town", async () => {
+    // Ann and Bo are one account's party. Bo walks the Harbor, in the rowboat Bo owns; the player acts as Ann.
+    sql.prepare("UPDATE players SET user_id = 'acct', party = 1 WHERE id IN ('ann', 'bo')").run();
+    sql.prepare("INSERT INTO furnishings (player_id, def_id, label, meta_json, created_at) VALUES ('bo', 'rowboat', 'rowboat', '{}', 0)").run();
+    here = afloatAt("sea");
+    const r = await startOuting(db, "ann", "fishing", "sea", { crewId: "CREWAA", pos: here, by: "bo" });
+    if (typeof r === "string") throw new Error(r);
+    expect(r.outing!.sitting!.spot).toBe("sea");
+  });
+
   it("carries more in a rowboat, and brings up the open sea's fish", async () => {
     boat("rowboat");
     const r = await sit("sea");
