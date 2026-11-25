@@ -437,13 +437,62 @@ const ART: Record<string, Art> = {
     p.r(4, 2, 2, 1, C.steel);
   },
   "chest-armor": (p) => {
-    p.r(4, 3, 8, 11, C.iron);
+    // The Hauberk of Calm Seas: a mail shirt in courses of rings, steel plates on the shoulders and a breastplate
+    // with a roundel of the accent on it, a gold belt and a mail skirt.
+    p.r(4, 3, 8, 12, C.iron);
+    for (const y of [12, 14]) p.r(4, y, 8, 1, "#6f7888");
+    for (const y of [6, 8]) {
+      p.r(2, y, 2, 1, "#6f7888");
+      p.r(12, y, 2, 1, "#6f7888");
+    }
+    p.r(2, 4, 2, 6, C.iron);
+    p.r(12, 4, 2, 6, C.iron);
     p.r(2, 2, 4, 3, C.steel);
     p.r(10, 2, 4, 3, C.steel);
-    p.r(5, 5, 6, 1, C.steel);
-    p.r(7, 6, 2, 3, p.accent);
-    p.r(4, 11, 8, 1, C.gold);
+    p.r(5, 4, 6, 6, C.steel);
+    p.r(5, 4, 6, 1, C.shine);
+    p.r(7, 6, 2, 2, p.accent);
+    p.r(4, 10, 8, 1, C.gold);
     p.r(6, 2, 4, 1, C.dark);
+  },
+  "oilskin-coat": (p) => {
+    // The Oilskin Greatcoat: yellow oilskin, a short cape over the shoulders under a stand-up collar, two rows of
+    // brass buttons, a dark belt with a buckle of the accent, cuffs of the accent and the skirts open below.
+    const [oil, deep, lit] = ["#b1933c", "#8a7230", "#c9ad55"];
+    p.r(4, 5, 8, 10, oil);
+    p.r(2, 5, 2, 6, oil);
+    p.r(12, 5, 2, 6, oil);
+    p.r(2, 10, 2, 1, p.accent);
+    p.r(12, 10, 2, 1, p.accent);
+    spans(p, lit, [[2, 4, 11], [3, 3, 12], [4, 2, 13]]);
+    p.r(2, 5, 12, 1, deep);
+    p.r(6, 0, 4, 2, deep);
+    for (const y of [7, 9]) {
+      p.r(6, y, 1, 1, C.gold);
+      p.r(9, y, 1, 1, C.gold);
+    }
+    p.r(4, 11, 8, 1, C.dark);
+    p.r(7, 11, 2, 1, p.accent);
+    p.r(7, 12, 2, 3, deep);
+    p.r(5, 13, 2, 1, deep);
+    p.r(9, 13, 2, 1, deep);
+  },
+  "diving-plate": (p) => {
+    // Diver's Plate: dark riveted iron, a brass corselet over the shoulders bolted round with a plate of the
+    // accent at its front, a chain slung across, and rope wound round the waist.
+    const [iron, brass, bolt, rope] = ["#5d6064", "#b8893a", "#d9ac55", "#b49a62"];
+    p.r(4, 5, 8, 10, iron);
+    p.r(2, 5, 2, 5, iron);
+    p.r(12, 5, 2, 5, iron);
+    spans(p, brass, [[1, 5, 10], [2, 3, 12], [3, 2, 13], [4, 2, 13], [5, 3, 12]]);
+    p.r(6, 1, 4, 1, C.dark);
+    for (const x of [3, 6, 9, 12]) p.r(x, 4, 1, 1, bolt);
+    p.r(7, 5, 2, 1, p.accent);
+    p.l(4, 7, 10, 10, C.dark);
+    for (const [x, y] of [[5, 12], [10, 12], [5, 14], [10, 14]]) p.r(x, y, 1, 1, "#8a8e94");
+    p.r(4, 11, 8, 1, rope);
+    p.r(5, 11, 1, 1, "#8f7a4a");
+    p.r(5, 12, 1, 2, rope);
   },
   "heavy-helm": (p) => {
     p.r(7, 0, 2, 2, p.accent);
@@ -482,14 +531,63 @@ const ART: Record<string, Art> = {
     p.r(7, 12, 2, 1, C.gold);
   },
   "armored-pants": (p) => {
-    p.r(4, 2, 8, 2, p.accent);
-    p.r(4, 4, 3, 10, C.iron);
-    p.r(9, 4, 3, 10, C.iron);
-    p.r(7, 4, 2, 3, C.iron);
+    // Deckhand Greaves: iron over the legs, steel knee cops, steel down the front of the shins strapped on in the
+    // accent, and a waistband of it.
+    p.r(4, 1, 8, 2, p.accent);
+    p.r(4, 3, 8, 3, C.iron);
+    p.r(4, 6, 3, 9, C.iron);
+    p.r(9, 6, 3, 9, C.iron);
+    p.r(4, 5, 3, 1, C.steel);
+    p.r(9, 5, 3, 1, C.steel);
     p.r(4, 8, 3, 2, C.steel);
     p.r(9, 8, 3, 2, C.steel);
-    p.r(4, 14, 3, 1, C.hide);
-    p.r(9, 14, 3, 1, C.hide);
+    p.r(3, 8, 1, 2, C.steel);
+    p.r(12, 8, 1, 2, C.steel);
+    p.r(5, 10, 1, 4, C.steel);
+    p.r(10, 10, 1, 4, C.steel);
+    p.r(4, 12, 3, 1, p.accent);
+    p.r(9, 12, 3, 1, p.accent);
+    p.r(4, 15, 3, 1, C.hide);
+    p.r(9, 15, 3, 1, C.hide);
+  },
+  "sailcloth-trousers": (p) => {
+    // Sailcloth Trousers: loose pale canvas with a seam down each leg and a patch on one knee, a rope tied at the
+    // waist, and each leg gathered at the shin by a cord of the accent.
+    const [cloth, seam, rope] = ["#d8cfb4", "#b3aa8f", "#b49a62"];
+    p.r(4, 1, 8, 5, cloth);
+    p.r(3, 6, 10, 1, cloth);
+    for (const x0 of [3, 9]) {
+      p.r(x0, 7, 4, 5, cloth);
+      p.r(x0, 12, 4, 1, p.accent);
+      p.r(x0, 13, 4, 2, cloth);
+    }
+    p.r(3, 7, 1, 5, seam);
+    p.r(12, 7, 1, 5, seam);
+    p.r(10, 8, 2, 2, seam);
+    p.r(4, 1, 8, 1, rope);
+    p.r(7, 2, 1, 2, rope);
+    p.r(4, 14, 3, 1, seam);
+    p.r(9, 14, 3, 1, seam);
+  },
+  "riveted-leggings": (p) => {
+    // Riveted Leggings: dark canvas, riveted iron plates down the thighs, round iron knee plates rimmed in brass
+    // with a boss of the accent, and a brass band round each shin.
+    const [canvas, iron, brass, rivet] = ["#4d4a3e", "#5d6064", "#b8893a", "#8a8e94"];
+    p.r(4, 1, 8, 2, "#3a382f");
+    p.r(4, 3, 8, 3, canvas);
+    p.r(4, 6, 3, 9, canvas);
+    p.r(9, 6, 3, 9, canvas);
+    p.r(4, 3, 3, 4, iron);
+    p.r(9, 3, 3, 4, iron);
+    for (const x of [4, 6, 9, 11]) p.r(x, 3, 1, 1, rivet);
+    spans(p, brass, [[7, 4, 6], [8, 3, 7], [9, 3, 7], [10, 4, 6]]);
+    spans(p, brass, [[7, 9, 11], [8, 8, 12], [9, 8, 12], [10, 9, 11]]);
+    p.r(4, 8, 3, 2, iron);
+    p.r(9, 8, 3, 2, iron);
+    p.r(5, 8, 1, 2, p.accent);
+    p.r(10, 8, 1, 2, p.accent);
+    p.r(4, 12, 3, 1, brass);
+    p.r(9, 12, 3, 1, brass);
   },
 
   // ---- trinkets ----

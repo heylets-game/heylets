@@ -1102,20 +1102,90 @@ export const LOW_POLY: Record<string, LowPolyDef> = {
     },
   },
   "chest-armor": {
+    // The Hauberk of Calm Seas: a mail shirt in courses of rings down to a skirt, steel pauldrons, a breastplate
+    // with a ridge down it, rivets along its top and a roundel of the accent with a calm sea across it, a gold belt.
     spin: 0.45,
     tip: 0.2,
     build: (k) => {
-      const pts: V3[] = [];
-      for (const [y, w, front, back] of [[6, 5, 2.4, 2.4], [3, 5.4, 3.4, 2.6], [-3, 4, 2.6, 2.3], [-6.2, 4.6, 2.7, 2.5]] as const) {
-        pts.push([-w, y, 0], [w, y, 0], [0, y, front], [0, y, -back]);
-        for (const sx of [-1, 1]) pts.push([sx * w * 0.72, y, front * 0.85], [sx * w * 0.72, y, -back * 0.9]);
-      }
-      k.hull(pts, C.iron);
+      const rows: Row[] = [[6, 5, 2.4, 2.4], [3, 5.4, 3.4, 2.6], [-3, 4, 2.6, 2.3], [-6.2, 4.6, 2.7, 2.5]];
+      k.hull(torsoPoints(rows), C.iron);
+      for (const y of [-2.2, -4.9, -5.7]) k.hull(torsoPoints([rowAt(rows, y + 0.15), rowAt(rows, y - 0.15)], 0.12), MAIL);
       k.cyl(2, 2.4, 0.5, 8, C.dark, { at: [0, 6.05, 0] });
       for (const sx of [-1, 1]) k.dome(2.8, 6, C.steel, { at: [sx * 4.8, 5.4, 0], rot: [0, 0, -sx * 0.5] });
-      k.plate([[0, 1.9], [1.4, 0], [0, -1.9], [-1.4, 0]], 0.4, k.a, { at: [0, 2, 3.25] }, 0.15);
+      const plate: V3[] = [];
+      for (const y of [5.6, 3, -1.6]) {
+        const z = frontAt(y, rows);
+        for (const sx of [-1, 1]) plate.push([sx * 3.6, y, z * 0.62 + 0.2], [sx * 3.6, y, z * 0.62 - 0.6]);
+        plate.push([0, y, z + 0.45], [0, y, z - 0.3]);
+      }
+      k.hull(plate, C.steel);
+      for (const x of [-2.4, -1.2, 0, 1.2, 2.4]) k.ball(0.28, C.shine, { at: [x, 5.3, frontAt(5.3, rows) * (1 - Math.abs(x) * 0.1) + 0.35] });
+      const f = frontAt(2.2, rows) + 0.5;
+      k.cyl(1.45, 1.45, 0.4, 10, C.gold, { at: [0, 2.2, f], rot: [Math.PI / 2, 0, 0] });
+      k.cyl(1.15, 1.15, 0.5, 10, k.a, { at: [0, 2.2, f + 0.1], rot: [Math.PI / 2, 0, 0] });
+      k.rod([[-0.85, 2.05, f + 0.4], [-0.3, 2.35, f + 0.4], [0.3, 2.05, f + 0.4], [0.85, 2.35, f + 0.4]], 0.14, C.gold, {}, 4);
       k.box(8.8, 1.3, 5.6, C.gold, { at: [0, -3.8, 0.1] }, 0.25);
       k.box(1.5, 1.5, 0.5, C.steel, { at: [0, -3.8, 3] }, 0.1);
+    },
+  },
+  "oilskin-coat": {
+    // The Oilskin Greatcoat: yellow oilskin to the shins, a short cape over the shoulders under a stand-up collar,
+    // buttoned over double-breasted with its edge in the accent, a dark belt with a buckle of it, cuffs of it, and
+    // the skirts open below the belt.
+    spin: 0.45,
+    tip: 0.2,
+    build: (k) => {
+      const [oil, deep, lit] = ["#b1933c", "#8a7230", "#c4a64e"];
+      const rows: readonly Row[] = [...TORSO.slice(0, 3), [-6.2, 5, 2.8, 2.6], [-11, 5.8, 3.2, 3]];
+      k.hull(torsoPoints(rows, 0.15), oil);
+      // The front buttoned over: a flap to the wearer's left, its edge in the accent.
+      const flap: V3[] = [];
+      for (const y of [5.4, 3, -3]) for (const x of [-1.6, 1.8]) flap.push([x, y, frontAt(y, rows) + 0.35], [x, y, frontAt(y, rows) - 0.4]);
+      k.hull(flap, lit);
+      k.rod([5.4, 3, -3].map((y): V3 => [1.85, y, frontAt(y, rows) + 0.4]), 0.24, k.a, {}, 4);
+      for (const y of [3.2, 1.2, -0.8]) for (const x of [-0.7, 1]) k.ball(0.36, C.gold, { at: [x, y, frontAt(y, rows) + 0.55] });
+      // Below the belt it hangs open: a dark gap between its skirts.
+      k.box(1.2, 7.6, 0.4, tone(oil, -0.28), { at: [0, -7.2, frontAt(-7.2, rows) + 0.1] });
+      for (const sx of [-1, 1]) k.box(2.4, 1, 0.4, deep, { at: [sx * 3, -5.6, frontAt(-5.6, rows) + 0.15] }, 0.15);
+      k.hull(torsoPoints([[-3.25, 4.5, 2.7, 2.4], [-4.35, 4.5, 2.7, 2.4]], 0.35), C.dark);
+      k.box(1.4, 1.4, 0.5, k.a, { at: [0, -3.8, frontAt(-3.8, rows) + 0.6] }, 0.1);
+      for (const sx of [-1, 1]) {
+        k.cyl(1.7, 2, 4.6, 6, oil, { at: [sx * 5.5, 3.6, 0], rot: [0, 0, sx * 0.5] });
+        k.cyl(1.9, 1.9, 0.9, 6, k.a, { at: [sx * 6.6, 1.6, 0], rot: [0, 0, sx * 0.5] });
+      }
+      // The cape over the shoulders, hemmed darker, and the collar standing up out of it.
+      k.cyl(3, 6.6, 2.8, 12, lit, { at: [0, 5.6, 0], scale: [1, 1, 0.6] });
+      k.cyl(6.75, 6.75, 0.5, 12, deep, { at: [0, 4.15, 0], scale: [1, 1, 0.61] });
+      k.cyl(2.3, 2.6, 1.6, 10, deep, { at: [0, 7.6, 0] });
+      k.cyl(1.9, 1.9, 0.4, 10, C.dark, { at: [0, 8.3, 0] });
+    },
+  },
+  "diving-plate": {
+    // Diver's Plate: riveted iron over a dark canvas suit, a brass corselet over the shoulders bolted round with a
+    // plate of the accent at its front, a chain slung across the chest, and rope wound round the waist and knotted.
+    spin: 0.45,
+    tip: 0.2,
+    build: (k) => {
+      const [iron, brass, bolt, rope] = ["#5d6064", "#b8893a", "#d9ac55", "#b49a62"];
+      const rows: readonly Row[] = [...TORSO.slice(0, 3), [-6.2, 4.9, 2.8, 2.6]];
+      k.hull(torsoPoints(rows), iron);
+      for (const y of [2.4, 0.4, -1.6]) for (const sx of [-1, 1]) k.ball(0.3, "#8a8e94", { at: [sx * 2.2, y, frontAt(y, rows) * 0.9 + 0.2] });
+      for (const sx of [-1, 1]) k.cyl(1.7, 1.9, 4.2, 6, tone(iron, -0.08), { at: [sx * 5.5, 3.9, 0], rot: [0, 0, sx * 0.5] });
+      k.cyl(3.3, 5.6, 2.2, 12, brass, { at: [0, 5.7, 0], scale: [1, 1, 0.68] });
+      for (let i = 0; i < 10; i++) {
+        const a = ((i + 0.5) / 10) * Math.PI * 2;
+        k.ball(0.32, bolt, { at: [Math.sin(a) * 5.15, 5, Math.cos(a) * 5.15 * 0.7] });
+      }
+      k.cyl(2.3, 2.5, 1, 10, tone(brass, -0.15), { at: [0, 7.1, 0] });
+      k.box(2.4, 1, 0.4, k.a, { at: [0, 5.5, 3.2], rot: [-0.55, 0, 0] }, 0.1);
+      for (let i = 0; i < 7; i++) {
+        const t = i / 6;
+        const y = 3.4 - 6.4 * t;
+        k.ring(0.6, 0.2, C.dark, { at: [-3.4 + 6.4 * t, y, frontAt(y, rows) + 0.25], rot: [0, i % 2 ? Math.PI / 2 : 0, -0.8] }, 4, 8);
+      }
+      k.hull(torsoPoints([[-3.1, 4.4, 2.7, 2.4], [-4.5, 4.5, 2.7, 2.4]], 0.3), rope);
+      k.ball(0.8, tone(rope, -0.1), { at: [-1.6, -3.8, frontAt(-3.8, rows) + 0.6] });
+      k.rod([[-1.6, -4.2, frontAt(-3.8, rows) + 0.6], [-1.9, -6.2, frontAt(-6.2, rows) + 0.5], [-1.7, -7.6, frontAt(-6.2, rows) + 0.5]], 0.32, rope, {}, 4);
     },
   },
   "heavy-helm": {
@@ -1260,6 +1330,8 @@ export const LOW_POLY: Record<string, LowPolyDef> = {
     },
   },
   "armored-pants": {
+    // Deckhand Greaves: iron over the legs, domed steel knee cops with a wing on the outside, steel greaves down the
+    // shins strapped on in the accent, and a waistband of it.
     spin: 0.45,
     tip: 0.15,
     build: (k) => {
@@ -1268,8 +1340,57 @@ export const LOW_POLY: Record<string, LowPolyDef> = {
       k.box(8.2, 3, 4, C.iron, { at: [0, 3.8, 0] }, 0.5);
       for (const sx of [-1, 1]) {
         k.cyl(2, 1.7, 10, 6, C.iron, { at: [sx * 2.3, -2.6, 0], rot: [0, 0, sx * 0.05] });
-        k.box(2.6, 2.2, 1, C.steel, { at: [sx * 2.4, -1.4, 1.8] }, 0.35);
+        k.cyl(2.2, 2.2, 0.9, 6, C.steel, { at: [sx * 2.3, 1, 0] });
+        k.dome(1.7, 8, C.steel, { at: [sx * 2.4, -1.4, 1.2], rot: [Math.PI / 2, 0, 0], scale: [1, 0.7, 1] });
+        k.plate([[0, 1.3], [1.4, 0], [0, -1.3], [-0.4, 0]], 0.3, C.steel, { at: [sx * 4.1, -1.4, 0.4], rot: [0, sx * Math.PI / 2, 0] }, 0.08);
+        k.box(2.8, 3.8, 0.7, C.steel, { at: [sx * 2.4, -5.2, 1.6], rot: [0.05, 0, 0] }, 0.3);
+        k.cyl(2.05, 2.05, 0.6, 6, k.a, { at: [sx * 2.4, -4.4, 0] });
         k.cyl(1.95, 1.95, 1.2, 6, C.hide, { at: [sx * 2.6, -7.6, 0] });
+      }
+    },
+  },
+  "sailcloth-trousers": {
+    // Sailcloth Trousers: loose pale canvas tied at the waist with a rope, sewn in panels with a seam down each leg
+    // and a patch on one knee, each leg gathered at the shin by a cord of the accent and bloused out below it.
+    spin: 0.45,
+    tip: 0.15,
+    build: (k) => {
+      const [cloth, seam, rope] = ["#d8cfb4", "#b3aa8f", "#b49a62"];
+      k.box(8.8, 4.4, 4.4, cloth, { at: [0, 4.6, 0] }, 0.6);
+      k.cyl(4.6, 4.6, 0.7, 10, rope, { at: [0, 6.5, 0], scale: [1, 1, 0.52] });
+      k.ball(0.6, tone(rope, -0.1), { at: [0.8, 6.4, 2.45] });
+      for (const dx of [0.5, 1.2]) k.rod([[0.8, 6.2, 2.5], [dx + 0.2, 4.6, 2.55], [dx, 3.4, 2.4]], 0.22, rope, {}, 4);
+      for (const sx of [-1, 1]) {
+        k.cyl(2.35, 2.55, 8.4, 6, cloth, { at: [sx * 2.45, -1.6, 0], rot: [0, 0, sx * 0.06] });
+        k.cyl(1.9, 1.9, 0.8, 6, k.a, { at: [sx * 2.75, -6, 0] });
+        k.cyl(2.3, 1.95, 1.6, 6, cloth, { at: [sx * 2.75, -7.2, 0] });
+        k.box(0.3, 8, 0.4, seam, { at: [sx * 4.9, -1.4, 0], rot: [0, 0, sx * 0.06] });
+      }
+      k.box(2, 2, 0.4, seam, { at: [2.6, -2, 2.4] }, 0.1);
+    },
+  },
+  "riveted-leggings": {
+    // Riveted Leggings: dark canvas, riveted iron plates down the thighs, round iron knee plates on a brass lip
+    // with rivets round them and a boss of the accent, and a brass band round each shin.
+    spin: 0.45,
+    tip: 0.15,
+    build: (k) => {
+      const [canvas, iron, brass, rivet] = ["#4d4a3e", "#5d6064", "#b8893a", "#8a8e94"];
+      k.box(8.6, 2, 4.2, tone(canvas, -0.06), { at: [0, 6, 0] }, 0.4);
+      k.box(8.2, 3, 4, canvas, { at: [0, 3.8, 0] }, 0.5);
+      for (const sx of [-1, 1]) {
+        k.cyl(2, 1.75, 10, 6, canvas, { at: [sx * 2.3, -2.6, 0], rot: [0, 0, sx * 0.05] });
+        k.box(2.8, 4, 0.6, iron, { at: [sx * 2.3, 1.8, 2.1] }, 0.15);
+        for (const [x, y] of [[-0.95, 3.4], [0.95, 3.4], [-0.95, 0.2], [0.95, 0.2]]) k.ball(0.25, rivet, { at: [sx * 2.3 + x, y, 2.45] });
+        k.dome(1.95, 8, brass, { at: [sx * 2.4, -2.2, 1.2], rot: [Math.PI / 2, 0, 0], scale: [1, 0.55, 1] });
+        k.dome(1.65, 8, iron, { at: [sx * 2.4, -2.2, 1.3], rot: [Math.PI / 2, 0, 0], scale: [1, 0.75, 1] });
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
+          k.ball(0.2, rivet, { at: [sx * 2.4 + Math.cos(a) * 1.15, -2.2 + Math.sin(a) * 1.15, 2.4] });
+        }
+        k.ball(0.45, k.a, { at: [sx * 2.4, -2.2, 2.6] });
+        k.cyl(1.95, 1.95, 0.8, 6, brass, { at: [sx * 2.5, -5.4, 0] });
+        k.cyl(1.85, 1.85, 0.8, 6, tone(canvas, -0.08), { at: [sx * 2.55, -7.2, 0] });
       }
     },
   },
@@ -1585,6 +1706,20 @@ function torsoPoints(rows: readonly Row[], grow = 0): V3[] {
   }
   return pts;
 }
+/** A tunic's row at height `y`, between the rows either side of it (`rows` from the top down). */
+function rowAt(rows: readonly Row[], y: number): Row {
+  for (let i = 0; i + 1 < rows.length; i++) {
+    const [p, q] = [rows[i], rows[i + 1]];
+    if (y <= p[0] && y >= q[0]) {
+      const t = (p[0] - y) / (p[0] - q[0]);
+      return [y, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t, p[3] + (q[3] - p[3]) * t];
+    }
+  }
+  const end = y > rows[0][0] ? rows[0] : rows[rows.length - 1];
+  return [y, end[1], end[2], end[3]];
+}
+/** The darker line of a course of mail rings. */
+const MAIL = "#6f7888";
 /** How far forward the tunic's front is at height `y`. */
 function frontAt(y: number, rows: readonly Row[] = TORSO): number {
   for (let i = 0; i + 1 < rows.length; i++) {
