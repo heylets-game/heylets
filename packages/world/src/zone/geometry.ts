@@ -464,15 +464,65 @@ export function directionToward(from: HexPos, toward: HexPos): HexPos {
   return best;
 }
 
-/** A straight run of hexes from `from` (not included) toward `toward`, stopping at the map's edge or at rock. */
+/**
+ * Which way `toward` lies from `from`, as a place round the rings of hexes about `from`: 0 at HEX_DIRS[0], 1 at
+ * HEX_DIRS[1], and so on round to 6, with the hexes of a ring between two of those spread evenly between them. Every
+ * ring is the same shape, only bigger, so a straight line out of `from` crosses each one at the same place: the i-th
+ * hex of the ring `d` out lies at i / d. A shape aimed at a hex is laid along that line, whichever way it runs.
+ */
+export function bearing(from: HexPos, toward: HexPos): number {
+  const dq = toward.q - from.q;
+  const dr = toward.r - from.r;
+  if (dq === 0 && dr === 0) return 0;
+  for (let k = 0; k < 6; k++) {
+    // The aim as so much of one direction and so much of the next round from it: both at least nothing, in the sixth it lies in.
+    const a = HEX_DIRS[k];
+    const b = HEX_DIRS[(k + 1) % 6];
+    const det = a.q * b.r - a.r * b.q;
+    const of = (dq * b.r - dr * b.q) / det;
+    const next = (a.q * dr - a.r * dq) / det;
+    if (of >= 0 && next >= 0) return (k + next / (of + next)) % 6;
+  }
+  return 0;
+}
+
+/**
+ * Aims that fall exactly between two hexes go the way round the rings that HEX_DIRS runs: a nudge far too small to
+ * move any other aim off the hexes it picks.
+ */
+const LEAN = 1e-7;
+
+/** The hex at `place` (counted in hexes round from HEX_DIRS[0]) on the ring `d` out from `from`. */
+function onRing(from: HexPos, d: number, place: number): HexPos {
+  const i = ((place % (6 * d)) + 6 * d) % (6 * d);
+  const k = Math.floor(i / d);
+  const j = i - k * d;
+  const a = HEX_DIRS[k];
+  const b = HEX_DIRS[(k + 1) % 6];
+  return { q: from.q + (d - j) * a.q + j * b.q, r: from.r + (d - j) * a.r + j * b.r };
+}
+
+/**
+ * The `width` hexes of the ring `d` out from `from` that lie nearest the line aimed along `bearing` (see bearing),
+ * side by side round the ring, in order round it.
+ */
+export function ringToward(from: HexPos, d: number, aim: number, width: number): HexPos[] {
+  const start = Math.round(aim * d - (width - 1) / 2 + LEAN);
+  return Array.from({ length: width }, (_, n) => onRing(from, d, start + n));
+}
+
+/**
+ * A run of hexes from `from` (not included) toward `toward`, one a step further out each time, as near the straight
+ * line through `toward` as hexes can lie, whichever way it points: `length` of them, each beside the last, but it
+ * stops at the map's edge or at rock.
+ */
 export function lineFrom(map: WorldMap, from: HexPos, toward: HexPos, length: number): HexPos[] {
   if (sameHex(from, toward)) return [];
-  const dir = directionToward(from, toward);
+  const aim = bearing(from, toward);
   const blocked = sightBlockers(map);
   const out: HexPos[] = [];
-  let cur = from;
-  for (let i = 0; i < length; i++) {
-    cur = { q: cur.q + dir.q, r: cur.r + dir.r };
+  for (let d = 1; d <= length; d++) {
+    const [cur] = ringToward(from, d, aim, 1);
     if (!inBounds(cur, map.grid) || blocked.has(posKey(cur))) break;
     out.push(cur);
   }

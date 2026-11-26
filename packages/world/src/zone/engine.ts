@@ -165,14 +165,28 @@ function passSpot(ctx: Ctx, from: Unit, spot: UnitCondition): void {
   if (laid) laid.by = spot.by;
 }
 
-/** Put a shield of `amount` points on a unit for `rounds` of its turns (Bolstered). A bigger one replaces a smaller. */
-export function shieldUnit(ctx: Ctx, unit: Unit, amount: number, rounds: number): void {
-  if (amount > 0) addCondition(ctx, unit, "bolstered", rounds, amount);
+/**
+ * A shield's condition (Bolstered) does not wear off with turns: it lasts until blows spend it or the fight ends
+ * (UNTIMED). Its `rounds` is only kept above 0, so it is not taken for spent.
+ */
+const SHIELD_KEEPS = 1;
+
+/** A shield is a thing of fights: only one in a fight can be given one. */
+const shieldable = (ctx: Ctx, unit: Unit): boolean => inFight(ctx.state, unit.id);
+
+/** Put a shield of `amount` points on a unit in a fight (Bolstered), to last the fight. A bigger one replaces a smaller. */
+export function shieldUnit(ctx: Ctx, unit: Unit, amount: number): void {
+  if (amount > 0 && shieldable(ctx, unit)) addCondition(ctx, unit, "bolstered", SHIELD_KEEPS, amount);
 }
 
-/** Add `amount` points to whatever shield a unit already has (Bulwark Strike), lasting `rounds` of its turns at least. */
-export function addShield(ctx: Ctx, unit: Unit, amount: number, rounds: number): void {
-  if (amount > 0) addCondition(ctx, unit, "bolstered", rounds, shieldOf(unit) + amount);
+/** Add `amount` points to whatever shield a unit in a fight already has (Bulwark Strike), to last the fight. */
+export function addShield(ctx: Ctx, unit: Unit, amount: number): void {
+  if (amount > 0 && shieldable(ctx, unit)) addCondition(ctx, unit, "bolstered", SHIELD_KEEPS, shieldOf(unit) + amount);
+}
+
+/** The fight is over for this unit (it ended, or they got away from it): its shield goes. */
+export function dropShield(unit: Unit): void {
+  removeCondition(unit, "bolstered");
 }
 
 /** The points of shield a unit has left (Bolstered), 0 for none. */
@@ -320,8 +334,11 @@ export function spendLuck(unit: Unit): void {
   if (luck.rounds <= 0) removeCondition(unit, "lucky");
 }
 
-/** Conditions that keep, turn after turn, until something else uses them up: Lucky, spent a roll at a time. */
-export const UNTIMED: ReadonlySet<string> = new Set(["lucky"]);
+/**
+ * Conditions that keep, turn after turn, until something else uses them up: Lucky, spent a roll at a time; and a
+ * shield (Bolstered), spent by blows, which lasts the fight and goes with it (zone.ts settle, and flee for one who gets away).
+ */
+export const UNTIMED: ReadonlySet<string> = new Set(["lucky", "bolstered"]);
 
 /** Roll a save against a difficulty and say so. */
 export function saveRoll(ctx: Ctx, unit: Unit, stat: StatKey, vs: number, label: string, disadvantage = false): Roll {
