@@ -1559,7 +1559,10 @@ export class WorldRenderer {
     // is done a moment later, once whatever view comes next is up and the page has a quiet moment, not in the
     // middle of going to it.
     const spent = this.renderer;
-    const lose = () => spent.forceContextLoss();
+    // Already dropped by the browser (it holds only so many): nothing to give back, and three.js warns if asked.
+    const lose = () => {
+      if (!spent.getContext().isContextLost()) spent.forceContextLoss();
+    };
     setTimeout(() => (typeof requestIdleCallback === "function" ? requestIdleCallback(lose, { timeout: 4000 }) : lose()), 1500);
     canvas.remove();
   }

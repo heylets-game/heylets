@@ -34,6 +34,11 @@ interface Studio {
 }
 
 let studio: Studio | null | undefined;
+// Changed while developing, this file is run afresh and makes a studio of its own: give this one's WebGL context
+// back now, or every change holds one more, and the browser drops the oldest to make room.
+import.meta.hot?.dispose(() => {
+  if (studio && !studio.renderer.getContext().isContextLost()) studio.renderer.forceContextLoss();
+});
 const cache = new Map<string, string>();
 iconArtListeners.add(() => cache.clear());
 

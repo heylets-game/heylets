@@ -28,6 +28,11 @@ let studio: Studio | null | undefined;
 /** After the browser refused a renderer: when to ask again (it may only have been a bad moment). */
 let retryAt = 0;
 const RETRY_MS = 5000;
+// Changed while developing, this file is run afresh and makes a studio of its own: give this one's WebGL context
+// back now, or every change holds one more, and the browser drops the oldest (the figure lab's) to make room.
+import.meta.hot?.dispose(() => {
+  if (studio && !studio.renderer.getContext().isContextLost()) studio.renderer.forceContextLoss();
+});
 
 function open(): Studio | null {
   // The browser drops the oldest WebGL context when a page holds too many: a renderer that lost its own is

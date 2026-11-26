@@ -122,22 +122,44 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
   }, [person, dressed, ownLook, gear, rarity, appearance]);
 
   const canvas = useRef<HTMLCanvasElement>(null);
+  /**
+   * Which canvas the stage is drawn on. A canvas whose WebGL context the browser has dropped (it holds only so many,
+   * and drops the oldest: easily the lab's, while the dev server swaps in changed code) never draws again, so the
+   * stage is built afresh on a new one. `swapped` is when that last happened, so a browser that gives no working
+   * context at all is not asked again and again.
+   */
+  const [generation, setGeneration] = useState(0);
+  const swapped = useRef(-Infinity);
   const readout = useRef<HTMLSpanElement>(null);
   const liveRef = useRef(live);
   liveRef.current = live;
   const stage = useRef<{ stand: THREE.Group; camera: THREE.PerspectiveCamera; figure: Figure | null; look: { yaw: number; pitch: number; away: number; mid: number }; act(action: Act): string; step(): void } | null>(null);
 
-  // The stage: a floor, lights that throw the figure's shadow, and a camera that looks round it. Made once.
+  // The stage: a floor, lights that throw the figure's shadow, and a camera that looks round it. Made once for each canvas.
   useEffect(() => {
     const el = canvas.current;
     if (!el) return;
+    const swap = () => {
+      if (performance.now() - swapped.current < 1000) return false;
+      swapped.current = performance.now();
+      setGeneration((g) => g + 1);
+      return true;
+    };
     let renderer: THREE.WebGLRenderer;
     try {
       renderer = new THREE.WebGLRenderer({ canvas: el, antialias: true });
     } catch {
-      setNote("No WebGL here: the stage cannot be drawn.");
+      if (!swap()) setNote("No WebGL here: the stage cannot be drawn.");
       return;
     }
+    // Lost already (dropped between this canvas's last stage and this one): onto a new canvas.
+    if (renderer.getContext().isContextLost()) {
+      renderer.dispose();
+      if (!swap()) setNote("No WebGL here: the stage cannot be drawn.");
+      return;
+    }
+    const lost = () => swap();
+    el.addEventListener("webglcontextlost", lost);
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -308,6 +330,8 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
 
     let raf = 0;
     let last = performance.now();
+    /** The last frame threw: its error has been said already. */
+    let failing = false;
     const frame = (at: number) => {
       const s = stage.current;
       if (!s) return;
@@ -315,7 +339,15 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
       last = at;
       const now = liveRef.current;
       if (now.spin && !dragging) look.yaw += real * 0.5;
-      if (!now.paused) draw(real * now.speed);
+      // A frame that throws (a figure or a move half-way through being changed) is passed over, said once, and
+      // the stage carries on: otherwise the next frame is never asked for, and the stage stands still for good.
+      try {
+        if (!now.paused) draw(real * now.speed);
+        failing = false;
+      } catch (e) {
+        if (!failing) console.error("Figure lab: a frame failed", e);
+        failing = true;
+      }
       // The camera goes round the figure; the figure itself stays facing +z, as in the game.
       const flat = Math.cos(look.pitch) * look.away;
       camera.position.set(Math.sin(look.yaw) * flat, look.mid + Math.sin(look.pitch) * look.away, Math.cos(look.yaw) * flat);
@@ -364,6 +396,7 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
       el.removeEventListener("pointerup", up);
       el.removeEventListener("pointercancel", up);
       el.removeEventListener("wheel", wheel);
+      el.removeEventListener("webglcontextlost", lost);
       stage.current?.figure?.dispose();
       for (const f of fx) f.sprite.material.dispose();
       mark.geometry.dispose();
@@ -373,7 +406,7 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
       renderer.dispose();
       stage.current = null;
     };
-  }, []);
+  }, [generation]);
 
   // The figure: built afresh whenever who it is, what it wears or how it is made changes.
   const built = `${kind}|${JSON.stringify(outfit ?? null)}|${rod}|${asleep}`;
@@ -395,7 +428,7 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
     s.look.mid = Math.max(0.4, (box.max.y + box.min.y) / 2);
     setNote("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [built]);
+  }, [built, generation]);
 
   // Escape shuts the lab; the space bar holds and lets go of time.
   useEffect(() => {
@@ -426,7 +459,7 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
 
   return (
     <div className="figure-lab" role="dialog" aria-label="Figure lab">
-      <canvas ref={canvas} className="figure-lab-stage" aria-label="The figure on its stage. Drag to look round it; scroll to come closer." role="img" />
+      <canvas key={generation} ref={canvas} className="figure-lab-stage" aria-label="The figure on its stage. Drag to look round it; scroll to come closer." role="img" />
       <div className="figure-lab-side panel">
         <div className="figure-lab-head">
           <strong>Figure lab</strong>

@@ -296,6 +296,11 @@ export const ICON_PX = 40;
 const OUTLINE = [27, 24, 48];
 const icons = new Map<string, string>();
 let iconRenderer: THREE.WebGLRenderer | null = null;
+// Changed while developing, this file is run afresh and makes a renderer of its own: give this one's WebGL context
+// back now, or every change holds one more, and the browser drops the oldest to make room.
+import.meta.hot?.dispose(() => {
+  if (iconRenderer && !iconRenderer.getContext().isContextLost()) iconRenderer.forceContextLoss();
+});
 
 /**
  * A catch's pixel sprite, rendered from its own model at a three-quarter
