@@ -793,14 +793,17 @@ export function fxTexture(kind: FxKind, color: string, flip = false): THREE.Canv
 
 // ---------- status badges ----------
 
-/** A condition on a unit, as its badge shows it: what it is, its colour, and rounds left. */
+/** A condition on a unit, as its badge shows it: what it is, its colour, rounds left, and stacks. */
 export interface Badge {
   kind: string;
   color: string;
   rounds: number;
-  /** For a condition that comes in stacks (Burning, Drowning), how many, when there is more than one. */
+  /** For a condition that comes in stacks (Bleeding, Burning, Drowning), how many: shown even when it is one. */
   stacks?: number;
 }
+
+/** The tiny hourglass beside a badge's rounds, 5 by 5, "#" lit. */
+const HOURGLASS = ["#####", ".#.#.", "..#..", ".###.", "#####"];
 
 /** A small pixel glyph for each condition, 7 by 7, "#" lit. */
 const GLYPHS: Record<string, string[]> = {
@@ -847,11 +850,12 @@ const GLYPHS: Record<string, string[]> = {
 };
 
 /** The key a badge row is drawn for, to know when it has changed. */
-export const badgesKey = (badges: readonly Badge[]): string => badges.map((b) => `${b.kind}:${b.rounds}:${b.stacks ?? 1}`).join(",");
+export const badgesKey = (badges: readonly Badge[]): string => badges.map((b) => `${b.kind}:${b.rounds}:${b.stacks ?? ""}`).join(",");
 
 /**
  * A row of status badges: each a dark square edged and tinted in the condition's colour, its glyph in that
- * colour, how many rounds it has left in the bottom corner, and its stacks (if more than one) in the top one. Drawn crisp, like the plates.
+ * colour, the rounds it has left in the bottom right beside a tiny hourglass, and its stacks (for one that stacks) in
+ * the top left. Drawn crisp, like the plates.
  */
 export function badgeTexture(badges: readonly Badge[]): { texture: THREE.CanvasTexture; aspect: number } {
   const SIZE = 22;
@@ -874,25 +878,30 @@ export function badgeTexture(badges: readonly Badge[]): { texture: THREE.CanvasT
     const glyph = GLYPHS[b.kind] ?? GLYPHS.exposed;
     ctx.fillStyle = b.color;
     glyph.forEach((row, y) => [...row].forEach((c, gx) => c === "#" && ctx.fillRect(x + 3 + gx * 2, 3 + y * 2, 2, 2)));
+    ctx.font = "bold 9px ui-monospace, Menlo, monospace";
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "#1c0d0e";
+    ctx.textBaseline = "bottom";
     if (b.rounds > 0) {
-      ctx.font = "bold 9px ui-monospace, Menlo, monospace";
+      // Bottom right: the rounds left, the hourglass just to their left on a dark patch so it reads over the glyph.
+      const text = String(b.rounds);
       ctx.textAlign = "right";
-      ctx.textBaseline = "bottom";
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = "#1c0d0e";
-      ctx.strokeText(String(b.rounds), x + SIZE - 1, SIZE);
+      ctx.strokeText(text, x + SIZE - 1, SIZE);
       ctx.fillStyle = "#fbe6c8";
-      ctx.fillText(String(b.rounds), x + SIZE - 1, SIZE);
+      ctx.fillText(text, x + SIZE - 1, SIZE);
+      const hx = x + SIZE - 2 - Math.ceil(ctx.measureText(text).width) - 6;
+      ctx.fillStyle = "#1c0d0e";
+      ctx.fillRect(hx - 1, SIZE - 8, 7, 7);
+      ctx.fillStyle = "#fbe6c8";
+      HOURGLASS.forEach((row, y) => [...row].forEach((c, gx) => c === "#" && ctx.fillRect(hx + gx, SIZE - 7 + y, 1, 1)));
     }
-    if ((b.stacks ?? 1) > 1) {
-      ctx.font = "bold 9px ui-monospace, Menlo, monospace";
+    if (b.stacks !== undefined && b.stacks > 0) {
+      // Top left: the stacks.
       ctx.textAlign = "left";
       ctx.textBaseline = "top";
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = "#14101f";
-      ctx.strokeText(`×${b.stacks}`, x + 1, 0);
+      ctx.strokeText(String(b.stacks), x + 1, 0);
       ctx.fillStyle = b.color;
-      ctx.fillText(`×${b.stacks}`, x + 1, 0);
+      ctx.fillText(String(b.stacks), x + 1, 0);
     }
   });
   const texture = new THREE.CanvasTexture(canvas);
