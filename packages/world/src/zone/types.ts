@@ -439,6 +439,8 @@ export type DevOp =
   | { op: "enemy_use"; unit: string; ability: string; target?: string }
   /** The combat sandbox (ZoneState.sandbox), on or off. Off in the middle of an enemy's turn: it plays it. */
   | { op: "sandbox"; on: boolean }
+  /** Put anyone standing straight on a hex (one they would have room on), with no walk to it. */
+  | { op: "place"; unit: string; at: HexPos }
   /** In a fight: end whoever's turn it is and start the next one's (`round`: every turn to the end of the round). */
   | { op: "next_turn"; round?: boolean }
   /** Heroes cannot go down: 0 HP does nothing. */

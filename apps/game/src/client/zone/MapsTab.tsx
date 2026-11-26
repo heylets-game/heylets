@@ -147,9 +147,13 @@ export function MapsTab() {
                 <>
                   <button className="small" onClick={() => send({ op: "next_turn" })}>Next turn</button>
                   <button className="small" onClick={() => send({ op: "next_turn", round: true })}>Next round</button>
+                  <button className={`small ${dev.tool?.tool === "place" ? "selected" : ""}`} onClick={() => setZoneDev({ tool: dev.tool?.tool === "place" ? null : { tool: "place" } })}>
+                    {dev.tool?.tool === "place" ? "Done placing" : "Put whoever you play anywhere: click the map"}
+                  </button>
                 </>
               )}
             </div>
+            {dev.flags.sandbox && <p className="muted">Every hero in the fight is yours to play, on anyone's turn, as often as you like: AP and cooldowns are put back after everything you do.</p>}
           </div>
           <div className="dev-row">
             <button className="small" onClick={() => send({ op: "heal" })}>Heal and restock everyone</button>

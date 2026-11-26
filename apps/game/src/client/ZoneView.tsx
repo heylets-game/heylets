@@ -1859,11 +1859,13 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const state = useMemo(() => (zone.state ? believe(zone.state, ahead) : null), [zone.state, ahead]);
   const enc = state?.encounter ?? null;
   // Which of your own you are playing: your hero, one of your party, or a stand-in or creature whose turn it is.
-  const mine = useMemo(() => state?.units.filter((u) => u.side === "hero" && (ownHero(state, u.id) || ownHero(state, u.controller))) ?? [], [state]);
+  // In the combat sandbox (dev toolbox), every hero in the fight is yours to play too.
+  const sandboxed = (u: Unit) => !!state?.sandbox && !!state.encounter?.order.includes(u.id);
+  const mine = useMemo(() => state?.units.filter((u) => u.side === "hero" && (ownHero(state, u.id) || ownHero(state, u.controller) || sandboxed(u))) ?? [], [state]);
   // The Maps tab (dev toolbox) can change these: it is told who they are and what they have.
   const mineKey = mine.map((u) => `${u.id}:${u.kind}:${u.level}:${u.outfit?.main_hand?.ref}:${u.abilities.join(",")}`).join("|");
   useEffect(() => {
-    setZoneDev({ heroes: mine.filter((u) => !u.summon).map((u) => ({ id: u.id, name: u.name, classId: u.kind, level: u.level, weapon: u.outfit?.main_hand?.ref, abilities: u.torchHand === "main" ? (u.stowed ?? []) : u.abilities })) });
+    setZoneDev({ heroes: mine.filter((u) => !u.summon && !!state && (ownHero(state, u.id) || ownHero(state, u.controller))).map((u) => ({ id: u.id, name: u.name, classId: u.kind, level: u.level, weapon: u.outfit?.main_hand?.ref, abilities: u.torchHand === "main" ? (u.stowed ?? []) : u.abilities })) });
   }, [mineKey]);
   const flags = { aiOff: !!state?.aiOff, undying: !!state?.undying, timerOff: !!state?.timerOff, sandbox: !!state?.sandbox };
   useEffect(() => setZoneDev({ flags }), [flags.aiOff, flags.undying, flags.timerOff, flags.sandbox]);
@@ -1871,7 +1873,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const onMap = state?.units.filter((u) => !u.down && !u.lost && !u.summon && !state.dark?.includes(u.id)) ?? [];
   const onMapKey = onMap.map((u) => `${u.id}:${u.name}:${u.abilities.join(",")}`).join("|");
   useEffect(() => setZoneDev({ units: onMap.map((u) => ({ id: u.id, name: u.name, side: u.side, abilities: u.abilities })) }), [onMapKey]);
-  const ready = (u: Unit) => !!enc && enc.acting.includes(u.id) && !enc.done.includes(u.id) && !u.down;
+  // In the sandbox, anyone in the fight may act whenever the dev likes.
+  const ready = (u: Unit) => !!enc && !u.down && (sandboxed(u) || (enc.acting.includes(u.id) && !enc.done.includes(u.id)));
   const act = mine.find((u) => u.id === playAs && (!enc || !enc.order.includes(u.id) || ready(u))) ?? mine.find(ready) ?? mine.find((u) => u.id === state?.you) ?? mine[0];
   // The hero of yours being played (party.ts): `act` itself, or whose stand-in or creature it is. Their sheet, bag and
   // share of the loot are what the screen shows, and what they carry comes out of their own pack.
@@ -2435,6 +2438,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     const there = unitFor(pos, want, clicked);
     if (dev.tool?.tool === "spawn") return dev.open?.send({ op: "spawn", kinds: dev.tool.kinds, at: pos });
     if (dev.tool?.tool === "paint") return dev.open?.send({ op: "paint", kind: dev.tool.surface, hexes: dev.tool.wide ? zoneBlast(state.map, pos, 1) : [pos] });
+    if (dev.tool?.tool === "place") return dev.open?.send({ op: "place", unit: act.id, at: pos });
     if (dev.tool?.tool === "pick") {
       const side = dev.tool.side;
       const one = unitsAt(z ?? state, pos).find((u) => u.side === side && !u.down && !u.summon && !state.dark?.includes(u.id));
@@ -2794,7 +2798,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const place: ReactNode = pick
     ? <>{pick.kind === "ability" ? ABILITIES[pick.id].name : pick.kind === "item" ? THROWABLES[pick.item].name : COMMON_ACTIONS[pick.what].name} <span className="muted">· {pick.kind === "item" && THROWABLES[pick.item].drink ? "click where to throw it, or yourself to drink it" : pick.kind === "item" && THROWABLES[pick.item].light && !act?.torch ? "click where to throw it, or yourself to light it to hold" : "click a target on the map"}, or Esc to put it back</span></>
     : dev.tool
-      ? <>Dev tool <span className="muted">· {dev.tool.tool === "spawn" ? "click a hex to place the group" : dev.tool.tool === "pick" ? `click ${dev.tool.side === "enemy" ? "an enemy" : "a hero"} to pick them` : "click hexes to paint"}</span></>
+      ? <>Dev tool <span className="muted">· {dev.tool.tool === "spawn" ? "click a hex to place the group" : dev.tool.tool === "pick" ? `click ${dev.tool.side === "enemy" ? "an enemy" : "a hero"} to pick them` : dev.tool.tool === "place" ? `click a hex to put ${act?.name ?? "them"} there` : "click hexes to paint"}</span></>
       : (!enc || !fighting) && doorBeside
         ? <>A locked door <span className="muted">· {keys > 0 ? `${keysText} on the ring: one opens it` : "no key: it can be forced, but not quietly"}</span></>
       : (!enc || !fighting) && chestBeside
