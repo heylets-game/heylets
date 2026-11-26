@@ -8,7 +8,7 @@
 import { hexDistance, hexNeighbors, hexSegment, posKey, type HexPos } from "@gantt-quest/core";
 import { ABILITIES, BARD_AURA, ENEMIES, type AbilityDef, type EffectKind } from "../content";
 import { tileAt, type Poi } from "../map";
-import { DEBUFFS, addCondition, addShield, addStacks, inflict, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, removeCondition, saveBonus, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
+import { DEBUFFS, UNTIMED_KEEPS, spendUse, addCondition, addShield, addStacks, inflict, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, removeCondition, saveBonus, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
 import { cratesOn, crateById, hurtCrate, isCrateId } from "./crates";
 import { ENEMY_ABILITIES } from "./enemyabilities";
 import { bearing, close, blast, blockerAt, courseShare, directionToward, ringToward, elevOf, flies, heldAgainst, inFight, lineFrom, pathIn, perkOf, pitAt, reachFrom, roomAt, sameHex, sees, seesFor, solid, stepCost, strikes, unitById, zoneReach, type Course, type Pit } from "./geometry";
@@ -1076,8 +1076,7 @@ function lungeAt(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit): bool
 export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | null, at?: HexPos): void {
   if (attack.kit.rally) return howl(ctx, enemy, attack);
   enemyAttack(ctx, enemy, attack, target, at);
-  const frenzy = enemy.conditions.find((c) => c.kind === "frenzied");
-  if (frenzy && --frenzy.rounds <= 0) removeCondition(enemy, "frenzied");
+  spendUse(enemy, "frenzied");
 }
 
 /**
@@ -1090,7 +1089,7 @@ export const alliesReached = (state: ZoneState, enemy: Unit, pos: HexPos, attack
 /** A call to its own side (a Pack Leader's Howl): every ally it reaches (alliesReached) is Frenzied for so many attacks. */
 function howl(ctx: Ctx, enemy: Unit, attack: EnemyStrike): void {
   ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name });
-  for (const ally of alliesReached(ctx.state, enemy, enemy.pos, attack)) addCondition(ctx, ally, "frenzied", attack.kit.rally!.attacks);
+  for (const ally of alliesReached(ctx.state, enemy, enemy.pos, attack)) addCondition(ctx, ally, "frenzied", UNTIMED_KEEPS, attack.kit.rally!.attacks);
 }
 
 function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | null, at?: HexPos): void {
