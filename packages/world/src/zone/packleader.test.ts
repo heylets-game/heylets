@@ -8,7 +8,7 @@ import { RALLY_WORTH, behaviourOf } from "./behaviours";
 import { mindOf } from "./kit";
 import { enemyStrikes } from "./kit";
 import type { Ctx } from "./engine";
-import type { ZoneEvent, ZoneState } from "./types";
+import type { ZoneAction, ZoneEvent, ZoneState } from "./types";
 
 // A Pack Leader: it howls its pack into a frenzy, tears deep with its bite, and leaps on whoever stands apart.
 
@@ -113,6 +113,35 @@ describe("a Frenzied ally", () => {
       if (events.some((e) => e.t === "hit" && e.target === "ann")) expect(bleeding(after, "ann")).toBe(bleeding(s, "ann"));
     }
     expect(drew).toBeGreaterThan(0);
+  });
+});
+
+describe("a Frenzy spent", () => {
+  it("is told attack by attack, after each attack, with what is left", () => {
+    const { state, leader, pack } = setUp(at(9, 6), [at(6, 6)]);
+    let s = act(state, leader, howl, null).after;
+    for (const left of [1, 0]) {
+      const { after, events } = act(s, pack[0], wolfBite, "ann", 3);
+      const spent = events.findIndex((e) => e.t === "condition" && e.spent);
+      expect(events[spent]).toEqual({ t: "condition", target: pack[0], kind: "frenzied", rounds: 1, amount: left, spent: true });
+      // After the attack it was spent on.
+      expect(events.findIndex((e) => e.t === "hit" || e.t === "miss")).toBeLessThan(spent);
+      s = after;
+    }
+  });
+});
+
+describe("a spur on a hero", () => {
+  it("works for whoever has it: a hero's ability that does harm has advantage, and spends a use", () => {
+    let state = flatBoard({ rng: 4242, start: at(1, 1), options: { party: 1 }, flags: { aiOff: true } });
+    standHero(state, "ann", at(4, 4), { classId: "qa_paladin", level: 1, armor: 2, power: 1, abilities: ["bash"], items: {} });
+    const foe = enemy(state, "bandit", at(5, 4), "g1", { hp: 500, maxHp: 500 });
+    unit(state, "ann").conditions.push({ kind: "frenzied", rounds: 1, amount: 2 });
+    state = must(state, { type: "dev", by: "ann", dev: { op: "start_fight" } });
+    for (let i = 0; i < 40 && state.encounter && state.encounter.acting[0] !== "ann"; i++) state = must(state, { type: "timeout" });
+    expect(attackContext(state, unit(state, "ann"), unit(state, foe.id), { melee: true }).notes).toContain("Advantage: you are Frenzied");
+    state = must(state, { type: "use", by: "ann", unit: "ann", ability: "bash", target: foe.id } as ZoneAction);
+    expect(frenzyLeft(state, "ann")).toBe(1);
   });
 });
 

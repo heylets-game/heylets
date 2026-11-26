@@ -8,7 +8,7 @@
 import { hexDistance, hexNeighbors, hexSegment, posKey, type HexPos } from "@gantt-quest/core";
 import { ABILITIES, BARD_AURA, ENEMIES, type AbilityDef, type EffectKind } from "../content";
 import { tileAt, type Poi } from "../map";
-import { DEBUFFS, UNTIMED_KEEPS, spendUse, addCondition, addShield, addStacks, inflict, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, removeCondition, saveBonus, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
+import { DEBUFFS, UNTIMED_KEEPS, attackMade, addCondition, addShield, addStacks, inflict, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, removeCondition, saveBonus, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
 import { cratesOn, crateById, hurtCrate, isCrateId } from "./crates";
 import { ENEMY_ABILITIES } from "./enemyabilities";
 import { bearing, close, blast, blockerAt, courseShare, directionToward, ringToward, elevOf, flies, heldAgainst, inFight, lineFrom, pathIn, perkOf, pitAt, reachFrom, roomAt, sameHex, sees, seesFor, solid, stepCost, strikes, unitById, zoneReach, type Course, type Pit } from "./geometry";
@@ -66,8 +66,9 @@ function provoke(ctx: Ctx, unit: Unit, next: HexPos, budget: Budget | null, flus
     else {
       const ability = reactionStrike(foe.abilities);
       strike(ctx, foe, ABILITIES[ability], tacticOf(ability), unit);
-      // A blow of opportunity is an attack too: a Rally goes into it.
+      // A blow of opportunity is an attack too: a Rally goes into it, and it spends a use of any spur (SPURS).
       removeCondition(foe, "rallied");
+      attackMade(ctx, foe);
     }
   }
 }
@@ -989,6 +990,8 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
   if (tactic.stride && !unit.down) moveMore(state, unit, tactic.stride);
   if (wasUnseen && !tactic.hide && !tactic.steal) giveAway(ctx, unit);
   if (rallied) removeCondition(unit, "rallied");
+  // An ability that does harm is an attack: it spends a use of any spur (SPURS).
+  if (def.damage) attackMade(ctx, unit);
 }
 
 /**
@@ -1076,7 +1079,7 @@ function lungeAt(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit): bool
 export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | null, at?: HexPos): void {
   if (attack.kit.rally) return howl(ctx, enemy, attack);
   enemyAttack(ctx, enemy, attack, target, at);
-  spendUse(enemy, "frenzied");
+  attackMade(ctx, enemy);
 }
 
 /**

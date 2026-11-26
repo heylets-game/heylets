@@ -297,7 +297,7 @@ const BELL_PAN_MS = 500;
  * land together. `next`: what follows, so that going down or catching fire comes on the heels of the blow.
  */
 function dwell(ev: ZoneEvent, many: boolean, next: ZoneEvent | undefined, carried = false): number {
-  const follows = (id: string) => !!next && ((next.t === "down" && next.id === id) || (next.t === "condition" && next.target === id));
+  const follows = (id: string) => !!next && ((next.t === "down" && next.id === id) || (next.t === "condition" && !next.spent && next.target === id));
   switch (ev.t) {
     case "moved": return Math.min(2400, ev.path.length * 400);
     // A roll a blow carries is read as the blow lands: the blow's own dwell is the time to read it.
@@ -305,7 +305,8 @@ function dwell(ev: ZoneEvent, many: boolean, next: ZoneEvent | undefined, carrie
     case "used": return ev.what.startsWith("throw:") ? 620 : 280;
     case "hit": case "heal": case "tick": return many ? 130 : follows(ev.target) ? 200 : 380;
     case "miss": return many ? 130 : 380;
-    case "condition": return many ? 50 : 150;
+    // A use spent only counts a badge down, as the blow that spent it lands: nothing to wait on.
+    case "condition": return ev.spent ? 0 : many ? 50 : 150;
     case "down": return many ? 130 : 320;
     case "skip": case "choked": return 320;
     // Up off the ground: what it does next waits till it is on its feet.
@@ -1494,6 +1495,14 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           view?.floatOver(ev.target, `-${ev.amount}`, "#ffa94d");
         });
         say(`${name(ev.target)} takes ${ev.amount} from ${what.toLowerCase()}.`);
+      } else if (ev.t === "condition" && ev.spent) {
+        // One use of it spent (a lucky roll, a Frenzied attack): its badge counts down now, and goes with the last.
+        const u = find(ev.target);
+        const held = u?.conditions.find((c) => c.kind === ev.kind);
+        if (u && held) {
+          if (ev.amount) held.amount = ev.amount;
+          else u.conditions = u.conditions.filter((c) => c !== held);
+        }
       } else if (ev.t === "condition") {
         const u = find(ev.target);
         const held = u?.conditions.find((c) => c.kind === ev.kind);

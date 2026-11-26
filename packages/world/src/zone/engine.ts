@@ -7,7 +7,7 @@ import { tileAt } from "../map";
 import type { Rng } from "../rng";
 import { adjacent, close, elevOf, inFight, perkOf } from "./geometry";
 import { ABILITIES, EFFECT_TICK, STACK_TURNS, SUNDERED_DEFENCE, isStacking, type Inflict, type StackingEffect } from "../content";
-import { AQUEOUS, AURAS, CORAL_ARMOR, ENEMY_KIT, FORTIFY, SHIELD_SET_ASIDE, enemyDefence, enemySave, healDice } from "./kit";
+import { AQUEOUS, AURAS, CONDITION_INFO, CORAL_ARMOR, ENEMY_KIT, FORTIFY, SHIELD_SET_ASIDE, enemyDefence, enemySave, healDice } from "./kit";
 import { inDark } from "./light";
 import { d20, heroDefence, mod, netAdvantage, rollShown, statOf } from "./rules";
 import { songDefence, songHit, windward } from "./song";
@@ -301,8 +301,8 @@ export function damage(ctx: Ctx, target: Unit, amount: number, opts: { actor: st
   // North Star: whatever its bearer strikes on the other side catches fire.
   const by = opts.actor ? ctx.state.units.find((u) => u.id === opts.actor) : undefined;
   if (by && by.side !== target.side && has(by, "north_star")) addStacks(ctx, target, "burning");
-  // Frenzied (a Pack Leader's Howl): whatever its bearer draws blood from on the other side bleeds.
-  if (by && by.side !== target.side && dealt > 0 && has(by, "frenzied")) addStacks(ctx, target, "bleeding");
+  // What its bearer's attacks are spurred on with (SPURS: a Frenzy's Bleeding) is left on whoever they draw blood from.
+  if (by && by.side !== target.side && dealt > 0) for (const [, spur] of spursOn(by)) if (spur.leaves) addStacks(ctx, target, spur.leaves);
   return dealt;
 }
 
@@ -356,7 +356,7 @@ export function attackContext(state: ZoneState, attacker: Unit, target: Unit, op
   if (has(attacker, "invisible")) adv("you are Unseen");
   if (has(attacker, "inspired")) adv("you are Inspired");
   if (has(attacker, "lucky")) adv("you are Lucky");
-  if (has(attacker, "frenzied")) adv("you are Frenzied");
+  for (const [kind, spur] of spursOn(attacker)) if (spur.advantage) adv(`you are ${CONDITION_INFO[kind].name}`);
   if (has(target, "guiding_light") && target.side !== attacker.side) adv("the target is lit by Guiding Light");
   if (attacker.side === "enemy" && ENEMY_KIT[attacker.kind]?.pack && state.units.some((u) => u.id !== attacker.id && u.side === "enemy" && !u.down && close(u.pos, target.pos))) adv("the pack is on the target");
   if (has(attacker, "poisoned")) dis("Poisoned");
@@ -405,7 +405,7 @@ export function attackRoll(ctx: Ctx, attacker: Unit, target: Unit, opts: { label
   }
   removeCondition(attacker, "glitched");
   removeCondition(attacker, "inspired");
-  spendLuck(attacker);
+  spendLuck(ctx, attacker);
   ctx.events.push({ t: "roll", roll });
   return roll;
 }
@@ -416,18 +416,41 @@ export function attackRoll(ctx: Ctx, attacker: Unit, target: Unit, opts: { label
  */
 export const usesLeft = (c: Pick<UnitCondition, "rounds" | "amount">): number => c.amount ?? c.rounds;
 
-/** Spend one use of an untimed condition (usesLeft): the last spent, it is gone. */
-export function spendUse(unit: Unit, kind: Condition): void {
+/**
+ * Spend one use of an untimed condition (usesLeft): the last spent, it is gone. Told as it happens (a `spent`
+ * condition event, with what is left), so what is shown counts down use by use, not all at once after.
+ */
+export function spendUse(ctx: Ctx, unit: Unit, kind: Condition): void {
   const held = unit.conditions.find((c) => c.kind === kind);
   if (!held) return;
   held.amount = usesLeft(held) - 1;
   held.rounds = UNTIMED_KEEPS;
   if (held.amount <= 0) removeCondition(unit, kind);
+  ctx.events.push({ t: "condition", target: unit.id, kind, rounds: UNTIMED_KEEPS, amount: Math.max(0, held.amount), spent: true });
+}
+
+/**
+ * Untimed conditions that spur on their bearer's next attacks, one use each (a Frenzy): what each gives every attack,
+ * until its uses (usesLeft) are spent, one at the end of each attack made (attackMade). A new one of the kind is a new
+ * entry here, and an UNTIMED condition.
+ * - `advantage`: its attacks are rolled with advantage.
+ * - `leaves`: a stack of this is left on whoever on the other side one of its attacks draws blood from.
+ */
+export const SPURS: Partial<Record<Condition, { advantage?: boolean; leaves?: StackingEffect }>> = {
+  frenzied: { advantage: true, leaves: "bleeding" },
+};
+
+/** The spurs (SPURS) a unit has on it, by kind. */
+const spursOn = (unit: Unit) => unit.conditions.flatMap((c) => (SPURS[c.kind] ? [[c.kind, SPURS[c.kind]!] as const] : []));
+
+/** An attack of the unit's is over (a blow, a shot, an ability that does harm): one use of each of its spurs is spent. */
+export function attackMade(ctx: Ctx, unit: Unit): void {
+  for (const [kind] of spursOn(unit)) spendUse(ctx, unit, kind);
 }
 
 /** A roll to hit was made: one lucky roll is spent. */
-export function spendLuck(unit: Unit): void {
-  spendUse(unit, "lucky");
+export function spendLuck(ctx: Ctx, unit: Unit): void {
+  spendUse(ctx, unit, "lucky");
 }
 
 /**

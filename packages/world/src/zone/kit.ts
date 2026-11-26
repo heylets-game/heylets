@@ -563,7 +563,7 @@ export const CONDITION_INFO: Record<Condition, { name: string; blurb: string; co
   inspired: { name: "Inspired", blurb: "Its next roll to hit has advantage.", color: "#ffe08a" },
   // Its stacks are the lucky rolls left: they do not run down with the turns, only with the rolls.
   lucky: { name: "Lucky", blurb: "A coin in the town well: each of its next rolls to hit, one for each coin, has advantage.", color: "#f6d365" },
-  // Its stacks are the attacks it has left: they do not run down with the turns, only with the attacks (combat.ts enemyAct).
+  // Its stacks are the attacks it has left: they do not run down with the turns, only with the attacks (engine.ts SPURS).
   frenzied: { name: "Frenzied", blurb: "Driven on by a howl: each of its next attacks, one for each stack, has advantage, and every one that draws blood leaves a stack of Bleeding.", color: "#e0322b" },
   guiding_light: { name: "Guiding Light", blurb: "Lit up by a star: every attack against it has advantage.", color: "#fff3a8" },
   north_star: { name: "North Star", blurb: "Every blow it lands sets the target Burning, one stack more if the blow would have set it Burning anyway.", color: "#ffd166" },
