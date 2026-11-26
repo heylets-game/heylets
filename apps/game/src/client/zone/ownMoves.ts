@@ -21,13 +21,26 @@ export type OwnRoute = "burst" | "at" | "dash" | "blow";
 
 const BY_NAME = new Map(Object.values(ENEMY_ABILITIES).map((a) => [a.name, a]));
 
+/**
+ * The enemy ability called `name`, as the kind `kind` has it: several kinds have abilities of the same name that work
+ * differently (a Giant Spider's Web Spit lands on a clump of hexes, a Broodmother's on one hero), so its user's own
+ * comes first. Any other by that name, if its kind has none (or none is known).
+ */
+export function enemyAbilityNamed(name: string, kind?: string) {
+  const own = kind ? ENEMIES[kind.split("|")[0]]?.abilities.map((id) => ENEMY_ABILITIES[id]).find((a) => a?.name === name) : undefined;
+  return own ?? BY_NAME.get(name);
+}
+
 /** The names enemies' retorts are told by (EnemyDef `retort`): a hurt from one of them is its bearer's doing, not a swing. */
 export const RETORTS: ReadonlySet<string> = new Set(Object.values(ENEMIES).flatMap((e) => (e.retort ? [e.retort.name] : [])));
 
-/** How the enemy ability called `name` reaches the fight's picture as a move of its own, or null if there is none by that name. */
-export function ownRoute(name: string): OwnRoute | null {
+/**
+ * How the enemy ability called `name`, used by a `kind`, reaches the fight's picture as a move of its own, or null if
+ * there is none by that name.
+ */
+export function ownRoute(name: string, kind?: string): OwnRoute | null {
   if (RETORTS.has(name)) return "blow";
-  const def = BY_NAME.get(name);
+  const def = enemyAbilityNamed(name, kind);
   if (!def) return null;
   if (def.shape === "burst" || def.rally || def.field) return "burst";
   if (def.dash) return "dash";

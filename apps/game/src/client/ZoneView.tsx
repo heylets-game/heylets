@@ -166,7 +166,7 @@ import { useZone, type ZoneSend } from "./useZone";
 import { Icon } from "./items";
 import { label } from "./labels";
 import { FLOURISH, GUARDS, SONG_MOOD, SOUND_KIND, SUMMONS, THROW_COLOR, aimKind, fxFor } from "./zone/abilityFx";
-import { RETORTS, ownRoute } from "./zone/ownMoves";
+import { RETORTS, enemyAbilityNamed, ownRoute } from "./zone/ownMoves";
 import { COMMON_ICON, ITEM_ICON, abilityIcon } from "./zone/actionIcons";
 import { BAR_SLOTS, assignSlot, barChoices, loadBar, moveSlot, saveBar } from "./zone/hotbar";
 import { believe, foreseeWalk, giveUp, settle, standing, type Ahead } from "./zone/ahead";
@@ -1015,13 +1015,13 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           const aim = ev.at ? point(ev.at, 0.05) : struck ? point(struck, 0.05) : null;
           // An enemy ability with a move of its own is played as that, whatever its usual look (zone/ownMoves.ts): round
           // its user, or at the spot it is thrown at, now; one at a single target, as the blow is told (see hit).
-          const own = ev.what === "attack" && view?.ownsMove(ev.id, ev.name) ? ownRoute(ev.name) : null;
+          const own = ev.what === "attack" && view?.ownsMove(ev.id, ev.name) ? ownRoute(ev.name, user?.kind) : null;
           // Its second part (an Earthquake's heave) goes off from the middle of where its user stood when it was first
           // used: from the ground it cracked, not from wherever it is now.
           const centre = ev.again && ev.at && user ? span(user, ev.at).map((p) => point(p)).reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(span(user, ev.at).length) : undefined;
           // A field raised round it (a Guardian's Slowing Field): once it has gone out, it stays round its user, following
           // it, for as long as the picture shows it carrying the field.
-          const field = Object.values(ENEMY_ABILITIES).find((a) => a.name === ev.name)?.field;
+          const field = enemyAbilityNamed(ev.name, user?.kind)?.field;
           if (field && !ev.again) {
             const holder = ev.id;
             const holding = () => !!shownNow.current?.units.find((u) => u.id === holder && u.hp > 0)?.conditions.some((c) => c.kind === "slowing_field");
@@ -1030,7 +1030,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           if (own === "burst" && view) return void view.burst(ev.id, ev.name, false, thenOn(() => {}), !!ev.again, centre);
           // One thrown onto a clump of hexes (`area`: an Acid Splash, an Immolate) lands in the middle of the clump, not
           // on the hex it was aimed at, which is at one edge of it.
-          const area = Object.values(ENEMY_ABILITIES).find((a) => a.name === ev.name)?.area;
+          const area = enemyAbilityNamed(ev.name, user?.kind)?.area;
           const clump = own === "at" && area && ev.at && user ? clusterHexes({ map: next.map }, user.pos, ev.at, area) : [];
           const middle = clump.length > 0 ? clump.map((p) => point(p, 0.05)).reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(clump.length) : aim;
           if (own === "at" && view && middle) return view.moveAt(ev.id, ev.name, middle, landing());
@@ -1331,7 +1331,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         // An enemy's move of its own (zone/ownMoves.ts): one at a single target is played as this blow, struck by hand
         // whatever its usual look (WorldRenderer.attack plays it); one round its user or at a spot was played as it was
         // used, and whoever it catches just flinches.
-        const own = ev.actor && !(hit && ev.splash) && actor?.side === "enemy" && view?.ownsMove(ev.actor, ev.what) ? ownRoute(ev.what) : null;
+        const own = ev.actor && !(hit && ev.splash) && actor?.side === "enemy" && view?.ownsMove(ev.actor, ev.what) ? ownRoute(ev.what, actor?.kind) : null;
         // A retort (a slime's Acid Armor) from one that cannot play it (it has just been killed): the victim just flinches.
         const passive = (!mine && (ev.what === "coral_field" || ev.what === "coral_armor")) || (!own && RETORTS.has(ev.what)) || (hit && !!ev.splash) || own === "burst" || own === "at" || own === "dash";
         const kind = passive ? "ground" : own === "blow" ? "melee" : !ev.actor || ev.actor === ev.target || ev.what.startsWith("throw:") || ev.what === "shove" || ev.what === "fall" ? "none" : (mine?.look.kind ?? "melee");
