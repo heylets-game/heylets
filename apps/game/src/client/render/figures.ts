@@ -9190,8 +9190,8 @@ function tuft(part: Part, color: string, at: Pt, out: readonly [number, number],
 
 /**
  * A wolf, nose toward +z. `ember` is the fire in an Ember Hound: it shows through cracks down its back and lights
- * its mouth. `mangy` is the Pack Leader's: a heavier build, a great spiky mane round the neck, taller hackles, and
- * ragged tufts standing off its flanks, legs, cheeks and tail.
+ * its mouth. `mangy` is the Pack Leader's: a heavier build, a spiky mane round the neck, taller hackles, and a
+ * few ragged tufts lying back along its flanks, legs, cheeks and tail.
  */
 function wolf(top: THREE.Group, fur = "#7d8793", dark = "#59616c", eye = "#ffd23f", ember?: string, mangy = false): Rig {
   const parts: Part[] = [];
@@ -9215,36 +9215,36 @@ function wolf(top: THREE.Group, fur = "#7d8793", dark = "#59616c", eye = "#ffd23
   if (mangy) {
     const coat = fluff(body);
     const shades = [fur, dark, tone(fur, 0.05), tone(dark, -0.06)];
-    // Ragged tufts all down the flanks and under the belly, leaning back, no two alike.
+    // A few ragged tufts down the flanks, lying back along the coat, no two alike.
     let n = 0;
-    for (let z = -4.4; z <= 4.4; z += 0.8) {
+    for (let z = -3.8; z <= 2.6; z += 1.6) {
       for (const s of [-1, 1]) {
-        for (let k = 0; k < 3; k++) {
-          const a = s * (0.95 + k * 0.6 + (jitter(n, 1) - 0.5) * 0.35);
-          const zz = z + (jitter(n, 2) - 0.5) * 0.5;
+        for (let k = 0; k < 2; k++) {
+          const a = s * (1.15 + k * 0.75 + (jitter(n, 1) - 0.5) * 0.35);
+          const zz = z + (k ? 0.8 : 0) + (jitter(n, 2) - 0.5) * 0.5;
           const spans = zz > 0.9 ? ruff : trunk;
-          tuft(coat, shades[n % shades.length], onHide(spans, zz, a), [Math.sin(a), Math.cos(a) - 0.25], 0.7 + jitter(n, 3) * 0.8, 0.32, 0.5 + jitter(n, 4) * 0.4);
+          tuft(coat, shades[n % shades.length], onHide(spans, zz, a), [Math.sin(a), Math.cos(a) - 0.25], 0.45 + jitter(n, 3) * 0.4, 0.3, 1 + jitter(n, 4) * 0.4);
           n++;
         }
       }
     }
-    // The mane: a thick collar of long spikes right round the neck, standing out and swept back over the shoulders.
-    for (const [z, len, salt] of [[4.7, 2.2, 5], [4.0, 2.6, 6], [3.2, 2.2, 7]] as const) {
-      for (let i = 0; i < 14; i++) {
-        const a = -Math.PI + (i + 0.5 + (z === 4.0 ? 0.5 : 0)) * ((Math.PI * 2) / 14);
+    // The mane: a collar of spikes round the neck, swept back over the shoulders.
+    for (const [z, len, salt] of [[4.5, 1.6, 5], [3.6, 1.9, 6]] as const) {
+      for (let i = 0; i < 10; i++) {
+        const a = -Math.PI + (i + 0.5 + (salt === 6 ? 0.5 : 0)) * ((Math.PI * 2) / 10);
         // Not under the throat, where it would bury the forelegs.
         if (Math.abs(a) > 2.5) continue;
         const l = len * (0.75 + jitter(i, salt) * 0.5) * (Math.abs(a) < 1.2 ? 1 : 0.8);
-        tuft(coat, i % 3 === 1 ? dark : tone(fur, 0.05 + (i % 2) * 0.04), onHide(ruff, z, a), [Math.sin(a), Math.cos(a)], l, 0.5, 1.3 + jitter(i, salt + 10) * 0.6);
+        tuft(coat, i % 3 === 1 ? dark : tone(fur, 0.05 + (i % 2) * 0.04), onHide(ruff, z, a), [Math.sin(a), Math.cos(a)], l, 0.5, 1.6 + jitter(i, salt + 10) * 0.5);
       }
     }
   }
   // The hackles up, a crest of spiky fur from the nape back over the shoulders, tallest at the withers.
-  // A mangy one's run the length of its back, and stand taller.
-  for (let i = 0; i < (mangy ? 14 : 9); i++) {
+  // A mangy one's run further down its back, and stand taller.
+  for (let i = 0; i < (mangy ? 11 : 9); i++) {
     const z = 4.6 - i * 0.75;
     const r = ringAt((z > 0.9 ? ruff : trunk) as readonly Ring[], z);
-    const rise = Math.max(0.7, 2.3 - Math.abs(z - 2.2) * 0.42) * (mangy ? 1.55 : 1);
+    const rise = Math.max(0.7, 2.3 - Math.abs(z - 2.2) * 0.42) * (mangy ? 1.3 : 1);
     for (const s of i % 2 ? [-1, 1] : [0]) {
       const x = s * 0.7;
       const y = r.dz + r.rz - 0.4 - Math.abs(x) * 0.35;
@@ -9283,13 +9283,12 @@ function wolf(top: THREE.Group, fur = "#7d8793", dark = "#59616c", eye = "#ffd23
   // The lip curled back off the teeth: wrinkles over the snout.
   for (const z of [3.2, 3.75]) head.shape(tone(dark, -0.08), sym([[0.85, 0.85, z], [0.85, 0.85, z + 0.22], [0, 1.25, z], [0, 1.25, z + 0.22]]));
   if (mangy) {
-    // Shaggy cheeks: spikes swept back off the jowls and the back of the skull, framing the face.
+    // Shaggy cheeks: a couple of spikes swept back off each jowl.
     const mane = fluff(head);
     for (const s of [-1, 1]) {
-      for (let i = 0; i < 4; i++) {
-        tuft(mane, i % 2 ? dark : fur, [s * 1.7, 0.2 + i * 0.55, 0.9 - i * 0.2], [s, -0.4 + i * 0.35], 1.1 + jitter(i, s + 20) * 0.5, 0.35, 1);
+      for (let i = 0; i < 2; i++) {
+        tuft(mane, i % 2 ? dark : fur, [s * 1.7, 0.4 + i * 0.7, 0.8 - i * 0.25], [s, -0.3 + i * 0.4], 0.8 + jitter(i, s + 20) * 0.3, 0.35, 1);
       }
-      tuft(mane, tone(fur, 0.05), [s * 0.9, 2.1, -0.3], [s * 0.5, 1], 1.2, 0.35, 1.1);
     }
   }
   const tail = part(top, 0, 7.6, -4.8);
@@ -9300,10 +9299,10 @@ function wolf(top: THREE.Group, fur = "#7d8793", dark = "#59616c", eye = "#ffd23
     // A matted, bristling brush: spikes off it all round, following its droop (it tips down by its pitch).
     const brush = fluff(tail);
     const droop = Math.sin(0.61);
-    for (let i = 0; i < 12; i++) {
-      const d = -0.4 - (i >> 1) * 0.75;
+    for (let i = 0; i < 6; i++) {
+      const d = -0.8 - i * 0.65;
       const a = (i % 2 ? 1 : -1) * (0.6 + jitter(i, 30) * 1.6);
-      tuft(brush, i % 3 ? fur : dark, [Math.sin(a) * 0.8, d * droop + Math.cos(a) * 0.8, d * Math.cos(0.61)], [Math.sin(a), Math.cos(a)], 0.8 + jitter(i, 31) * 0.5, 0.3, 0.6);
+      tuft(brush, i % 3 ? fur : dark, [Math.sin(a) * 0.8, d * droop + Math.cos(a) * 0.8, d * Math.cos(0.61)], [Math.sin(a), Math.cos(a)], 0.5 + jitter(i, 31) * 0.3, 0.3, 0.8);
     }
   }
   const legs = [[-1.5, 3], [1.5, 3], [-1.5, -3.6], [1.5, -3.6]].map(([x, z]) => {
@@ -9316,7 +9315,7 @@ function wolf(top: THREE.Group, fur = "#7d8793", dark = "#59616c", eye = "#ffd23
       // Shaggy feathering down the backs of the legs, hanging back off the elbow and the hock.
       const s = Math.sign(x);
       const feathers = fluff(leg);
-      for (let i = 0; i < 3; i++) tuft(feathers, i % 2 ? tone(dark, -0.06) : dark, [s * 0.6, 0.6 - i * 0.9, -0.7], [s * 0.6, -0.5], 0.9 + jitter(i, x + z) * 0.4, 0.3, 0.9);
+      for (let i = 0; i < 2; i++) tuft(feathers, i % 2 ? tone(dark, -0.06) : dark, [s * 0.6, 0.6 - i * 0.9, -0.7], [s * 0.6, -0.5], 0.6 + jitter(i, x + z) * 0.3, 0.3, 0.9);
     }
     return leg;
   });
