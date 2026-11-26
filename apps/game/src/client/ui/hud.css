@@ -59,12 +59,14 @@
 /* On a map, as wide as the turn bar over it (--fight-bar-w in zone/fight.css). */
 .hud.full .hud-rack { width: calc(var(--u) * 732); }
 /* The fight lab's stand-in: the board, empty, as tall as the real one on a map. */
-.hud-rack.lab { height: calc(var(--u) * 140); }
+.hud-rack.lab { height: calc(var(--u) * 158); }
 
-/* Each end: two small tabs stacked, the cog among them. */
-.hud-tabs { flex: none; display: flex; flex-direction: column; gap: calc(var(--u) * 6); }
+/* Each end: the hands (or the bag) over a row of small tabs, the cog among them. */
+.hud-side { flex: none; display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * 6); }
+/* A row with nothing in it (no rest here) keeps its room, so the hands and the bag stay level. */
+.hud-tabs { flex: none; display: flex; justify-content: center; gap: max(3px, calc(var(--u) * 4)); min-height: max(16px, calc(var(--u) * 22)); }
 .hud .hud-tab {
-  position: relative; width: calc(var(--u) * 24); height: calc(var(--u) * 24); padding: 0; display: grid; place-items: center;
+  position: relative; width: max(17px, calc(var(--u) * 22)); height: max(16px, calc(var(--u) * 22)); padding: 0; display: grid; place-items: center;
   font: bold max(9px, calc(var(--u) * 12)) ui-monospace, Consolas, monospace; line-height: 1; color: var(--h-brass-hi); text-shadow: 0 1px 0 #000;
   background: linear-gradient(180deg, rgba(255, 214, 170, 0.12), rgba(0, 0, 0, 0.25)), var(--h-wood-hi);
   border: 2px solid var(--h-out); border-radius: 0;
@@ -88,8 +90,8 @@
 /* What is in hand, and the bag. */
 .hud-hands { flex: none; display: flex; gap: calc(var(--u) * 4); }
 
-/* The middle: health, the plaque and energy over the slots, and experience along the foot, between two lines of
-   brass let into the board. */
+/* The middle: health, the plaque and energy, experience under them, and the slots under that, between two lines
+   of brass let into the board. */
 .hud-core {
   flex: 1 1 auto; min-width: 0; align-self: stretch; display: flex; flex-direction: column; justify-content: center; gap: calc(var(--u) * 6);
   padding: 0 calc(var(--u) * 8);
@@ -138,7 +140,9 @@
   border: 2px solid var(--h-out); border-radius: 0;
   box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.75), 0 0 0 1px var(--h-brass-lo), 0 1px 0 1px rgba(214, 150, 96, 0.12);
 }
-.hud .hud-slot.hand, .hud .hud-slot.bag { --w: calc(var(--u) * 54); }
+/* What is in hand, and the bag, are the biggest things on the bar: as wide as their column allows on a map. */
+.hud .hud-slot.hand, .hud .hud-slot.bag { --w: calc(var(--u) * 74); }
+.hud.slim .hud-slot.hand, .hud.slim .hud-slot.bag { --w: calc(var(--u) * 62); }
 .hud .hud-slot.bag { box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.75), 0 0 0 1px var(--h-brass), 0 1px 0 1px rgba(214, 150, 96, 0.12); }
 .hud-slot .voxel-icon, .hud-slot .pixel-icon { width: calc(var(--w) * 0.74); height: calc(var(--w) * 0.74); }
 .hud-slot.hand .voxel-icon, .hud-slot.bag .voxel-icon { width: calc(var(--w) * 0.96); height: calc(var(--w) * 0.96); }
@@ -213,9 +217,9 @@
 @media (max-width: 760px), (max-height: 520px) {
   .hud { bottom: 8px; max-width: calc(100% - 12px); }
   /* The whole board is drawn smaller, and smaller still where even that is too wide: 732 is a map's board across,
-     600 about a slim one's, each with a 16px margin. */
+     560 about a slim one's, each with a 16px margin. */
   .hud.full { --u: min(0.67px, calc((100vw - 16px) / 732)); }
-  .hud.slim { --u: min(0.8px, calc((100vw - 16px) / 600)); }
+  .hud.slim { --u: min(0.8px, calc((100vw - 16px) / 560)); }
   /* Terse on a phone: the muted explainer after where you stand goes; the place itself stays. */
   .hud-place .muted { display: none; }
   /* Where you stand gets a line of its own over the buttons, rather than a narrow column beside them. */
