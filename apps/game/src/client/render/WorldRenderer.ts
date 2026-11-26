@@ -2117,18 +2117,29 @@ export class WorldRenderer {
 
   /**
    * An attack all round where the unit stands (a ring): struck as its heavy blow, or, `sung`, played on what it
-   * carries (cast, with no instrument); a ground-pound is leant into. `then` runs as the blow lands.
+   * carries (cast, with no instrument); a ground-pound is leant into, or played as its own move where it has one
+   * (an Ogre's Stomp). `then` runs as the blow lands. Returns whether it played its own move, which draws the
+   * ground shaking round it itself (so whoever asked draws no ring of their own).
    */
-  burst(actorId: string, name: string, sung: boolean, then: () => void) {
+  burst(actorId: string, name: string, sung: boolean, then: () => void): boolean {
     const unit = this.units.get(actorId);
     let wait = 0;
     if (unit && !unit.lying) {
+      const own = QUAKES.has(name) ? SIGNATURE_MOVES[name] : undefined;
+      if (own && playsFor(own, unit)) {
+        sounds.attack(name, "melee", this.fighter(actorId), this.spot(actorId));
+        // Should a hit on someone come through attack after all, it is not played a second time.
+        this.quakeAt.set(actorId, this.clock);
+        own.play(this.moveStage(actorId, actorId, name, unit, 1, false), { figure: unit.figure, hitAt: unit.goal.clone(), dir: 1, crit: false, onImpact: then, alone: true });
+        return true;
+      }
       if (QUAKES.has(name)) unit.lean = -0.9;
       else wait = sung ? unit.figure.play() || unit.figure.cast() : unit.figure.strike("heavy");
     }
     sounds.attack(name, sung ? "magic" : "melee", this.fighter(actorId), this.spot(actorId));
     if (wait > 0) this.later(then, wait);
     else then();
+    return false;
   }
 
   /** A heal or a blessing given: the giver turns to whoever it is for (if not themselves) and plays it, or casts it. */

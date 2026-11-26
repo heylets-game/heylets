@@ -106,6 +106,11 @@ export interface MoveCtx {
    * throws out round its user has been drawn already, and only its landing on this target is left to time.
    */
   echo?: boolean;
+  /**
+   * Played round its user alone, before anyone it catches is known (a fight's burst, ZoneView): nobody is reached
+   * by it here, and `onImpact` runs as it lands. Whoever it catches flinches as their own hit is told.
+   */
+  alone?: boolean;
 }
 
 export interface SignatureMove {
@@ -428,7 +433,7 @@ export const STOMP_WAVE = { radius: 3.8, life: 0.6 };
  * dusty one just behind it, and great clouds of dust rolling out after them and billowing up round it. Each hero is
  * jolted, with dust thrown up at their feet, as the wave reaches them, and the blow on them is told then.
  */
-function stomp(stage: MoveStage, { figure, hitAt, crit, onImpact, echo }: MoveCtx) {
+function stomp(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alone }: MoveCtx) {
   const feet = figure.root.getWorldPosition(new THREE.Vector3());
   const ground = feet.clone().setY(feet.y + 0.08);
   const { radius, life } = STOMP_WAVE;
@@ -455,6 +460,7 @@ function stomp(stage: MoveStage, { figure, hitAt, crit, onImpact, echo }: MoveCt
       }
     }, 0.1);
   }, lands);
+  if (alone) return stage.later(onImpact, lands);
   // Whoever it reaches is caught as the wave passes under them.
   const far = Math.hypot(hitAt.x - feet.x, hitAt.z - feet.z);
   stage.later(() => {
