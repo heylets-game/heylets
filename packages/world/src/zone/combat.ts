@@ -1083,7 +1083,9 @@ export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Uni
   }
   if (!attack.harmless) {
     const rolled = rollShown(ctx.rng, attack.dice, 0, roll.crit);
-    damage(ctx, target, rolled.total, { actor: enemy.id, what: attack.name, crit: roll.crit, dice: rolled });
+    const dealt = damage(ctx, target, rolled.total, { actor: enemy.id, what: attack.name, crit: roll.crit, dice: rolled });
+    // A drain: its user grows back a share of what it tore off.
+    if (attack.kit.drain && dealt > 0 && !enemy.down) heal(ctx, enemy, Math.floor(dealt * attack.kit.drain), { actor: enemy.id, what: attack.name });
     if (melee) thorns(ctx, enemy, target);
     // A splash: every other hero in the fight beside the target is battered by a share of the same blow.
     if (attack.kit.splash) {

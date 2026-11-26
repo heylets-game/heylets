@@ -379,11 +379,12 @@ export const ENEMIES: Record<string, EnemyDef> = {
     abilities: ["club_smash", "stomp", "shove"],
   },
   // A troll: no tougher than a brute to look at, but its wounds close as you watch. It grows back every
-  // turn unless it is Burning, so fire (or a lot of damage at once) is how it is put down.
+  // turn unless it is Burning, so fire (or a lot of damage at once) is how it is put down. It rakes, chomps (and
+  // grows back half of what it bites off), and throws a rock that leaves whoever keeps away reeling.
   troll: {
     kind: "troll", name: "Troll", hp: 29, defence: 11, move: 2, save: 2, init: -1, xp: 22,
     regen: { amount: TROLL_REGEN, unless: "burning", name: "Regenerate" },
-    abilities: ["rake", "hurl_rock", "shove"],
+    abilities: ["rake", "chomp", "hurl_rock", "shove"],
   },
   cultist: {
     kind: "cultist", name: "Cultist", hp: 16, defence: 11, move: 2, save: 0, init: 0, xp: 14,

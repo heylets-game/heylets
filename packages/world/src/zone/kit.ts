@@ -689,7 +689,7 @@ export function commonCostFor(unit: Pick<Unit, "kind" | "perks">, what: CommonAc
 // ---------- enemies ----------
 
 /** What an enemy's ability does besides its damage, when it lands. */
-export type EnemyAttackKit = Pick<EnemyAbilityDef, "surface" | "push" | "chills" | "splash">;
+export type EnemyAttackKit = Pick<EnemyAbilityDef, "surface" | "push" | "chills" | "splash" | "drain">;
 
 /** The share of a blow that splashes onto each other hero beside its target (EnemyAbilityDef `splash`). */
 export const SPLASH_SHARE = 0.5;
@@ -729,7 +729,7 @@ export const ENEMY_KIT: Record<string, EnemyKit> = {
   bear: {},
   // Its Stomp, like anything that strikes the whole crew, is a burst around it.
   ogre: {},
-  // It rakes up close, and will throw a rock at whoever keeps away. (Its wounds closing is in zone.ts, at the start of its turn.)
+  // It rakes and chomps up close, and will throw a rock at whoever keeps away. (Its wounds closing is in zone.ts, at the start of its turn.)
   troll: {},
   cultist: { mind: SHOOTER },
   brute: {},
@@ -819,7 +819,7 @@ export function abilityStrikes(ids: readonly string[], level: number, more = 0):
         behaviour: (a.behaviour ?? (burst ? "burst" : "strike")) as BehaviourId,
         cost: a.cost ?? ACTION_AP,
         cooldown: a.cooldown ?? 0,
-        kit: { surface: a.surface, push: a.push, chills: a.chills, splash: a.splash },
+        kit: { surface: a.surface, push: a.push, chills: a.chills, splash: a.splash, drain: a.drain },
       },
     ];
   });
