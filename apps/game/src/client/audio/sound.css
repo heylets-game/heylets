@@ -23,13 +23,13 @@
 .dev-tools .sound-corner { right: 40px; }
 .dev-tools .hud-corner { right: 40px; max-width: calc(100% - 54px); }
 /* Its window: tabs across the top, for the sky and the engine readout, and for seeding gold and items. */
-/* The dev toolbox (DevToolbox.tsx): docked down the left side, from the top to just clear of the bottom bar (--hud-h,
-   ui/Hud.tsx), in the fight interface's timber (the combat log's, zone/fight.css): dark boards, a hard dark edge with a
+/* The dev toolbox (DevToolbox.tsx): docked down the left side, top to bottom, narrowed (its own `width`) to keep clear
+   of the bottom bar and the turn bar, in the fight interface's timber (the combat log's, zone/fight.css): dark boards, a hard dark edge with a
    thin rim, a lighter wooden head. The head (name, tabs, minimize, close) stays put; the body scrolls. Its buttons and
    fields are the same softer kind, not the pixel blocks the rest of the UI has. */
 .dev-dock {
   --d-out: #1c0d0e; --d-rim: #6b3524; --d-wood-hi: #3d231d; --d-brass: #c9a24a; --d-brass-hi: #f6e2a1;
-  position: fixed; left: 8px; top: 8px; bottom: calc(var(--hud-h, 0px) + 10px); z-index: 70; width: min(500px, calc(100vw - 16px));
+  position: fixed; left: 8px; top: 8px; bottom: 8px; z-index: 70; width: min(500px, calc(100vw - 16px));
   display: flex; flex-direction: column; font-size: 12px; line-height: 1.4; white-space: normal; cursor: default; color: var(--text, #fbe6c8);
   background: linear-gradient(180deg, rgba(40, 20, 17, 0.96), rgba(24, 12, 10, 0.94));
   border: 3px solid var(--d-out); box-shadow: 0 0 0 1px var(--d-rim), 0 8px 20px rgba(0, 0, 0, 0.5);

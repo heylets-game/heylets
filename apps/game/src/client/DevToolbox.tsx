@@ -2,7 +2,8 @@
 // right edge of a map (in the bottom-right corner where there is none), there
 // only on a development deployment (the worker's ENVIRONMENT is "dev":
 // local and staging; see devTools.ts). It opens a window docked down the left
-// side of the screen, from the top to just above the bottom bar, in the fight
+// side of the screen, top to bottom, and no wider than leaves the bottom bar
+// and the turn bar over it clear (dockWidth), in the fight
 // interface's timber (the combat log's: zone/fight.css): its name, its tabs
 // and its close and minimize buttons stay put at the top, and only the tab
 // under them scrolls. Minimized, it is that top alone. It has a tab for each
@@ -96,11 +97,43 @@ function useCameraColumn(): HTMLElement | null {
   return column;
 }
 
+/** The bottom bar and the turn bar over it: the toolbox stays to the left of both. */
+const BARS = ".hud.full .hud-rack, .fight-turn-bar";
+/** The toolbox's widest, and the gap it keeps from the bars. */
+const DOCK_MAX = 500;
+const DOCK_GAP = 10;
+
+/**
+ * How wide the docked toolbox may be: DOCK_MAX, or less where the bars on screen come nearer the left edge than
+ * that. Measured on the screen (the toolbox is outside the views the UI scale zooms), looked at again twice a
+ * second and on resizing, as the bars come and go with fights. Null: as wide as it likes.
+ */
+function useDockWidth(): number | null {
+  const [width, setWidth] = useState<number | null>(null);
+  useEffect(() => {
+    const measure = () => {
+      const lefts = [...document.querySelectorAll<HTMLElement>(BARS)].map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0).map((r) => r.left);
+      const room = lefts.length > 0 ? Math.floor(Math.min(...lefts)) - 8 - DOCK_GAP : null;
+      const next = room === null || room >= DOCK_MAX ? null : Math.max(260, room);
+      setWidth((prev) => (prev === next ? prev : next));
+    };
+    measure();
+    const timer = setInterval(measure, 500);
+    addEventListener("resize", measure);
+    return () => {
+      clearInterval(timer);
+      removeEventListener("resize", measure);
+    };
+  }, []);
+  return width;
+}
+
 export function DevToolbox({ me, refresh }: { me: Me; refresh(): Promise<void> }) {
   const column = useCameraColumn();
   const [open, setOpen] = useState(() => recall(OPEN_KEY) === "1");
   const [tab, setTab] = useState<Tab>(() => TABS.find(([id]) => id === recall(TAB_KEY))?.[0] ?? "sky");
   const [lab, setLab] = useState(false);
+  const width = useDockWidth();
   const [folded, setFolded] = useState(() => recall(FOLDED_KEY) === "1");
   const fold = (on: boolean) => {
     remember(FOLDED_KEY, on ? "1" : null);
@@ -123,7 +156,7 @@ export function DevToolbox({ me, refresh }: { me: Me; refresh(): Promise<void> }
     <>
       {column ? createPortal(spanner, column) : spanner}
       {open && (
-        <aside className={`dev-dock ${folded ? "folded" : ""}`} role="dialog" aria-label="Dev toolbox">
+        <aside className={`dev-dock ${folded ? "folded" : ""}`} role="dialog" aria-label="Dev toolbox" style={width ? { width } : undefined}>
           {/* Stays put while the tab under it scrolls. */}
           <div className="dev-dock-top">
             <strong className="dev-dock-title">Dev toolbox</strong>
