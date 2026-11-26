@@ -72,6 +72,8 @@ export const AUDIO: AudioManifest = {
     "attack.magic": { files: "sfx/combat/cast_*", fallback: built("spell_cast"), pitch: [-1, 1], reverb: -8 },
     // A Pack Leader's Howl: a long, carrying call, heard across the field.
     "attack.howl": { files: "sfx/combat/howl_*", fallback: built("howl"), pitch: [-1, 1], reverb: -4 },
+    // A Guardian's Slowing Field: a hum built up through it, and let go as the field goes out.
+    "attack.slowing_field": { files: "sfx/combat/slowing_field_*", fallback: built("channel"), pitch: [-1, 1], reverb: -4 },
     // A blow landing: a blunt thump by hand, unless it cuts or bites (blade abilities, below).
     impact: { files: "sfx/combat/hit_*", fallback: built("blunt"), pitch: [-2, 2], volume: [-2, 0], reverb: -8 },
     "impact.ranged": { files: "sfx/combat/arrow_hit_*", fallback: built("arrow_hit"), pitch: [-2, 2], reverb: -8 },

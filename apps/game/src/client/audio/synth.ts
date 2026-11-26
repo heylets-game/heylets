@@ -33,6 +33,8 @@ export type SynthCombat =
   | "alarm"
   // A Pack Leader's Howl, calling its pack on.
   | "howl"
+  // A Guardian channelling its Slowing Field: a hum building up through it, and let go.
+  | "channel"
   // Words typed out in a conversation, a short soft note a letter.
   | "blip";
 
@@ -77,6 +79,7 @@ const COMBAT_LENGTH: Record<SynthCombat, number> = {
   creak: 0.8, knock: 0.3, splinter: 0.9,
   alarm: 4.8,
   howl: 1.9,
+  channel: 2.3,
   blip: 0.09,
 };
 
@@ -289,6 +292,25 @@ function combat(r: Render, sound: SynthCombat) {
       }
       noiseAt(r, t, { filter: "bandpass", freq: 900 * p, freqTo: 1300 * p, q: 1.5, attack: 0.3, decay: 1.3, gain: v * 0.12 });
       break;
+    case "channel": {
+      // Drawn up through it for about a second (figures.ts CHANNEL): a deep hum swelling and climbing, a throb in it
+      // quickening, a glassy shimmer over the top and a hiss of charge rising under it. Then let go, as the field goes
+      // out: a deep soft thump, a long airy whoosh falling away, and a ring left hanging, two notes, as the light fades.
+      const go = 1.05;
+      toneAt(r, t, { type: "sine", freq: 62 * p, freqTo: 92 * p, attack: go - 0.05, decay: 0.2, gain: v * 0.55 });
+      toneAt(r, t, { type: "triangle", freq: 124 * p, freqTo: 186 * p, attack: go - 0.05, decay: 0.15, gain: v * 0.22, cut: 900 });
+      for (let i = 0; i < 9; i++) {
+        const at = t + 0.2 + go * 0.8 * (1 - (1 - i / 9) ** 1.6);
+        toneAt(r, at, { type: "triangle", freq: (110 + i * 6) * p, attack: 0.02, decay: 0.07, gain: v * (0.05 + i * 0.015), cut: 1200 });
+      }
+      for (const [f, g] of [[880, 0.05], [1320, 0.035], [1760, 0.025]] as const) toneAt(r, t + 0.15, { type: "sine", freq: f * p * wobble(r, 0.01), freqTo: f * 1.08 * p, attack: go - 0.2, decay: 0.12, gain: v * g });
+      noiseAt(r, t, { filter: "bandpass", freq: 900 * p, freqTo: 3200 * p, q: 4, attack: go, decay: 0.08, gain: v * 0.12 });
+      toneAt(r, t + go, { type: "sine", freq: 170 * p, freqTo: 46, decay: 0.55, gain: v * 0.9 });
+      noiseAt(r, t + go, { filter: "lowpass", freq: 4200 * p, freqTo: 260, q: 0.8, attack: 0.02, decay: 1.0, gain: v * 0.35 });
+      toneAt(r, t + go + 0.02, { type: "triangle", freq: 523 * p, freqTo: 510 * p, decay: 1.0, gain: v * 0.12 });
+      toneAt(r, t + go + 0.02, { type: "sine", freq: 784 * p, freqTo: 770 * p, decay: 1.1, gain: v * 0.08 });
+      break;
+    }
     case "boss_down":
       noiseAt(r, t, { filter: "lowpass", freq: 1800, freqTo: 120, q: 0.7, attack: 0.02, decay: 0.7, gain: v * 0.7 });
       toneAt(r, t, { type: "sawtooth", freq: 180, freqTo: 40, attack: 0.02, decay: 0.8, gain: v * 0.45, cut: 600 });

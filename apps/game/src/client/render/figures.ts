@@ -648,6 +648,8 @@ class Part {
    * when the figure falls dead (see ragdoll), so spikes standing off a hide do not prop it up on its feet.
    */
   fluff = false;
+  /** What its glowing pieces are called, for an effect to find them where they are (Figure.glowAt): a Guardian's "eyes", its "gem". */
+  glowTag?: string;
 
   constructor(parent: THREE.Object3D, x = 0, y = 0, z = 0) {
     this.joint.position.set(x, y, z);
@@ -905,6 +907,7 @@ class Part {
     if (this.lit.length > 0) {
       const mesh = new THREE.Mesh(merged(this.lit), mats.glow);
       mesh.userData.selfLit = true;
+      if (this.glowTag) mesh.userData.glowTag = this.glowTag;
       this.skin.add(mesh);
     }
     if (this.inked.length > 0) {
@@ -9173,7 +9176,12 @@ function golem(top: THREE.Group): Rig {
   }
   t.ball(dark, 2.0, 0, 7.4, -1.8, 0, [1.4, 0.7, 1]);
   // The seam of light: a core glowing out of a crack in the chest, and thin lines of it along the joins.
-  t.glowBall(glow, 0.85, 0, 4.4, 4.15);
+  // The core is a piece of its own, riding on the chest, so an effect can find it apart from the seams (Figure.glowAt).
+  const gem = new Part(t.skin);
+  gem.fluff = true;
+  gem.glowTag = "gem";
+  parts.push(gem);
+  gem.glowBall(glow, 0.85, 0, 4.4, 4.15);
   t.glowBox(glow, 0.22, 2.4, 0.2, 0.05, 3.1, 4.05, [0, 0, 0.25]);
   t.glowBox(glow, 1.8, 0.16, 0.2, -1.3, 4.0, 4.05, [0, 0, -0.35]);
   t.glowBox(glow, 1.5, 0.16, 0.2, 1.3, 5.0, 4.0, [0, 0, 0.3]);
@@ -9189,6 +9197,7 @@ function golem(top: THREE.Group): Rig {
   h.joint.position.set(0, 6.4, 2.2);
   h.loft(stone, [[0, 1.9, 1.7, 0.2], [1.3, 2.2, 1.9, 0.15], [2.5, 1.9, 1.7, 0], [3.1, 1.1, 1.1, -0.1]], 5);
   h.shape(dark, sym([[2.0, 2.05, 1.5], [2.1, 2.55, 1.4], [0, 2.15, 2.25], [0, 2.7, 2.1], [1.0, 1.9, 2.15]]));
+  h.glowTag = "eyes";
   for (const s of [-1, 1]) h.glowBox(glow, 0.8, 0.24, 0.2, s * 0.85, 1.6, 1.98, [0, 0, s * -0.12]);
   // Long arms of stacked stones, the elbows boulders, ending in fists bigger than its head.
   for (const arm of [b.armR, b.armL]) {
@@ -10526,6 +10535,8 @@ export interface Figure {
    * Guardian channelling). Greyed when down all the same.
    */
   setGlow(k: number): void;
+  /** Where the glowing pieces of the part tagged `tag` are (Part.glowTag), in the world, as it stands now; null if it has none. */
+  glowAt(tag: string): THREE.Vector3 | null;
   /**
    * Cast a spell, or throw something: the casting hand swings round overhead and comes down to point at the mark.
    * Returns the seconds until it points, which is when what is cast should leave; 0 for a creature, which only
@@ -10985,6 +10996,16 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
       mats.body.color.setScalar(on ? 0.5 : 1);
       mats.glow.color.setScalar((on ? 0.4 : 1) * glowK);
       mats.ink.color.setScalar(on ? 0.5 : 1);
+    },
+    glowAt(tag) {
+      let found: THREE.Mesh | null = null;
+      root.traverse((o) => {
+        if (!found && o instanceof THREE.Mesh && o.userData.glowTag === tag) found = o;
+      });
+      const mesh = found as THREE.Mesh | null;
+      if (!mesh) return null;
+      if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+      return mesh.geometry.boundingBox!.getCenter(new THREE.Vector3()).applyMatrix4(mesh.matrixWorld);
     },
     setGlow(k) {
       glowK = Math.max(0, k);

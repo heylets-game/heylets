@@ -1234,15 +1234,13 @@ function slowingField(stage: MoveStage, { figure, crit, onImpact, alone, hitAt }
   const ground = feet.clone().setY(feet.y + 0.07);
   const { reach, rings, life, apart } = SLOWING_FIELD;
   const color = crit ? GOLD : GUARDIAN_GLOW;
-  // Where its eyes and its chest are, from how tall it stands: its head sunk low near the top, the gem well up its front.
+  // Where its eyes and the gem in its chest are, as it moves (Figure.glowAt); for a figure without them, from how tall
+  // it stands: its head near the top, its chest well up it.
   const box = new THREE.Box3().setFromObject(figure.root);
   const tall = Math.max(0.5, box.max.y - box.min.y);
-  const at = (up: number) => {
-    const base = figure.root.getWorldPosition(new THREE.Vector3());
-    return base.setY(box.min.y + tall * up);
-  };
-  const eyes = () => at(0.8);
-  const chest = () => at(0.58);
+  const up = (k: number) => figure.root.getWorldPosition(new THREE.Vector3()).setY(box.min.y + tall * k);
+  const eyes = () => figure.glowAt("eyes") ?? up(0.8);
+  const chest = () => figure.glowAt("gem") ?? up(0.58);
   const wait = figure.strike("channel") || Math.max(0.35, figure.cast());
   const { held, flash, fade } = CHANNEL_GLOW;
   // The glow building as it draws the field in: eased up to `held` over the channelling.
