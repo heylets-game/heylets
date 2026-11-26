@@ -144,11 +144,11 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   // take half). It needs a few turns to get its breath back for another.
   thunderous_roar: { id: "thunderous_roar", name: "Thunderous Roar", damage: 8, potency: 3, shape: "burst", saveOr: { effect: "reeling", turns: 1, amount: 2 }, cooldown: 3, weight: 2 },
   // A guardian's fist of stone: whoever it lands on is knocked back a hex, and off their feet unless they stand firm.
-  stone_fist: { id: "stone_fist", name: "Stone Fist", damage: 12, potency: 5, push: 1, saveOr: { effect: "prone", turns: 1 }, weight: 2 },
+  stone_fist: { id: "stone_fist", name: "Stone Fist", damage: 15, potency: 5, push: 1, saveOr: { effect: "prone", turns: 1 }, weight: 2 },
   // A guardian pounds the ground and it starts to shake all round it: small tremors now, and the ground cracking,
   // then on its next turn the whole of it heaves, throwing whoever is still on it off their feet. Most of its turn,
   // and it needs a few to gather itself for another.
-  earthquake: { id: "earthquake", name: "Earthquake", damage: 5, potency: 3, shape: "burst", cost: 4, cooldown: 4, aftershock: { damage: 10, saveOr: { effect: "prone", turns: 1 } }, weight: 2 },
+  earthquake: { id: "earthquake", name: "Earthquake", damage: 7, potency: 3, shape: "burst", cost: 4, cooldown: 4, aftershock: { damage: 15, saveOr: { effect: "prone", turns: 1 } }, weight: 2 },
   chill_touch: { id: "chill_touch", name: "Chill Touch", damage: 5, potency: 3, saveOr: { effect: "slowed", turns: 2 }, chills: true, weight: 2 },
   wail: { id: "wail", name: "Wail", damage: 3, potency: 3, shape: "burst", weight: 1 },
   bat_bite: { id: "bat_bite", name: "Bite", damage: 4, potency: 4, saveOr: { effect: "bleeding" }, weight: 2 },
