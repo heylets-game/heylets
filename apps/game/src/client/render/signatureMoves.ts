@@ -35,7 +35,8 @@ export interface MoveStage {
   lunge(): void;
   /**
    * Leap the attacker bodily at the target and home again after (see pounceAt): a crouch, a jump through the air
-   * that comes down in the target's face, a moment there, and a hop back. Returns the seconds until it lands.
+   * that comes down in the target's face, a moment there, and a hop back; or, for one that leapt in from further
+   * off (a Lunge), from where it set off, settling onto the hex it took after. Returns the seconds until it lands.
    */
   pounce(): number;
   /** A blow has landed on the target: jolt it. */
@@ -97,32 +98,41 @@ function cheapShot(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Mov
 /**
  * A creature's leap at its target (MoveStage.pounce), in seconds for each part: gathering itself (drawn back by
  * `gather`), in the air (`high` at the top), held where it landed, and the hop home (`homeHop` high). It comes down
- * `short` of the target's middle: in its face, not on top of it.
+ * `short` of the target's middle: in its face, not on top of it. A leap that carries it to a new hex (a Lunge from
+ * further off) is longer in the air the further it goes (leapAir), and settles onto its new hex in place of the hop.
  */
 export const POUNCE = { crouch: 0.14, air: 0.26, hold: 0.2, back: 0.24, gather: 0.22, high: 0.6, homeHop: 0.12, short: 0.6 };
-/** Seconds from a pounce's start to its landing, and to its end, home again. */
-export const POUNCE_LANDS = POUNCE.crouch + POUNCE.air;
-export const POUNCE_OVER = POUNCE_LANDS + POUNCE.hold + POUNCE.back;
+/** Seconds from a pounce's start to its landing, and to its end, home again (or settled on its new hex). */
+export const pounceLands = (air: number = POUNCE.air) => POUNCE.crouch + air;
+export const pounceOver = (air: number = POUNCE.air) => pounceLands(air) + POUNCE.hold + POUNCE.back;
+export const POUNCE_LANDS = pounceLands();
+export const POUNCE_OVER = pounceOver();
+/** How long a leap to a new hex, at a target `far` world units off, is in the air: longer the further it goes. */
+export const leapAir = (far: number) => Math.min(0.6, POUNCE.air + 0.06 * Math.max(0, far - 1.5));
 
 const ease = (k: number) => k * k * (3 - 2 * k);
 
 /**
- * Where a pounce has its creature `s` seconds in, at a target `far` away: how far it is toward the target from
- * where it stands (back from it while gathering itself), and how high off the ground.
+ * Where a pounce has its creature `s` seconds in, at a target `far` away, `air` seconds off the ground: how far it is
+ * toward the target from where it set off (back from it while gathering itself), how high off the ground, the most
+ * it comes toward the target (`reach`), and how far it is on its way home from there, 0 to 1 (`home`).
  */
-export function pounceAt(s: number, far: number): { ahead: number; up: number } {
+export function pounceAt(s: number, far: number, air: number = POUNCE.air): { ahead: number; up: number; reach: number; home: number } {
   const reach = Math.max(0, far - POUNCE.short);
-  if (s <= 0 || s >= POUNCE_OVER) return { ahead: 0, up: 0 };
-  if (s < POUNCE.crouch) return { ahead: -POUNCE.gather * ease(s / POUNCE.crouch), up: 0 };
+  if (s <= 0) return { ahead: 0, up: 0, reach, home: 0 };
+  if (s >= pounceOver(air)) return { ahead: 0, up: 0, reach, home: 1 };
+  if (s < POUNCE.crouch) return { ahead: -POUNCE.gather * ease(s / POUNCE.crouch), up: 0, reach, home: 0 };
   s -= POUNCE.crouch;
-  if (s < POUNCE.air) {
-    const k = s / POUNCE.air;
-    return { ahead: -POUNCE.gather + (reach + POUNCE.gather) * k, up: 4 * POUNCE.high * k * (1 - k) };
+  if (s < air) {
+    const k = s / air;
+    // A longer leap goes higher, but not as much higher as it goes further.
+    const high = POUNCE.high * Math.sqrt(air / POUNCE.air);
+    return { ahead: -POUNCE.gather + (reach + POUNCE.gather) * k, up: 4 * high * k * (1 - k), reach, home: 0 };
   }
-  s -= POUNCE.air;
-  if (s < POUNCE.hold) return { ahead: reach, up: 0 };
+  s -= air;
+  if (s < POUNCE.hold) return { ahead: reach, up: 0, reach, home: 0 };
   const k = (s - POUNCE.hold) / POUNCE.back;
-  return { ahead: reach * (1 - ease(k)), up: 4 * POUNCE.homeHop * k * (1 - k) };
+  return { ahead: reach * (1 - ease(k)), up: 4 * POUNCE.homeHop * k * (1 - k), reach, home: ease(k) };
 }
 
 const TEETH = "#f4efe2";
@@ -161,10 +171,10 @@ function wolfBite(stage: MoveStage, ctx: MoveCtx) {
 }
 
 /**
- * A wolf's lunge: it gathers itself and leaps at the target, kicking dust back off the ground as it goes and throwing
+ * A wolf's lunge: it gathers itself and leaps at the target (from up to 3 hexes off, if it sprang from there), kicking dust back off the ground as it goes and throwing
  * speed lines off itself the whole way through the air. Its jaws close on the target as it comes down, with a flash
  * and lines bursting out round it; the target is jolted and dust is thrown up at its feet. The wolf holds there a
- * moment, then hops back. The blow is told when the jaws meet.
+ * moment, then hops back (or settles onto the hex it took). The blow is told when the jaws meet.
  */
 function wolfLunge(stage: MoveStage, ctx: MoveCtx) {
   const { figure, hitAt, dir, crit, onImpact } = ctx;
@@ -300,5 +310,5 @@ export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
   "Rending Swipe": { who: "bear", blurb: "Rears back on its hind legs and rakes a forepaw down across the target, its claws leaving a red swoosh, and three red claw marks torn across it.", play: rendingSwipe },
   Bite: { who: "wolf", blurb: "A snap forward, jaws closing on the target as two white arches.", play: wolfBite },
   "Cheap Shot": { who: "bandit", blurb: "Two quick side slashes, a forehand then a backhand: the sword leaves a red trail, and each cut a flat red swipe across the target.", play: cheapShot },
-  Lunge: { who: "wolf", blurb: "A crouch and a leap through the air, dust kicked back and speed lines streaming off it, jaws snapping shut on the target with a flash as it lands, then a hop back home.", play: wolfLunge },
+  Lunge: { who: "wolf", blurb: "A crouch and a leap through the air (from up to 3 hexes off, taking the hex beside its target), dust kicked back and speed lines streaming off it the whole way, jaws snapping shut on the target with a flash as it lands.", play: wolfLunge },
 };

@@ -33,6 +33,11 @@ export interface EnemyAbilityDef {
   shape?: "single" | "burst";
   /** Hexes it reaches: 1 (the default) is a blow by hand; more is a shot, and needs a clear line. */
   range?: number;
+  /**
+   * A leap: `range` is how far it springs, not a shot. A hero beyond arm's reach (but in range, and in sight) it
+   * leaps at, landing on an open hex beside them, and then it strikes as a blow by hand (combat.ts lungeLanding).
+   */
+  leap?: boolean;
   /** Action Points it takes: ACTION_AP (kit.ts) when not said. */
   cost?: number;
   /** Its user's turns it is not ready for after it is used, as a hero's cooldowns are (kit.ts Tactic). None: every turn. */
@@ -65,8 +70,8 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   cheap_shot: { id: "cheap_shot", name: "Cheap Shot", damage: 6, potency: 3, saveOr: { effect: "bleeding" }, cooldown: 3, weight: 3 },
   wolf_bite: { id: "wolf_bite", name: "Bite", damage: 5, potency: 3, weight: 1 },
   // A dire wolf's opener: it throws its whole weight at one hero, jaws first, to bring them down. It springs again
-  // once it has its breath back, and bites in between.
-  wolf_lunge: { id: "wolf_lunge", name: "Lunge", damage: 5, potency: 3, saveOr: { effect: "prone", turns: 1 }, cooldown: 2, weight: 3 },
+  // once it has its breath back, and bites in between. It springs from up to 3 hexes off, landing beside its target.
+  wolf_lunge: { id: "wolf_lunge", name: "Lunge", damage: 5, potency: 3, range: 3, leap: true, saveOr: { effect: "prone", turns: 1 }, cooldown: 2, weight: 3 },
   mauling_swipe: { id: "mauling_swipe", name: "Rending Swipe", damage: 12, potency: 4, saveOr: { effect: "bleeding" }, weight: 1 },
   // A cave bear's favourite: it rears and comes down with its whole weight. Slow to wind up (most of its turn), but
   // whoever it lands on is left reeling, with less to do on their next turn.

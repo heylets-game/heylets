@@ -29,7 +29,7 @@ import { FlotsamMarks, type FlotsamMark } from "./flotsam";
 import { OVERLAY_LAYER, PostFx, type Air } from "./post";
 import { fishMount } from "./catchArt";
 import { FRAME, OUTLINE, SITTING_DROP, inflate, makeFigure, type Figure } from "./figures";
-import { POUNCE_LANDS, POUNCE_OVER, SIGNATURE_MOVES, pounceAt, type MoveStage } from "./signatureMoves";
+import { POUNCE, SIGNATURE_MOVES, leapAir, pounceAt, pounceLands, pounceOver, type MoveStage } from "./signatureMoves";
 import { HIDES, hidingMaterial } from "./silhouette";
 import { BOAT_SCALE, OARLOCKS, ROWER_SEAT, aimOar, rowboatModel, shipOar } from "./rowboat";
 import { BoatWake, WAKE_STEP } from "./wake";
@@ -343,6 +343,8 @@ const STAND_S = 0.2;
  * base and so much more per world unit jumped; the longest it is ever in the air; how far it clears the lip of
  * a ledge it is jumping up onto; and how far into the jump's sound the thud of the landing is.
  */
+/** The longest a unit is held where it set off from for the leap of its Lunge (see lungeFrom), in seconds. */
+const LAUNCH_HELD_S = 2.5;
 const LEAP = { air: 0.3, airPer: 0.045, longest: 0.56, high: 0.45, highPer: 0.13, clear: 0.45, thud: 0.3 };
 
 /**
@@ -667,8 +669,17 @@ interface Unit {
   path: THREE.Vector3[];
   /** Brief attack lunge, decays to zero. */
   kick: THREE.Vector3;
-  /** A leap at a target under way (signatureMoves.ts pounceAt): begun at `at` on the render clock, along `way` (a unit length), at a target `far` off. */
-  pounce?: { at: number; way: THREE.Vector3; far: number };
+  /**
+   * A leap at a target under way (signatureMoves.ts pounceAt): begun at `at` on the render clock, along `way` (a unit
+   * length), at a target `far` off, `air` seconds off the ground. `from`: it set off from there, not from its hex (a
+   * Lunge from further off), and settles onto its hex after.
+   */
+  pounce?: { at: number; way: THREE.Vector3; far: number; air: number; from?: THREE.Vector3 };
+  /**
+   * Where it is held, though its hex is another (see lungeFrom), till its leap there is played: from `since` on the
+   * render clock, and not for long.
+   */
+  launch?: { from: THREE.Vector3; since: number };
   /** Lean into an attack, in radians; decays to zero. */
   lean: number;
   /** Distance walked, which drives the hop, and the current hop height. */
@@ -2302,17 +2313,36 @@ export class WorldRenderer {
     a.bob = 0.2;
   }
 
-  /** Leap a creature bodily at its target and home again (signatureMoves.ts pounceAt). Returns the seconds until it lands. */
+  /**
+   * Leap a creature bodily at its target and home again (signatureMoves.ts pounceAt); or, held where it set off from
+   * (lungeFrom), from there, onto the hex it has taken beside them. Returns the seconds until it lands.
+   */
   private pounce(actorId: string, targetId: string): number {
     const a = this.units.get(actorId);
     const t = this.units.get(targetId);
     if (!a || !t || a === t) return 0;
-    const way = t.goal.clone().sub(a.goal);
+    const from = a.launch?.from;
+    a.launch = undefined;
+    const way = t.goal.clone().sub(from ?? a.goal);
     const far = way.length();
     if (far < 1e-4) return 0;
-    a.pounce = { at: this.clock, way: way.divideScalar(far), far };
+    const air = from ? leapAir(far) : undefined;
+    a.pounce = { at: this.clock, way: way.divideScalar(far), far, air: air ?? POUNCE.air, ...(from ? { from } : {}) };
     a.kick.set(0, 0, 0);
-    return POUNCE_LANDS;
+    return pounceLands(a.pounce.air);
+  }
+
+  /**
+   * The leap of a Lunge, given before its blow: the unit is held where it stands, though its hex is now the one
+   * beside its target, and the blow's own animation (signatureMoves.ts wolfLunge, by pounce) carries it there.
+   */
+  lungeFrom(id: string) {
+    const unit = this.units.get(id);
+    if (!unit) return;
+    this.fight.setOff(id);
+    const from = unit.root.position.clone();
+    from.y -= unit.bob;
+    unit.launch = { from, since: this.clock };
   }
 
   /** Who a unit is in the fight, for its voice: looked up when asked, as the fight's line-up can change. */
@@ -5819,7 +5849,7 @@ export class WorldRenderer {
       // A jump whose landing place is no longer the next on the way (knocked aside, sent elsewhere) is off.
       if (unit.leap && unit.leap.to !== unit.path[0]) unit.leap = undefined;
       // Sent walking (or knocked aside) mid-pounce: the walk takes over from it.
-      if (unit.path.length > 0) unit.pounce = undefined;
+      if (unit.path.length > 0) unit.pounce = unit.launch = undefined;
       if (unit.path.length === 0 && unit.leaps?.size) unit.leaps.clear();
       if (unit.path.length > 0) {
         const next = this.stepSpot.copy(unit.path[0]);
@@ -5886,13 +5916,21 @@ export class WorldRenderer {
         unit.stride = 0;
         const goal = this.restSpot.copy(unit.goal).add(unit.kick);
         const pounce = unit.pounce;
-        if (pounce && this.clock - pounce.at >= POUNCE_OVER) unit.pounce = undefined;
+        if (pounce && this.clock - pounce.at >= pounceOver(pounce.air)) unit.pounce = undefined;
+        // Held for a leap that never came (its blow was not played): it goes on to its hex.
+        if (unit.launch && this.clock - unit.launch.since > LAUNCH_HELD_S) unit.launch = undefined;
         if (unit.pounce && pounce) {
           // Leaping at a target: carried along the leap exactly, through the air and home again (signatureMoves.ts).
-          const at = pounceAt(this.clock - pounce.at, pounce.far);
-          p.copy(goal.addScaledVector(pounce.way, at.ahead));
-          unit.bob = at.up;
-        }
+          const at = pounceAt(this.clock - pounce.at, pounce.far, pounce.air);
+          if (pounce.from) {
+            // From where it set off, up into the target's face, and from there onto its own new hex.
+            p.copy(pounce.from).addScaledVector(pounce.way, at.home > 0 ? at.reach : at.ahead).lerp(goal, at.home);
+            unit.bob = at.home > 0 ? 0 : at.up;
+          } else {
+            p.copy(goal.addScaledVector(pounce.way, at.ahead));
+            unit.bob = at.up;
+          }
+        } else if (unit.launch) p.copy(unit.launch.from);
         // Put somewhere else with no walk to get there (sent back to its post when a fight ends, set down at the
         // spawn): it is simply there, not dragged across the map in a streak.
         else if (Math.hypot(goal.x - p.x, goal.z - p.z) > 3.5) p.copy(goal);

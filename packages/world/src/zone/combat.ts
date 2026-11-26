@@ -10,12 +10,13 @@ import { ABILITIES, BARD_AURA, ENEMIES, type AbilityDef, type EffectKind } from 
 import { tileAt, type Poi } from "../map";
 import { DEBUFFS, addCondition, addShield, addStacks, inflict, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, removeCondition, saveBonus, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
 import { cratesOn, crateById, hurtCrate, isCrateId } from "./crates";
+import { ENEMY_ABILITIES } from "./enemyabilities";
 import { bearing, close, blast, blockerAt, courseShare, directionToward, ringToward, elevOf, flies, heldAgainst, inFight, lineFrom, pathIn, perkOf, pitAt, reachFrom, roomAt, sameHex, sees, seesFor, solid, stepCost, strikes, unitById, zoneReach, type Course, type Pit } from "./geometry";
 import { ACTION_AP, CHART, COMMON_ACTIONS, CORAL_ARMOR, ENEMY_EDGE, RALLY, SHANTY, SUMMON_CALLS, ENEMY_BURST, FLEE_RANGE, JUMP_DOWN, JUMP_UP, blinkRange, jumpRange, POTION_EDGE, SAVE_STAT, SMUGGLED, THROWABLES, TORCH_GROUND_ROUNDS, abilityDice, abilityStrikes, enemySave, unitStrikes, healDice, reactionStrike, tacticOf, throwRange, type EnemyStrike, type Tactic } from "./kit";
 import { modsOf } from "./mods";
 import { d20, diceFor, hitChance, mod, proficiency, rollDice, rollShown, statOf } from "./rules";
 import { seenByHeroes } from "./light";
-import { HINDERING, chill, clearSurfaces, dropTorch, enterSurface, ignite, letGoTorch, placeSurface } from "./surfaces";
+import { HARMFUL, HINDERING, chill, clearSurfaces, dropTorch, enterSurface, ignite, letGoTorch, placeSurface } from "./surfaces";
 import type { Budget, CommonAction, Throwable, Unit, ZoneState } from "./types";
 import { clusterHexes, enterWeather, makeWeather, rainHexes, wallHexes } from "./weather";
 import { summonCall, summonSpots } from "./summon";
@@ -1009,6 +1010,47 @@ export function retune(ctx: Ctx): void {
 // ---------- an enemy's attacks ----------
 
 /** One of an enemy's attacks: a blow or a shot at `target`, or (an attack on every hero) a burst around itself. */
+/** Whether an enemy's attack is a leap at its target (EnemyAbilityDef `leap`): a blow by hand, struck where it lands. */
+export const leaps = (attack: EnemyStrike): boolean => !!ENEMY_ABILITIES[attack.id]?.leap;
+
+/**
+ * Where a leaping attack (a Dire Wolf's Lunge) of `enemy`'s, made from `from`, lands to strike `target`: `from` itself
+ * if the target is in reach of a blow from there already; else the open hex beside them nearest `from` that a blow
+ * reaches them from, with a clear line to it, not too high to leap up to, and out of fire and poison if there is one.
+ * The target must be within the attack's range and in sight. Null: there is no leaping at them from there.
+ */
+export function lungeLanding(state: ZoneState, enemy: Unit, from: HexPos, attack: EnemyStrike, target: Unit): HexPos | null {
+  if (strikes(state.map, from, target.pos)) return from;
+  if (hexDistance(from, target.pos) > attack.range || !seesFor(state, enemy.side, from, target.pos)) return null;
+  const rise = elevOf(state.map, from) + JUMP_UP;
+  const spots = hexNeighbors(target.pos, state.map.grid).filter(
+    (p) => !sameHex(p, from) && standable(state, p, enemy) && elevOf(state.map, p) <= rise && strikes(state.map, p, target.pos) && sees(state.map, from, p),
+  );
+  const harmful = (p: HexPos) => { const kind = state.surfaces[posKey(p)]?.kind; return kind && HARMFUL.has(kind) ? 1 : 0; };
+  return spots.sort((a, b) => harmful(a) - harmful(b) || hexDistance(from, a) - hexDistance(from, b) || a.q - b.q || a.r - b.r)[0] ?? null;
+}
+
+/**
+ * A leaping attack's leap, before the blow: from where it stands to beside `target` (lungeLanding), drawing blows
+ * from whoever it leaps out of reach of, as a Jump does, and meeting the ground where it lands. False if it does not
+ * get there on its feet to strike.
+ */
+function lungeAt(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit): boolean {
+  const to = lungeLanding(ctx.state, enemy, enemy.pos, attack, target);
+  if (!to) return false;
+  if (sameHex(to, enemy.pos)) return true;
+  const from = enemy.pos;
+  provoke(ctx, enemy, to, null, () => {});
+  if (enemy.down) return false;
+  enemy.pos = to;
+  ctx.events.push({ t: "jumped", id: enemy.id, from, to, lunge: target.id });
+  tumble(ctx, enemy, from, null, JUMP_DOWN);
+  if (enemy.down || enterSurface(ctx, enemy) || enemy.down) return false;
+  enterWeather(ctx, enemy);
+  ctx.onStep?.(enemy, () => {});
+  return !enemy.down && !has(enemy, "prone") && !target.down;
+}
+
 export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | null): void {
   const { state } = ctx;
   const dc = 8 + attack.potency;
@@ -1030,7 +1072,11 @@ export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Uni
     return;
   }
   if (!target) return;
-  const roll = attackRoll(ctx, enemy, target, { label: attack.name, bonus: attack.potency, melee: attack.range === 1 });
+  // A leap: through the air to beside them first, then a blow by hand.
+  const leap = leaps(attack);
+  if (leap && !lungeAt(ctx, enemy, attack, target)) return;
+  const melee = attack.range === 1 || leap;
+  const roll = attackRoll(ctx, enemy, target, { label: attack.name, bonus: attack.potency, melee });
   if (!roll.ok) {
     ctx.events.push({ t: "miss", actor: enemy.id, target: target.id, what: attack.name });
     return;
@@ -1038,7 +1084,7 @@ export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Uni
   if (!attack.harmless) {
     const rolled = rollShown(ctx.rng, attack.dice, 0, roll.crit);
     damage(ctx, target, rolled.total, { actor: enemy.id, what: attack.name, crit: roll.crit, dice: rolled });
-    if (attack.range === 1) thorns(ctx, enemy, target);
+    if (melee) thorns(ctx, enemy, target);
   }
   leave(target, true);
   if (attack.kit.surface) placeSurface(ctx, [target.pos], attack.kit.surface.kind, attack.kit.surface.rounds, enemy.id);

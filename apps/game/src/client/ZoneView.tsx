@@ -271,6 +271,20 @@ function cardsFor(events: ZoneEvent[], many: boolean[]): Map<number, Roll> {
   return cards;
 }
 
+/**
+ * Whether the leap at `i` is the leap of a leaping attack (a Dire Wolf's Lunge) whose blow follows in the same run:
+ * then the blow's own animation carries the leaper there, through the air, and the leap is not drawn by itself.
+ */
+function lungeBlow(events: ZoneEvent[], i: number): boolean {
+  const ev = events[i];
+  if (ev.t !== "jumped" || !ev.lunge) return false;
+  for (let k = i + 1; k < events.length && !CAUSES.has(events[k].t); k++) {
+    const next = events[k];
+    if ((next.t === "hit" || next.t === "miss") && next.actor === ev.id && next.target === ev.lunge) return true;
+  }
+  return false;
+}
+
 /** How long the camera is given to pan over to the alarm bell before it is seen to ring, in ms. */
 const BELL_PAN_MS = 500;
 
@@ -741,8 +755,10 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       } else if (ev.t === "jumped") {
         const u = find(ev.id);
         if (u) u.pos = ev.to;
-        // A leap, not a walk; the view sounds it, timed to the landing.
-        const go = () => (renderer.current ? renderer.current.leapUnit(ev.id, ev.to) : sounds.zone("jump"));
+        // A leap, not a walk; the view sounds it, timed to the landing. The leap of a Lunge is held for its blow,
+        // which carries the leaper there itself (signatureMoves.ts wolfLunge), and the blow's sound is its own.
+        const lunge = lungeBlow(events, i);
+        const go = () => (renderer.current ? (lunge ? renderer.current.lungeFrom(ev.id) : renderer.current.leapUnit(ev.id, ev.to)) : lunge || sounds.zone("jump"));
         unwalked.current.add(go);
         later(() => unwalked.current.delete(go) && go());
         owe(ev.id);
@@ -1736,6 +1752,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         framed?.();
       });
       let wait = dwell(ev, many[i], events[i + 1], ev.t === "roll" && carried.has(ev.roll));
+      // A Lunge's leap is waited on as part of its blow, not by itself.
+      if (lungeBlow(events, i)) wait = 0;
       // Turns keep a pace that can be followed (TURN_BEAT), but nobody waits on an enemy still marching in from afar.
       if (marching[i]) {
         // Its walk plays on while the next turn begins; whatever is not marching waits for the last of them to arrive.
@@ -1953,7 +1971,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       // One lost to a pit is not drawn at all.
       units: [
         ...(state.loot ?? []).filter((s) => s.kind === "body" && s.unit && !picture.units.some((u) => u.id === s.id)).map((s) => ({ id: s.id, kind: s.unit!, pos: s.pos, name: s.name, down: true })),
-        ...picture.units.filter((u) => u.side === "enemy" && !u.lost && !state.dark?.includes(u.id)).map((u) => ({ id: u.id, kind: u.kind, pos: u.pos, name: u.name, hp: inFight(u.id) || u.hp < u.maxHp ? u.hp / u.maxHp : undefined, down: u.down, prone: u.conditions.some((c) => c.kind === "prone"), active: u.id === spot, hostile: inFight(u.id), effects: [...badgesOf(u), ...(state.encounter?.bell?.goer === u.id && !state.map.pois.some((p) => p.kind === "bell" && p.cleared) ? [{ kind: "bell", color: "#ffd34e", rounds: 0 }] : [])] })),
+        ...picture.units.filter((u) => u.side === "enemy" && !u.lost && !state.dark?.includes(u.id)).map((u) => ({ id: u.id, kind: u.kind, pos: u.pos, name: u.name, hp: inFight(u.id) || u.hp < u.maxHp ? u.hp / u.maxHp : undefined, down: u.down, prone: u.conditions.some((c) => c.kind === "prone"), active: u.id === spot, hostile: inFight(u.id), effects: badgesOf(u) })),
       ],
       // Lit tiles are a turn's movement; walking freely, nothing is lit.
       freeRoam: !fighting,

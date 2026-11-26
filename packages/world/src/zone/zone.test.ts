@@ -1384,7 +1384,8 @@ describe("the enemy's turn", () => {
     const run = (hasted: boolean) => {
       let state = board();
       Object.assign(hero(state, "ann", "qa_paladin", at(1, 6)), { hp: 900, maxHp: 900 });
-      const wolf = enemy(state, "wolf", at(15, 6));
+      // Bite only: a Lunge would spring the last of the way, and stop its walk short.
+      const wolf = enemy(state, "wolf", at(15, 6), "g1", { abilities: ["wolf_bite"] });
       if (hasted) wolf.conditions.push({ kind: "hasted", rounds: 9 });
       const events: ZoneEvent[] = [];
       state = provoke(state, "ann", events);
