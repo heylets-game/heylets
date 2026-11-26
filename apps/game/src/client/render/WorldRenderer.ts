@@ -2404,7 +2404,7 @@ export class WorldRenderer {
     }
     // An enemy ability with an animation of its own (signatureMoves.ts), the same one the figure lab plays.
     const signature = SIGNATURE_MOVES[ability];
-    if (signature) {
+    if (signature && (!signature.only || signature.only.includes(a.kind))) {
       const stage: MoveStage = {
         spawnFx: (kind, color, flipped, opts) => this.spawnFx(kind, color, flipped, opts),
         later: (run, seconds) => this.later(run, seconds),

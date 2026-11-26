@@ -1571,7 +1571,7 @@ const GET_UP_HIPS = -1;
  * `n` counts the figure's actions, so two flinches in a row need not be the same.
  */
 interface Act {
-  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
+  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "claw" | "flurry" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
   t: number;
   n: number;
   /** A jump's seconds off the ground (see JUMP). */
@@ -1656,6 +1656,58 @@ const SLICES: Blow & { second: number } = {
 };
 /** Seconds from the first of the two side slashes landing to the second. */
 export const SLICES_APART = SLICES.second - SLICES.hit;
+
+/**
+ * A beast's claw swipe, for one on four legs with a forepaw to swipe with (Rig.claws): it rears back onto its hind
+ * legs, `rear` radians nose-up, and raises the paw high and out to its side (`lift`, the paw's turn forward and up from
+ * hanging; `sweep`, how far across its front, inward from its own side, below 0 out past it); then it comes down
+ * on the mark, the paw raking down and across its front as the body drops and lurches forward (`step`, as SLICES'),
+ * the head kept on the mark however far it rears, and dipped down a little more into the blow (`head`, nose-down). Back on all fours by `over`. A Cave Bear's Rending
+ * Swipe (signatureMoves.ts).
+ */
+const CLAW = {
+  hit: 0.3,
+  over: 0.7,
+  /** When the paw starts down from on high, and when the rake is through: its claws leave a swoosh only between. */
+  rake: [0.2, 0.42] as const,
+  rear: [[0, 0], [0.2, 0.42], [0.3, 0.1], [0.42, 0.06], [0.7, 0]] as Keys,
+  lift: [[0, 0], [0.2, -2.3], [0.3, -0.85], [0.42, -0.55], [0.7, 0]] as Keys,
+  sweep: [[0, 0], [0.2, -0.55], [0.3, 0.7], [0.42, 0.95], [0.7, 0]] as Keys,
+  head: [[0, 0], [0.2, 0.1], [0.3, 0.3], [0.45, 0.2], [0.7, 0]] as Keys,
+  step: [[0, 0], [0.2, 0.1], [0.3, 1], [0.45, 1], [0.7, 0]] as Keys,
+};
+
+/** Seconds into a bear's flurry (FLURRY) that each of its blows lands: right paw, left, right, left. */
+export const FLURRY_BLOWS = [0.34, 0.46, 0.58, 0.7] as const;
+/** A paw's swing in a flurry: held high, and for each of its own blows (`own`) whipped down and across and back up. */
+function flurryPaw(own: readonly number[]): { lift: Keys; sweep: Keys } {
+  const lift: [number, number][] = [[0, 0], [0.22, -2.3]];
+  const sweep: [number, number][] = [[0, 0], [0.22, -0.5]];
+  for (const h of own) {
+    lift.push([h - 0.06, -2.45], [h, -0.95], [h + 0.05, -1.25]);
+    sweep.push([h - 0.06, -0.6], [h, 0.75], [h + 0.05, 0.9]);
+  }
+  lift.push([0.86, -0.5], [1.1, 0]);
+  sweep.push([0.86, 0.2], [1.1, 0]);
+  return { lift, sweep };
+}
+/**
+ * A bear's flurry: it rears right up onto its hind legs, both forepaws raised high, and rakes them down across its
+ * front one after the other, right, left, right, left (FLURRY_BLOWS), lurching in as it goes; then drops back onto
+ * all fours by `over`, its head on the mark throughout (`head`, as CLAW's). Each paw's swing is as CLAW's (`paws`, right then left), and its claws leave a swoosh from
+ * `trail[0]` before each of its blows to `trail[1]` after. A Cave Bear's Maul (signatureMoves.ts).
+ */
+const FLURRY = {
+  hit: FLURRY_BLOWS[0],
+  over: 1.1,
+  rear: [[0, 0], [0.24, 0.62], [0.74, 0.58], [0.88, 0.2], [1.1, 0]] as Keys,
+  head: [[0, 0], [0.24, 0.15], [0.34, 0.28], [0.74, 0.28], [0.88, 0.2], [1.1, 0]] as Keys,
+  step: [[0, 0], [0.24, 0.05], [0.34, 0.7], [0.74, 0.9], [1.1, 0]] as Keys,
+  paws: [flurryPaw([FLURRY_BLOWS[0], FLURRY_BLOWS[2]]), flurryPaw([FLURRY_BLOWS[1], FLURRY_BLOWS[3]])],
+  trail: [0.07, 0.06] as const,
+};
+/** The blows a beast with claws (Rig.claws) plays as animations of its own. */
+const CLAW_ACTS = new Set<Act["kind"]>(["claw", "flurry"]);
 
 /**
  * A thrust, for a weapon that stabs: the hand drawn back to the hip with the point levelled at the mark, then a
@@ -2014,9 +2066,9 @@ function makeSmoke(big: number) {
 const SWOOSH = { life: 0.13, slow: 45, fast: 110, most: 64, bright: 0.55, inner: 0.5, arc: 0.12, color: "#f4f8ff" };
 /**
  * Blows whose swoosh is a colour of its own, not the usual pale light, and how strong it is at its brightest (the
- * usual is SWOOSH.bright): a Bandit's Cheap Shot (SLICES) leaves a thick red one.
+ * usual is SWOOSH.bright): a Bandit's Cheap Shot (SLICES) leaves a thick red one, and a bear's claws (CLAW) too; its flurry's (FLURRY) are a bright white.
  */
-const SWOOSH_TINT: Partial<Record<Act["kind"], { color: string; bright: number }>> = { slices: { color: "#e0313f", bright: 0.85 } };
+const SWOOSH_TINT: Partial<Record<Act["kind"], { color: string; bright: number }>> = { slices: { color: "#e0313f", bright: 0.85 }, claw: { color: "#e0313f", bright: 0.9 }, flurry: { color: SWOOSH.color, bright: 0.9 } };
 
 /**
  * A swoosh: a ribbon of light left in the air where a swung weapon has just been, between where its tip was and
@@ -2258,7 +2310,7 @@ const RECORDER_LENGTH = 6.4;
 const HAMMER = { hit: 0.4, over: 0.86, up: [[0, 0.25], [0.3, 1], [0.4, 0], [0.48, 0.18], [0.86, 0.25]] as Keys };
 const STIR = { over: 30, turns: 25 };
 /** How long each kind of action lasts. */
-const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
+const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, claw: CLAW.over, flurry: FLURRY.over, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
 /** When each kind of blow lands. */
 const ACT_HIT = { strike: SWING.hit, stab: THRUST.hit, slices: SLICES.hit, pounce: POUNCE.hit, heavy: SWEEP.hit, twin: TWIN.hit };
 /**
@@ -2287,6 +2339,11 @@ interface Rig {
   loose?: () => number;
   /** Plays strikes and hits as timed animations of its own (see Act); a rig without is leant into them, as it always was. */
   acts?: boolean;
+  /**
+   * A beast that swipes with a forepaw (see CLAW): it plays that one blow as an animation of its own, though it is
+   * leant into every other, as a rig without `acts` is.
+   */
+  claws?: boolean;
   /** Its ordinary strike, where what it carries does not cut (see LIGHT): a leaping stab, or a straight thrust. */
   light?: "pounce" | "stab";
   /** It carries an instrument, and plays it (see Figure.play). */
@@ -8923,10 +8980,12 @@ function spot(part: Part, color: string, rx: number, ry: number, depth: number, 
 
 /**
  * The four-legged gait a wolf and a bear share. `across` is half the body's width, `tall` the back's height,
- * and `stoop` how far (radians) the head is carried nose-down: a wolf's, low and growling.
+ * and `stoop` how far (radians) the head is carried nose-down: a wolf's, low and growling. `paws`, for a beast that
+ * swipes (see CLAW, FLURRY): its forepaws, right then left, each with the point at its claws' tips and the swoosh
+ * they leave. A single swipe is the right's.
  */
-function fourLegs(top: THREE.Group, legs: Part[], head: Part, tail: Part | null, across: number, tall: number, stoop = 0) {
-  return (a: Anim) => {
+function fourLegs(top: THREE.Group, legs: Part[], head: Part, tail: Part | null, across: number, tall: number, stoop = 0, paws: Paw[] = []) {
+  const pose = (a: Anim) => {
     if (a.getUp) {
       // On its belly, the forelegs out in front and the hind legs tucked forward beside it, the head up.
       top.rotation.set(0, 0, 0);
@@ -8947,6 +9006,28 @@ function fourLegs(top: THREE.Group, legs: Part[], head: Part, tail: Part | null,
       head.joint.rotation.set(0, 0, 0);
       return;
     }
+    if (paws.length > 0 && a.act && CLAW_ACTS.has(a.act.kind)) {
+      // Reared back on the hind legs (lifted as it tips, so their feet stay on the ground), a paw (or both) raised and raked down.
+      const t = a.act.t;
+      const blow = a.act.kind === "flurry" ? FLURRY : CLAW;
+      const rear = along(blow.rear, t);
+      const behind = -Math.min(...legs.map((leg) => leg.joint.position.z));
+      const hips = legs[0].joint.position.y;
+      top.rotation.set(-rear, 0, 0);
+      top.position.set(0, (a.breath + 1) * 0.06 + behind * Math.sin(rear) + hips * (1 - Math.cos(rear)), along(blow.step, t) * STRIDE * 0.5 * a.scale);
+      for (const leg of legs) {
+        const i = paws.findIndex((p) => p.leg === leg);
+        const swing = blow === FLURRY ? FLURRY.paws[i] : i === 0 ? CLAW : undefined;
+        const side = Math.sign(leg.joint.position.x) || 1;
+        if (swing) leg.joint.rotation.set(along(swing.lift, t), 0, -side * along(swing.sweep, t));
+        // A foreleg not swiping comes up off the ground with the rest of the front, reaching a little; the hind legs stay upright.
+        else leg.joint.rotation.set(leg.joint.position.z > 0 ? -rear * 0.8 : rear, 0, 0);
+      }
+      // The head kept on the target as the body rears (turned down by as much as it tips up), and dipped into each blow.
+      head.joint.rotation.set(stoop + rear + along(blow.head, t), 0, 0);
+      if (tail) tail.joint.rotation.set(0, 0, 0);
+      return;
+    }
     top.rotation.set(-a.strike * 0.3, 0, 0);
     top.position.set(0, (a.breath + 1) * 0.06 + a.strike * 1.2, 0);
     // (Every turn of a joint is set, not one of them: getting up from a fall, it is eased back from however it lay.)
@@ -8954,6 +9035,55 @@ function fourLegs(top: THREE.Group, legs: Part[], head: Part, tail: Part | null,
     head.joint.rotation.set(stoop + a.breath * 0.04 + a.strike * 0.35, 0, 0);
     if (tail) tail.joint.rotation.set(0, Math.sin(a.t * 3.1) * 0.3, 0);
   };
+  return (a: Anim) => {
+    pose(a);
+    paws.forEach((paw, i) => clawTrail(top, paw, i, a));
+  };
+}
+
+/** A forepaw a beast swipes with (see fourLegs): the leg, where its claws' tips are on it, and the swoosh they leave. */
+interface Paw {
+  leg: Part;
+  tip: THREE.Vector3;
+  swoosh: ReturnType<typeof makeSwoosh>;
+}
+
+/** A forepaw to swipe with: the swoosh is made now, with the figure, so it is put away with it. */
+function pawOf(leg: Part, tip: THREE.Vector3): Paw {
+  return { leg, tip, swoosh: makeSwoosh() };
+}
+
+const pawAt = { shoulder: new THREE.Vector3(), claws: new THREE.Vector3() };
+/**
+ * The swoosh behind a swiping paw's claws, tracked each frame from the shoulder (what the paw turns about) to the
+ * claws' tips, in the frame `top` hangs in (the figure's own units, as a held weapon's). `which` paw: 0 the right.
+ */
+function clawTrail(top: THREE.Group, paw: Paw, which: number, a: Anim) {
+  const root = top.parent;
+  if (!root) return;
+  if (!paw.swoosh.mesh.parent) root.add(paw.swoosh.mesh);
+  if (a.lying || a.getUp) return paw.swoosh.hide();
+  // Only the rakes down leave one, not the paw going up.
+  const t = a.act?.t ?? 0;
+  const swiping =
+    a.act?.kind === "claw" ? which === 0 && t >= CLAW.rake[0] && t <= CLAW.rake[1]
+    : a.act?.kind === "flurry" ? FLURRY_BLOWS.some((h, n) => n % 2 === which && t >= h - FLURRY.trail[0] && t <= h + FLURRY.trail[1])
+    : false;
+  if (swiping) paw.swoosh.tint(SWOOSH_TINT[a.act!.kind]!.color, SWOOSH_TINT[a.act!.kind]!.bright);
+  // (`track` keeps copies of what it is given.)
+  paw.swoosh.track(a.t, placeIn(paw.leg.joint, ORIGIN, pawAt.shoulder, root), placeIn(paw.leg.joint, paw.tip, pawAt.claws, root), swiping);
+}
+
+const ORIGIN = new THREE.Vector3();
+const chainOf = new THREE.Matrix4();
+/** Where `at`, a point in `frame`, is in the frame of `root`, one of the joints it hangs from. */
+function placeIn(frame: THREE.Object3D, at: THREE.Vector3, out: THREE.Vector3, root: THREE.Object3D) {
+  chainOf.identity();
+  for (let joint: THREE.Object3D | null = frame; joint && joint !== root; joint = joint.parent) {
+    joint.updateMatrix();
+    chainOf.premultiply(joint.matrix);
+  }
+  return out.copy(at).applyMatrix4(chainOf);
 }
 
 /**
@@ -9061,7 +9191,9 @@ function bear(top: THREE.Group, fur = "#7a5232", dark = "#4f3420", muzzle = "#b9
     for (const cx of [-0.8, 0, 0.8]) leg.shape(claw, [[cx - 0.25, -4.8, 1.55], [cx + 0.25, -4.8, 1.55], [cx, -4.25, 1.6], [cx, -4.75, 2.55]]);
     return leg;
   });
-  return { parts, animate: fourLegs(top, legs, head, null, 3.6, 12), getUp: BEAST_GET_UP };
+  // It swipes with its forepaws, right then left: the middle claw's tip leads each swoosh.
+  const paws = [legs[0], legs[1]].map((leg) => pawOf(leg, new THREE.Vector3(0, -4.75, 2.55)));
+  return { parts, animate: fourLegs(top, legs, head, null, 3.6, 12, 0, paws), getUp: BEAST_GET_UP, claws: true };
 }
 
 /**
@@ -9996,11 +10128,14 @@ export interface Figure {
    * Strike a blow. "light" is the ordinary one for what is in hand: a cut, with a dagger a leap and a stab
    * downward, with a rapier a straight thrust. "stab" is that thrust at arm's length, with whatever is held. "heavy" is a great two-handed sweep from side to side, or with a weapon
    * in each hand both tossed up, caught points down and jabbed downward. "slices" is two flat side slashes, one
-   * each way, the first landing when this says and the second SLICES_APART after. A person, a giant
-   * or a skeleton winds up and steps in first, and this returns the seconds until the blow lands, for whatever
-   * it hits to wait; a creature lunges at once, as it always did, and this returns 0.
+   * each way, the first landing when this says and the second SLICES_APART after. "claw" is a beast rearing up and
+   * raking a forepaw down across its front (see CLAW), for one that has claws to swipe with (a bear); for anything
+   * else it is "light". "flurry" is such a beast rearing right up and raking with both forepaws by turns (see
+   * FLURRY), the first blow landing when this says and the rest at FLURRY_BLOWS. A person, a giant or a skeleton (or a bear clawing) winds up and steps in first, and this
+   * returns the seconds until the blow lands, for whatever it hits to wait; a creature lunges at once, as it always
+   * did, and this returns 0.
    */
-  strike(how?: "light" | "stab" | "heavy" | "slices"): number;
+  strike(how?: "light" | "stab" | "heavy" | "slices" | "claw" | "flurry"): number;
   /**
    * Cast a spell, or throw something: the casting hand swings round overhead and comes down to point at the mark.
    * Returns the seconds until it points, which is when what is cast should leave; 0 for a creature, which only
@@ -10229,9 +10364,9 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
     const want = p.walking ? Math.sin(p.stride * 3.6) : 0;
     swing += (want - swing) * Math.min(1, dt * 20);
     const rowing = p.rowing !== undefined && !!rig.hands && !p.lying;
-    const anim: Anim = { t: p.time, swing, breath: Math.sin(p.time * 2.2 + beat), strike: Math.min(1, Math.abs(p.lean) * 2), act: action && rig.acts ? { kind: action.kind, t: action.kind === "cast" ? since / pace : since, n: action.n, air: action.air } : null, scale: 1 / scaler.scale.x, lying: p.lying, sitting: rowing ? 1 : typeof p.sitting === "number" ? Math.max(0, Math.min(1, p.sitting)) : p.sitting ? 1 : 0, floor: rowing || p.lying ? 0 : Math.max(0, Math.min(1, p.floor ?? 0)), oars: rowing ? Math.max(0, Math.min(1, p.rowing!)) : -1, getUp: null };
+    const anim: Anim = { t: p.time, swing, breath: Math.sin(p.time * 2.2 + beat), strike: Math.min(1, Math.abs(p.lean) * 2), act: action && (rig.acts || (rig.claws && CLAW_ACTS.has(action.kind))) ? { kind: action.kind, t: action.kind === "cast" ? since / pace : since, n: action.n, air: action.air } : null, scale: 1 / scaler.scale.x, lying: p.lying, sitting: rowing ? 1 : typeof p.sitting === "number" ? Math.max(0, Math.min(1, p.sitting)) : p.sitting ? 1 : 0, floor: rowing || p.lying ? 0 : Math.max(0, Math.min(1, p.floor ?? 0)), oars: rowing ? Math.max(0, Math.min(1, p.rowing!)) : -1, getUp: null };
     // A rig with no animations of its own is leant into a blow, and a little into a hit, easing off as it always has.
-    if (action && !rig.acts) anim.strike = Math.max(anim.strike, Math.min(1, (action.kind === "hit" ? 0.5 : 1.8) * Math.exp(-8 * since)));
+    if (action && !rig.acts && !anim.act) anim.strike = Math.max(anim.strike, Math.min(1, (action.kind === "hit" ? 0.5 : 1.8) * Math.exp(-8 * since)));
     if (sling) stow(sling, p.walking, Math.max(anim.strike, anim.act && anim.act.kind !== "hit" ? 1 : 0), dt);
     // At the oars, whatever was in hand is laid down in the boat; it is back in hand once they step ashore.
     if (rig.hands && rowing !== heldAway) {
@@ -10346,6 +10481,11 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
     hands: () => rig.hands ?? null,
     loose: () => rig.loose?.() ?? 0,
     strike(how = "light") {
+      if ((how === "claw" || how === "flurry") && rig.claws) {
+        asked = how;
+        return how === "flurry" ? FLURRY.hit : CLAW.hit;
+      }
+      if (how === "claw" || how === "flurry") how = "light";
       const kind = how === "heavy" ? (rig.twin ? "twin" : "heavy") : how === "stab" || how === "slices" ? how : (rig.light ?? "strike");
       asked = kind;
       return rig.acts ? ACT_HIT[kind] : 0;

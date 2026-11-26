@@ -20,7 +20,7 @@
 
 import { STARTING_STATS, hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/core";
 import { classAbilitiesOf, poolFor, withClassAbilities } from "../classabilities";
-import { ABILITIES, DRUID_REGEN, EFFECT_TICK, ENEMIES, HERO_CLASSES, WEAPONS, abilitiesFor } from "../content";
+import { ABILITIES, DRUID_REGEN, EFFECT_TICK, ENEMIES, HERO_CLASSES, REELING_AP, WEAPONS, abilitiesFor } from "../content";
 import { weaponItem } from "../gear";
 import { tileAt } from "../map";
 import type { HeroSheet } from "../hero";
@@ -550,6 +550,15 @@ function beginTurn(ctx: Ctx, enc: Encounter, unit: Unit): boolean {
     // Said, so the getting up is seen before anything else it does this turn.
     ctx.events.push({ t: "stood", id: unit.id });
   }
+  // Still reeling from a heavy blow: this turn comes with less to spend.
+  if (has(unit, "reeling")) {
+    removeCondition(unit, "reeling");
+    const lost = Math.min(REELING_AP, Math.max(0, ap));
+    ap -= lost;
+    // Said, so the turn is seen to start short before anything else it does.
+    ctx.events.push({ t: "reeled", id: unit.id, ap: lost });
+  }
+  ap = Math.max(0, ap);
   // Windrunner Leggings: a few steps free at the start of every turn (none for one knocked flat).
   enc.budgets[unit.id] = { ap, move: stride > 0 ? perkOf(unit, "fleet") : 0, stride, disengaged: false, ...(sung > 0 ? { song: sung } : {}) };
   // An enemy puts only so much of a turn into getting about.

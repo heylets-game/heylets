@@ -3,7 +3,7 @@ import { GRID, at, fails, flatBoard, has, must, standEnemy as enemy, standHero, 
 import { STARTING_STATS, hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/core";
 import { BEHAVIOURS } from "./behaviours";
 import { ENEMY_ABILITIES } from "./enemyabilities";
-import { ABILITIES, EFFECT_TICK, ENEMIES, HERO_CLASSES, SUNDERED_DEFENCE, WEAPONS, abilitiesFor } from "../content";
+import { ABILITIES, EFFECT_TICK, ENEMIES, HERO_CLASSES, SUNDERED_DEFENCE, REELING_AP, WEAPONS, abilitiesFor } from "../content";
 import { CLIMES, type Tile } from "../map";
 import { makeRng } from "../rng";
 import { abilityArea, checkAbility, checkCommon, courseFor, crateBlow, enemyAct, moveLeft, walk, walkAp, wayBetween } from "./combat";
@@ -1338,6 +1338,19 @@ describe("the enemy's turn", () => {
     expect(unit(state, foe).conditions.some((c) => c.kind === "prone")).toBe(false);
   });
 
+  it("starts a Reeling unit's next turn with 2 less AP, says so, and then it is spent", () => {
+    const apNext = (reeling: boolean) => {
+      let { state } = duel("dummy", "qa_paladin", at(5, 6), at(9, 6));
+      if (reeling) unit(state, "ann").conditions.push({ kind: "reeling", rounds: 2 });
+      const events: ZoneEvent[] = [];
+      state = nextTurn(state, events);
+      expect(unit(state, "ann").conditions.some((c) => c.kind === "reeling")).toBe(false);
+      expect(events.filter((e) => e.t === "reeled")).toEqual(reeling ? [{ t: "reeled", id: "ann", ap: REELING_AP }] : []);
+      return state.encounter!.budgets.ann.ap;
+    };
+    expect(apNext(true)).toBe(apNext(false) - REELING_AP);
+  });
+
   it("runs when nothing is in reach, but puts no more than two of its AP into the ground in a turn, and keeps the rest", () => {
     let state = board();
     Object.assign(hero(state, "ann", "qa_paladin", at(1, 6)), { hp: 900, maxHp: 900 });
@@ -2019,6 +2032,7 @@ describe("fleeing", () => {
     expect(back).toContainEqual({ t: "fight_join", id: "bo" });
     expect(state.encounter!.order).toContain("s1");
   });
+
 
   it("brings a hero's class abilities with them, after the weapon's, and refreshes them on a return", () => {
     const sheet = standInHero("qa_paladin", "cy", 3)!;

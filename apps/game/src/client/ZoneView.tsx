@@ -222,7 +222,7 @@ const AHEAD_WAIT_MS = 6000;
 /** The shimmer of a blink through Phase Treads, and the hexes only a blink reaches. */
 const PHASE_COLOR = "#b98cff";
 
-const CAUSES = new Set<ZoneEvent["t"]>(["stood", "used", "moved", "jumped", "blinked", "shoved", "reaction", "turn", "round", "fight_start", "fight_end"]);
+const CAUSES = new Set<ZoneEvent["t"]>(["stood", "reeled", "used", "moved", "jumped", "blinked", "shoved", "reaction", "turn", "round", "fight_start", "fight_end"]);
 
 /**
  * Which events land on several at once, and which is the last of its run. What comes of one thing done
@@ -292,6 +292,7 @@ function dwell(ev: ZoneEvent, many: boolean, next: ZoneEvent | undefined, carrie
     case "skip": case "choked": return 320;
     // Up off the ground: what it does next waits till it is on its feet.
     case "stood": return 450;
+    case "reeled": return 400;
     case "surface": return many ? 80 : 240;
     case "up": case "fight_join": case "round": return 240;
     case "burst": case "reaction": return 300;
@@ -705,7 +706,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       const view = renderer.current;
       /** The unit makes its gesture (a cast, or a bow drawn), and `go`, what leaves its hand, runs as the gesture ends: at once with no view to draw it. */
       const cast = (id: string, name: string, x: number, z: number, go: () => void, thrown = false) => (view ? view.cast(id, name, x, z, go, thrown) : go());
-      if ((ev.t === "stood" || ev.t === "moved" || ev.t === "used" || ev.t === "jumped" || ev.t === "blinked") && next.encounter?.order.includes(ev.id)) {
+      if ((ev.t === "stood" || ev.t === "reeled" || ev.t === "moved" || ev.t === "used" || ev.t === "jumped" || ev.t === "blinked") && next.encounter?.order.includes(ev.id)) {
         // An enemy's turn has no event of its own: it begins with the first thing that enemy does. So the pace of
         // turns is kept here: a beat after the last thing the one before it did, its turn is announced, and a beat
         // more before it acts. (Not for one marching in from afar, and not for a hero, whose player sets the pace.)
@@ -1492,6 +1493,12 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         if (u) u.conditions = u.conditions.filter((c) => c.kind !== "prone");
         later(() => view?.floatOver(ev.id, "Gets up", CONDITION_INFO.prone.color));
         say(`${name(ev.id)} gets up.`);
+      } else if (ev.t === "reeled") {
+        // Shaken by a heavy blow: the turn starts short.
+        const u = find(ev.id);
+        if (u) u.conditions = u.conditions.filter((c) => c.kind !== "reeling");
+        later(() => view?.floatOver(ev.id, `Reeling −${ev.ap} AP`, CONDITION_INFO.reeling.color));
+        say(`${name(ev.id)} is Reeling and has ${ev.ap} less AP this turn.`, find(ev.id)?.side === "hero" ? "bad" : "good");
       } else if (ev.t === "skip") {
         say(`${name(ev.id)} is ${CONDITION_INFO[ev.kind].name} and loses the turn.`);
       } else if (ev.t === "choked") {

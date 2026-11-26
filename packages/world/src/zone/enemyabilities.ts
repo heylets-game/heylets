@@ -67,7 +67,10 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   // A dire wolf's opener: it throws its whole weight at one hero, jaws first, to bring them down. It springs again
   // once it has its breath back, and bites in between.
   wolf_lunge: { id: "wolf_lunge", name: "Lunge", damage: 5, potency: 3, saveOr: { effect: "prone", turns: 1 }, cooldown: 2, weight: 3 },
-  mauling_swipe: { id: "mauling_swipe", name: "Mauling Swipe", damage: 12, potency: 4, saveOr: { effect: "bleeding" }, weight: 3 },
+  mauling_swipe: { id: "mauling_swipe", name: "Rending Swipe", damage: 12, potency: 4, saveOr: { effect: "bleeding" }, weight: 1 },
+  // A cave bear's favourite: it rears and comes down with its whole weight. Slow to wind up (most of its turn), but
+  // whoever it lands on is left reeling, with less to do on their next turn.
+  bear_maul: { id: "bear_maul", name: "Maul", damage: 12, potency: 4, saveOr: { effect: "reeling", turns: 1 }, cost: 3, cooldown: 3, weight: 3 },
   roar: { id: "roar", name: "Roar", damage: 4, potency: 3, saveOr: { effect: "stunned", turns: 1 }, weight: 1 },
   club_smash: { id: "club_smash", name: "Club Smash", damage: 13, potency: 3, saveOr: { effect: "stunned", turns: 1 }, weight: 3 },
   stomp: { id: "stomp", name: "Stomp", damage: 4, potency: 3, shape: "burst", saveOr: { effect: "slowed", turns: 2 }, weight: 1 },

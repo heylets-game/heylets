@@ -4,7 +4,7 @@
 import type { StatKey } from "@gantt-quest/core";
 
 /** What an ability or an enemy's attack can leave on whoever it lands on. A fight on the tiles has more conditions of its own (zone/types.ts). */
-export type EffectKind = "bleeding" | "burning" | "stunned" | "guarded" | "taunting" | "slowed" | "hasted" | "glitched" | "exposed" | "prone" | "sundered";
+export type EffectKind = "bleeding" | "burning" | "stunned" | "guarded" | "taunting" | "slowed" | "hasted" | "glitched" | "exposed" | "prone" | "sundered" | "reeling";
 
 export const EFFECT_INFO: Record<EffectKind, { name: string; blurb: string; color: string }> = {
   bleeding: { name: "Bleeding", blurb: "Loses 2 HP at the start of each turn.", color: "#f87171" },
@@ -18,10 +18,14 @@ export const EFFECT_INFO: Record<EffectKind, { name: string; blurb: string; colo
   exposed: { name: "Exposed", blurb: "Takes 3 more damage from every direct hit, for 2 of its turns.", color: "#facc15" },
   prone: { name: "Prone", blurb: "Knocked flat: standing up costs 1 AP.", color: "#cbd5e1" },
   sundered: { name: "Sundered", blurb: "Its armor is dented: 2 less Defence.", color: "#b0a48a" },
+  reeling: { name: "Reeling", blurb: "Shaken by a heavy blow: 2 less AP on its next turn.", color: "#c084fc" },
 };
 
 /** Sundered targets have this much less Defence. */
 export const SUNDERED_DEFENCE = 2;
+
+/** AP a Reeling unit goes without on its next turn. */
+export const REELING_AP = 2;
 
 /** The effects that stack, each stack hurting for its tick at the start of the bearer's turn. */
 export type StackingEffect = "bleeding" | "burning";
@@ -365,7 +369,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   // Where the Brute stuns with a club, the bear tears (bleeding) and only its roar stuns.
   bear: {
     kind: "bear", name: "Cave Bear", hp: 38, defence: 11, move: 2, save: 2, init: -1, xp: 20,
-    abilities: ["mauling_swipe", "roar", "shove"],
+    abilities: ["bear_maul", "mauling_swipe", "shove"],
   },
   // The heaviest thing that walks ashore: very slow, and its club lands like a dropped mast. Its stomp
   // shakes the whole crew and leaves them slow on their feet. A pair's worth on its own, like a bear.

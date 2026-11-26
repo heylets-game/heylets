@@ -536,6 +536,8 @@ export type ZoneEvent =
   | { t: "skip"; id: string; kind: Condition }
   /** One lying Prone gets up as its turn begins (for an AP), before it does anything else. */
   | { t: "stood"; id: string }
+  /** One Reeling from a heavy blow starts its turn short: `ap` is how much less it has to spend. */
+  | { t: "reeled"; id: string; ap: number }
   /** Drowning: it failed to hold its breath, and loses 2 of its AP this turn. */
   | { t: "choked"; id: string }
   | { t: "down"; id: string }

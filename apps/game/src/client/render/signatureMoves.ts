@@ -6,7 +6,7 @@
 // figure lab (FigureLab.tsx), where each one has a button of its own. A new one added here shows in both.
 
 import type * as THREE from "three";
-import { SLICES_APART, type Figure } from "./figures";
+import { FLURRY_BLOWS, SLICES_APART, type Figure } from "./figures";
 import type { FxKind } from "./sprites";
 
 /** One effect sprite: flown from `from` to `to` over `life` seconds, growing from one size to the other. */
@@ -59,6 +59,11 @@ export interface SignatureMove {
   who: string;
   /** What it looks like, for the lab's tooltip. */
   blurb: string;
+  /**
+   * The only kinds it is played for, where another kind has an ability of the same name (a Brute's Maul is not a
+   * bear's): any other strikes as usual. None: whoever uses it.
+   */
+  only?: readonly string[];
   play(stage: MoveStage, ctx: MoveCtx): void;
 }
 
@@ -206,7 +211,93 @@ function wolfLunge(stage: MoveStage, ctx: MoveCtx) {
   }, Math.max(0, lands - LUNGE_BITE));
 }
 
+/** How far apart a bear's three claw marks lie across the target, and the seconds between each being torn. */
+const CLAW_MARKS = { apart: 0.17, every: 0.025 };
+
+/**
+ * Three red claw marks torn across the target one after another, raked the way `dir` says (1: down to the right as
+ * the viewer sees it), `at` a little off its middle; `size` scales them.
+ */
+function clawMarks(stage: MoveStage, at: THREE.Vector3, dir: 1 | -1, color: string, size = 1) {
+  const flip = dir < 0;
+  [-1, 0, 1].forEach((i, n) =>
+    stage.later(() => {
+      // Each mark a little further across, and a little lower, than the one before: three parallel rakes.
+      const mark = at.clone().setX(at.x + i * CLAW_MARKS.apart * size * dir).setY(at.y - i * CLAW_MARKS.apart * size * 0.5);
+      stage.spawnFx("slash", color, flip, { from: mark, to: mark, life: 0.28, size: [1.1 * size, 1.9 * size], turn: (flip ? -1 : 1) * 0.15, spin: (flip ? 1 : -1) * 0.35, fade: true });
+    }, n * CLAW_MARKS.every),
+  );
+}
+
+/** A Maul's claw marks: near black, so they read against any ground. */
+const MAUL_BLACK = "#16121c";
+
+/** The bears: what plays a bear's own Maul. */
+const BEARS = ["bear", "snow_bear", "great_bear"] as const;
+
+/**
+ * A bear's Maul: it rears right up onto its hind legs with both forepaws high, and tears into the target with them by
+ * turns, right, left, right, left (figures.ts FLURRY), white swooshes behind its claws and lurching in as it goes.
+ * Every blow tears three black claw marks across the target, the way that paw raked, with white slashes flung off
+ * round it and a white flash, and jolts it; the last throws black and white lines out all round. The blow is told as
+ * the last lands.
+ */
+function bearMaul(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  // Black claw marks and white slashes (all gold on a critical hit).
+  const dark = crit ? GOLD : MAUL_BLACK;
+  const pale = crit ? GOLD : TEETH;
+  const first = figure.strike("flurry");
+  // A creature with no flurry of its own springs at the target, and the blows land quick as it does.
+  if (first <= 0) stage.lunge();
+  const when = FLURRY_BLOWS.map((h) => (first > 0 ? first + h - FLURRY_BLOWS[0] : (h - FLURRY_BLOWS[0]) * 0.6));
+  when.forEach((at, n) => {
+    const last = n === when.length - 1;
+    stage.later(() => {
+      if (n > 0) stage.sound();
+      // The right paw rakes one way across the target, the left the other.
+      const way = (n % 2 === 0 ? dir : -dir) as 1 | -1;
+      const middle = hitAt.clone().setY(hitAt.y + 0.12 - n * 0.06);
+      clawMarks(stage, middle, way, dark, last ? 1.25 : 1);
+      // Slashes flung off round it, every which way.
+      for (let k = 0; k < 3; k++) {
+        const off = middle.clone().setX(middle.x + (Math.random() - 0.5) * 0.7).setY(middle.y + (Math.random() - 0.5) * 0.6);
+        const side = Math.random() < 0.5;
+        stage.spawnFx("slash", pale, side, { from: off, to: off, life: 0.2, size: [0.6, 1.2], turn: Math.random() * Math.PI * 2, spin: (side ? 1 : -1) * 0.6, fade: true });
+      }
+      stage.spawnFx("burst", pale, way < 0, { from: middle, to: middle, life: 0.2, size: [0.5, 1.3], spin: 0.5, fade: true });
+      stage.jolt();
+      if (!last) return;
+      // The last: lines bursting out all round, and the blow told.
+      stage.spawnFx("burst", pale, false, { from: hitAt, to: hitAt, life: 0.3, size: [1, 2.6], spin: 0.7, fade: true });
+      for (const side of [false, true]) for (const [n, turn] of [-0.6, -0.2, 0.2, 0.6].entries()) stage.spawnFx("streak", n % 2 ? dark : pale, side, { from: hitAt, to: hitAt, life: 0.22, size: [0.6, 2], turn: side ? -turn : turn, spin: 0, fade: true });
+      stage.later(() => stage.jolt(), 0.05);
+      onImpact();
+    }, at);
+  });
+}
+
+/**
+ * A bear's Rending Swipe: it rears back onto its hind legs with a forepaw raised high and out to its side, then
+ * comes down on the target, the paw raking down and across its front and leaving a red swoosh behind its claws
+ * (figures.ts CLAW). Where they land, three red claw marks are torn across the target one after another, with a
+ * spray of red off it; it is jolted, and the blow is told.
+ */
+function rendingSwipe(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const color = crit ? GOLD : CHEAP_SHOT_RED;
+  const wait = figure.strike("claw");
+  // A creature with no swipe of its own springs at the target, and the marks land as it does.
+  if (wait <= 0) stage.lunge();
+  stage.later(() => {
+    clawMarks(stage, hitAt, dir, color);
+    stage.spawnFx("burst", color, dir < 0, { from: hitAt, to: hitAt, life: 0.22, size: [0.6, 1.5], spin: 0.5, fade: true });
+    stage.jolt();
+    onImpact();
+  }, Math.max(0, wait));
+}
+
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
+  Maul: { who: "bear", only: BEARS, blurb: "Rears right up on its hind legs and tears into the target with both forepaws by turns, white swooshes behind its claws, every blow tearing three black claw marks across it with white slashes flung off all round.", play: bearMaul },
+  "Rending Swipe": { who: "bear", blurb: "Rears back on its hind legs and rakes a forepaw down across the target, its claws leaving a red swoosh, and three red claw marks torn across it.", play: rendingSwipe },
   Bite: { who: "wolf", blurb: "A snap forward, jaws closing on the target as two white arches.", play: wolfBite },
   "Cheap Shot": { who: "bandit", blurb: "Two quick side slashes, a forehand then a backhand: the sword leaves a red trail, and each cut a flat red swipe across the target.", play: cheapShot },
   Lunge: { who: "wolf", blurb: "A crouch and a leap through the air, dust kicked back and speed lines streaming off it, jaws snapping shut on the target with a flash as it lands, then a hop back home.", play: wolfLunge },

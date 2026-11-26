@@ -20,7 +20,7 @@ export interface Fighter {
 }
 
 const BIOMES: Record<Biome, true> = { plains: true, forest: true, hills: true, water: true, dock: true, cobble: true, mud: true, rampart: true, floor: true, wall: true, cave: true, rock: true, gate: true, fog: true, sand: true, paved: true };
-const EFFECTS: Record<EffectKind, true> = { bleeding: true, burning: true, stunned: true, guarded: true, taunting: true, slowed: true, hasted: true, glitched: true, exposed: true, prone: true, sundered: true };
+const EFFECTS: Record<EffectKind, true> = { bleeding: true, burning: true, stunned: true, guarded: true, taunting: true, slowed: true, hasted: true, glitched: true, exposed: true, prone: true, sundered: true, reeling: true };
 
 const voice = (f: Fighter, what: "attack" | "hurt" | "down") =>
   f.side === "enemy" ? [`enemy.${f.kind}.${what}`, `enemy.${what}`] : [`hero.${f.kind}.${what}`, `hero.${what}`];

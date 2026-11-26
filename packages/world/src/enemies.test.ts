@@ -18,10 +18,14 @@ describe("the bear", () => {
     expect(bear.init).toBeLessThanOrEqual(brute.init);
     const hardest = Math.max(...attacksOf(bear).map((a) => a.damage));
     expect(hardest).toBeGreaterThan(Math.max(...attacksOf(wolf).map((a) => a.damage)));
-    // Its heavy blow makes them bleed; only its roar stuns.
-    const swipe = attacksOf(bear).find((a) => a.damage === hardest)!;
+    // It never stuns: its swipe tears (bleeding), and its favourite, the Maul, is a slow, heavy blow that leaves its
+    // target reeling (2 less AP next turn), once every few turns.
+    expect(attacksOf(bear).some((a) => a.saveOr?.effect === "stunned")).toBe(false);
+    const swipe = attacksOf(bear).find((a) => a.name === "Rending Swipe")!;
     expect(swipe.saveOr?.effect).toBe("bleeding");
-    expect(attacksOf(bear).some((a) => a.name === "Roar" && a.saveOr?.effect === "stunned")).toBe(true);
+    const maul = attacksOf(bear).find((a) => a.name === "Maul")!;
+    expect(maul).toMatchObject({ damage: swipe.damage, cost: 3, cooldown: 3, saveOr: { effect: "reeling" } });
+    expect(maul.weight).toBeGreaterThan(swipe.weight);
   });
 
   it("has a boss of its own: bigger, and its roar shakes the whole party", () => {

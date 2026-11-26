@@ -168,7 +168,7 @@ export function giveAway(ctx: Ctx, unit: Unit): void {
 }
 
 /** The conditions that count as wounds, for abilities that grow with them. */
-export const DEBUFFS: readonly Condition[] = ["bleeding", "burning", "stunned", "slowed", "glitched", "exposed", "poisoned", "prone", "sundered"];
+export const DEBUFFS: readonly Condition[] = ["bleeding", "burning", "stunned", "slowed", "glitched", "exposed", "poisoned", "prone", "sundered", "reeling"];
 
 /** Fortify: one of the side that raised a wall, standing beside it, is the steadier for it. */
 export const wallDefence = (state: Pick<ZoneState, "weather">, unit: Unit): number =>
