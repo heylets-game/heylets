@@ -97,10 +97,9 @@ export const LOOKS: Record<string, Look> = {
   // The Warden is a deep-sea diver: a brass helmet with a glass port, a brass plate on the shoulders, a canvas suit
   // and lead-weighted boots. The sea does not move them, and neither will you.
   sre_warden: { skin: "#d9a67c", hair: "#3a2a20", body: "#8f7f5c", legs: "#7d6f50", accent: "#e8742e", hat: "diver", hatColor: "#c2893a", weapon: "maul", boots: "#4a4a52", corselet: "#c2893a" },
-  // The Warlock is a captain the sea gave back: a dripping tricorn over a red band, eyes alight, a scarf over the
-  // face, a long sea-dark coat edged in tarnished gold, a red sash, barnacles on the shoulders, and a dark,
-  // clasped grimoire.
-  data_warlock: { skin: "#a3aca4", hair: "#2a2f2c", body: "#1f2e2b", legs: "#1a1f1e", accent: "#b06cff", hat: "tricorn", hatColor: "#1d2624", weapon: "grimoire", coat: true, coatTrim: "#a8863a", sash: "#6b2230", bandana: "#6b2230", glowEyes: "#c48bff", glowOnCast: true, mask: "#2c3a39", boots: "#1d1f1f", barnacles: true },
+  // The Warlock is a captain the sea gave back: a dripping tricorn over a red band, eyes alight, a long sea-dark coat
+  // edged in tarnished gold, a red sash, barnacles on the shoulders, and a dark, clasped grimoire.
+  data_warlock: { skin: "#a3aca4", hair: "#2a2f2c", body: "#1f2e2b", legs: "#1a1f1e", accent: "#b06cff", hat: "tricorn", hatColor: "#1d2624", weapon: "grimoire", coat: true, coatTrim: "#a8863a", sash: "#6b2230", bandana: "#6b2230", glowEyes: "#c48bff", glowOnCast: true, boots: "#1d1f1f", barnacles: true },
   // Traveling salesmen (packages/world/src/salesman.ts): each one easy to tell from the crew at a glance, and each
   // dressed for the sea. The curio seller came in on a trading ship: a plum kerchief, a shirt striped in plum, a gold
   // sash and a lantern to show her wares by.
