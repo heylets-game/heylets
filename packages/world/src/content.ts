@@ -372,11 +372,11 @@ export const ENEMIES: Record<string, EnemyDef> = {
     abilities: ["bear_maul", "mauling_swipe", "shove"],
   },
   // The heaviest thing that walks ashore: very slow, and its club lands like a dropped mast, battering whoever
-  // stands beside its target too. Its favourite is the stomp, every few turns: it shakes the whole crew and leaves
+  // stands beside its target too. Its favourite is the slam, every few turns: it shakes the whole crew and leaves
   // them slow on their feet. A pair's worth on its own, like a bear.
   ogre: {
     kind: "ogre", name: "Ogre", hp: 46, defence: 10, move: 2, save: 2, init: -2, xp: 24,
-    abilities: ["club_smash", "stomp", "shove"],
+    abilities: ["club_smash", "slam", "shove"],
   },
   // A troll: no tougher than a brute to look at, but its wounds close as you watch. It grows back every
   // turn unless it is Burning, so fire (or a lot of damage at once) is how it is put down. It rakes, chomps (and

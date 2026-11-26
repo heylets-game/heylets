@@ -102,10 +102,15 @@ export interface MoveCtx {
   /** When the blow is told: the damage and what it leaves show then. */
   onImpact(): void;
   /**
-   * For a move that catches several at once (a Stomp), played once for each: this one is not the first, so what it
+   * For a move that catches several at once (a Slam), played once for each: this one is not the first, so what it
    * throws out round its user has been drawn already, and only its landing on this target is left to time.
    */
   echo?: boolean;
+  /**
+   * Played round its user alone, before anyone it catches is known (a fight's burst, ZoneView): nobody is reached
+   * by it here, and `onImpact` runs as it lands. Whoever it catches flinches as their own hit is told.
+   */
+  alone?: boolean;
 }
 
 export interface SignatureMove {
@@ -364,11 +369,15 @@ const ROCK_PALE = "#a89f8c";
 /** A point so far off another. */
 const offset = (p: THREE.Vector3, x: number, y: number, z: number) => p.clone().set(p.x + x, p.y + y, p.z + z);
 
+/** A Club Smash's pulse: as far as it spreads (just past the hexes beside the target) and how long it takes. */
+const SMASH_PULSE = { radius: 2.3, life: 0.4 };
+
 /**
  * An Ogre's Club Smash: it heaves the club right up over its head and brings it straight down on the target
- * (figures.ts SLAM). Where it lands the ground bursts like a small explosion: a flash, a ring of dust thrown out all
- * round and billowing up, chunks of rock flung out every way in arcs, grit spraying up, and shock lines bursting out.
- * The target is jolted twice, and the blow is told as the club lands.
+ * (figures.ts SLAM). Where it lands the ground bursts like a small explosion: a flash, a pulse rolling out over the
+ * ground to the hexes all round, a ring of dust thrown out and billowing up, chunks of rock flung out every way in
+ * arcs, grit spraying up, and shock lines bursting out. The target is jolted twice, and the blow is told as the club
+ * lands. Only the target is smashed: a hero beside it caught by the pulse just flinches (ZoneView, a `splash` hit).
  */
 function clubSmash(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
   const wait = figure.strike("slam");
@@ -378,7 +387,10 @@ function clubSmash(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Mov
     const ground = hitAt.clone().setY(hitAt.y - 0.45);
     const flash = crit ? GOLD : "#fff3d6";
     stage.spawnFx("burst", flash, false, { from: ground, to: ground, life: 0.24, size: [1, 3], spin: 0.6, fade: true });
-    stage.spawnFx("bang", crit ? GOLD : DUST, dir < 0, { from: ground, to: ground, life: 0.3, size: [1.2, 2.6], spin: 0, fade: true });
+    // The shock pulsing out over the ground to the hexes all round, where any hero beside the target is caught by it.
+    const floor = ground.clone().setY(ground.y + 0.05);
+    stage.wave({ at: floor, radius: SMASH_PULSE.radius, life: SMASH_PULSE.life, color: crit ? GOLD : "#f3e7c8", width: 0.1 });
+    stage.later(() => stage.wave({ at: floor, radius: SMASH_PULSE.radius * 0.85, life: SMASH_PULSE.life * 1.15, color: DUST, width: 0.3 }), 0.05);
     // Shock lines bursting out from where it landed, all round.
     for (const side of [false, true]) for (const turn of [-0.7, -0.3, 0.1, 0.5]) stage.spawnFx("streak", flash, side, { from: ground, to: ground, life: 0.2, size: [0.7, 2.2], turn: side ? -turn : turn, spin: 0, fade: true });
     // A ring of dust thrown out along the ground and billowing up, then a slower cloud hanging over it.
@@ -412,19 +424,19 @@ function clubSmash(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Mov
   }, Math.max(0, wait));
 }
 
-/** An Ogre's Stomp wave: as far as it spreads (past every hero two hexes off, ENEMY_BURST) and how long it takes. */
-export const STOMP_WAVE = { radius: 3.8, life: 0.6 };
+/** An Ogre's Slam wave: as far as it spreads (past every hero two hexes off, ENEMY_BURST) and how long it takes. */
+export const SLAM_WAVE = { radius: 3.8, life: 0.6 };
 
 /**
- * An Ogre's Stomp: it crouches, springs straight up into the air and comes down flat on its backside (figures.ts
+ * An Ogre's Slam: it crouches, springs straight up into the air and comes down flat on its backside (figures.ts
  * SEAT_DROP). As it lands the ground pulses out from under it, a bright wave spreading over the ground with a broad
  * dusty one just behind it, and great clouds of dust rolling out after them and billowing up round it. Each hero is
  * jolted, with dust thrown up at their feet, as the wave reaches them, and the blow on them is told then.
  */
-function stomp(stage: MoveStage, { figure, hitAt, crit, onImpact, echo }: MoveCtx) {
+function seatSlam(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alone }: MoveCtx) {
   const feet = figure.root.getWorldPosition(new THREE.Vector3());
   const ground = feet.clone().setY(feet.y + 0.08);
-  const { radius, life } = STOMP_WAVE;
+  const { radius, life } = SLAM_WAVE;
   // Only the first plays the drop: by the time the others are told, it has already landed.
   const lands = echo ? 0 : Math.max(0, figure.strike("drop"));
   if (!echo) stage.later(() => {
@@ -448,6 +460,7 @@ function stomp(stage: MoveStage, { figure, hitAt, crit, onImpact, echo }: MoveCt
       }
     }, 0.1);
   }, lands);
+  if (alone) return stage.later(onImpact, lands);
   // Whoever it reaches is caught as the wave passes under them.
   const far = Math.hypot(hitAt.x - feet.x, hitAt.z - feet.z);
   stage.later(() => {
@@ -459,8 +472,8 @@ function stomp(stage: MoveStage, { figure, hitAt, crit, onImpact, echo }: MoveCt
 }
 
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
-  Stomp: { who: "ogre", blurb: "Crouches, springs up into the air and lands on its backside: a wave pulses out over the ground from its feet, clouds of dust rolling out after it, and each hero is jolted as it reaches them.", play: stomp },
-  "Club Smash": { who: "ogre", blurb: "Heaves its club right up over its head and brings it straight down: the ground bursts where it lands, dust thrown out all round and chunks of rock flung every way.", play: clubSmash },
+  Slam: { who: "ogre", blurb: "Crouches, springs up into the air and lands on its backside: a wave pulses out over the ground from its feet, clouds of dust rolling out after it, and each hero is jolted as it reaches them.", play: seatSlam },
+  "Club Smash": { who: "ogre", blurb: "Heaves its club right up over its head and brings it straight down: the ground bursts where it lands, a pulse rolling out to the hexes round it, dust thrown out all round and chunks of rock flung every way.", play: clubSmash },
   Maul: { who: "bear", only: BEARS, blurb: "Rears right up on its hind legs and tears into the target with both forepaws by turns, white swooshes behind its claws, every blow tearing three black claw marks across it with white slashes flung off all round.", play: bearMaul },
   "Rending Swipe": { who: "bear", blurb: "Rears back on its hind legs and rakes a forepaw down across the target, its claws leaving a red swoosh, and three red claw marks torn across it.", play: rendingSwipe },
   Bite: { who: "wolf", blurb: "A snap forward, jaws closing on the target as two white arches.", play: wolfBite },

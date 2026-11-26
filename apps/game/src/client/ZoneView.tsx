@@ -1171,8 +1171,12 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
             if (under.length > 0) cast(ev.id, ev.name, point(under[0]).x, point(under[0]).z, () => fxs.erupt(under.map((p) => point(p)), look.color, look.style, bind));
           } else if (look.kind === "ring") {
             // Struck all round (a song, played): the ring goes out as the blow lands.
-            const ring = () => fxs.ring(point(user.pos, 0.05), ev.what === "attack" ? 3.6 : covered.length > 6 ? 3.6 : 1.9, look.color);
-            if (view) view.burst(ev.id, ev.name, ABILITIES[ev.what]?.stat === "int_stat", thenOn(ring));
+            // One with a move of its own (an Ogre's Slam) draws the ground shaking itself: no ring over it.
+            let own = false;
+            const ring = () => {
+              if (!own) fxs.ring(point(user.pos, 0.05), ev.what === "attack" ? 3.6 : covered.length > 6 ? 3.6 : 1.9, look.color);
+            };
+            if (view) own = view.burst(ev.id, ev.name, ABILITIES[ev.what]?.stat === "int_stat", thenOn(ring));
             else ring();
           } else if (look.kind === "bless") {
             // A guard is braced behind; a heal or a blessing is played or cast, toward whoever it is for.
@@ -1245,7 +1249,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         const mine = use && use.id === ev.actor ? use : null;
         // Coral cutting whoever is in it or strikes it is the coral's doing, not a blow by whoever grew it: the victim
         // flinches, and nobody swings (when the field is first grown, the cast's own look plays as usual).
-        const passive = !mine && (ev.what === "coral_field" || ev.what === "coral_armor");
+        // And the shock of a blow on someone beside them (a Club Smash's pulse) is that one blow's doing: they are
+        // jolted as it reaches them, and it is not swung again for each.
+        const passive = (!mine && (ev.what === "coral_field" || ev.what === "coral_armor")) || (hit && !!ev.splash);
         const kind = passive ? "ground" : !ev.actor || ev.actor === ev.target || ev.what.startsWith("throw:") || ev.what === "shove" || ev.what === "fall" ? "none" : (mine?.look.kind ?? "melee");
         // The log's line for it: the roll that decided it (if it has a card), then what it did.
         const logged = () => {

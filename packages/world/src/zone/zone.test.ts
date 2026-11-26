@@ -2019,10 +2019,10 @@ describe("fleeing", () => {
     expect(state.encounter!.order).not.toContain("bo");
     expect(state.encounter!.order).not.toContain("s1");
     // The ogre stamps the ground: Ann, in the fight, is caught; Bo, beside her and not in it, is not.
-    const stomp = enemyStrikes("ogre", 1).find((s) => s.burst)!;
+    const slam = enemyStrikes("ogre", 1).find((s) => s.burst)!;
     const events: ZoneEvent[] = [];
     const ctx: Ctx = { state: structuredClone(state), rng: makeRng(3), events, effects: [] };
-    enemyAct(ctx, unit(ctx.state, ogre.id), stomp, null);
+    enemyAct(ctx, unit(ctx.state, ogre.id), slam, null);
     expect(events.some((e) => (e.t === "hit" || e.t === "roll") && ("target" in e ? e.target === "ann" : e.roll.id === "ann"))).toBe(true);
     expect(events.some((e) => (e.t === "hit" && e.target === "bo") || (e.t === "roll" && e.roll.id === "bo"))).toBe(false);
     // He comes back: he is here again, and near the fight he is in it.
@@ -2035,7 +2035,7 @@ describe("fleeing", () => {
   });
 
 
-  it("splashes half of a landed Club Smash onto every other hero beside its target, and nobody further off", () => {
+  it("pulses half of a landed Club Smash onto every other hero beside its target (a quarter if they save), and nobody further off", () => {
     let state = board();
     state.aiOff = true;
     const ann = at(5, 6);
@@ -2045,8 +2045,9 @@ describe("fleeing", () => {
     const ogre = enemy(state, "ogre", ogreAt);
     state = provoke(state);
     const smash = enemyStrikes("ogre", 1).find((s) => s.name === "Club Smash")!;
-    let landed = false;
-    for (let seed = 1; seed < 40 && !landed; seed++) {
+    // Seen both ways: once with Bo getting clear of the pulse, and once caught by it.
+    const seen = new Set<boolean>();
+    for (let seed = 1; seed < 200 && seen.size < 2; seed++) {
       const events: ZoneEvent[] = [];
       const ctx: Ctx = { state: structuredClone(state), rng: makeRng(seed), events, effects: [] };
       enemyAct(ctx, unit(ctx.state, ogre.id), smash, unit(ctx.state, "ann"));
@@ -2056,12 +2057,18 @@ describe("fleeing", () => {
         expect(hits).toEqual([]);
         continue;
       }
-      landed = true;
-      expect(hits.find((e) => e.target === "bo")?.amount).toBe(Math.max(1, Math.floor(onAnn.dice!.total / 2)));
+      expect(onAnn.splash).toBeUndefined();
+      const save = events.find((e): e is Extract<ZoneEvent, { t: "roll" }> => e.t === "roll" && e.roll.id === "bo")!;
+      expect(save.roll.kind).toBe("save");
+      seen.add(save.roll.ok);
+      const share = Math.floor(onAnn.dice!.total / 2);
+      const onBo = hits.find((e) => e.target === "bo")!;
+      expect(onBo).toMatchObject({ splash: true, amount: Math.max(1, save.roll.ok ? Math.floor(share / 2) : share) });
       expect(hits.some((e) => e.target === "cy")).toBe(false);
+      expect(events.some((e) => e.t === "roll" && e.roll.id === "cy")).toBe(false);
       expect(unit(ctx.state, "ann").conditions.some((c) => c.kind === "stunned")).toBe(false);
     }
-    expect(landed).toBe(true);
+    expect(seen.size).toBe(2);
   });
 
   it("brings a hero's class abilities with them, after the weapon's, and refreshes them on a return", () => {
