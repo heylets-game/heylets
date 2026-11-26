@@ -29,6 +29,7 @@ import { FlotsamMarks, type FlotsamMark } from "./flotsam";
 import { OVERLAY_LAYER, PostFx, type Air } from "./post";
 import { fishMount } from "./catchArt";
 import { FRAME, OUTLINE, SITTING_DROP, inflate, makeFigure, type Figure } from "./figures";
+import { playsFor } from "../zone/ownMoves";
 import { POUNCE, SIGNATURE_MOVES, groundWave, leapAir, pounceAt, pounceLands, pounceOver, type MoveStage } from "./signatureMoves";
 import { HIDES, hidingMaterial } from "./silhouette";
 import { BOAT_SCALE, OARLOCKS, ROWER_SEAT, aimOar, rowboatModel, shipOar } from "./rowboat";
@@ -90,8 +91,6 @@ const SMASHES = new Set(["Club Smash"]);
 const HEAVY_SWINGS = new Set([...SMASHES, "Cleave", "Eviscerate", "Crushing Maul", "Crushing Strike", "Sweeping Ruin", "Stone Fist", "Shockwave"]);
 /** A ground-pound (the ogre's Slam, the guardian's Quake): no step in; the ground shakes out from the attacker's feet and jolts whoever it reaches. */
 const QUAKES = new Set(["Slam", "Quake"]);
-/** Whether a signature move plays for this unit: a unit's `kind` is its sprite key (spriteKey), the kind before the first "|". */
-const playsFor = (move: { only?: readonly string[] }, unit: { kind: string }): boolean => !move.only || move.only.includes(unit.kind.split("|")[0]);
 /** How an attack travels, for its sound: the same split the effects above are drawn by. */
 const attackStyle = (ability: string): AttackStyle => (SPELL_COLOR[ability] ? "magic" : ARROW_ABILITIES.has(ability) || THROWN[ability] ? "ranged" : "melee");
 const isBoss = (kind: string) => !!ENEMIES[kind]?.boss;
@@ -2125,7 +2124,8 @@ export class WorldRenderer {
     const unit = this.units.get(actorId);
     let wait = 0;
     if (unit && !unit.lying) {
-      const own = QUAKES.has(name) ? SIGNATURE_MOVES[name] : undefined;
+      // Any burst with a move of its own plays it, not only a ground-pound (zone/ownMoves.ts).
+      const own = SIGNATURE_MOVES[name];
       if (own && playsFor(own, unit)) {
         sounds.attack(name, "melee", this.fighter(actorId), this.spot(actorId));
         // Should a hit on someone come through attack after all, it is not played a second time.
@@ -2440,6 +2440,14 @@ export class WorldRenderer {
       onImpact();
       return;
     }
+    // An enemy ability with an animation of its own (signatureMoves.ts), the same one the figure lab plays: ahead of the
+    // usual shot, throw or spell, so one from afar is played as its own too (zone/ownMoves.ts).
+    const signature = SIGNATURE_MOVES[ability];
+    if (signature && playsFor(signature, a)) {
+      const stage = this.moveStage(actorId, targetId, ability, t, dir, landed);
+      signature.play(stage, { figure: a.figure, hitAt, dir, crit, onImpact });
+      return;
+    }
     const rock = THROWN[ability];
     if (rock) {
       // Lobbed high, tumbling, and it breaks into dust where it lands.
@@ -2477,13 +2485,6 @@ export class WorldRenderer {
       const wait = (kind === "arrow" && (a.figure.loose() || a.figure.fire())) || (spell && a.figure.play()) || a.figure.cast();
       if (wait > 0) this.later(fly, wait);
       else fly();
-      return;
-    }
-    // An enemy ability with an animation of its own (signatureMoves.ts), the same one the figure lab plays.
-    const signature = SIGNATURE_MOVES[ability];
-    if (signature && playsFor(signature, a)) {
-      const stage = this.moveStage(actorId, targetId, ability, t, dir, landed);
-      signature.play(stage, { figure: a.figure, hitAt, dir, crit, onImpact });
       return;
     }
     // Melee: the figure winds up, steps half way across its tile and strikes (a creature, with no such

@@ -119,8 +119,8 @@ export interface SignatureMove {
   /** What it looks like, for the lab's tooltip. */
   blurb: string;
   /**
-   * The only kinds it is played for, where another kind has an ability of the same name (a Brute's Maul is not a
-   * bear's): any other strikes as usual. None: whoever uses it.
+   * The kinds it is played for, where more than `who` should have it (every bear's Maul, not a Brute's): any other
+   * strikes as usual. None: `who` alone, since others have abilities of the same name (a bat's Bite is not a wolf's).
    */
   only?: readonly string[];
   play(stage: MoveStage, ctx: MoveCtx): void;
@@ -587,7 +587,7 @@ export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
   Slam: { who: "ogre", blurb: "Crouches, springs up into the air and lands on its backside: a wave pulses out over the ground from its feet, clouds of dust rolling out after it, and each hero is jolted as it reaches them.", play: seatSlam },
   "Club Smash": { who: "ogre", blurb: "Heaves its club right up over its head and brings it straight down: the ground bursts where it lands, a pulse rolling out to the hexes round it, dust thrown out all round and chunks of rock flung every way.", play: clubSmash },
   Maul: { who: "bear", only: BEARS, blurb: "Rears right up on its hind legs and tears into the target with both forepaws by turns, white swooshes behind its claws, every blow tearing three black claw marks across it with white slashes flung off all round.", play: bearMaul },
-  "Rending Swipe": { who: "bear", blurb: "Rears back on its hind legs and rakes a forepaw down across the target, its claws leaving a red swoosh, and three red claw marks torn across it.", play: rendingSwipe },
+  "Rending Swipe": { who: "bear", only: BEARS, blurb: "Rears back on its hind legs and rakes a forepaw down across the target, its claws leaving a red swoosh, and three red claw marks torn across it.", play: rendingSwipe },
   Chomp: { who: "troll", blurb: "A snap forward, jaws closing on the target as two red arches.", play: trollChomp },
   Rake: { who: "troll", blurb: "A swing of a long clawed arm, leaving a red swoosh across the target.", play: trollRake },
   Bite: { who: "wolf", blurb: "A snap forward, jaws closing on the target as two white arches.", play: wolfBite },

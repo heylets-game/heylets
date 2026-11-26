@@ -146,6 +146,7 @@ import { useZone, type ZoneSend } from "./useZone";
 import { Icon } from "./items";
 import { label } from "./labels";
 import { FLOURISH, GUARDS, SONG_MOOD, SOUND_KIND, SUMMONS, THROW_COLOR, aimKind, fxFor } from "./zone/abilityFx";
+import { ownRoute } from "./zone/ownMoves";
 import { COMMON_ICON, ITEM_ICON, abilityIcon } from "./zone/actionIcons";
 import { BAR_SLOTS, assignSlot, barChoices, loadBar, moveSlot, saveBar } from "./zone/hotbar";
 import { believe, foreseeWalk, giveUp, settle, standing, type Ahead } from "./zone/ahead";
@@ -959,6 +960,12 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           // A star brought down on one target falls on where they stand.
           const struck = look.kind === "meteor" && !ev.at && ev.target ? find(ev.target)?.pos : undefined;
           const aim = ev.at ? point(ev.at, 0.05) : struck ? point(struck, 0.05) : null;
+          // An enemy ability with a move of its own is played as that, whatever its usual look (zone/ownMoves.ts): round
+          // its user, or at the spot it is thrown at, now; one at a single target, as the blow is told (see hit).
+          const own = ev.what === "attack" && view?.ownsMove(ev.id, ev.name) ? ownRoute(ev.name) : null;
+          if (own === "burst" && view) return void view.burst(ev.id, ev.name, false, thenOn(() => {}));
+          if (own === "at" && view && aim) return view.moveAt(ev.id, ev.name, aim, landing());
+          if (own === "blow") return;
           if (links.length > 0) {
             const last = links[links.length - 1][1];
             cast(ev.id, ev.name, last.x, last.z, () => links.forEach(([a, b], i) => timers.current.push(setTimeout(() => fxs.beam(a, b, look.color), i * 140))));
@@ -979,9 +986,6 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
             });
           } else if (look.kind === "rain" && aim) {
             cast(ev.id, ev.name, aim.x, aim.z, () => fxs.gather(aim, look.color));
-          } else if (look.kind === "lob" && aim && view?.ownsMove(ev.id, ev.name)) {
-            // One with a throw of its own (a Cultist's Immolate) plays it at the spot; what it does waits till it lands.
-            view.moveAt(ev.id, ev.name, aim, landing());
           } else if (look.kind === "lob" && aim) {
             cast(ev.id, ev.name, aim.x, aim.z, () => {
               const down = landing();
@@ -1178,12 +1182,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
             if (under.length > 0) cast(ev.id, ev.name, point(under[0]).x, point(under[0]).z, () => fxs.erupt(under.map((p) => point(p)), look.color, look.style, bind));
           } else if (look.kind === "ring") {
             // Struck all round (a song, played): the ring goes out as the blow lands.
-            // One with a move of its own (an Ogre's Slam) draws the ground shaking itself: no ring over it.
-            let own = false;
-            const ring = () => {
-              if (!own) fxs.ring(point(user.pos, 0.05), ev.what === "attack" ? 3.6 : covered.length > 6 ? 3.6 : 1.9, look.color);
-            };
-            if (view) own = view.burst(ev.id, ev.name, ABILITIES[ev.what]?.stat === "int_stat", thenOn(ring));
+            const ring = () => fxs.ring(point(user.pos, 0.05), ev.what === "attack" ? 3.6 : covered.length > 6 ? 3.6 : 1.9, look.color);
+            if (view) view.burst(ev.id, ev.name, ABILITIES[ev.what]?.stat === "int_stat", thenOn(ring));
             else ring();
           } else if (look.kind === "bless") {
             // A guard is braced behind; a heal or a blessing is played or cast, toward whoever it is for.
@@ -1258,8 +1258,12 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         // flinches, and nobody swings (when the field is first grown, the cast's own look plays as usual).
         // And the shock of a blow on someone beside them (a Club Smash's pulse) is that one blow's doing: they are
         // jolted as it reaches them, and it is not swung again for each.
-        const passive = (!mine && (ev.what === "coral_field" || ev.what === "coral_armor")) || (hit && !!ev.splash);
-        const kind = passive ? "ground" : !ev.actor || ev.actor === ev.target || ev.what.startsWith("throw:") || ev.what === "shove" || ev.what === "fall" ? "none" : (mine?.look.kind ?? "melee");
+        // An enemy's move of its own (zone/ownMoves.ts): one at a single target is played as this blow, struck by hand
+        // whatever its usual look (WorldRenderer.attack plays it); one round its user or at a spot was played as it was
+        // used, and whoever it catches just flinches.
+        const own = ev.actor && !(hit && ev.splash) && actor?.side === "enemy" && view?.ownsMove(ev.actor, ev.what) ? ownRoute(ev.what) : null;
+        const passive = (!mine && (ev.what === "coral_field" || ev.what === "coral_armor")) || (hit && !!ev.splash) || own === "burst" || own === "at";
+        const kind = passive ? "ground" : own === "blow" ? "melee" : !ev.actor || ev.actor === ev.target || ev.what.startsWith("throw:") || ev.what === "shove" || ev.what === "fall" ? "none" : (mine?.look.kind ?? "melee");
         // The log's line for it: the roll that decided it (if it has a card), then what it did.
         const logged = () => {
           if (card) logAdd({ k: "roll", who: name(card.id), side: sideOf(card.id), roll: card, ...(card.target ? { target: name(card.target) } : {}) });
