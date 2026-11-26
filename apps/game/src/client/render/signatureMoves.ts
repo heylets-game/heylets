@@ -8,6 +8,7 @@
 import * as THREE from "three";
 import { FLURRY_BLOWS, SLICES_APART, type Figure } from "./figures";
 import type { FxKind } from "./sprites";
+import { CRACK_DARK, CRACK_EDGE, crackGeometry, crackPaths, type CrackOpts } from "./cracks";
 
 /** One effect sprite: flown from `from` to `to` over `life` seconds, growing from one size to the other. */
 export interface FxOpts {
@@ -94,6 +95,8 @@ export interface MoveStage {
   pounce(): number;
   /** A blow has landed on the target: jolt it. */
   jolt(): void;
+  /** Rock the whole view, `by` world units at first and dying away over `seconds` (a great quake). None in the lab. */
+  shake?(by: number, seconds: number): void;
 }
 
 export interface MoveCtx {
@@ -134,6 +137,11 @@ export interface SignatureMove {
    */
   sweeps?: boolean;
   play(stage: MoveStage, ctx: MoveCtx): void;
+  /**
+   * Its second part, played on a later turn (an Earthquake's heave, told as the ability used `again`): the lab has a
+   * button for it too.
+   */
+  again?: { blurb: string; play(stage: MoveStage, ctx: MoveCtx): void };
 }
 
 const CHEAP_SHOT_RED = "#e0313f";
@@ -1022,7 +1030,217 @@ function thunderousRoar(stage: MoveStage, { figure, hitAt, crit, onImpact, echo,
   }, roars + waveReaches(far, radius, life));
 }
 
+const STONE = "#e6e1d6";
+/** What a Guardian's power glows: its eyes' cyan (looks.ts). */
+const GUARDIAN_GLOW = "#7fe3ff";
+
+/**
+ * A Guardian's Stone Fist: it heaves its fist right up overhead and brings it straight down on the target (figures.ts
+ * SLAM). Where it lands: a pale stone flash with a duller one swelling behind it, a pulse over the ground at their feet,
+ * shock lines driven on the way the blow goes, chips of stone flung on past them, a glint of the Guardian's cyan, and
+ * the view jolted. Then dust driven up along the ground for the hex they are knocked back.
+ */
+function stoneFist(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const flip = dir < 0;
+  const wait = figure.strike("slam");
+  // A creature has no slam of its own: it springs at the target, and the blow lands as it does.
+  if (wait <= 0) stage.lunge();
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const on = hitAt.clone().sub(feet).setY(0).normalize();
+  const color = crit ? GOLD : STONE;
+  stage.later(() => {
+    stage.spawnFx("burst", color, false, { from: hitAt, to: hitAt, life: 0.24, size: [1.1, 3.1], spin: 0.6, fade: true });
+    stage.later(() => stage.spawnFx("burst", crit ? GOLD : ROCK_PALE, true, { from: hitAt, to: hitAt, life: 0.34, size: [0.9, 2.4], spin: -0.5, fade: true }), 0.05);
+    stage.spawnFx("spark", GUARDIAN_GLOW, flip, { from: hitAt, to: offset(hitAt, 0, 0.35, 0), life: 0.3, size: [0.7, 0.2], spin: 2, fade: true });
+    const floor = hitAt.clone().setY(feet.y + 0.06);
+    stage.wave({ at: floor, radius: 1.4, life: 0.3, color: crit ? GOLD : "#f3e7c8", width: 0.12 });
+    // Shock lines driven on the way it is struck, and chips of stone flung on past them.
+    for (const turn of [-0.5, -0.2, 0.2, 0.5]) stage.spawnFx("streak", color, flip, { from: hitAt, to: hitAt.clone().addScaledVector(on, 1.0), life: 0.22, size: [0.8, 2.2], turn, spin: 0, fade: true });
+    for (let i = 0; i < 7; i++) {
+      const to = hitAt.clone().addScaledVector(on, 0.6 + Math.random() * 0.8).setY(hitAt.y + (Math.random() - 0.4) * 0.9);
+      const big = 0.25 + Math.random() * 0.2;
+      stage.spawnFx("rock", i % 2 ? ROCK : ROCK_PALE, flip, { from: hitAt, to, life: 0.36 + Math.random() * 0.15, size: [big, big * 0.8], spin: (Math.random() - 0.5) * 14, fade: false, arc: 0.3 + Math.random() * 0.3 });
+    }
+    stage.shake?.(0.1, 0.3);
+    stage.jolt();
+    stage.later(() => stage.jolt(), 0.07);
+    onImpact();
+    // Dust driven up along the ground as they go back a hex.
+    const ground = hitAt.clone().setY(feet.y + 0.12);
+    for (let i = 0; i < 2; i++) {
+      stage.later(() => {
+        const at = ground.clone().addScaledVector(on, (HEX * (i + 1)) / 2);
+        for (const side of [-1, 1]) {
+          const out = new THREE.Vector3(-on.z * side, 0, on.x * side);
+          stage.spawnFx("dust", DUST, side > 0, { from: at, to: at.clone().addScaledVector(out, 0.5).setY(at.y + 0.35), life: 0.45, size: [0.6, 1.3], spin: 0, fade: true });
+        }
+      }, 0.06 * (i + 1));
+    }
+  }, Math.max(0, wait));
+}
+
+/**
+ * Cracks laid on the ground at `at` (cracks.ts): spreading out from it over `grow` seconds, held `hold`, then fading
+ * over `fade`. Each is drawn dark, over a paler broken edge a little wider. Lay it with MoveStage.lay.
+ */
+function groundCracks(at: THREE.Vector3, o: CrackOpts & { grow: number; hold: number; fade: number }): (group: THREE.Object3D) => (dt: number) => boolean {
+  return (group) => {
+    const cracks = crackPaths(o);
+    const parts = [
+      { geometry: crackGeometry(cracks.map((c) => ({ ...c, width: c.width * 2 + 0.03 }))), color: CRACK_EDGE, full: 0.7, order: 7 },
+      { geometry: crackGeometry(cracks), color: CRACK_DARK, full: 0.95, order: 8 },
+    ];
+    const meshes = parts.map(({ geometry, color, full, order }, n) => {
+      const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: full, side: THREE.DoubleSide, depthWrite: false });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.copy(at).setY(at.y + n * 0.004);
+      mesh.renderOrder = order;
+      group.add(mesh);
+      return { mesh, material, full };
+    });
+    let age = 0;
+    return (dt) => {
+      age += dt;
+      const g = Math.min(1, age / o.grow);
+      const spread = 0.04 + 0.96 * (1 - (1 - g) * (1 - g));
+      const k = Math.min(1, Math.max(0, (age - o.grow - o.hold) / o.fade));
+      for (const { mesh, material, full } of meshes) {
+        mesh.scale.set(spread, 1, spread);
+        material.opacity = full * (1 - k * k);
+      }
+      if (k < 1) return true;
+      for (const { mesh, material } of meshes) {
+        group.remove(mesh);
+        mesh.geometry.dispose();
+        material.dispose();
+      }
+      return false;
+    };
+  };
+}
+
+/** A random spot on the ground within `radius` of `at`, evenly over the disc. */
+function spotWithin(at: THREE.Vector3, radius: number, lift = 0): THREE.Vector3 {
+  const a = Math.random() * Math.PI * 2;
+  const d = Math.sqrt(Math.random()) * radius;
+  return offset(at, Math.cos(a) * d, lift, Math.sin(a) * d);
+}
+
+/**
+ * A Guardian's Earthquake, both turns of it: how far the shaking reaches (past every hero two hexes off, ENEMY_BURST),
+ * and for each turn the ripples sent out (how many, how long each takes, the seconds between), the cracks (how many,
+ * how wide), and how hard the view is shaken.
+ */
+export const EARTHQUAKE = {
+  reach: HEX * 2.35,
+  first: { ripples: 4, life: 0.55, apart: 0.22, cracks: 7, width: 0.08, shake: 0.05 },
+  heave: { ripples: 4, life: 0.6, apart: 0.3, cracks: 11, width: 0.24, shake: 0.3 },
+};
+
+/**
+ * A Guardian's Earthquake, the turn it is used: it heaves both fists up overhead and drives them into the ground
+ * (figures.ts POUND). From under its fists thin cracks run out over the ground all round to two hexes off, small
+ * ripples of dust follow one another out across it, little puffs of dust pop up here and there and pebbles hop, and
+ * the view trembles a little. Each hero is jolted as the first ripple reaches them, and the blow on them is told then.
+ * The cracks fade as the map's cracked ground (TacticsLayer) takes over, to heave on its next turn (`again`).
+ */
+function earthquake(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alone }: MoveCtx) {
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const ground = feet.clone().setY(feet.y + 0.06);
+  const { reach } = EARTHQUAKE;
+  const f = EARTHQUAKE.first;
+  const lands = echo ? 0 : Math.max(0, figure.strike("pound"));
+  if (!echo) stage.later(() => {
+    stage.spawnFx("burst", crit ? GOLD : "#f3e7c8", false, { from: offset(ground, 0, 0.2, 0), to: offset(ground, 0, 0.2, 0), life: 0.22, size: [0.8, 2.2], spin: 0.5, fade: true });
+    for (const side of [-1, 1]) stage.spawnFx("dust", DUST, side > 0, { from: ground, to: offset(ground, side * 0.7, 0.3, 0), life: 0.45, size: [0.7, 1.4], spin: 0, fade: true });
+    stage.lay(groundCracks(ground, { count: f.cracks, reach, width: f.width, step: 0.2, wander: 0.5, fork: 0.1, grow: 0.5, hold: 1.1, fade: 0.6 }));
+    stage.shake?.(f.shake, 1.0);
+    // Small tremors: thin ripples of dust, one after another.
+    for (let n = 0; n < f.ripples; n++) stage.later(() => stage.wave({ at: ground, radius: reach * (1 - n * 0.05), life: f.life, color: n === 0 && crit ? GOLD : DUST, width: 0.05 }), n * f.apart);
+    // The ground stirring all over: little puffs of dust, and pebbles hopping.
+    for (let k = 0; k < 16; k++) {
+      stage.later(() => {
+        const at = spotWithin(ground, reach, 0.04);
+        stage.spawnFx("dust", DUST, Math.random() < 0.5, { from: at, to: offset(at, (Math.random() - 0.5) * 0.3, 0.25, 0), life: 0.4, size: [0.3, 0.75], spin: 0, fade: true });
+        stage.spawnFx("fleck", ROCK_PALE, Math.random() < 0.5, { from: at, to: offset(at, (Math.random() - 0.5) * 0.25, 0.02, (Math.random() - 0.5) * 0.25), life: 0.3, size: [0.28, 0.22], spin: 0, fade: false, arc: 0.25 });
+      }, 0.05 + Math.random() * 1.0);
+    }
+  }, lands);
+  if (alone) return stage.later(onImpact, lands);
+  const far = Math.hypot(hitAt.x - feet.x, hitAt.z - feet.z);
+  stage.later(() => {
+    const at = hitAt.clone().setY(feet.y + 0.12);
+    for (const side of [-1, 1]) stage.spawnFx("dust", crit ? GOLD : DUST, side > 0, { from: at, to: offset(at, side * 0.5, 0.3, 0), life: 0.4, size: [0.5, 1.1], spin: 0, fade: true });
+    stage.jolt();
+    onImpact();
+  }, lands + waveReaches(far, reach, f.life));
+}
+
+/**
+ * A Guardian's Earthquake on its next turn, as the cracked ground heaves: it pounds the ground again, and this time the
+ * whole of it goes. The view is shaken hard; wide cracks tear out across the ground all round, a bright flash and a
+ * heavy wave burst out from its fists with broad rolling ones of dust behind, and all over the cracked ground dust
+ * bursts up in columns and chunks of rock are thrown into the air, the ground rumbling on in further ripples and a
+ * second jolt of the view. Each hero is jolted as the first wave reaches them, and the blow on them is told then.
+ */
+function earthquakeHeave(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alone }: MoveCtx) {
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const ground = feet.clone().setY(feet.y + 0.06);
+  const { reach } = EARTHQUAKE;
+  const h = EARTHQUAKE.heave;
+  const lands = echo ? 0 : Math.max(0, figure.strike("pound"));
+  if (!echo) stage.later(() => {
+    stage.shake?.(h.shake, 1.4);
+    stage.later(() => stage.shake?.(h.shake * 0.6, 0.9), 0.55);
+    stage.spawnFx("burst", crit ? GOLD : "#fff3d6", false, { from: offset(ground, 0, 0.3, 0), to: offset(ground, 0, 0.3, 0), life: 0.28, size: [1.3, 3.8], spin: 0.6, fade: true });
+    stage.lay(groundCracks(ground, { count: h.cracks, reach: reach * 1.05, width: h.width, step: 0.28, wander: 0.4, fork: 0.2, start: 0.15, grow: 0.22, hold: 1.0, fade: 0.7 }));
+    stage.wave({ at: ground, radius: reach * 1.1, life: 0.5, color: crit ? GOLD : "#f3e7c8", width: 0.1 });
+    // Broad rolling waves of dust behind it: the ground rumbling on.
+    for (let n = 0; n < h.ripples; n++) stage.later(() => stage.wave({ at: ground, radius: reach * (1.05 - n * 0.06), life: h.life, color: DUST, width: 0.3 - n * 0.04 }), 0.06 + n * h.apart);
+    // Dust bursting up in columns all over it, and chunks of rock thrown up.
+    for (let k = 0; k < 14; k++) {
+      stage.later(() => {
+        const at = spotWithin(ground, reach, 0.05);
+        stage.spawnFx("dust", DUST, Math.random() < 0.5, { from: at, to: offset(at, (Math.random() - 0.5) * 0.4, 0.9 + Math.random() * 0.5, 0), life: 0.6, size: [0.7, 1.9], spin: 0, fade: true });
+        for (let r = 0; r < 2; r++) {
+          const big = 0.3 + Math.random() * 0.3;
+          stage.spawnFx("rock", r ? ROCK : ROCK_PALE, Math.random() < 0.5, { from: at, to: offset(at, (Math.random() - 0.5) * 0.9, 0.05, (Math.random() - 0.5) * 0.9), life: 0.45 + Math.random() * 0.2, size: [big, big * 0.8], spin: (Math.random() - 0.5) * 14, fade: false, arc: 0.7 + Math.random() * 0.6 });
+        }
+      }, Math.random() * 0.7);
+    }
+    // Clouds of dust rolling out after the first wave, all round, and a slower one hanging over its feet.
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2 + Math.random() * 0.25;
+      const far = reach * (0.55 + Math.random() * 0.3);
+      stage.spawnFx("dust", DUST, Math.cos(a) < 0, { from: offset(ground, Math.cos(a) * 0.5, 0.15, Math.sin(a) * 0.5), to: offset(ground, Math.cos(a) * far, 0.3 + Math.random() * 0.3, Math.sin(a) * far), life: 0.8 + Math.random() * 0.25, size: [0.9, 2.4], spin: 0, fade: true });
+    }
+    stage.later(() => {
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2 + Math.random() * 0.5;
+        const from = offset(ground, Math.cos(a) * 0.6, 0.1, Math.sin(a) * 0.6);
+        stage.spawnFx("dust", DUST, Math.cos(a) < 0, { from, to: offset(from, Math.cos(a) * 0.4, 0.9, Math.sin(a) * 0.4), life: 1.1, size: [1.4, 2.8], spin: 0, fade: true });
+      }
+    }, 0.12);
+  }, lands);
+  if (alone) return stage.later(onImpact, lands);
+  const far = Math.hypot(hitAt.x - feet.x, hitAt.z - feet.z);
+  stage.later(() => {
+    const at = hitAt.clone().setY(feet.y + 0.12);
+    for (const side of [-1, 1]) stage.spawnFx("dust", crit ? GOLD : DUST, side > 0, { from: at, to: offset(at, side * 0.7, 0.5, 0), life: 0.5, size: [0.8, 1.6], spin: 0, fade: true });
+    stage.jolt();
+    stage.later(() => stage.jolt(), 0.08);
+    onImpact();
+  }, lands + waveReaches(far, reach * 1.1, 0.5));
+}
+
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
+  "Stone Fist": { who: "guardian", blurb: "Heaves its fist up overhead and brings it straight down: a pale stone flash and a cyan glint, a pulse at the target's feet, shock lines and chips of stone driven on past them, the view jolted, and dust driven up along the hex they are knocked back.", play: stoneFist },
+  Earthquake: {
+    who: "guardian",
+    blurb: "Heaves both fists overhead and drives them into the ground: thin cracks run out over the ground two hexes all round, small ripples of dust follow each other out, little puffs of dust and hopping pebbles all over, and the view trembles.",
+    play: earthquake,
+    again: { blurb: "Its next turn, as the cracked ground heaves: it pounds the ground again, the view shakes hard, wide cracks tear out all round, a bright flash and a heavy wave with rolling dust behind, columns of dust and chunks of rock thrown up all over it, and a second jolt.", play: earthquakeHeave },
+  },
   "Great Cleave": { who: "brute", sweeps: true, blurb: "A great two-handed sweep from side to side: a wide white swoosh runs across both rows of hexes in front of it, dust kicked up under it and grit flung past the far edge, and everyone caught takes a heavy slash with a red burst.", play: greatCleave },
   "Battering Ram": { who: "brute", blurb: "Drops its shoulder and charges in, dust kicked off its heels and speed lines streaming off it: a big flash, a shock pulsing over the ground, grit and shock lines bursting out ahead as it hits, then dust driven up along the ground for the three hexes the target is shoved back.", play: batteringRam },
   "Rain of Arrows": { who: "archer", blurb: "Draws and looses a sheaf of arrows straight up, then they come down slanting on the hex and all round it, one after another, each landing with a puff of dust and standing in the ground a moment, a pale ring pulsing out as the first hit.", play: rainOfArrows },

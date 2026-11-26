@@ -885,7 +885,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         if (!ev.pulled || ev.pulled === 1) say(!to ? `${name(ev.id)} shoves ${name(ev.target)}, who has nowhere to go and falls.` : ev.pulled ? `${name(ev.id)} hauls ${name(ev.target)} in.` : hexDistance(ev.from, to) > 1 ? `${name(ev.target)} is swept away.` : `${name(ev.id)} shoves ${name(ev.target)} back.`);
       } else if (ev.t === "used") {
         // Getting away has a line of its own (fled).
-        if (ev.what !== "flee") say(`${name(ev.id)}: ${ev.name}${ev.target ? ` on ${name(ev.target)}` : ""}.`);
+        if (ev.again) say(`The ground heaves: ${name(ev.id)}'s ${ev.name}.`);
+        else if (ev.what !== "flee") say(`${name(ev.id)}: ${ev.name}${ev.target ? ` on ${name(ev.target)}` : ""}.`);
         const user = find(ev.id);
         const from = user ? point(user.pos, 0.9) : null;
         const thrown = ev.what.startsWith("throw:") ? (ev.what.slice(6) as Throwable) : null;
@@ -976,7 +977,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           // An enemy ability with a move of its own is played as that, whatever its usual look (zone/ownMoves.ts): round
           // its user, or at the spot it is thrown at, now; one at a single target, as the blow is told (see hit).
           const own = ev.what === "attack" && view?.ownsMove(ev.id, ev.name) ? ownRoute(ev.name) : null;
-          if (own === "burst" && view) return void view.burst(ev.id, ev.name, false, thenOn(() => {}));
+          if (own === "burst" && view) return void view.burst(ev.id, ev.name, false, thenOn(() => {}), !!ev.again);
           if (own === "at" && view && aim) return view.moveAt(ev.id, ev.name, aim, landing());
           if (own === "blow") return;
           if (links.length > 0) {
@@ -1568,7 +1569,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         later(() => view?.floatOver(ev.id, "No breath", CONDITION_INFO.drowning.color));
         say(`${name(ev.id)} chokes on seawater and loses its Action.`);
       } else if (ev.t === "weather") {
-        say(ev.kind === "wall" ? "A wall goes up." : ev.kind ? `${WEATHER_INFO[ev.kind].name} gathers.` : "The weather clears.");
+        say(ev.kind === "wall" ? "A wall goes up." : ev.kind === "quake" ? `The ground round ${name(ev.by)} cracks, and keeps shaking.` : ev.kind ? `${WEATHER_INFO[ev.kind].name} gathers.` : "The weather clears.");
       } else if (ev.t === "surface") {
         for (const p of ev.hexes) {
           if (ev.kind) draft.surfaces[posKey(p)] = { kind: ev.kind, rounds: 1, by: null };

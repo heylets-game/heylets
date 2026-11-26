@@ -7,7 +7,8 @@
 // (the enemy's turn) and zone.ts (the reducer that ties them together).
 
 import type { HexPos, Stats } from "@gantt-quest/core";
-import type { EffectKind } from "../content";
+import type { EffectKind, Inflict } from "../content";
+import type { Dice } from "./rules";
 import type { ItemDef, Outfit, Perks } from "../gear";
 import type { ResourceKind, Resources } from "../hut";
 import type { Clime, WorldMap } from "../map";
@@ -121,7 +122,7 @@ export interface Unit {
 }
 
 /** What a spell can leave hanging over (or standing on) some hexes (weather.ts). A wall (Fortify) is one too: nobody passes it. */
-export type WeatherKind = "rain" | "wind" | "coral" | "wall";
+export type WeatherKind = "rain" | "wind" | "coral" | "wall" | "quake";
 
 export interface Weather {
   kind: WeatherKind;
@@ -135,6 +136,11 @@ export interface Weather {
   side: Side;
   /** Rain and coral: the turn (Encounter.turnNo, or -1 out of a fight) each unit was last healed or cut by it in. */
   touched: Record<string, number>;
+  /**
+   * A quake: the shaking still to come as its maker's next turn begins (weather.ts quakeAtTurn), as the ability that
+   * made it (its name, for the log) rolls it, and the DC of the Agility save against it.
+   */
+  shock?: { name: string; dice: Dice; dc: number; saveOr?: Inflict };
 }
 
 export type SurfaceKind = "poison" | "fire" | "oil" | "water" | "ice" | "slime";
@@ -528,7 +534,8 @@ export type ZoneEvent =
   | { t: "round"; n: number }
   | { t: "turn"; ids: string[] }
   /** Something done, said before its rolls: an ability, a common action, a throw, an enemy's attack by name. */
-  | { t: "used"; id: string; what: string; name: string; target?: string; at?: HexPos }
+  /** `again`: the second part of something used on an earlier turn (an Earthquake's heave), not a new use of it. */
+  | { t: "used"; id: string; what: string; name: string; target?: string; at?: HexPos; again?: true }
   | { t: "reaction"; id: string; target: string }
   /**
    * `dice`: what was rolled for it, where dice were. `splash`: not struck itself, but caught by the shock of the same

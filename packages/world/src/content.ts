@@ -409,10 +409,10 @@ export const ENEMIES: Record<string, EnemyDef> = {
     kind: "great_bear", name: "Great Bear", hp: 60, defence: 12, move: 2, save: 3, init: -1, xp: 44, boss: true,
     abilities: ["rending_cleave", "thunderous_roar", "shove"],
   },
-  // A guardian boss: slow and alone, but each blow lands like a wall.
+  // A guardian boss: slow and alone, but each blow lands like a wall, and the ground it stands on shakes itself apart.
   guardian: {
     kind: "guardian", name: "Guardian", hp: 51, defence: 12, move: 2, save: 3, init: -1, xp: 44, boss: true,
-    abilities: ["stone_fist", "quake", "shove"],
+    abilities: ["stone_fist", "earthquake", "shove"],
   },
   // The Haunted Caverns' dead. A shade is quick and weak, and its touch chills (slows) whoever it lays a hand on.
   shade: {

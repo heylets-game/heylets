@@ -38,7 +38,7 @@ import { FREE_WALK, blast, blockerAt, inFight, isDead, pathIn, perkOf, roomAt, s
 import { AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, ENEMY_MOVE_AP, FLEE_RANGE, ITEM_AP, STROLL_GRACE_MS, STROLL_STEP_MS, SUMMONS, STARTING_ITEMS, THROWABLES, THROWABLE_KINDS, cleanItems, commonCostFor, enemyHp, enemyMove, tacticOf } from "./kit";
 import { d20, heroMove, mod, rollDice, statOf } from "./rules";
 import { hiddenEnemies, sentToClient } from "./light";
-import { tickWeather, weatherAtTurn } from "./weather";
+import { quakeAtTurn, tickWeather, weatherAtTurn } from "./weather";
 import { checkPickup, checkStow, clearSurfaces, lightTorch, pickUpTorch, placeSurface, stowTorch, standInSurface, tickLights, tickSurfaces } from "./surfaces";
 import { exploreRound, passTime } from "./clock";
 import { checkUnlock, dropKeys, heardBy, workDoor } from "./doors";
@@ -508,6 +508,8 @@ function beginTurn(ctx: Ctx, enc: Encounter, unit: Unit): boolean {
   if (song) song.surge = 0;
   tickStacks(ctx, unit);
   if (unit.down) return false;
+  // The ground it cracked on its last turn heaves (an Earthquake), whether or not it is fit to do anything else.
+  quakeAtTurn(ctx, unit);
   // A Druid mends a little every turn.
   if (unit.kind === "backend_druid" && unit.hp < unit.maxHp) heal(ctx, unit, DRUID_REGEN, { actor: unit.id, what: "regen" });
   // A Healing Aura mends the bearer and everyone of theirs standing beside them.

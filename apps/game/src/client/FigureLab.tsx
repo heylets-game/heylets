@@ -260,8 +260,11 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
       const figure = stage.current?.figure;
       if (!figure) return "";
       if (action.startsWith("move:")) {
-        const move = SIGNATURE_MOVES[action.slice(5)];
+        // "move:Name|again": that move's second part (an Earthquake's heave on its next turn).
+        const [named, part] = action.slice(5).split("|");
+        const move = SIGNATURE_MOVES[named];
         if (!move) return "";
+        const play = (part === "again" && move.again?.play) || move.play;
         // As the game does it: left or right is which way the target is as the camera sees it.
         const body = figure.root.position.clone().setY(SIZE * 0.4);
         const hitAt = new THREE.Vector3(0, SIZE * 0.4, TARGET_AHEAD);
@@ -290,7 +293,7 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
           jolt: () => {},
         };
         const began = t;
-        move.play(stage, { figure, hitAt, dir, crit: false, onImpact: () => setNote(`The blow is told ${(t - began).toFixed(2)}s in.`) });
+        play(stage, { figure, hitAt, dir, crit: false, onImpact: () => setNote(`The blow is told ${(t - began).toFixed(2)}s in.`) });
         return "";
       }
       if (action === "hit") {
@@ -451,10 +454,17 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
 
   const act = (action: Act) => setNote(stage.current?.act(action) ?? "");
   // The enemy moves (render/signatureMoves.ts) of whoever is on the stage: none for anyone else.
-  const ownMoves = useMemo(() => Object.entries(SIGNATURE_MOVES).filter(([, move]) => move.who === kind), [kind]);
+  // A move in two parts (an Earthquake) has a button for each: the second is "Name, next turn".
+  const ownMoves = useMemo(
+    () =>
+      Object.entries(SIGNATURE_MOVES)
+        .filter(([, move]) => move.who === kind)
+        .flatMap(([name, move]): [string, { blurb: string }, string][] => [[name, move, `move:${name}`], ...(move.again ? [[`${name}, next turn`, move.again, `move:${name}|again`] as [string, { blurb: string }, string]] : [])]),
+    [kind],
+  );
   // A move set to repeat is let go when its enemy leaves the stage.
   useEffect(() => {
-    if (live.repeat?.startsWith("move:") && !ownMoves.some(([name]) => `move:${name}` === live.repeat)) set({ repeat: null });
+    if (live.repeat?.startsWith("move:") && !ownMoves.some(([, , act]) => act === live.repeat)) set({ repeat: null });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ownMoves]);
   const view = (yaw: number, pitch: number) => {
@@ -550,8 +560,8 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
             <h4>Enemy moves</h4>
             <p className="muted">This enemy's abilities with an animation of their own, thrown at the red ring a tile ahead.</p>
             <div className="dev-row">
-              {ownMoves.map(([name, move]) => (
-                <button key={name} className="small primary" title={move.blurb} onClick={() => act(`move:${name}`)}>
+              {ownMoves.map(([name, move, id]) => (
+                <button key={name} className="small primary" title={move.blurb} onClick={() => act(id as Act)}>
                   {name}
                 </button>
               ))}
@@ -568,8 +578,8 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
                   {name}
                 </option>
               ))}
-              {ownMoves.map(([name]) => (
-                <option key={name} value={`move:${name}`}>
+              {ownMoves.map(([name, , id]) => (
+                <option key={name} value={id}>
                   {name}
                 </option>
               ))}

@@ -9,15 +9,19 @@
 // It acts on a unit as the weather is made, as the unit's turn starts in it,
 // and as the unit steps (or is pushed) into it on its own turn. Rain heals a
 // unit, and coral cuts one, at most once a turn, however often it goes in and out.
+//
+// A quake (a Guardian's Earthquake) is ground left cracked and shaking: it does nothing to whoever walks on it,
+// but as its maker's next turn begins it heaves once, hard, under everyone on it, and is gone (quakeAtTurn).
 
 import { hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/core";
-import { addCondition, damage, heal, type Ctx } from "./engine";
+import { addCondition, damage, heal, inflict, saveRoll, type Ctx } from "./engine";
 import { HEX_DIRS, blockerAt, directionToward, flies, inFight, solid, unitAt } from "./geometry";
 import { FORTIFY, WEATHER } from "./kit";
 import { tileAt } from "../map";
-import { rollDice } from "./rules";
+import { rollDice, rollShown, type Dice } from "./rules";
 import { placeSurface } from "./surfaces";
 import type { Unit, Weather, WeatherKind, ZoneState } from "./types";
+import type { Inflict } from "../content";
 
 /** Each weather as the player sees it. */
 export const WEATHER_INFO: Record<WeatherKind, { name: string; blurb: string; color: string }> = {
@@ -25,6 +29,7 @@ export const WEATHER_INFO: Record<WeatherKind, { name: string; blurb: string; co
   wind: { name: "Trade Winds", blurb: "The caster's side is Hasted in it, the other side Slowed.", color: "#d9f2e6" },
   coral: { name: "Coral Field", blurb: "Harmless to the caster's side. The other side is cut and Slowed, once a turn, as each starts a turn in it or walks into it.", color: "#ff7f6e" },
   wall: { name: "Fortification", blurb: `Nobody gets through it. The side that raised it sees over it, and has +${FORTIFY.defence} Defence beside it; the other side cannot see through it.`, color: "#c9b48a" },
+  quake: { name: "Cracked Ground", blurb: "Shaking still. It heaves hard when the one who cracked it starts their next turn: get off it before then, or save on Agility for half and to keep your feet.", color: "#d9a066" },
 };
 
 /**
@@ -73,8 +78,8 @@ function wetGround(ctx: Ctx, w: Weather): void {
 
 /** What a weather does to one unit in it. `turn`: the turn it counts against, for rain's once-a-turn heal and coral's once-a-turn cut. */
 function weatherOn(ctx: Ctx, w: Weather, unit: Unit, turn: number): void {
-  // A wall acts on nobody: nobody is ever in it.
-  if (unit.down || w.kind === "wall") return;
+  // A wall acts on nobody: nobody is ever in it. Cracked ground only acts as it heaves (quakeAtTurn).
+  if (unit.down || w.kind === "wall" || w.kind === "quake") return;
   const friend = unit.side === w.side;
   if (w.kind === "rain") {
     if (!friend || w.touched[unit.id] === turn) return;
@@ -132,6 +137,63 @@ export function enterWeather(ctx: Ctx, unit: Unit): void {
   }
 }
 
+/**
+ * The hexes an Earthquake shakes: every one within `radius` of `at` that there is ground on (not rock, not off the map).
+ */
+export function quakeHexes(state: Pick<ZoneState, "map">, at: HexPos, radius: number): HexPos[] {
+  const out: HexPos[] = [];
+  for (let dq = -radius; dq <= radius; dq++) {
+    for (let dr = Math.max(-radius, -dq - radius); dr <= Math.min(radius, -dq + radius); dr++) {
+      const p = { q: at.q + dq, r: at.r + dr };
+      const tile = tileAt(state.map, p);
+      if (tile && !solid(tile)) out.push(p);
+    }
+  }
+  return out;
+}
+
+/**
+ * The ground shakes under every one of `by`'s foes on `hexes` who is in the fight and not flying: `dice` of damage,
+ * or half on an Agility save against `dc`, and `saveOr` on a failure.
+ */
+function shake(ctx: Ctx, by: Unit, hexes: HexPos[], name: string, dice: Dice, dc: number, saveOr?: Inflict): void {
+  const state = ctx.state;
+  const rolled = rollShown(ctx.rng, dice);
+  for (const victim of state.units.filter((u) => u.side !== by.side && !u.down && !flies(u) && inFight(state, u.id) && hexes.some((p) => p.q === u.pos.q && p.r === u.pos.r))) {
+    const saved = saveRoll(ctx, victim, "agi", dc, name).ok;
+    damage(ctx, victim, saved ? Math.floor(rolled.total / 2) : rolled.total, { actor: by.id, what: name, dice: rolled, halved: saved });
+    if (!saved && saveOr && !victim.down) inflict(ctx, victim, saveOr);
+  }
+}
+
+/**
+ * An Earthquake, begun: the ground round `by` shakes now (`first` damage), and is left cracked over `hexes` until
+ * `by`'s next turn, when it heaves (`shock`).
+ */
+export function makeQuake(ctx: Ctx, by: Unit, hexes: HexPos[], name: string, first: Dice, dc: number, shock: { dice: Dice; saveOr?: Inflict }): void {
+  const state = ctx.state;
+  // One quake at a time from each maker: a new one takes the place of the old.
+  state.weather = [...(state.weather ?? []).filter((w) => !(w.kind === "quake" && w.by === by.id)), { kind: "quake", hexes, rounds: WEATHER.quake.rounds, fresh: true, by: by.id, side: by.side, touched: {}, shock: { name, dice: shock.dice, dc, saveOr: shock.saveOr } }];
+  ctx.events.push({ t: "weather", kind: "quake", hexes, by: by.id });
+  shake(ctx, by, hexes, name, first, dc);
+}
+
+/**
+ * `unit`'s turn begins: the ground it cracked on its last turn heaves under everyone still on it, and settles (told
+ * as the ability used `again`; the weather's going is not told: the picture follows the state).
+ */
+export function quakeAtTurn(ctx: Ctx, unit: Unit): void {
+  const mine = (ctx.state.weather ?? []).filter((w) => w.kind === "quake" && w.by === unit.id);
+  if (mine.length === 0) return;
+  ctx.state.weather = ctx.state.weather!.filter((w) => !mine.includes(w));
+  for (const w of mine) {
+    if (w.shock) {
+      ctx.events.push({ t: "used", id: unit.id, what: "attack", name: w.shock.name, again: true });
+      shake(ctx, unit, w.hexes, w.shock.name, w.shock.dice, w.shock.dc, w.shock.saveOr);
+    }
+  }
+}
+
 /** A round has passed: every weather has one less to go (bar one made this round), and the spent ones clear. */
 export function tickWeather(ctx: Ctx): void {
   const list = ctx.state.weather;
@@ -140,7 +202,10 @@ export function tickWeather(ctx: Ctx): void {
     if (w.fresh) delete w.fresh;
     else w.rounds -= 1;
   }
-  const gone = list.filter((w) => w.rounds <= 0);
-  ctx.state.weather = list.filter((w) => w.rounds > 0);
-  for (const w of gone) ctx.events.push({ t: "weather", kind: null, hexes: w.hexes, by: w.by });
+  // Cracked ground whose maker has fallen settles: it will not heave now.
+  const over = (w: Weather) => w.rounds <= 0 || (w.kind === "quake" && !!ctx.state.units.find((u) => u.id === w.by)?.down);
+  const gone = list.filter(over);
+  ctx.state.weather = list.filter((w) => !over(w));
+  // Cracked ground settles quietly: the weather clearing is not news of it.
+  for (const w of gone) if (w.kind !== "quake") ctx.events.push({ t: "weather", kind: null, hexes: w.hexes, by: w.by });
 }
