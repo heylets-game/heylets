@@ -375,11 +375,14 @@ function savageBite(stage: MoveStage, ctx: MoveCtx) {
  * hex's width of √3 apiece), how long it takes, and how many there are, how far apart.
  */
 const HOWL_WAVES = { radius: 5.6, life: 0.95, count: 5, every: 0.17 };
+/** A Howl's breath: seconds it puffs for from when the howl rings out (about as long as the note is held), and between puffs. */
+const HOWL_BREATH = { lasts: 0.75, every: 0.07 };
+const BREATH = "#e9e6e0";
 
 /**
  * A Pack Leader's Howl: it sits back on its haunches and throws its head up at the sky (figures.ts HOWL). As the howl
  * rings out, red sound waves pulse out from it one after another, rings spreading over the ground round it, with a red
- * flare at its mouth. It
+ * flare at its mouth, and its breath puffs pale off its muzzle, drifting up, for as long as it holds the note. It
  * reaches its own side, not the other, so nobody is jolted; what it does to them is told as it rings out.
  */
 function howlMove(stage: MoveStage, { figure, crit, onImpact }: MoveCtx) {
@@ -390,6 +393,14 @@ function howlMove(stage: MoveStage, { figure, crit, onImpact }: MoveCtx) {
   const mouth = () => figure.root.getWorldPosition(new THREE.Vector3()).setY(feet.y + 1.35);
   const red = crit ? GOLD : SAVAGE_RED;
   const deep = crit ? GOLD : SAVAGE_DEEP;
+  // Its breath, as it holds the note: pale puffs off the raised muzzle, drifting up and spreading as they fade.
+  for (let s = peak; s < peak + HOWL_BREATH.lasts; s += HOWL_BREATH.every) {
+    stage.later(() => {
+      const from = offset(mouth(), (Math.random() - 0.5) * 0.15, 0.1, (Math.random() - 0.5) * 0.15);
+      const to = offset(from, (Math.random() - 0.5) * 0.5, 0.7 + Math.random() * 0.4, (Math.random() - 0.5) * 0.3);
+      stage.spawnFx("dust", BREATH, Math.random() < 0.5, { from, to, life: 0.7 + Math.random() * 0.2, size: [0.5, 1.5], spin: 0, fade: true });
+    }, s);
+  }
   stage.later(() => {
     const at = mouth();
     stage.spawnFx("burst", red, false, { from: at, to: at, life: 0.3, size: [0.6, 1.9], spin: 0.5, fade: true });
@@ -1026,7 +1037,7 @@ export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
   Rake: { who: "troll", blurb: "A swing of a long clawed arm, leaving a red swoosh across the target.", play: trollRake },
   Bite: { who: "wolf", blurb: "A snap forward, jaws closing on the target as two white arches.", play: wolfBite },
   "Cheap Shot": { who: "bandit", blurb: "Two quick side slashes, a forehand then a backhand: the sword leaves a red trail, and each cut a flat red swipe across the target.", play: cheapShot },
-  Howl: { who: "alpha", blurb: "Sits back on its haunches and throws its head up at the sky: red sound waves pulse out one after another, rings spreading over the ground round it, with a red flare at its mouth.", play: howlMove },
+  Howl: { who: "alpha", blurb: "Sits back on its haunches and throws its head up at the sky: red sound waves pulse out one after another, rings spreading over the ground round it, a red flare at its mouth and its breath puffing pale off its muzzle.", play: howlMove },
   "Savage Bite": { who: "alpha", blurb: "A snap forward, wide red jaws closing hard on the target: a red flash and a deeper one after it, red lines bursting out, and the target jolted twice.", play: savageBite },
   "Great Lunge": { who: "alpha", blurb: "A Lunge with more weight behind it: thicker speed lines, red among them, and where it lands a shock rolling over the ground, dust and grit thrown up all round, and a second, bigger red flash.", play: greatLunge },
   Lunge: { who: "wolf", blurb: "A crouch and a leap through the air (from up to 3 hexes off, taking the hex beside its target), dust kicked back and speed lines streaming off it the whole way, jaws snapping shut on the target with a flash as it lands.", play: wolfLunge },
