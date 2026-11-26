@@ -65,12 +65,12 @@ const CHEAP_SHOT_RED = "#e0313f";
  * Each cut leaves a red swipe lying flat across the target, the second a little below the first and swept the
  * other way, and jolts it. The blow is told when the second lands.
  */
-function cheapShot(stage: MoveStage, { figure, hitAt, dir, perfect, onImpact }: MoveCtx) {
+function cheapShot(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
   const cut = (second: boolean) => {
     // The swipe is drawn as a quarter circle bowed up and to one side; turned an eighth, it lies flat, an arch.
     const flip = second ? dir > 0 : dir < 0;
     const at = hitAt.clone().setY(hitAt.y + (second ? -0.1 : 0.12));
-    stage.spawnFx("slash", perfect ? "#ffd23f" : CHEAP_SHOT_RED, flip, { from: at, to: at, life: 0.24, size: [1.4, 2.3], turn: flip ? -Math.PI / 4 : Math.PI / 4, spin: (flip ? 1 : -1) * 0.5, fade: true });
+    stage.spawnFx("slash", crit ? "#ffd23f" : CHEAP_SHOT_RED, flip, { from: at, to: at, life: 0.24, size: [1.4, 2.3], turn: flip ? -Math.PI / 4 : Math.PI / 4, spin: (flip ? 1 : -1) * 0.5, fade: true });
     stage.jolt();
   };
   const first = figure.strike("slices");
