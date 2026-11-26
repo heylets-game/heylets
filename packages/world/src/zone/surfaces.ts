@@ -10,7 +10,7 @@ import { hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/cor
 import { tileAt } from "../map";
 import { cratesOn, hurtCrate } from "./crates";
 import { addCondition, addStacks, saveRoll, tick, type Ctx } from "./engine";
-import { flies, hovers, perkOf, solid } from "./geometry";
+import { flies, hovers, perkOf, solid, span } from "./geometry";
 import type { GroundSurface, SurfaceKind, Unit } from "./types";
 import { TORCH_HELD_ROUNDS } from "./kit";
 
@@ -66,9 +66,19 @@ function act(ctx: Ctx, unit: Unit, kind: SurfaceKind, moving: boolean): boolean 
   return false;
 }
 
+/**
+ * What a unit stands in: the ground on its hex, or for a big one (geometry.ts span) the worst of what is under any of
+ * its hexes (what harms before what hinders, before water), which acts on it once.
+ */
+function underfoot(state: Ctx["state"], unit: Unit): GroundSurface | undefined {
+  const all = span(unit).map((p) => state.surfaces[posKey(p)]).filter((s): s is GroundSurface => !!s);
+  const rank = (s: GroundSurface) => (HARMFUL.has(s.kind) ? 0 : HINDERING.has(s.kind) ? 1 : 2);
+  return all.sort((a, b) => rank(a) - rank(b))[0];
+}
+
 /** A unit has just stepped onto a hex: whatever is on it acts. Returns true if the unit must stop there. */
 export function enterSurface(ctx: Ctx, unit: Unit, flush?: () => void): boolean {
-  const surface = ctx.state.surfaces[posKey(unit.pos)];
+  const surface = underfoot(ctx.state, unit);
   if (!surface) return false;
   flush?.();
   return act(ctx, unit, surface.kind, true);
@@ -76,7 +86,7 @@ export function enterSurface(ctx: Ctx, unit: Unit, flush?: () => void): boolean 
 
 /** A unit's turn starts: whatever it is standing in acts again. */
 export function standInSurface(ctx: Ctx, unit: Unit): void {
-  const surface = ctx.state.surfaces[posKey(unit.pos)];
+  const surface = underfoot(ctx.state, unit);
   if (surface) act(ctx, unit, surface.kind, false);
 }
 
@@ -161,9 +171,10 @@ export function placeSurface(ctx: Ctx, hexes: HexPos[], kind: SurfaceKind, round
   }
   if (burst.size > 0) ctx.events.push({ t: "burst", hexes: [...burst.values()] });
   for (const unit of ctx.state.units) {
-    const key = posKey(unit.pos);
-    if (burst.has(key) && !unit.down && !flies(unit)) tick(ctx, unit, "fire", d(ctx, 6));
-    const now = changed.get(key);
+    // A big one is caught once, however many of its hexes it is caught on.
+    const keys = span(unit).map(posKey);
+    if (keys.some((key) => burst.has(key)) && !unit.down && !flies(unit)) tick(ctx, unit, "fire", d(ctx, 6));
+    const now = keys.map((key) => changed.get(key)).find((c) => c?.kind);
     if (now?.kind) act(ctx, unit, now.kind, false);
   }
   const burning = [...changed.values()].filter((c) => c.kind === "fire").map((c) => c.pos);

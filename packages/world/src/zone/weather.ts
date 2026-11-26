@@ -15,7 +15,7 @@
 
 import { hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/core";
 import { addCondition, damage, heal, inflict, saveRoll, type Ctx } from "./engine";
-import { HEX_DIRS, blockerAt, directionToward, flies, inFight, solid, unitAt } from "./geometry";
+import { HEX_DIRS, blockerAt, covers, directionToward, flies, inFight, solid, unitAt } from "./geometry";
 import { FORTIFY, WEATHER } from "./kit";
 import { tileAt } from "../map";
 import { rollDice, rollShown, type Dice } from "./rules";
@@ -62,7 +62,8 @@ export function clusterHexes(state: Pick<ZoneState, "map">, from: HexPos, at: He
 /** The three hexes a rain cloud covers: the one aimed at and the two beside it nearest the caster. */
 export const rainHexes = (state: Pick<ZoneState, "map">, from: HexPos, at: HexPos): HexPos[] => clusterHexes(state, from, at, 3);
 
-const inside = (w: Weather, pos: HexPos) => w.hexes.some((p) => p.q === pos.q && p.r === pos.r);
+/** Whether a unit is under a weather: on any of its hexes, for a big one. */
+const inside = (w: Weather, unit: Unit) => w.hexes.some((p) => covers(unit, p));
 
 /** Whether it is this unit's own turn just now. */
 function ownTurn(state: ZoneState, unit: Unit): boolean {
@@ -113,14 +114,14 @@ export function makeWeather(ctx: Ctx, kind: WeatherKind, hexes: HexPos[], by: Un
   state.weather = [...(state.weather ?? []), w];
   ctx.events.push({ t: "weather", kind, hexes, by: by.id });
   if (kind === "rain") wetGround(ctx, w);
-  for (const unit of state.units) if (inside(w, unit.pos)) weatherOn(ctx, w, unit, turnOf(state, unit));
+  for (const unit of state.units) if (inside(w, unit)) weatherOn(ctx, w, unit, turnOf(state, unit));
 }
 
 /** A unit's turn starts: the rain comes down again, and whatever weather it stands in acts on it. */
 export function weatherAtTurn(ctx: Ctx, unit: Unit): void {
   for (const w of ctx.state.weather ?? []) {
     if (w.kind === "rain") wetGround(ctx, w);
-    if (inside(w, unit.pos)) weatherOn(ctx, w, unit, turnOf(ctx.state, unit));
+    if (inside(w, unit)) weatherOn(ctx, w, unit, turnOf(ctx.state, unit));
   }
 }
 
@@ -130,7 +131,7 @@ export function enterWeather(ctx: Ctx, unit: Unit): void {
   const fighting = !!ctx.state.encounter && inFight(ctx.state, unit.id);
   if (fighting && !ownTurn(ctx.state, unit)) return;
   for (const w of ctx.state.weather ?? []) {
-    if (!inside(w, unit.pos)) continue;
+    if (!inside(w, unit)) continue;
     // The winds do nothing out of a fight: there is no pace to change. Nor does coral: it is for a fight.
     if ((w.kind === "wind" || w.kind === "coral") && !fighting) continue;
     weatherOn(ctx, w, unit, turnOf(ctx.state, unit));
@@ -138,18 +139,21 @@ export function enterWeather(ctx: Ctx, unit: Unit): void {
 }
 
 /**
- * The hexes an Earthquake shakes: every one within `radius` of `at` that there is ground on (not rock, not off the map).
+ * The hexes an Earthquake shakes: every one within `radius` of any of `from` (the hexes its maker stands on) that
+ * there is ground on (not rock, not off the map), each once.
  */
-export function quakeHexes(state: Pick<ZoneState, "map">, at: HexPos, radius: number): HexPos[] {
-  const out: HexPos[] = [];
-  for (let dq = -radius; dq <= radius; dq++) {
-    for (let dr = Math.max(-radius, -dq - radius); dr <= Math.min(radius, -dq + radius); dr++) {
-      const p = { q: at.q + dq, r: at.r + dr };
-      const tile = tileAt(state.map, p);
-      if (tile && !solid(tile)) out.push(p);
+export function quakeHexes(state: Pick<ZoneState, "map">, from: readonly HexPos[], radius: number): HexPos[] {
+  const out = new Map<string, HexPos>();
+  for (const at of from) {
+    for (let dq = -radius; dq <= radius; dq++) {
+      for (let dr = Math.max(-radius, -dq - radius); dr <= Math.min(radius, -dq + radius); dr++) {
+        const p = { q: at.q + dq, r: at.r + dr };
+        const tile = tileAt(state.map, p);
+        if (tile && !solid(tile)) out.set(posKey(p), p);
+      }
     }
   }
-  return out;
+  return [...out.values()];
 }
 
 /**
@@ -159,7 +163,7 @@ export function quakeHexes(state: Pick<ZoneState, "map">, at: HexPos, radius: nu
 function shake(ctx: Ctx, by: Unit, hexes: HexPos[], name: string, dice: Dice, dc: number, saveOr?: Inflict): void {
   const state = ctx.state;
   const rolled = rollShown(ctx.rng, dice);
-  for (const victim of state.units.filter((u) => u.side !== by.side && !u.down && !flies(u) && inFight(state, u.id) && hexes.some((p) => p.q === u.pos.q && p.r === u.pos.r))) {
+  for (const victim of state.units.filter((u) => u.side !== by.side && !u.down && !flies(u) && inFight(state, u.id) && hexes.some((p) => covers(u, p)))) {
     const saved = saveRoll(ctx, victim, "agi", dc, name).ok;
     damage(ctx, victim, saved ? Math.floor(rolled.total / 2) : rolled.total, { actor: by.id, what: name, dice: rolled, halved: saved });
     if (!saved && saveOr && !victim.down) inflict(ctx, victim, saveOr);

@@ -550,6 +550,8 @@ export type ZoneEvent =
   | { t: "round"; n: number }
   | { t: "turn"; ids: string[] }
   /** Something done, said before its rolls: an ability, a common action, a throw, an enemy's attack by name. */
+  /** Something tried to move a big unit by force (a shove, a pull, a wave), and it was too heavy to budge. */
+  | { t: "heavy"; id: string }
   /** `again`: the second part of something used on an earlier turn (an Earthquake's heave), not a new use of it. */
   | { t: "used"; id: string; what: string; name: string; target?: string; at?: HexPos; again?: true }
   | { t: "reaction"; id: string; target: string }

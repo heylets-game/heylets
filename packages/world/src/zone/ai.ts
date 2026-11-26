@@ -40,7 +40,7 @@ import { behaviourOf, type Look } from "./behaviours";
 import { BELL_AP, goesForBell, liveBell, ringBell, somethingToRouse } from "./bell";
 import { apForMove, checkCommon, doCommon, enemyAct, leavesReach, walk, walkAp } from "./combat";
 import { has, unseen, type Ctx, type EnemyOrder } from "./engine";
-import { blast, close, elevOf, flies, heldAgainst, inFight, pathIn, sameHex, stepCost, zoneReach, type Reached } from "./geometry";
+import { big, blast, close, elevOf, flies, gap, heldAgainst, inFight, pathIn, sameHex, stepCost, zoneReach, type Reached } from "./geometry";
 import { ACTION_AP, AP_MAX, COMMON_ACTIONS, ENEMY_WHIM, jumpRange, mindOf, unitStrike, unitStrikes, type EnemyStrike, type Mind } from "./kit";
 import { seedFromString } from "../rng";
 import { HARMFUL } from "./surfaces";
@@ -184,7 +184,7 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
    * at `targets`. `strike`: AP are kept back for an attack from there, and only the rest spent on getting there.
    */
   const chooseAmong = (targets: Unit[], strike: boolean): Plan | null => {
-    const nearest = (pos: HexPos) => Math.min(...targets.map((h) => hexDistance(pos, h.pos)));
+    const nearest = (pos: HexPos) => Math.min(...targets.map((h) => gap(enemy, h, pos)));
     // How far it can walk and still have `keep` AP left: each ability keeps back its own cost (and a jump's, to leap first).
     const reach = (keep: number) => budget.move + walkAp(budget, keep) * budget.stride;
     const usable = strike ? t.blows.filter((b) => b.cost <= budget.ap) : [];
@@ -207,7 +207,7 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
         const drawn = new Set<string>();
         let from = enemy.pos;
         for (const step of path) {
-          for (const h of t.heroes) if (leavesReach(state, h.pos, from, step) && !state.encounter?.reacted.includes(h.id) && !has(h, "stunned") && !has(h, "prone")) drawn.add(h.id);
+          for (const h of t.heroes) if (leavesReach(state, h, enemy, from, step) && !state.encounter?.reacted.includes(h.id) && !has(h, "stunned") && !has(h, "prone")) drawn.add(h.id);
           from = step;
         }
         score -= mind.caution * 3 * drawn.size;
@@ -233,7 +233,8 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
     }
     // No blow to be had on foot: is there a ledge to leap that would give one? (A Jump, and the AP it takes.)
     const leapable = usable.filter((b) => b.cost + jumpAp <= budget.ap);
-    if (best && !best.attacks && strike && !air && leapable.length > 0) {
+    // Nothing big jumps.
+    if (best && !best.attacks && strike && !air && !big(enemy) && leapable.length > 0) {
       const afoot = Math.max(...leapable.map((b) => reach(b.cost + jumpAp)));
       const range = jumpRange(enemy);
       for (const reached of clean.values()) {

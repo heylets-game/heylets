@@ -16,7 +16,7 @@ import "./camera.css";
 import { PINCH_PAN_SLACK, followIconSvg, readFollow, writeFollow } from "./cameraFollow";
 import type { HexPos } from "@gantt-quest/core";
 import { hexDistance } from "@gantt-quest/core";
-import { lookStep, lookYaw, BASE_HEIGHT, HARBOR_HEART_AT, BIG_REACH, ENEMIES, HEX_DIRS, SEATS, tileCost, WALL_FACE_HALF, WALL_ITEM_BOTTOM, WALL_ITEM_TOP, hexAt, reachable, tileAt, wallFace, wallFaces, type Biome, type Clime, type Emote, type Outfit, type Poi, type Tile, type WorldMap, type FloorLook, type WallLook } from "@gantt-quest/world";
+import { lookStep, lookYaw, BASE_HEIGHT, HARBOR_HEART_AT, BIG_REACH, ENEMIES, HEX_DIRS, SEATS, spanAt, tileCost, WALL_FACE_HALF, WALL_ITEM_BOTTOM, WALL_ITEM_TOP, hexAt, reachable, tileAt, wallFace, wallFaces, type Biome, type Clime, type Emote, type Outfit, type Poi, type Tile, type WorldMap, type FloorLook, type WallLook } from "@gantt-quest/world";
 import { fancy, fancyGrass, inkLine } from "./fancy";
 import { NightLife } from "./nightlife";
 import { Storm } from "./storm";
@@ -97,7 +97,7 @@ const isBoss = (kind: string) => !!ENEMIES[kind]?.boss;
 /** Rank-and-file drawn a size up: the heavy hitters. */
 const isBig = (kind: string) => kind === "brute" || kind === "bear" || kind === "snow_bear" || kind === "ogre" || kind === "troll";
 /** How tall an enemy is drawn. The Pack Leader is half as big again as the wolves it leads, and a Great Bear half again a Cave Bear. */
-const enemySize = (kind: string) => (kind === "alpha" ? 2.1 : kind === "great_bear" ? 2.4 : isBoss(kind) ? 1.9 : isBig(kind) ? 1.6 : 1.4);
+const enemySize = (kind: string) => (kind === "alpha" ? 2.1 : kind === "great_bear" ? 2.4 : kind === "guardian" ? 3.4 : isBoss(kind) ? 1.9 : isBig(kind) ? 1.6 : 1.4);
 
 /** Seconds between one pickup told over a hero's head and the next. */
 const PICKUP_GAP = 0.55;
@@ -572,6 +572,9 @@ const noise = (q: number, r: number, salt: number) => {
   const n = Math.sin(q * 127.1 + r * 311.7 + salt * 74.7) * 43758.5453;
   return n - Math.floor(n);
 };
+
+/** How many hexes an enemy of this kind stands on (ENEMIES `size`): it is drawn in the middle of them all. */
+const hexesOf = (kind: string): number => ENEMIES[kind.split("|")[0]]?.size ?? 1;
 
 interface Unit {
   /** Wearing Phase Treads (shown): it leaves a faint afterimage trail as it walks. */
@@ -1718,7 +1721,7 @@ export class WorldRenderer {
     for (const ev of events) {
       if (ev.t === "moved") {
         const unit = this.units.get(ev.heroId);
-        if (unit) unit.path = ev.path.map((p) => this.standAt(p));
+        if (unit) unit.path = ev.path.map((p) => this.bodyAt(unit.kind, p));
         continue;
       }
       const got = xp.get(ev.heroId) ?? { amount: 0, levelUp: false };
@@ -1874,7 +1877,7 @@ export class WorldRenderer {
     const last = unit.path[unit.path.length - 1];
     let from: HexPos = last ? worldToHex(last.x, last.z) : worldToHex(unit.root.position.x, unit.root.position.z - 0.25);
     for (const p of path) {
-      const at = this.standAt(p);
+      const at = this.bodyAt(unit.kind, p);
       unit.path.push(at);
       if (level(from) !== level(p)) (unit.leaps ??= new Map()).set(at, false);
       from = p;
@@ -1903,7 +1906,7 @@ export class WorldRenderer {
   stopWalkAt(id: string, at: HexPos) {
     const unit = this.units.get(id);
     if (!unit) return;
-    const stop = this.standAt(at);
+    const stop = this.bodyAt(unit.kind, at);
     const i = unit.path.findIndex((p) => Math.hypot(p.x - stop.x, p.z - stop.z) < 0.01);
     const dropped = i >= 0 ? unit.path.splice(i + 1) : unit.path.splice(0);
     if (i < 0) unit.path.push(stop);
@@ -3439,6 +3442,19 @@ export class WorldRenderer {
   }
 
   /**
+   * Where a unit of this kind (a sprite key) stands with its anchor on `pos`: the middle of its hex, or for one that
+   * stands on three (ENEMIES `size`) the middle of all three, on the highest of them.
+   */
+  private bodyAt(kind: string, pos: HexPos): THREE.Vector3 {
+    const n = hexesOf(kind);
+    if (n <= 1) return this.standAt(pos);
+    const all = spanAt(pos, n).map((p) => this.standAt(p));
+    const at = all.reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(all.length);
+    at.y = Math.max(...all.map((p) => p.y));
+    return at;
+  }
+
+  /**
    * Where a point above a hex sits on screen, in CSS pixels from the container's top left corner.
    * `lift` is how far above the ground to aim; the default is where a hero's name label hangs.
    * Null when the point is behind the camera or outside the view.
@@ -4732,11 +4748,12 @@ export class WorldRenderer {
     }
     // A zone's enemies: beside whoever else is on their hex. The fallen lie in the middle of theirs.
     for (const u of state.units ?? []) {
-      const pos = this.standAt(u.pos);
-      pos.z += 0.25;
+      const big = hexesOf(u.kind) > 1;
+      const pos = this.bodyAt(u.kind, u.pos);
+      if (!big) pos.z += 0.25;
       // The second on a hex has its plate above the first's, so the two can be told apart.
       let slot = 0;
-      if (!u.down) {
+      if (!u.down && !big) {
         const n = stacks.get(key(u.pos)) ?? 1;
         slot = seen.get(key(u.pos)) ?? 0;
         seen.set(key(u.pos), slot + 1);
@@ -4838,7 +4855,9 @@ export class WorldRenderer {
       if (fell || w.hp === undefined) this.clearArrows(unit);
 
       if (w.ring && !unit.ring) {
-        unit.ring = new THREE.Mesh(new THREE.RingGeometry(0.3, 0.44, 6), new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+        // Round all three hexes of one that stands on three.
+        const wide = hexesOf(w.kind) > 1 ? 2.4 : 1;
+        unit.ring = new THREE.Mesh(new THREE.RingGeometry(0.3 * wide, 0.44 * wide, 6), new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
         unit.ring.rotation.x = -Math.PI / 2;
         this.unitGroup.add(unit.ring);
       }

@@ -34,7 +34,7 @@ import { ALERT_RANGE, JOIN_RANGE, freeHexNear, generateZone } from "./gen";
 import { generateDelve } from "./delve";
 import { checkLoot, checkOpen, leaveBody, look, lootFor, openChest, payBounty, take } from "./loot";
 import { PARTY_SIZES, siteOpen, spaced } from "./sites";
-import { FREE_WALK, blast, blockerAt, inFight, isDead, pathIn, perkOf, roomAt, sameHex, sees, solid, unitAt, unitById, zoneReach } from "./geometry";
+import { FREE_WALK, big, blast, blockerAt, caught, covers, gap, inFight, isDead, meet, pathIn, perkOf, roomAt, sameHex, sees, solid, span, unitAt, unitById, zoneReach } from "./geometry";
 import { AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, ENEMY_MOVE_AP, FLEE_RANGE, ITEM_AP, STROLL_GRACE_MS, STROLL_STEP_MS, SUMMONS, STARTING_ITEMS, THROWABLES, THROWABLE_KINDS, cleanItems, commonCostFor, enemyHp, enemyMove, tacticOf } from "./kit";
 import { d20, heroMove, mod, rollDice, statOf } from "./rules";
 import { hiddenEnemies, sentToClient } from "./light";
@@ -129,7 +129,33 @@ export function growGroups(state: ZoneState): string[] {
       added.push(enemy.id);
     }
   }
+  makeRoom(state);
   return added;
+}
+
+/**
+ * The nearest place to `near` where `unit` can stand (all of it, for a big one: geometry.ts span), on ground, clear of
+ * everyone else and of anything that stands in the way. Null if there is none near.
+ */
+function placeFor(state: ZoneState, unit: Unit, near: HexPos): HexPos | null {
+  const clear = (p: HexPos) => !solid(tileAt(state.map, p)) && !blockerAt(state, p) && !state.units.some((u) => u.id !== unit.id && !isDead(u) && covers(u, p));
+  return freeHexNear(state.map, near, (p) => !span(unit, p).every(clear), (p) => tileAt(state.map, p));
+}
+
+/**
+ * Every big enemy (geometry.ts span) has room for all of itself where it stands: one made where its post leaves no
+ * room for the rest of it (the map was laid out with posts of one hex), or saved from before it was big, is moved to
+ * the nearest place that has, and keeps that as its post. Out of a fight only. Returns the same state, changed in place.
+ */
+export function makeRoom(state: ZoneState): ZoneState {
+  for (const u of state.units) {
+    if (!big(u) || u.down || inFight(state, u.id)) continue;
+    const there = placeFor(state, u, u.pos);
+    if (!there || sameHex(there, u.pos)) continue;
+    u.pos = there;
+    u.home = there;
+  }
+  return state;
 }
 
 /**
@@ -152,8 +178,8 @@ export function ensureEnemyAbilities(state: ZoneState): ZoneState {
   return state;
 }
 
-/** A saved zone, brought up to date as it is loaded: a way out of a cave (ensureMouth), and enemies' abilities (ensureEnemyAbilities). */
-export const loadZone = (state: ZoneState): ZoneState => ensureEnemyAbilities(ensureMouth(state));
+/** A saved zone, brought up to date as it is loaded: a way out of a cave (ensureMouth), enemies' abilities (ensureEnemyAbilities), and room for the big ones (makeRoom). */
+export const loadZone = (state: ZoneState): ZoneState => makeRoom(ensureEnemyAbilities(ensureMouth(state)));
 
 export function createZone(code: string, seed: string, options: ZoneOptions): ZoneState {
   const plan = options.delve ? generateDelve(seed, options) : generateZone(seed, options);
@@ -166,6 +192,7 @@ export function createZone(code: string, seed: string, options: ZoneOptions): Zo
     group.kinds.forEach((kind, i) => state.units.push(enemyUnit(state, kind, group.posts[i], id)));
   }
   ensureMouth(state);
+  makeRoom(state);
   if (!options.delve && open(state)) placeBell(state);
   return state;
 }
@@ -312,7 +339,7 @@ function enter(ctx: Ctx, enc: Encounter, unit: Unit): void {
  */
 function drawnIn(state: ZoneState, enc: Encounter, hero: Unit): boolean {
   const fled = !!enc.fled?.includes(hero.id);
-  return state.units.some((f) => enc.order.includes(f.id) && !f.down && (fled ? f.side !== hero.side && hexDistance(f.pos, hero.pos) <= FLEE_RANGE : hexDistance(f.pos, hero.pos) <= JOIN_RANGE));
+  return state.units.some((f) => enc.order.includes(f.id) && !f.down && (fled ? f.side !== hero.side && gap(f, hero) <= FLEE_RANGE : gap(f, hero) <= JOIN_RANGE));
 }
 
 /** Heroes near anyone in the fight are in it. */
@@ -462,7 +489,7 @@ function reinforce(ctx: Ctx, only?: readonly string[]): void {
   const heard = new Set<string>();
   for (const e of standing(state, "enemy")) {
     if (!e.group || state.groups[e.group]?.alerted || heard.has(e.group) || (only && !only.includes(e.group))) continue;
-    if (fighters.some((f) => hexDistance(f.pos, e.pos) <= HEAR_RANGE)) heard.add(e.group);
+    if (fighters.some((f) => gap(f, e) <= HEAR_RANGE)) heard.add(e.group);
   }
   for (const group of heard) ctx.events.push({ t: "noise", group });
   if (heard.size > 0) engage(ctx, [...heard], hero);
@@ -475,7 +502,7 @@ function noticedBy(state: ZoneState, unit: Unit): string[] {
   if (unseen(unit)) return [];
   for (const e of standing(state, "enemy")) {
     if (!e.group || state.groups[e.group]?.alerted) continue;
-    if (hexDistance(e.pos, unit.pos) <= ALERT_RANGE && sees(state.map, e.pos, unit.pos)) out.add(e.group);
+    if (gap(e, unit) <= ALERT_RANGE && sees(state.map, ...meet(e, unit))) out.add(e.group);
   }
   return [...out];
 }
@@ -661,7 +688,7 @@ function settle(ctx: Ctx): boolean {
     }
     for (const f of back) {
       const post = f.home ?? was.get(f.id)!;
-      f.pos = freeHexNear(state.map, post, (p) => !!unitAt(state, p) || blockerAt(state, p), (p) => tileAt(state.map, p)) ?? was.get(f.id)!;
+      f.pos = placeFor(state, f, post) ?? was.get(f.id)!;
     }
   } else {
     const groups = new Set(foes.map((f) => f.group));
@@ -681,7 +708,7 @@ function settle(ctx: Ctx): boolean {
     for (const h of heroes) h.pos = { q: -99, r: -99 };
     for (const f of band) {
       const post = f.home ?? was.get(f.id)!;
-      f.pos = freeHexNear(state.map, post, (p) => !!unitAt(state, p) || blockerAt(state, p), (p) => tileAt(state.map, p)) ?? post;
+      f.pos = placeFor(state, f, post) ?? post;
     }
     for (const h of heroes) h.pos = freeHexNear(state.map, state.start, (p) => !!unitAt(state, p) || blockerAt(state, p), (p) => tileAt(state.map, p)) ?? state.start;
   }
@@ -835,7 +862,15 @@ function dev(ctx: Ctx, by: string, op: DevOp): string | null {
     const first = roomAt(state, op.at, { id: "", side: "enemy" }) && !blockerAt(state, op.at) ? op.at : null;
     kinds.forEach((kind, i) => {
       const pos = (i === 0 && first) || free(op.at);
-      if (pos) state.units.push(enemyUnit(state, kind, pos, group));
+      if (!pos) return;
+      const enemy = enemyUnit(state, kind, pos, group);
+      // A big one goes where all of it has room, as near as there is.
+      if (big(enemy)) {
+        const room = placeFor(state, enemy, pos);
+        if (!room) return;
+        enemy.pos = enemy.home = room;
+      }
+      state.units.push(enemy);
     });
     // Put down near enough to a fight to hear it: it is in it at once, as it would be at the end of the round.
     reinforce(ctx, [group]);
@@ -1097,7 +1132,7 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
     if (wrong) return wrong;
     // Something that takes a shape can catch a group that had not noticed anyone: it has now. A mark on the map touches nobody.
     const area = new Set(tactic.chart ? [] : abilityArea(state, unit, action.ability, action.at, action.target).map(posKey));
-    const touched = state.units.filter((u) => u.id === action.target || area.has(posKey(u.pos)));
+    const touched = state.units.filter((u) => u.id === action.target || caught(u, area));
     const back = reachBack(state, unit, touched);
     if (back) return back;
     // Out of a fight too: there its cooldown runs down a round at a time on the clock (clock.ts).
@@ -1214,7 +1249,7 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
   if (wrong) return wrong;
   const def = THROWABLES[action.item];
   const area = new Set(blast(state.map, action.at, def.radius).map(posKey));
-  const touched = state.units.filter((u) => area.has(posKey(u.pos)));
+  const touched = state.units.filter((u) => caught(u, area));
   const back = reachBack(state, unit, touched);
   if (back) return back;
   const cost = spend(budget, ITEM_AP.throw);

@@ -454,8 +454,8 @@ describe("a hex is one side's or the other's", () => {
     hero(beside, "ann", "qa_paladin", at(5, 6));
     const foe = enemy(beside, "bandit", at(6, 6));
     const round: ZoneEvent[] = [];
-    expect(leavesReach(beside, at(6, 6), at(5, 6), at(5, 5))).toBe(false);
-    expect(leavesReach(beside, at(6, 6), at(5, 6), at(4, 6))).toBe(true);
+    expect(leavesReach(beside, foe, unit(beside, "ann"), at(5, 6), at(5, 5))).toBe(false);
+    expect(leavesReach(beside, foe, unit(beside, "ann"), at(5, 6), at(4, 6))).toBe(true);
     must(fight(beside), { type: "move", by: "ann", unit: "ann", to: at(5, 5) }, round);
     expect(got(round, "reaction")).toEqual([]);
     // Away from it altogether: the blow.
@@ -657,7 +657,7 @@ describe("cliffs and ladders", () => {
     // Ann walks away from under the bandit on the cliff top: it cannot strike at her, so it does not.
     unit(state, "ann").pos = at(7, 5);
     unit(state, below.id).pos = at(1, 1);
-    expect(leavesReach(state, above.pos, at(7, 5), at(6, 5))).toBe(false);
+    expect(leavesReach(state, above, unit(state, "ann"), at(7, 5), at(6, 5))).toBe(false);
     const events: ZoneEvent[] = [];
     must(state, { type: "move", by: "ann", unit: "ann", to: at(5, 5) }, events);
     expect(got(events, "reaction")).toEqual([]);

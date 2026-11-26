@@ -9,7 +9,7 @@
 // Everywhere else it is light enough to see: all of this is a no-op.
 
 import { hexDistance, posKey, type HexPos } from "@gantt-quest/core";
-import { close, inFight, sees } from "./geometry";
+import { gap, inFight, sees, span } from "./geometry";
 import { propOf } from "./props";
 import { AURAS, FIRE_GLOW, LIGHT_RADIUS } from "./kit";
 import { GLOWCAP_LIGHT } from "./forage";
@@ -77,8 +77,8 @@ export const inDark = (state: ZoneState, pos: HexPos, lit: Set<string> | null = 
 
 /** Whether the party can make this unit out: it stands in the light, or right beside a hero. */
 export function seenByHeroes(state: ZoneState, unit: Unit, lit: Set<string> | null = litHexes(state)): boolean {
-  if (!lit || lit.has(posKey(unit.pos))) return true;
-  return state.units.some((h) => h.side === "hero" && !h.down && close(h.pos, unit.pos));
+  if (!lit || span(unit).some((p) => lit.has(posKey(p)))) return true;
+  return state.units.some((h) => h.side === "hero" && !h.down && gap(h, unit) <= 1);
 }
 
 /** The enemies the dark hides from the party right now. */

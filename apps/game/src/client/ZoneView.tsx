@@ -95,6 +95,7 @@ import {
   tileAt,
   FORCE_DC,
   unitAt,
+  covers,
   unopened,
   unlooted,
   lootIn,
@@ -864,6 +865,10 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         if (u) u.conditions = u.conditions.filter((c) => c.kind !== "invisible");
         later(() => view?.floatOver(ev.id, "Seen!", CONDITION_INFO.invisible.color));
         say(`${name(ev.id)} gives themselves away.`);
+      } else if (ev.t === "heavy") {
+        // Something tried to move one bigger than a hex: it stays put, and says why.
+        later(() => view?.floatOver(ev.id, "Too Heavy!", "#e6e1d6"));
+        say(`${name(ev.id)} is too heavy to move.`);
       } else if (ev.t === "shoved") {
         const u = find(ev.target);
         const to = ev.to;
@@ -2052,7 +2057,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
 
   const z = state ? asState(state) : null;
   /** Who is on this hex: whoever stands on it or, with nobody standing there, a dead enemy lying on it. */
-  const unitOn = (pos: HexPos | null) => (pos && z ? (unitAt(z, pos) ?? z.units.find((u) => sameHex(u.pos, pos))) : undefined);
+  const unitOn = (pos: HexPos | null) => (pos && z ? (unitAt(z, pos) ?? z.units.find((u) => covers(u, pos))) : undefined);
   /** A crate still whole on this hex. */
   const crateOn = (pos: HexPos | null) => (pos && state ? crateAt(state, pos) : undefined);
   /** The hexes something of this range reaches from where you stand: further from above, when `high` (a shot or a spell). */
@@ -2201,7 +2206,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     const near = reach.get(posKey(hover));
     const got = near ?? far?.get(posKey(hover));
     // An enemy's own hex is nowhere to walk to (a click on it walks up beside it): no walk is priced over it, and it is not called "no way" either.
-    if (!got) return state.units.some((u) => u.side !== act.side && !u.down && sameHex(u.pos, hover)) ? null : { none: true as const };
+    if (!got) return state.units.some((u) => u.side !== act.side && !u.down && covers(u, hover)) ? null : { none: true as const };
     if (got.cost === 0) return null;
     const from = near ? reach : far!;
     const path = pathIn(from, hover) ?? [];
@@ -2211,7 +2216,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     if (!budget.disengaged && !act.conditions.some((c) => c.kind === "invisible")) {
       for (const step of path) {
         for (const u of state.units) {
-          if (u.side !== act.side && !u.down && enc.order.includes(u.id) && !enc.reacted.includes(u.id) && leavesReach(state, u.pos, at, step)) drawn.add(u.id);
+          if (u.side !== act.side && !u.down && enc.order.includes(u.id) && !enc.reacted.includes(u.id) && leavesReach(state, u, act, at, step)) drawn.add(u.id);
         }
         at = step;
       }
@@ -2332,7 +2337,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     const unsure = owed.current.has(unit.id) || aheadNow.current.some((a) => a.kind === "walk" && a.off && a.unit === unit.id);
     const free = !state.encounter?.order.includes(unit.id) && strolling.current.has(unit.id);
     const left = !unsure && free && view ? view.walkLeft(unit.id) : [];
-    const held = (pos: HexPos) => state.units.some((u) => u.id !== unit.id && !(u.down && u.side === "enemy") && sameHex(u.pos, pos));
+    const held = (pos: HexPos) => state.units.some((u) => u.id !== unit.id && !(u.down && u.side === "enemy") && covers(u, pos));
     const cut = left.length > 1 && !held(left[0]) ? left[0] : null;
     const from = cut ? { ...state, units: state.units.map((u) => (u.id === unit.id ? { ...u, pos: cut } : u)) } : state;
     const seen = unsure ? null : foreseeWalk(from, unit.id, to);

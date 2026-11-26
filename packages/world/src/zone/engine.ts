@@ -5,7 +5,7 @@
 import { hexDistance, posKey, type StatKey } from "@gantt-quest/core";
 import { tileAt } from "../map";
 import type { Rng } from "../rng";
-import { adjacent, close, elevOf, inFight, perkOf } from "./geometry";
+import { elevOf, gap, gapTo, inFight, meet, nearOf, perkOf, span } from "./geometry";
 import { ABILITIES, EFFECT_TICK, STACK_TURNS, SUNDERED_DEFENCE, isStacking, type Inflict, type StackingEffect } from "../content";
 import { AQUEOUS, AURAS, CONDITION_INFO, CORAL_ARMOR, ENEMY_KIT, FORTIFY, SHIELD_SET_ASIDE, enemyDefence, enemySave, healDice } from "./kit";
 import { inDark } from "./light";
@@ -184,7 +184,7 @@ export const DEBUFFS: readonly Condition[] = ["bleeding", "burning", "stunned", 
 
 /** Fortify: one of the side that raised a wall, standing beside it, is the steadier for it. */
 export const wallDefence = (state: Pick<ZoneState, "weather">, unit: Unit): number =>
-  (state.weather ?? []).some((w) => w.kind === "wall" && w.side === unit.side && w.hexes.some((p) => adjacent(p, unit.pos))) ? FORTIFY.defence : 0;
+  (state.weather ?? []).some((w) => w.kind === "wall" && w.side === unit.side && w.hexes.some((p) => gapTo(unit, p) === 1)) ? FORTIFY.defence : 0;
 
 /** A unit's Defence. With the board (`state`), a Dour Shanty it stands in, and a wall of its side's it stands beside, count too. */
 export const defenceOf = (unit: Unit, state?: Pick<ZoneState, "units" | "weather">): number =>
@@ -194,7 +194,7 @@ export const defenceOf = (unit: Unit, state?: Pick<ZoneState, "units" | "weather
   (has(unit, "sundered") ? SUNDERED_DEFENCE : 0);
 
 /** Whether a unit stands in water (Aqueous Regeneration heals more there). */
-export const inWater = (state: ZoneState, unit: Unit): boolean => state.surfaces[posKey(unit.pos)]?.kind === "water";
+export const inWater = (state: ZoneState, unit: Unit): boolean => span(unit).some((p) => state.surfaces[posKey(p)]?.kind === "water");
 
 /**
  * Heals that come again as a unit's turn starts (or a round passes out of a fight): Aqueous Regeneration, more for one
@@ -249,7 +249,7 @@ function passSpot(ctx: Ctx, from: Unit, spot: UnitCondition): void {
   const { state } = ctx;
   const next = state.units
     .filter((u) => u.side === from.side && u.id !== from.id && !u.down && (!state.encounter || inFight(state, u.id)))
-    .sort((a, b) => hexDistance(a.pos, from.pos) - hexDistance(b.pos, from.pos) || a.id.localeCompare(b.id))[0];
+    .sort((a, b) => gap(a, from) - gap(b, from) || a.id.localeCompare(b.id))[0];
   if (!next) return;
   addCondition(ctx, next, "black_spot", spot.rounds);
   const laid = next.conditions.find((c) => c.kind === "black_spot");
@@ -370,30 +370,31 @@ export function attackContext(state: ZoneState, attacker: Unit, target: Unit, op
   if (has(attacker, "lucky")) adv("you are Lucky");
   for (const [kind, spur] of spursOn(attacker)) if (spur.advantage) adv(`you are ${CONDITION_INFO[kind].name}`);
   if (has(target, "guiding_light") && target.side !== attacker.side) adv("the target is lit by Guiding Light");
-  if (attacker.side === "enemy" && ENEMY_KIT[attacker.kind]?.pack && state.units.some((u) => u.id !== attacker.id && u.side === "enemy" && !u.down && close(u.pos, target.pos))) adv("the pack is on the target");
+  if (attacker.side === "enemy" && ENEMY_KIT[attacker.kind]?.pack && state.units.some((u) => u.id !== attacker.id && u.side === "enemy" && !u.down && gap(u, target) <= 1)) adv("the pack is on the target");
   if (has(attacker, "poisoned")) dis("Poisoned");
   if (has(attacker, "glitched")) dis("Fumbling");
   if (has(attacker, "black_spot")) dis("the Black Spot is on you");
   if (has(attacker, "red_sky")) dis("Red Sky at Morning");
   // The party strikes blind at what the light does not reach. The things of the caves see in the dark.
-  if (attacker.side === "hero" && inDark(state, target.pos)) dis("the target is in the dark");
+  if (attacker.side === "hero" && span(target).every((p) => inDark(state, p))) dis("the target is in the dark");
   if (!opts.melee) {
-    if (state.units.some((u) => u.side !== attacker.side && !u.down && inFight(state, u.id) && close(u.pos, attacker.pos))) dis("an enemy is beside you");
+    if (state.units.some((u) => u.side !== attacker.side && !u.down && inFight(state, u.id) && gap(u, attacker) <= 1)) dis("an enemy is beside you");
     if (has(target, "prone")) dis("the target is Prone");
   }
   let mods = 0;
   // A Beacon on the attacker, or on an ally near enough (AURAS.range): a steady bonus to hit, however many are lit.
-  if (state.units.some((u) => u.side === attacker.side && !u.down && has(u, "beacon") && hexDistance(u.pos, attacker.pos) <= AURAS.range)) {
+  if (state.units.some((u) => u.side === attacker.side && !u.down && has(u, "beacon") && gap(u, attacker) <= AURAS.range)) {
     mods += AURAS.beaconHit;
     notes.push(`+${AURAS.beaconHit} ${has(attacker, "beacon") ? "your Beacon" : "an ally's Beacon"}`);
   }
   const sung = songHit(state, attacker);
   if (sung > 0) { mods += sung; notes.push(`+${sung} Lively Shanty`); }
-  const rise = elevOf(state.map, attacker.pos) - elevOf(state.map, target.pos);
+  const [from, to] = meet(attacker, target);
+  const rise = elevOf(state.map, from) - elevOf(state.map, to);
   if (!opts.melee) {
     if (rise > 0) { mods += 2; notes.push("+2 high ground"); }
     if (rise < 0) { mods -= 2; notes.push("-2 shooting uphill"); }
-    if (tileAt(state.map, target.pos)?.biome === "forest") { mods -= 2; notes.push("-2 the target is among trees"); }
+    if (tileAt(state.map, nearOf(target, attacker.pos))?.biome === "forest") { mods -= 2; notes.push("-2 the target is among trees"); }
   } else if (Math.abs(rise) >= 2) {
     // Only a ladder joins two that far apart: whoever holds the top of it has the better of it.
     if (rise > 0) { mods += 2; notes.push("+2 striking down a ladder"); }

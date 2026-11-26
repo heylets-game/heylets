@@ -12,7 +12,7 @@ import { hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/cor
 import { tileAt } from "../map";
 import { alliesReached, leaps, leavesReach, lungeLanding, shiftInto, shoveDest, sweepHexes } from "./combat";
 import { has } from "./engine";
-import { HIGH_REACH, inFight, reachFrom, sameHex, seesFor, strikes } from "./geometry";
+import { HIGH_REACH, covers, gap, inFight, meet, nearOf, reachFrom, reaches, sameHex, seesFor, span, strikes } from "./geometry";
 import { ENEMY_BURST, SPLASH_SHARE, type EnemyStrike, type Mind } from "./kit";
 import { diceAverage } from "./rules";
 import { clusterHexes } from "./weather";
@@ -50,8 +50,15 @@ export function strikeReaches(state: ZoneState, enemy: Unit, pos: HexPos, attack
   return aimReaches(state, enemy, pos, attack, hero.pos);
 }
 
-/** Whether an attack of an enemy's (not a leap) reaches from `pos` to the hex `at`, whoever is on it: as strikeReaches. */
+/**
+ * Whether an attack of an enemy's (not a leap) reaches from `pos` to the hex `at`, whoever is on it: as strikeReaches.
+ * A big enemy (geometry.ts span) anchored at `pos` reaches from any of its hexes.
+ */
 function aimReaches(state: ZoneState, enemy: Unit, pos: HexPos, attack: EnemyStrike, at: HexPos): boolean {
+  return span(enemy, pos).some((p) => aimReachesFrom(state, enemy, p, attack, at));
+}
+
+function aimReachesFrom(state: ZoneState, enemy: Unit, pos: HexPos, attack: EnemyStrike, at: HexPos): boolean {
   if (attack.range === 1) return strikes(state.map, pos, at);
   // The lie of the land is looked up only where it could settle it: height adds up to HIGH_REACH to a range and takes nothing from it.
   const far = hexDistance(pos, at);
@@ -94,7 +101,7 @@ function spreadAims(look: Look, from: HexPos, attack: EnemyStrike, targets: read
   const out: Aim[] = [];
   for (const at of aims) {
     const hexes = area ? clusterHexes(state, from, at, area) : sweepHexes(state, from, at, sweep!);
-    const caught = targets.filter((h) => hexes.some((p) => sameHex(p, h.pos)));
+    const caught = targets.filter((h) => hexes.some((p) => covers(h, p)));
     if (caught.length > 0) out.push({ at, caught });
   }
   return out;
@@ -109,7 +116,7 @@ export function leapRisk(state: ZoneState, enemy: Unit, from: HexPos, land: HexP
   if (from.q === land.q && from.r === land.r) return 1;
   const reacted = state.encounter?.reacted ?? [];
   const strikers = state.units.filter(
-    (u) => u.side !== enemy.side && !u.down && inFight(state, u.id) && !reacted.includes(u.id) && !has(u, "stunned") && !has(u, "prone") && leavesReach(state, u.pos, from, land),
+    (u) => u.side !== enemy.side && !u.down && inFight(state, u.id) && !reacted.includes(u.id) && !has(u, "stunned") && !has(u, "prone") && leavesReach(state, u, enemy, from, land),
   ).length;
   const kind = state.surfaces[posKey(land)]?.kind;
   return 0.5 ** strikers * (kind && HARMFUL.has(kind) ? 0.5 : 1);
@@ -117,7 +124,7 @@ export function leapRisk(state: ZoneState, enemy: Unit, from: HexPos, land: HexP
 
 /** The heroes a burst from `pos` catches: everyone within ENEMY_BURST it can see. */
 const caughtBy = (look: Look, pos: HexPos, targets: readonly Unit[]): Unit[] =>
-  targets.filter((h) => hexDistance(pos, h.pos) <= ENEMY_BURST && seesFor(look.state, look.enemy.side, pos, h.pos));
+  targets.filter((h) => gap(look.enemy, h, pos) <= ENEMY_BURST && seesFor(look.state, look.enemy.side, ...meet(look.enemy, h, pos)));
 
 /**
  * One hero: the damage it does. Neither how likely it is to land nor how hurt they are comes into it: it picks no one
@@ -178,12 +185,13 @@ const burst: Behaviour = {
  * not come into it.
  */
 const shove: Behaviour = {
-  reaches: (look, from, _attack, targets) => targets.some((h) => strikes(look.state.map, from, h.pos)),
+  reaches: (look, from, _attack, targets) => targets.some((h) => reaches(look.state.map, look.enemy, h, from)),
   value(look, from, attack, targets) {
     let best: Use | null = null;
     for (const hero of targets) {
-      if (!strikes(look.state.map, from, hero.pos) || has(hero, "prone")) continue;
-      const into = shiftInto(look.state, hero.pos, shoveDest(from, hero.pos), hero);
+      if (!reaches(look.state.map, look.enemy, hero, from) || has(hero, "prone")) continue;
+      // Shoved straight away from the hex of a big one nearest them.
+      const into = shiftInto(look.state, hero.pos, shoveDest(nearOf(look.enemy, hero.pos, from), hero.pos), hero);
       if (!into || into.how === "open") continue;
       let worth = (into.how === "pit" ? Math.max(8, hero.hp) : 2.5 * (into.levels - 1) + 2) * (look.whim?.(attack, hero) ?? 1);
       if (has(hero, "taunting")) worth *= 3;

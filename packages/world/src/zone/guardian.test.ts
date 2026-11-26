@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { at, flatBoard, has, must, standEnemy as enemy, standHero, unit } from "../test/zoneBoard";
-import { hexDistance, type HexPos } from "@gantt-quest/core";
+import { GRID, at, fails, flatBoard, has, must, standEnemy as enemy, standHero, unit } from "../test/zoneBoard";
+import { hexDistance, posKey, type HexPos } from "@gantt-quest/core";
 import { makeRng } from "../rng";
-import { enemyAct } from "./combat";
+import { checkAbility, enemyAct, push, shift } from "./combat";
+import { covers, gapTo, roomFor, span, unitAt, zoneReach } from "./geometry";
+import { loadZone } from "./zone";
 import { ENEMIES } from "../content";
 import { enemyStrikes } from "./kit";
 import { quakeAtTurn, tickWeather } from "./weather";
@@ -66,8 +68,10 @@ describe("a Guardian's Earthquake", () => {
     expect(earthquake.kit.aftershock?.saveOr).toEqual({ effect: "prone", turns: 1 });
   });
 
-  it("shakes everyone within 2 hexes now, for half on a save, and leaves the ground there cracked", () => {
-    const { state, guardian } = setUp(at(8, 6), [at(7, 6), at(10, 6), at(11, 6)]);
+  it("shakes everyone within 2 hexes of any of its hexes now, for half on a save, and leaves the ground there cracked", () => {
+    const { state, guardian } = setUp(at(8, 6), [at(7, 6), at(11, 6), at(12, 6)]);
+    const g = unit(state, guardian);
+    expect([gapTo(g, at(7, 6)), gapTo(g, at(11, 6)), gapTo(g, at(12, 6))]).toEqual([1, 2, 3]);
     const ctx = ctxOf(state, 3);
     enemyAct(ctx, unit(ctx.state, guardian), earthquake, null);
     const hurt = (id: string) => ctx.events.filter((e) => e.t === "hit" && e.target === id);
@@ -77,8 +81,10 @@ describe("a Guardian's Earthquake", () => {
     // The first shaking leaves nobody Prone.
     expect(has(ctx.state, "ann", "prone") || has(ctx.state, "bo", "prone")).toBe(false);
     const quake = ctx.state.weather?.find((w) => w.kind === "quake");
-    expect(quake?.hexes).toHaveLength(19);
-    expect(quake?.hexes.every((p) => hexDistance(p, unit(ctx.state, guardian).pos) <= 2)).toBe(true);
+    // Every hex within 2 of any of its three, each once.
+    const within: string[] = [];
+    for (let row = 0; row < GRID.rows; row++) for (let col = 0; col < GRID.cols; col++) if (gapTo(g, at(col, row)) <= 2) within.push(posKey(at(col, row)));
+    expect(quake?.hexes.map(posKey).sort()).toEqual(within.sort());
   });
 
   it("heaves as the Guardian's next turn begins, harder, on whoever is still on it, and then is gone", () => {
@@ -147,5 +153,91 @@ describe("a Guardian's Earthquake", () => {
     unit(ctx.state, guardian).down = true;
     tickWeather(ctx);
     expect(ctx.state.weather?.some((w) => w.kind === "quake")).toBe(false);
+  });
+});
+
+/** On to ann's turn, the Guardian's passing with the AI off. */
+function annsTurn(state: ZoneState): ZoneState {
+  for (let n = 0; n < 6 && !(state.encounter!.acting.includes("ann") && !state.encounter!.done.includes("ann")); n++) state = must(state, { type: "timeout" });
+  return state;
+}
+
+describe("a Guardian is three hexes big", () => {
+  it("stands on its hex, the one east of it and the one south-east, and nobody else can stand on any of them", () => {
+    const { state, guardian } = setUp(at(8, 6), [at(5, 6)]);
+    const g = unit(state, guardian);
+    expect(span(g).map(posKey)).toEqual([at(8, 6), at(9, 6), at(8, 7)].map(posKey));
+    for (const p of span(g)) expect(unitAt(state, p)?.id).toBe(guardian);
+    // Ann can walk round it, not onto it.
+    const reach = zoneReach(state, unit(state, "ann"), 20);
+    for (const p of span(g)) expect(reach.has(posKey(p))).toBe(false);
+    expect(reach.has(posKey(at(10, 6)))).toBe(true);
+  });
+
+  it("is in reach of a blow from beside any of its hexes", () => {
+    // Beside the south-east hex only (at(8, 7)), two hexes from its anchor.
+    const { state, guardian } = setUp(at(8, 6), [at(8, 8)]);
+    expect(hexDistance(unit(state, "ann").pos, unit(state, guardian).pos)).toBe(2);
+    expect(checkAbility(state, unit(state, "ann"), "bash", { target: guardian })).toBeNull();
+  });
+
+  it("strikes at anyone beside any of its hexes", () => {
+    const { state, guardian } = setUp(at(8, 6), [at(10, 6)]);
+    let landed = false;
+    for (let seed = 1; seed <= 10 && !landed; seed++) {
+      const ctx = ctxOf(state, seed);
+      enemyAct(ctx, unit(ctx.state, guardian), stoneFist, unit(ctx.state, "ann"));
+      landed = ctx.events.some((e) => e.t === "hit" && e.target === "ann");
+      // Knocked straight away from the hex of it beside her: east, not off at a slant from its anchor.
+      if (landed) expect(unit(ctx.state, "ann").pos).toEqual(at(11, 6));
+    }
+    expect(landed).toBe(true);
+  });
+
+  it("walks only where all of it has room", () => {
+    const { state, guardian } = setUp(at(8, 6), [at(2, 2)]);
+    const g = unit(state, guardian);
+    const reach = zoneReach(state, g, 6);
+    expect(reach.size).toBeGreaterThan(1);
+    for (const r of reach.values()) if (r.stop) expect(roomFor(state, g, r.pos), posKey(r.pos)).toBe(true);
+    // Nor next to the edge of the map, where one of its hexes would be off it.
+    expect([...reach.values()].some((r) => !roomFor(state, g, r.pos))).toBe(false);
+  });
+
+  it("is too heavy to push, pull or sweep: it does not budge, and says so", () => {
+    const { state, guardian } = setUp(at(8, 6), [at(7, 6)]);
+    const ctx = ctxOf(state, 1);
+    expect(push(ctx, at(7, 6), unit(ctx.state, guardian), "ann")).toBe("heavy");
+    expect(shift(ctx, unit(ctx.state, guardian), at(10, 6), "ann")).toBe("heavy");
+    expect(unit(ctx.state, guardian).pos).toEqual(at(8, 6));
+    // No knock against what it was not pushed into, either.
+    expect(has(ctx.state, guardian, "prone")).toBe(false);
+    expect(ctx.events.filter((e) => e.t === "heavy" && e.id === guardian)).toHaveLength(2);
+    expect(ctx.events.some((e) => e.t === "shoved" || e.t === "hit")).toBe(false);
+  });
+
+  it("stays put when a hero shoves it", () => {
+    let { state, guardian } = setUp(at(8, 6), [at(7, 6)]);
+    state = annsTurn(state);
+    state = must(state, { type: "common", by: "ann", unit: "ann", what: "shove", target: guardian });
+    expect(unit(state, guardian).pos).toEqual(at(8, 6));
+    expect(has(state, guardian, "prone")).toBe(false);
+  });
+
+  it("is moved, as it loads, to where all of it has room, and keeps that as its post", () => {
+    const { state, guardian } = setUp(at(8, 6), [at(2, 2)]);
+    const g = unit(state, guardian);
+    // Someone stands where its east hex would be.
+    Object.assign(standHero(state, "bo", at(9, 6), { classId: "qa_paladin", level: 1, armor: 0, power: 1, abilities: [], items: {} }), {});
+    state.encounter = null;
+    loadZone(state);
+    expect(roomFor(state, g, g.pos)).toBe(true);
+    expect(g.home).toEqual(g.pos);
+    expect(covers(g, at(9, 6))).toBe(false);
+  });
+
+  it("cannot jump", () => {
+    let { state, guardian } = setUp(at(8, 6), [at(2, 2)]);
+    expect(fails(state, { type: "common", by: "ann", unit: guardian, what: "jump", at: at(8, 4) })).toBeTruthy();
   });
 });

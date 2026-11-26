@@ -1121,12 +1121,12 @@ function spotWithin(at: THREE.Vector3, radius: number, lift = 0): THREE.Vector3 
 }
 
 /**
- * A Guardian's Earthquake, both turns of it: how far the shaking reaches (past every hero two hexes off, ENEMY_BURST),
+ * A Guardian's Earthquake, both turns of it: how far the shaking reaches from the middle of its three hexes (past every hero two hexes off any of them, ENEMY_BURST),
  * and for each turn the ripples sent out (how many, how long each takes, the seconds between), the cracks (how many,
  * how wide), and how hard the view is shaken.
  */
 export const EARTHQUAKE = {
-  reach: HEX * 2.35,
+  reach: HEX * 2.75,
   first: { ripples: 4, life: 0.55, apart: 0.22, cracks: 7, width: 0.08, shake: 0.05 },
   heave: { ripples: 4, life: 0.6, apart: 0.3, cracks: 11, width: 0.24, shake: 0.3 },
 };
