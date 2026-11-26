@@ -69,6 +69,8 @@
 }
 .dev-dock input[type="checkbox"]:checked { border-color: #6b4a12; box-shadow: 0 0 0 1px var(--d-brass); background: linear-gradient(180deg, #fbe7a6, #e0b04a); }
 .dev-dock input[type="checkbox"]:checked::after { content: ""; display: block; width: 4px; height: 8px; margin: 1px auto 0; border: solid #2a1406; border-width: 0 2px 2px 0; rotate: 45deg; }
+/* A switch that matters (the combat sandbox): the width of its section, and chunkier than the rest. */
+.dev-dock button.dev-big { width: 100%; padding: 8px 12px 9px; font-family: var(--font-head); font-size: 15px; letter-spacing: 0.06em; }
 .dev-dock-btn { flex: none; width: 24px; height: 22px; padding: 0 !important; display: grid; place-items: center; font-size: 15px; font-weight: bold; line-height: 1; }
 .dev-dock .dev-kit-hero { border: 1px solid rgba(107, 53, 36, 0.8); border-radius: 3px; background: rgba(0, 0, 0, 0.18); }
 .dev-tabs { display: flex; flex-wrap: wrap; gap: 4px; }

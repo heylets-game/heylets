@@ -143,8 +143,10 @@ export function MapsTab() {
           <p><strong>Map <span className="selectable code">{dev.open.code}</span></strong> <span className="muted">is on screen.</span></p>
           <DevSection id="maps.sandbox" title="Combat sandbox" open>
             <p className="muted">A fight goes by your hand: no enemy takes its turn, no turn ends of itself, nothing is timed, and there is no battle music. Turns come round when you move them on.</p>
+            <button className={`dev-big ${dev.flags.sandbox ? "selected" : ""}`} aria-pressed={dev.flags.sandbox} onClick={() => send({ op: "sandbox", on: !dev.flags.sandbox })}>
+              {dev.flags.sandbox ? "Sandbox active" : "Enable Sandbox"}
+            </button>
             <div className="dev-row">
-              <label><input type="checkbox" checked={dev.flags.sandbox} onChange={(e) => send({ op: "sandbox", on: e.target.checked })} /> Sandbox</label>
               {dev.flags.sandbox && (
                 <>
                   <button className="small" onClick={() => send({ op: "next_turn" })}>Next turn</button>
