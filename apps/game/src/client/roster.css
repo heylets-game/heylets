@@ -34,6 +34,8 @@ button.cm-main:hover:not(:disabled) { border-color: var(--line); background: rgb
   background: #14122a; border: 1px solid var(--line);
 }
 .cm-face img { width: 36px; height: 44px; }
+/* Selected to walk with the one being played (shift-click, or P): the same green as their marker on the map. */
+.grouped .cm-face { border-color: #7dff9a; box-shadow: 0 0 4px rgba(125, 255, 154, 0.6); }
 .mine .cm-face { border-color: var(--gold); }
 /* Presence: a lit dot ringed in the panel colour, tucked into the portrait's corner. */
 .cm-face .dot { position: absolute; right: -4px; bottom: -4px; width: 10px; height: 10px; border: 2px solid var(--ink); }

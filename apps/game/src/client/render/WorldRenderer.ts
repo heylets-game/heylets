@@ -5129,7 +5129,7 @@ export class WorldRenderer {
     else if (e.key === "f" || e.key === "F") this.tiltBy(-0.18, true);
     else if (e.key === "c" || e.key === "C") this.setFollow(!this.follow || this.followHeld);
     else if ((e.key === "v" || e.key === "V") && this.combat.enabled && !e.repeat) this.combat.toggle();
-    else if (import.meta.env.DEV && (e.key === "p" || e.key === "P")) this.setPost(!this.post);
+    else if (import.meta.env.DEV && (e.key === "o" || e.key === "O")) this.setPost(!this.post);
     else if (PAN_KEYS[e.key.toLowerCase()]) {
       this.heldKeys.add(e.key.toLowerCase());
       // Arrow keys would otherwise scroll whatever panel has focus.
