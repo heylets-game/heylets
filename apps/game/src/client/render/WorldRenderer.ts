@@ -29,7 +29,7 @@ import { FlotsamMarks, type FlotsamMark } from "./flotsam";
 import { OVERLAY_LAYER, PostFx, type Air } from "./post";
 import { fishMount } from "./catchArt";
 import { FRAME, OUTLINE, SITTING_DROP, inflate, makeFigure, type Figure } from "./figures";
-import { SIGNATURE_MOVES, type MoveStage } from "./signatureMoves";
+import { POUNCE_LANDS, POUNCE_OVER, SIGNATURE_MOVES, pounceAt, type MoveStage } from "./signatureMoves";
 import { HIDES, hidingMaterial } from "./silhouette";
 import { BOAT_SCALE, OARLOCKS, ROWER_SEAT, aimOar, rowboatModel, shipOar } from "./rowboat";
 import { BoatWake, WAKE_STEP } from "./wake";
@@ -667,6 +667,8 @@ interface Unit {
   path: THREE.Vector3[];
   /** Brief attack lunge, decays to zero. */
   kick: THREE.Vector3;
+  /** A leap at a target under way (signatureMoves.ts pounceAt): begun at `at` on the render clock, along `way` (a unit length), at a target `far` off. */
+  pounce?: { at: number; way: THREE.Vector3; far: number };
   /** Lean into an attack, in radians; decays to zero. */
   lean: number;
   /** Distance walked, which drives the hop, and the current hop height. */
@@ -2297,6 +2299,19 @@ export class WorldRenderer {
     a.bob = 0.2;
   }
 
+  /** Leap a creature bodily at its target and home again (signatureMoves.ts pounceAt). Returns the seconds until it lands. */
+  private pounce(actorId: string, targetId: string): number {
+    const a = this.units.get(actorId);
+    const t = this.units.get(targetId);
+    if (!a || !t || a === t) return 0;
+    const way = t.goal.clone().sub(a.goal);
+    const far = way.length();
+    if (far < 1e-4) return 0;
+    a.pounce = { at: this.clock, way: way.divideScalar(far), far };
+    a.kick.set(0, 0, 0);
+    return POUNCE_LANDS;
+  }
+
   /** Who a unit is in the fight, for its voice: looked up when asked, as the fight's line-up can change. */
   private fighter(id: string): Fighter | undefined {
     const h = this.state?.heroes.find((x) => x.id === id);
@@ -2392,6 +2407,7 @@ export class WorldRenderer {
         later: (run, seconds) => this.later(run, seconds),
         sound: () => sounds.attack(ability, attackStyle(ability), this.fighter(actorId), this.spot(actorId)),
         lunge: () => this.lunge(actorId, targetId),
+        pounce: () => this.pounce(actorId, targetId),
         jolt: () => {
           if (landed) t.kick.set(dir * 0.1, 0, 0);
         },
@@ -5799,6 +5815,8 @@ export class WorldRenderer {
       let touched = false;
       // A jump whose landing place is no longer the next on the way (knocked aside, sent elsewhere) is off.
       if (unit.leap && unit.leap.to !== unit.path[0]) unit.leap = undefined;
+      // Sent walking (or knocked aside) mid-pounce: the walk takes over from it.
+      if (unit.path.length > 0) unit.pounce = undefined;
       if (unit.path.length === 0 && unit.leaps?.size) unit.leaps.clear();
       if (unit.path.length > 0) {
         const next = this.stepSpot.copy(unit.path[0]);
@@ -5864,9 +5882,17 @@ export class WorldRenderer {
         }
         unit.stride = 0;
         const goal = this.restSpot.copy(unit.goal).add(unit.kick);
+        const pounce = unit.pounce;
+        if (pounce && this.clock - pounce.at >= POUNCE_OVER) unit.pounce = undefined;
+        if (unit.pounce && pounce) {
+          // Leaping at a target: carried along the leap exactly, through the air and home again (signatureMoves.ts).
+          const at = pounceAt(this.clock - pounce.at, pounce.far);
+          p.copy(goal.addScaledVector(pounce.way, at.ahead));
+          unit.bob = at.up;
+        }
         // Put somewhere else with no walk to get there (sent back to its post when a fight ends, set down at the
         // spawn): it is simply there, not dragged across the map in a streak.
-        if (Math.hypot(goal.x - p.x, goal.z - p.z) > 3.5) p.copy(goal);
+        else if (Math.hypot(goal.x - p.x, goal.z - p.z) > 3.5) p.copy(goal);
         else p.lerp(goal, 1 - Math.exp(-dt * 14));
         unit.kick.multiplyScalar(Math.exp(-dt * 9));
       }

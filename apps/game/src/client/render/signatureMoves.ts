@@ -33,6 +33,11 @@ export interface MoveStage {
   sound(): void;
   /** Spring the attacker at the target: for a creature, which has no swing of its own. */
   lunge(): void;
+  /**
+   * Leap the attacker bodily at the target and home again after (see pounceAt): a crouch, a jump through the air
+   * that comes down in the target's face, a moment there, and a hop back. Returns the seconds until it lands.
+   */
+  pounce(): number;
   /** A blow has landed on the target: jolt it. */
   jolt(): void;
 }
@@ -84,28 +89,57 @@ function cheapShot(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Mov
   }, first + (first > 0 ? SLICES_APART : 0.2));
 }
 
-const LUNGE_TEETH = "#f4efe2";
-/** Seconds into the spring that the wolf is driven on in, still airborne, and that its jaws close. */
-const LUNGE_DRIVE = 0.07;
-const LUNGE_SNAP = 0.1;
+/**
+ * A creature's leap at its target (MoveStage.pounce), in seconds for each part: gathering itself (drawn back by
+ * `gather`), in the air (`high` at the top), held where it landed, and the hop home (`homeHop` high). It comes down
+ * `short` of the target's middle: in its face, not on top of it.
+ */
+export const POUNCE = { crouch: 0.14, air: 0.26, hold: 0.2, back: 0.24, gather: 0.22, high: 0.6, homeHop: 0.12, short: 0.6 };
+/** Seconds from a pounce's start to its landing, and to its end, home again. */
+export const POUNCE_LANDS = POUNCE.crouch + POUNCE.air;
+export const POUNCE_OVER = POUNCE_LANDS + POUNCE.hold + POUNCE.back;
+
+const ease = (k: number) => k * k * (3 - 2 * k);
 
 /**
- * A wolf's lunge: it springs at the target and is driven on in, its whole weight behind it, and its jaws close on
- * them: two white arches, the upper and the lower, snapping together. The target is jolted and dust is thrown up
- * at its feet as it is borne down. The blow is told when the jaws meet.
+ * Where a pounce has its creature `s` seconds in, at a target `far` away: how far it is toward the target from
+ * where it stands (back from it while gathering itself), and how high off the ground.
+ */
+export function pounceAt(s: number, far: number): { ahead: number; up: number } {
+  const reach = Math.max(0, far - POUNCE.short);
+  if (s <= 0 || s >= POUNCE_OVER) return { ahead: 0, up: 0 };
+  if (s < POUNCE.crouch) return { ahead: -POUNCE.gather * ease(s / POUNCE.crouch), up: 0 };
+  s -= POUNCE.crouch;
+  if (s < POUNCE.air) {
+    const k = s / POUNCE.air;
+    return { ahead: -POUNCE.gather + (reach + POUNCE.gather) * k, up: 4 * POUNCE.high * k * (1 - k) };
+  }
+  s -= POUNCE.air;
+  if (s < POUNCE.hold) return { ahead: reach, up: 0 };
+  const k = (s - POUNCE.hold) / POUNCE.back;
+  return { ahead: reach * (1 - ease(k)), up: 4 * POUNCE.homeHop * k * (1 - k) };
+}
+
+const LUNGE_TEETH = "#f4efe2";
+/** How long the jaws take to close: they meet as the wolf lands. */
+const LUNGE_BITE = 0.1;
+
+/**
+ * A wolf's lunge: it gathers itself and leaps at the target, and its jaws close on them as it comes down: two white
+ * arches, the upper and the lower, snapping together. The target is jolted and dust is thrown up at its feet as it
+ * is borne down; the wolf holds there a moment, then hops back. The blow is told when the jaws meet.
  */
 function wolfLunge(stage: MoveStage, { hitAt, dir, crit, onImpact }: MoveCtx) {
   const color = crit ? "#ffd23f" : LUNGE_TEETH;
   // The swipe is drawn as a quarter circle; turned an eighth it lies flat as an arch, and half a turn more turns it over.
   const flat = dir < 0 ? -Math.PI / 4 : Math.PI / 4;
-  stage.lunge();
-  stage.later(() => stage.lunge(), LUNGE_DRIVE);
+  const lands = stage.pounce();
   stage.later(() => {
     const jaw = (upper: boolean, onEnd?: () => void) => {
       const side = upper ? 1 : -1;
       const from = hitAt.clone().setY(hitAt.y + side * 0.4);
       const to = hitAt.clone().setY(hitAt.y + side * 0.06);
-      stage.spawnFx("slash", color, dir < 0, { from, to, life: 0.1, size: [1.5, 1.2], turn: upper ? flat : flat + Math.PI, spin: 0, fade: false, onEnd });
+      stage.spawnFx("slash", color, dir < 0, { from, to, life: LUNGE_BITE, size: [1.5, 1.2], turn: upper ? flat : flat + Math.PI, spin: 0, fade: false, onEnd });
     };
     jaw(false);
     jaw(true, () => {
@@ -116,10 +150,10 @@ function wolfLunge(stage: MoveStage, { hitAt, dir, crit, onImpact }: MoveCtx) {
       stage.later(() => stage.jolt(), 0.05);
       onImpact();
     });
-  }, LUNGE_SNAP);
+  }, Math.max(0, lands - LUNGE_BITE));
 }
 
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
   "Cheap Shot": { who: "bandit", blurb: "Two quick side slashes, a forehand then a backhand: the sword leaves a red trail, and each cut a flat red swipe across the target.", play: cheapShot },
-  Lunge: { who: "wolf", blurb: "A spring driven right in, jaws snapping shut on the target as two white arches, and dust thrown up at its feet.", play: wolfLunge },
+  Lunge: { who: "wolf", blurb: "A crouch and a leap through the air at the target, jaws snapping shut on it as two white arches as it lands, dust thrown up at its feet, then a hop back home.", play: wolfLunge },
 };

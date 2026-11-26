@@ -21,7 +21,7 @@ import type { Me } from "./api";
 import { label } from "./labels";
 import { makeFigure, type Figure } from "./render/figures";
 import { LOOKS } from "./render/looks";
-import { SIGNATURE_MOVES, type FxOpts, type MoveStage } from "./render/signatureMoves";
+import { POUNCE_LANDS, SIGNATURE_MOVES, pounceAt, type FxOpts, type MoveStage } from "./render/signatureMoves";
 import { fxTexture, lookFor } from "./render/sprites";
 import "./figureLab.css";
 
@@ -175,6 +175,8 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
     let sinceAct = 0;
     /** A jump under way: when the feet leave the ground, on the stage's clock. */
     let sprang = -Infinity;
+    /** A leap at the target under way (a creature's pounce): when it began, on the stage's clock. */
+    let pounced = -Infinity;
     const draw = (dt: number) => {
       const s = stage.current;
       const now = liveRef.current;
@@ -221,6 +223,12 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
       // A jump goes up and comes down on the spot, as high as one of two tiles does in the game.
       const up = (t - sprang) / JUMP_AIR;
       if (s.figure) s.figure.root.position.y = up > 0 && up < 1 ? 4 * JUMP_HIGH * up * (1 - up) : 0;
+      // A pounce carries it at the target ahead and home again, as the game does (signatureMoves.ts pounceAt).
+      const leapt = pounceAt(t - pounced, TARGET_AHEAD);
+      if (s.figure) {
+        s.figure.root.position.z = leapt.ahead;
+        s.figure.root.position.y += leapt.up;
+      }
       if (readout.current) readout.current.textContent = `${t.toFixed(2)}s · lean ${lean.toFixed(2)} · strike ${Math.min(1, Math.abs(lean) * 2).toFixed(2)}`;
     };
     const act = (action: Act): string => {
@@ -248,6 +256,10 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
           sound: () => {},
           lunge: () => {
             lean = -0.9;
+          },
+          pounce: () => {
+            pounced = t;
+            return POUNCE_LANDS;
           },
           jolt: () => {},
         };
