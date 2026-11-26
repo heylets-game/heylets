@@ -1580,10 +1580,10 @@ const GET_UP_HIPS = -1;
  * `n` counts the figure's actions, so two flinches in a row need not be the same.
  */
 interface Act {
-  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "slam" | "drop" | "pound" | "channel" | "claw" | "flurry" | "howl" | "rake" | "roar" | "grasp" | "wail" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
+  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "slam" | "drop" | "pound" | "channel" | "claw" | "flurry" | "howl" | "rake" | "roar" | "grasp" | "wail" | "dive" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
   t: number;
   n: number;
-  /** A jump's seconds off the ground (see JUMP). */
+  /** A jump's seconds off the ground (see JUMP), or how long a dive is held (see DIVE). */
   air?: number;
 }
 
@@ -1853,6 +1853,28 @@ const SPECTRAL_ACTS = new Set<Act["kind"]>(["grasp", "wail"]);
 
 /** The blows a beast with claws (Rig.claws) plays as animations of its own. */
 const CLAW_ACTS = new Set<Act["kind"]>(["claw", "flurry", "rake", "roar"]);
+
+/**
+ * A dive, for a flier that dives (Rig.dives, Figure.dive): in `into` seconds it pitches nose-down (`pitch`), drops low
+ * (`drop`, in its own units) and sweeps its wings back along its sides (`sweep`, folded up a little by `fold`), and holds
+ * so, barely fluttering, for as long as the dive is (the act's `air`); then in `flare` seconds it throws its head up
+ * and its wings out wide to brake (`brake`), and in `settle` more is hovering as before. A Cave Bat's Fell Swoop
+ * (signatureMoves.ts).
+ */
+export const DIVE = { into: 0.08, flare: 0.12, settle: 0.22, pitch: 0.8, drop: -3, sweep: 1.05, fold: 0.45, brake: -0.45 };
+
+/** Where a dive held for `air` seconds is, `t` seconds in (see DIVE): its pitch, drop, wing sweep and fold. */
+export function diveAt(t: number, air: number): { pitch: number; drop: number; sweep: number; fold: number } {
+  const held = Math.max(DIVE.into, air);
+  const up = held + DIVE.flare;
+  const end = up + DIVE.settle;
+  return {
+    pitch: along([[0, 0], [DIVE.into, DIVE.pitch], [held, DIVE.pitch], [up, DIVE.brake], [end, 0]], t),
+    drop: along([[0, 0], [DIVE.into, DIVE.drop], [held, DIVE.drop], [up, DIVE.drop * 0.3], [end, 0]], t),
+    sweep: along([[0, 0], [DIVE.into, DIVE.sweep], [held, DIVE.sweep], [up, -0.25], [end, 0]], t),
+    fold: along([[0, 0], [DIVE.into, DIVE.fold], [held, DIVE.fold], [up, -0.2], [end, 0]], t),
+  };
+}
 
 /**
  * A beast's howl, for one on four legs that howls (Rig.howls): it drops its head and draws breath, then sits back on
@@ -2470,7 +2492,7 @@ const RECORDER_LENGTH = 6.4;
 const HAMMER = { hit: 0.4, over: 0.86, up: [[0, 0.25], [0.3, 1], [0.4, 0], [0.48, 0.18], [0.86, 0.25]] as Keys };
 const STIR = { over: 30, turns: 25 };
 /** How long each kind of action lasts. */
-const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, slam: SLAM.over, drop: SEAT_DROP.over, pound: POUND.over, channel: CHANNEL.over, claw: CLAW.over, flurry: FLURRY.over, howl: HOWL.over, rake: RAKE.over, roar: ROAR.over, grasp: GRASP.over, wail: WAIL.over, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
+const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, slam: SLAM.over, drop: SEAT_DROP.over, pound: POUND.over, channel: CHANNEL.over, claw: CLAW.over, flurry: FLURRY.over, howl: HOWL.over, rake: RAKE.over, roar: ROAR.over, grasp: GRASP.over, wail: WAIL.over, dive: DIVE.into + DIVE.flare + DIVE.settle, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
 /** When each kind of blow lands. */
 const ACT_HIT = { strike: SWING.hit, stab: THRUST.hit, slices: SLICES.hit, slam: SLAM.hit, pounce: POUNCE.hit, heavy: SWEEP.hit, twin: TWIN.hit };
 /**
@@ -2506,6 +2528,8 @@ interface Rig {
   claws?: boolean;
   /** A beast that howls (see HOWL, Figure.howl): it plays that as an animation of its own. */
   howls?: boolean;
+  /** A flier that dives (see DIVE, Figure.dive): it plays that as an animation of its own. */
+  dives?: boolean;
   /** A ghost: it plays its grasp and its wail (see GRASP, WAIL) as animations of its own, and is leant into the rest. */
   spectral?: boolean;
   /** Its ordinary strike, where what it carries does not cut (see LIGHT): a leaping stab, or a straight thrust. */
@@ -9747,12 +9771,18 @@ function bat(top: THREE.Group): Rig {
       wings.forEach((p, i) => p.joint.rotation.set(0, 0, (i ? -1 : 1) * 0.2));
       return;
     }
-    top.rotation.set(a.strike * 0.5, 0, 0);
-    top.position.set(0, Math.sin(a.t * 5) * 0.6, 0);
-    const flap = Math.sin(a.t * 15) * 0.6;
-    wings.forEach((p, i) => p.joint.rotation.set(0, 0, (i ? 1 : -1) * flap));
+    // Diving (a Fell Swoop): nose-down and low, wings swept back along its sides and barely fluttering, then a flare.
+    const dive = a.act?.kind === "dive" ? diveAt(a.act.t, a.act.air ?? 0) : null;
+    const tuck = dive ? Math.min(1, Math.abs(dive.sweep) / DIVE.sweep) : 0;
+    top.rotation.set(a.strike * 0.5 + (dive?.pitch ?? 0), 0, 0);
+    top.position.set(0, Math.sin(a.t * 5) * 0.6 * (1 - tuck) + (dive?.drop ?? 0), 0);
+    const flap = Math.sin(a.t * 15) * 0.6 * (1 - tuck * 0.85);
+    wings.forEach((p, i) => {
+      const s = i ? 1 : -1;
+      p.joint.rotation.set(0, s * (dive?.sweep ?? 0), s * (flap + (dive?.fold ?? 0)));
+    });
   };
-  return { parts, animate, clean: true };
+  return { parts, animate, clean: true, dives: true };
 }
 
 /** A cave slime: a green blob with a shine on it, two dark eyes, and a drip. */
@@ -10640,6 +10670,11 @@ export interface Figure {
    */
   howl(): number;
   /**
+   * Dive (a Cave Bat's Fell Swoop): pitch nose-down, drop low and sweep the wings back, held for `seconds`, then flare
+   * them out to brake and hover again (see DIVE). Anything that does not dive does nothing.
+   */
+  dive(seconds: number): void;
+  /**
    * Work at a trade: `hammer` brings a hammer down on an anvil before the figure, and returns the seconds until it
    * lands, for the sparks and the ring of it to wait; `stir` stirs a pot before it, round and round for half a
    * minute, and returns 0. A creature does nothing and returns 0.
@@ -10833,7 +10868,7 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
     const first = last < 0;
     const dt = last < 0 ? 1 : Math.min(0.1, Math.max(0, p.time - last));
     last = p.time;
-    if (asked) [action, asked] = [{ kind: asked, at: p.time, n: ++actions, air: asked === "jump" ? airtime : 0 }, null];
+    if (asked) [action, asked] = [{ kind: asked, at: p.time, n: ++actions, air: asked === "jump" || asked === "dive" ? airtime : 0 }, null];
     const since = action ? p.time - action.at : 0;
     if (action && (since < 0 || since >= lasts(action.kind) + action.air)) action = null;
     // Walking off ends a dance (or any emote) at once.
@@ -10841,7 +10876,7 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
     const want = p.walking ? Math.sin(p.stride * 3.6) : 0;
     swing += (want - swing) * Math.min(1, dt * 20);
     const rowing = p.rowing !== undefined && !!rig.hands && !p.lying;
-    const anim: Anim = { t: p.time, swing, breath: Math.sin(p.time * 2.2 + beat), strike: Math.min(1, Math.abs(p.lean) * 2), act: action && (rig.acts || (rig.claws && CLAW_ACTS.has(action.kind)) || (rig.howls && action.kind === "howl") || (rig.spectral && SPECTRAL_ACTS.has(action.kind))) ? { kind: action.kind, t: action.kind === "cast" ? since / pace : since, n: action.n, air: action.air } : null, scale: 1 / scaler.scale.x, lying: p.lying, sitting: rowing ? 1 : typeof p.sitting === "number" ? Math.max(0, Math.min(1, p.sitting)) : p.sitting ? 1 : 0, floor: rowing || p.lying ? 0 : Math.max(0, Math.min(1, p.floor ?? 0)), oars: rowing ? Math.max(0, Math.min(1, p.rowing!)) : -1, getUp: null };
+    const anim: Anim = { t: p.time, swing, breath: Math.sin(p.time * 2.2 + beat), strike: Math.min(1, Math.abs(p.lean) * 2), act: action && (rig.acts || (rig.claws && CLAW_ACTS.has(action.kind)) || (rig.howls && action.kind === "howl") || (rig.dives && action.kind === "dive") || (rig.spectral && SPECTRAL_ACTS.has(action.kind))) ? { kind: action.kind, t: action.kind === "cast" ? since / pace : since, n: action.n, air: action.air } : null, scale: 1 / scaler.scale.x, lying: p.lying, sitting: rowing ? 1 : typeof p.sitting === "number" ? Math.max(0, Math.min(1, p.sitting)) : p.sitting ? 1 : 0, floor: rowing || p.lying ? 0 : Math.max(0, Math.min(1, p.floor ?? 0)), oars: rowing ? Math.max(0, Math.min(1, p.rowing!)) : -1, getUp: null };
     // A rig with no animations of its own is leant into a blow, and a little into a hit, easing off as it always has.
     if (action && !rig.acts && !anim.act) anim.strike = Math.max(anim.strike, Math.min(1, (action.kind === "hit" ? 0.5 : 1.8) * Math.exp(-8 * since)));
     if (sling) stow(sling, p.walking, Math.max(anim.strike, anim.act && anim.act.kind !== "hit" ? 1 : 0), dt);
@@ -11042,6 +11077,11 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
       if (!rig.howls) return 0;
       asked = "howl";
       return HOWL.peak;
+    },
+    dive(seconds) {
+      if (!rig.dives) return;
+      asked = "dive";
+      airtime = Math.max(0, seconds);
     },
     emote(emote) {
       // A sit is not played out but held, as a pose (FigurePose.floor).

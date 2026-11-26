@@ -1530,7 +1530,7 @@ function batBite(stage: MoveStage, ctx: MoveCtx) {
 const SWOOP_STREAK_EVERY = 0.025;
 
 /**
- * A Cave Bat's Fell Swoop: its wings snap back with a burst of dusk-violet, and it tears in a straight line, low and
+ * A Cave Bat's Fell Swoop: its wings snap back with a burst of dusk-violet, and it dives (figures.ts DIVE) in a straight line, low and
  * fast, dark and violet speed lines streaming off it. Each hero it passes through is raked as it goes: three red claw
  * lines torn across them with a white slash and a flash, and a jolt. Where it comes to rest, its wings flare out in a
  * last violet burst. What it does to each is told as their hit is.
@@ -1550,6 +1550,8 @@ function fellSwoop(stage: MoveStage, ctx: MoveCtx) {
   for (const side of [-1, 1]) stage.spawnFx("streak", BAT_DUSK, side > 0, { from: start, to: start.clone().addScaledVector(back, 0.5).setY(start.y + side * 0.3), life: 0.18, size: [0.9, 1.2], spin: 0, fade: true });
   // A stage with nowhere to dash plays it at its target, as a blow.
   const way: DashWay = stage.dash?.() ?? { passes: [{ at: hitAt, when: 0.05, jolt: () => stage.jolt() }], over: 0 };
+  // It dives the whole way: nose-down and low, wings swept back, and flares them out to brake as it comes to rest.
+  figure.dive(Math.max(0.15, way.over));
   for (let s = 0; s < way.over; s += SWOOP_STREAK_EVERY) {
     stage.later(() => {
       const at = body();
@@ -1584,7 +1586,7 @@ function fellSwoop(stage: MoveStage, ctx: MoveCtx) {
 
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
   "Bite@bat": { who: "bat", blurb: "Flicks up and back, then darts in: its needle fangs snap shut once, quick as a sting, with a small pale flash and violet sparks spitting out either side.", play: batBite },
-  "Fell Swoop": { who: "bat", blurb: "Its wings snap back in a burst of violet and it tears in a straight line, low and fast, dark speed lines streaming off it: each hero it passes through is raked with three red claw lines, a white slash and a flash, and where it comes to rest its wings flare out.", play: fellSwoop },
+  "Fell Swoop": { who: "bat", blurb: "Its wings snap back in a burst of violet and it dives in a straight line, nose-down and low, wings swept back along its sides, dark speed lines streaming off it: each hero it passes through is raked with three red claw lines, a white slash and a flash, and where it comes to rest it throws its wings out wide to brake, and hovers again.", play: fellSwoop },
   "Chill Touch": { who: "shade", blurb: "Draws up and back, then surges in with its arms stretching out long, wisps streaming off it: a cold flash where its hands land, three pale finger marks drawn down the target, frost glinting and drifting down, a ring of frost at their feet, and wisps of their warmth curling back to it.", play: chillTouch },
   Wail: { who: "shade", blurb: "Huddles in, drawing breath in wisps, then flings itself up and back and screams, arms wide, swelling and trembling: rings roll out over the ground two hexes all round, pale then violet, a ring goes out through the air, sound lines burst from its head and wisps swirl out every way; each hero is jolted as the first ring reaches them, with violet wisps circling their head.", play: shadeWail },
   "Slowing Field": { who: "guardian", blurb: "Opens its arms out wide, chest out and head lifted, and holds there trembling as its eyes and chest gem burn brighter and pulse, a halo pulsing bigger round the gem and little rays of light shooting off it, and motes of cyan light are drawn in to it; then lets go: a last burst of long rays, the glow flashes, three slow cyan rings roll out over the ground two hexes past it, and motes drift lazily up all over the field.", play: slowingField },
