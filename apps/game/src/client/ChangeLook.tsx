@@ -35,7 +35,7 @@ export function ChangeLook({ hero, look: from, onClose, onSaved }: { hero: Publi
     setSaving(true);
     setError(null);
     try {
-      await api.setAppearance(look);
+      await api.setAppearance(look, hero.id);
       window.dispatchEvent(new Event(LOOK_CHANGED));
       onSaved();
     } catch (err) {

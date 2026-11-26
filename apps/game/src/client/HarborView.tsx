@@ -1101,7 +1101,7 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
       })()}
       {shop && me.character && <ShopScreen me={me} refresh={refreshAll} onClose={() => setShop(false)} />}
       {me.character && <Trading me={me} partners={board.members.filter((m) => m.id !== you)} withId={tradeWith} onWith={setTradeWith} refresh={refresh} nudge={harbor.trades} />}
-      {heroSheet.open && you && <HeroSheet id={heroSheet.open} you={you} onClose={heroSheet.close} logbook={me.character ? { hero: me.character, open: () => { heroSheet.close(); setBook(true); } } : undefined} />}
+      {heroSheet.open && <HeroSheet id={heroSheet.open} you={me.player.id} onClose={heroSheet.close} logbook={me.character ? { hero: me.character, open: () => { heroSheet.close(); setBook(true); } } : undefined} />}
     </div>
   );
 }

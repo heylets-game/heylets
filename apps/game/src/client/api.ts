@@ -195,13 +195,16 @@ async function fetchMe(): Promise<Me> {
 
 export const api = {
   /** Another hero's public sheet (or your own): name, level, stats and worn gear. */
-  hero: (id: string) => request<{ hero: PublicHero }>(`/api/hero/${encodeURIComponent(id)}`),
+  /** `yours`: one of this account's own heroes, whose look and name can be changed. Absent from an older server. */
+  hero: (id: string) => request<{ hero: PublicHero; yours?: boolean }>(`/api/hero/${encodeURIComponent(id)}`),
   suggestName: (classId: string, avoid: string[]) => request<{ name: string }>("/api/character/name", { classId, avoid }),
   roll: (classId: string, name: string) => request<{ character: Character }>("/api/character/roll", { classId, name }),
   confirm: () => request("/api/character/confirm", {}),
   /** A new name for your hero (2 to 20 characters, not another hero's). Answers with the name as saved. */
-  rename: (name: string) => request<{ name: string }>("/api/character/rename", { name }),
-  setAppearance: (appearance: Appearance) => request("/api/character/appearance", { appearance }),
+  /** `hero`: another of the account's heroes to rename (another of the party); else the hero acted as. */
+  rename: (name: string, hero?: string) => request<{ name: string }>("/api/character/rename", { name }, hero ? { "x-gq-hero": hero } : {}),
+  /** `hero`: another of the account's heroes to dress (another of the party); else the hero acted as. */
+  setAppearance: (appearance: Appearance, hero?: string) => request("/api/character/appearance", { appearance }, hero ? { "x-gq-hero": hero } : {}),
   reroll: () => request("/api/character/reroll", {}),
   spend: (stat: StatKey) => request("/api/character/spend", { stat }),
   /** Put a class ability in a slot (null empties it). Harbor only. */

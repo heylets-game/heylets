@@ -4,6 +4,7 @@
 
 import { HERO_CLASSES, makeRng, parseAppearance, rollStartingStats } from "@gantt-quest/world";
 import { heroName } from "../ai";
+import { heroAsked } from "../auth";
 import {
   cleanHeroName,
   confirmCharacter,
@@ -24,11 +25,16 @@ import {
 import type { GameApp } from "./shared";
 
 export function characterRoutes(app: GameApp): void {
-  // A crewmate's hero sheet, read-only: what the overhead plate opens on a click.
+  // A crewmate's hero sheet, read-only: what the overhead plate opens on a click. `yours`: one of the account's own
+  // heroes (another of the party, say), whose look and name can be changed from it.
   app.get("/api/hero/:id", async (c) => {
-    const hero = await publicHero(c.env.DB, c.get("player").id, c.req.param("id"));
+    const player = c.get("player");
+    const id = c.req.param("id");
+    const hero = await publicHero(c.env.DB, player.id, id);
     if (!hero) return c.json({ error: "No such hero in your crew." }, 404);
-    return c.json({ hero });
+    const yours =
+      id === player.id || (!!player.userId && !!(await c.env.DB.prepare("SELECT 1 FROM players WHERE id = ? AND user_id = ?").bind(id, player.userId).first()));
+    return c.json({ hero, yours });
   });
 
   // Suggest a hero name for the class being created. Text only: nothing is saved.
@@ -73,7 +79,9 @@ export function characterRoutes(app: GameApp): void {
   });
 
   // A new name for a confirmed hero, from their sheet. The client then has the rooms it is in re-read the hero (refresh).
+  // Like a new look, it can be for another of the account's heroes, named as the hero asking (x-gq-hero).
   app.post("/api/character/rename", async (c) => {
+    if (notTheHeroAsked(c.req.raw, c.get("player").id)) return c.json({ error: "That is not one of your heroes." }, 404);
     const body = await c.req.json<{ name?: unknown }>().catch(() => ({}) as { name?: unknown });
     const name = cleanHeroName(body.name);
     if (!name) return c.json({ error: "Name must be 2 to 20 characters." }, 400);
@@ -85,8 +93,10 @@ export function characterRoutes(app: GameApp): void {
     return c.json({ name });
   });
 
-  // How the hero looks: body, face and colouring, from fixed presets (appearance.ts). Draft or active.
+  // How the hero looks: body, face and colouring, from fixed presets (appearance.ts). Draft or active. A sheet of
+  // another of the account's heroes names them as the hero asking (x-gq-hero), so it is their look that changes.
   app.post("/api/character/appearance", async (c) => {
+    if (notTheHeroAsked(c.req.raw, c.get("player").id)) return c.json({ error: "That is not one of your heroes." }, 404);
     const body = await c.req.json<{ appearance?: unknown }>().catch(() => ({}) as { appearance?: unknown });
     if (!parseAppearance(body.appearance)) return c.json({ error: "That is not a look." }, 400);
     const ok = await saveAppearance(c.env.DB, c.get("player").id, body.appearance);
@@ -124,4 +134,13 @@ export function characterRoutes(app: GameApp): void {
     const error = await setGearHidden(c.env.DB, c.get("player").id, Number(body.itemId), body.hidden === true);
     return error ? c.json({ error }, 409) : c.json({ ok: true });
   });
+}
+
+/**
+ * A request that names a hero (x-gq-hero) that is not the one it was taken as: not one of the account's, so the
+ * session fell back to another of them (auth.ts playerForRequest). A change meant for one hero must not land on another.
+ */
+function notTheHeroAsked(req: Request, playerId: string): boolean {
+  const asked = heroAsked(req);
+  return asked !== null && asked !== playerId;
 }
