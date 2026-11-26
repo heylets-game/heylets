@@ -1223,8 +1223,9 @@ export const CHANNEL_GLOW = { held: 2.2, flash: 3.4, fade: 0.9, pulse: 0.22, ray
 /**
  * A Guardian's Slowing Field: it opens its arms out wide, chest thrown out and head lifted, and holds there, trembling,
  * as it draws the field up through itself (figures.ts CHANNEL). Its eyes and the gem in its chest burn brighter and
- * brighter (Figure.setGlow), a halo round each pulsing out bigger and bigger, little rays of light shooting out of them
- * every way, flickers of cyan coming off them, and motes of it drawn in from all round to its chest. As it lets go, the glow flashes white-bright and the field goes out from it: a flash at its chest, three slow
+ * brighter, pulsing quicker as they go (Figure.setGlow); off the gem alone, a halo pulsing out bigger and bigger, little
+ * rays of light shooting out every way and flickers of cyan, and motes drawn in to it from all round. As it lets go,
+ * the glow flashes white-bright and the field goes out from it: a flash and long rays at its chest, three slow
  * cyan rings rolling out over the ground one after another to the edge of its reach, and the air in it thick with motes
  * drifting lazily up; its glow settles back as they go. (What stays round it while it lasts is the map's: ZoneView,
  * SpellFx.aura.)
@@ -1234,21 +1235,21 @@ function slowingField(stage: MoveStage, { figure, crit, onImpact, alone, hitAt }
   const ground = feet.clone().setY(feet.y + 0.07);
   const { reach, rings, life, apart } = SLOWING_FIELD;
   const color = crit ? GOLD : GUARDIAN_GLOW;
-  // Where its eyes and the gem in its chest are, as it moves (Figure.glowAt); for a figure without them, from how tall
-  // it stands: its head near the top, its chest well up it.
+  // Where the gem in its chest is, as it moves (Figure.glowAt); for a figure without one, well up its body. (Its eyes
+  // only glow and pulse with the rest of its light: nothing comes off them.)
   const box = new THREE.Box3().setFromObject(figure.root);
   const tall = Math.max(0.5, box.max.y - box.min.y);
-  const up = (k: number) => figure.root.getWorldPosition(new THREE.Vector3()).setY(box.min.y + tall * k);
-  const eyes = () => figure.glowAt("eyes") ?? up(0.8);
-  const chest = () => figure.glowAt("gem") ?? up(0.58);
+  const chest = () => figure.glowAt("gem") ?? figure.root.getWorldPosition(new THREE.Vector3()).setY(box.min.y + tall * 0.58);
   const wait = figure.strike("channel") || Math.max(0.35, figure.cast());
   const { held, flash, fade } = CHANNEL_GLOW;
   // The glow building as it draws the field in: eased up to `held` over the channelling.
   for (let s = 0; s <= wait; s += 0.03) {
     const k = s / wait;
-    stage.later(() => figure.setGlow(1 + (held - 1) * k * k * (3 - 2 * k)), s);
+    // Pulsing as it builds, quicker and deeper toward the end.
+    const beat = 1 + 0.18 * k * Math.sin(s * (10 + 14 * k));
+    stage.later(() => figure.setGlow((1 + (held - 1) * k * k * (3 - 2 * k)) * beat), s);
   }
-  // Drawn in: motes of light coming in from all round to its chest, and flickers off its eyes and its gem.
+  // Drawn in: motes of light coming in from all round to its chest, and flickers off its gem.
   for (let s = 0; s < wait; s += 0.05) {
     stage.later(() => {
       const to = chest();
@@ -1256,18 +1257,18 @@ function slowingField(stage: MoveStage, { figure, crit, onImpact, alone, hitAt }
       const from = offset(to, Math.cos(a) * 2.2, -0.6 + Math.random() * 1.6, Math.sin(a) * 2.2);
       stage.spawnFx("mote", color, Math.cos(a) < 0, { from, to, life: 0.4, size: [0.35, 0.15], spin: 0, fade: true });
       if (Math.random() < 0.6) {
-        const at = Math.random() < 0.5 ? eyes() : to;
+        const at = to;
         stage.spawnFx("spark", color, Math.random() < 0.5, { from: at, to: offset(at, (Math.random() - 0.5) * 0.5, 0.3 + Math.random() * 0.3, (Math.random() - 0.5) * 0.5), life: 0.25, size: [0.35, 0.12], spin: 2, fade: true });
       }
     }, s);
   }
-  // Light pouring off its eyes and its gem: a halo round each, pulsing out bigger and brighter as it builds, and little
+  // Light pouring off its gem: a halo round it, pulsing out bigger and brighter as it builds, and little
   // rays shooting out of them every way, longer as it goes.
   const { pulse, rays, rayEvery } = CHANNEL_GLOW;
   for (let s = 0; s < wait; s += pulse) {
     const k = s / wait;
     stage.later(() => {
-      for (const [at, big] of [[chest(), 1], [eyes(), 0.6]] as const) {
+      for (const [at, big] of [[chest(), 1]] as const) {
         stage.spawnFx("burst", color, Math.random() < 0.5, { from: at, to: at, life: pulse * 1.6, size: [0.3 * big, (1 + 2.2 * k) * big], spin: 0.2, fade: true });
       }
     }, s);
@@ -1275,7 +1276,7 @@ function slowingField(stage: MoveStage, { figure, crit, onImpact, alone, hitAt }
   for (let s = 0.1; s < wait; s += rayEvery) {
     const k = s / wait;
     stage.later(() => {
-      for (const [at, long] of [[chest(), 1], [eyes(), 0.7]] as const) {
+      for (const [at, long] of [[chest(), 1]] as const) {
         for (let i = 0; i < rays; i++) {
           const a = (i / rays) * Math.PI * 2 + Math.random() * 0.6;
           const reach = (0.35 + 0.65 * k) * long;
@@ -1287,7 +1288,7 @@ function slowingField(stage: MoveStage, { figure, crit, onImpact, alone, hitAt }
   }
   stage.later(() => {
     // Let go: a last burst of rays from both, long, and the glow flashes and settles back to its own as the field goes out.
-    for (const [at, long] of [[chest(), 1.4], [eyes(), 0.9]] as const) {
+    for (const [at, long] of [[chest(), 1.4]] as const) {
       for (let i = 0; i < rays + 2; i++) {
         const a = (i / (rays + 2)) * Math.PI * 2;
         stage.spawnFx("streak", "#f4feff", false, { from: at, to: offset(at, Math.cos(a) * long, Math.sin(a) * long, 0.05), life: 0.3, size: [0.4 * long, 1.6 * long], turn: a, spin: 0, fade: true });
@@ -1298,7 +1299,7 @@ function slowingField(stage: MoveStage, { figure, crit, onImpact, alone, hitAt }
     const heart = chest();
     stage.spawnFx("burst", "#f4feff", false, { from: heart, to: heart, life: 0.3, size: [0.8, 2.6], spin: 0.3, fade: true });
     stage.spawnFx("burst", color, false, { from: heart, to: heart, life: 0.45, size: [1.2, 3.6], spin: -0.3, fade: true });
-    stage.spawnFx("burst", color, true, { from: eyes(), to: eyes(), life: 0.3, size: [0.5, 1.4], spin: 0.4, fade: true });
+
     for (let n = 0; n < rings; n++) stage.later(() => stage.wave({ at: ground, radius: reach * (1 - n * 0.04), life, color, width: n ? 0.06 : 0.1 }), n * apart);
     // The air in it thickening: motes drifting slowly up all over it.
     for (let k = 0; k < 18; k++) {
@@ -1316,7 +1317,7 @@ function slowingField(stage: MoveStage, { figure, crit, onImpact, alone, hitAt }
 }
 
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
-  "Slowing Field": { who: "guardian", blurb: "Opens its arms out wide, chest out and head lifted, and holds there trembling as its eyes and chest gem burn brighter, haloes pulsing bigger round them and little rays of light shooting off them, and motes of cyan light are drawn in to it; then lets go: a last burst of long rays, the glow flashes, three slow cyan rings roll out over the ground two hexes past it, and motes drift lazily up all over the field.", play: slowingField },
+  "Slowing Field": { who: "guardian", blurb: "Opens its arms out wide, chest out and head lifted, and holds there trembling as its eyes and chest gem burn brighter and pulse, a halo pulsing bigger round the gem and little rays of light shooting off it, and motes of cyan light are drawn in to it; then lets go: a last burst of long rays, the glow flashes, three slow cyan rings roll out over the ground two hexes past it, and motes drift lazily up all over the field.", play: slowingField },
   "Stone Fist": { who: "guardian", blurb: "Heaves its fist up overhead and brings it straight down: a pale stone flash and a cyan glint, a pulse at the target's feet, shock lines and chips of stone driven on past them, and the view jolted.", play: stoneFist },
   Earthquake: {
     who: "guardian",
