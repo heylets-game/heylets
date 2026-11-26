@@ -88,7 +88,7 @@ const SMASHES = new Set(["Club Smash"]);
  * Melee blows struck as the figure's heavy strike (see Figure.strike), a great two-handed sweep or with a blade
  * in each hand both tossed and jabbed down: the smashes, and the other all-or-nothing swings.
  */
-const HEAVY_SWINGS = new Set([...SMASHES, "Cleave", "Eviscerate", "Crushing Maul", "Crushing Strike", "Sweeping Ruin", "Stone Fist", "Shockwave"]);
+const HEAVY_SWINGS = new Set([...SMASHES, "Cleave", "Eviscerate", "Crushing Strike", "Sweeping Ruin", "Stone Fist", "Shockwave"]);
 /** A ground-pound (the ogre's Slam, the guardian's Quake): no step in; the ground shakes out from the attacker's feet and jolts whoever it reaches. */
 const QUAKES = new Set(["Slam", "Quake"]);
 /** How an attack travels, for its sound: the same split the effects above are drawn by. */
@@ -2519,6 +2519,7 @@ export class WorldRenderer {
   private moveStage(actorId: string, targetId: string, ability: string, t: Unit, dir: number, landed: boolean): MoveStage {
     return {
       wave: (opts) => this.waves.push(groundWave(this.fxGroup, opts)),
+      lay: (lay) => this.waves.push(lay(this.fxGroup)),
       spawnFx: (kind, color, flipped, opts) => this.spawnFx(kind, color, flipped, opts),
       later: (run, seconds) => this.later(run, seconds),
       sound: () => sounds.attack(ability, attackStyle(ability), this.fighter(actorId), this.spot(actorId)),

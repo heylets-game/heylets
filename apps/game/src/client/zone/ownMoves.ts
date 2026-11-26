@@ -5,11 +5,14 @@
 //
 // - "burst": round its user, everyone near caught (an Ogre's Slam). Played round it as it is used
 //   (WorldRenderer.burst); each hero caught just flinches as their hit is told.
-// - "at": thrown at a spot, landing on the hexes round it (a Cultist's Immolate). Played at the spot as it is used
-//   (WorldRenderer.moveAt); each hero caught just flinches.
+// - "at": thrown at a spot, landing on the hexes round it (a Cultist's Immolate), or swept toward one through the
+//   hexes in front of its user (a Great Bear's Rending Cleave). Played at the spot as it is used (WorldRenderer.moveAt);
+//   each hero caught just flinches. A sweep whose move strikes each hero caught in turn (`sweeps`: a Brute's Great
+//   Cleave) is a "blow" instead.
 // - "blow": at one target, by hand or from afar. Played as each blow is told (WorldRenderer.blow, attack).
 
 import { ENEMY_ABILITIES } from "@gantt-quest/world";
+import { SIGNATURE_MOVES } from "../render/signatureMoves";
 
 export type OwnRoute = "burst" | "at" | "blow";
 
@@ -19,7 +22,8 @@ const BY_NAME = new Map(Object.values(ENEMY_ABILITIES).map((a) => [a.name, a]));
 export function ownRoute(name: string): OwnRoute | null {
   const def = BY_NAME.get(name);
   if (!def) return null;
-  return def.shape === "burst" ? "burst" : def.area ? "at" : "blow";
+  if (def.shape === "burst") return "burst";
+  return def.area || (def.sweep && !SIGNATURE_MOVES[name]?.sweeps) ? "at" : "blow";
 }
 
 /**

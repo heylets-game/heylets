@@ -1577,7 +1577,7 @@ const GET_UP_HIPS = -1;
  * `n` counts the figure's actions, so two flinches in a row need not be the same.
  */
 interface Act {
-  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "slam" | "drop" | "claw" | "flurry" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
+  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "slam" | "drop" | "claw" | "flurry" | "rake" | "roar" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
   t: number;
   n: number;
   /** A jump's seconds off the ground (see JUMP). */
@@ -1755,8 +1755,36 @@ const FLURRY = {
   paws: [flurryPaw([FLURRY_BLOWS[0], FLURRY_BLOWS[2]]), flurryPaw([FLURRY_BLOWS[1], FLURRY_BLOWS[3]])],
   trail: [0.07, 0.06] as const,
 };
+/**
+ * A beast's wide rake, as CLAW's swipe but flat and wide: it rears a little and carries the paw right out to its side,
+ * held up level, then sweeps it all the way across its front through everything before it, the body lurching in after
+ * it. Its claws leave a red swoosh from `rake[0]` to `rake[1]`. A Great Bear's Rending Cleave (signatureMoves.ts).
+ */
+const RAKE = {
+  hit: 0.34,
+  over: 0.8,
+  rake: [0.22, 0.46] as const,
+  rear: [[0, 0], [0.22, 0.32], [0.34, 0.12], [0.46, 0.08], [0.8, 0]] as Keys,
+  lift: [[0, 0], [0.22, -1.75], [0.34, -1.45], [0.46, -1.35], [0.8, 0]] as Keys,
+  sweep: [[0, 0], [0.22, -1.05], [0.34, 0.55], [0.46, 1.35], [0.8, 0]] as Keys,
+  head: [[0, 0], [0.22, 0.05], [0.34, 0.25], [0.5, 0.15], [0.8, 0]] as Keys,
+  step: [[0, 0], [0.22, 0.05], [0.34, 0.6], [0.5, 0.6], [0.8, 0]] as Keys,
+};
+/**
+ * A beast's roar: it rears right up onto its hind legs, forepaws off the ground, throws its head back (`head`, below 0
+ * nose-up) and bellows at `hit`, shaking with it until `shake[1]`, then drops back onto all fours by `over`. A Great
+ * Bear's Thunderous Roar (signatureMoves.ts).
+ */
+export const ROAR = {
+  hit: 0.32,
+  over: 1.05,
+  shake: [0.3, 0.8] as const,
+  rear: [[0, 0], [0.26, 0.6], [0.8, 0.55], [1.05, 0]] as Keys,
+  head: [[0, 0], [0.26, -0.45], [0.32, -0.55], [0.8, -0.45], [1.05, 0]] as Keys,
+  step: [[0, 0], [1.05, 0]] as Keys,
+};
 /** The blows a beast with claws (Rig.claws) plays as animations of its own. */
-const CLAW_ACTS = new Set<Act["kind"]>(["claw", "flurry"]);
+const CLAW_ACTS = new Set<Act["kind"]>(["claw", "flurry", "rake", "roar"]);
 
 /**
  * A thrust, for a weapon that stabs: the hand drawn back to the hip with the point levelled at the mark, then a
@@ -2117,7 +2145,7 @@ const SWOOSH = { life: 0.13, slow: 45, fast: 110, most: 64, bright: 0.55, inner:
  * Blows whose swoosh is a colour of its own, not the usual pale light, and how strong it is at its brightest (the
  * usual is SWOOSH.bright): a Bandit's Cheap Shot (SLICES) leaves a thick red one, and a bear's claws (CLAW) too; its flurry's (FLURRY) are a bright white.
  */
-const SWOOSH_TINT: Partial<Record<Act["kind"], { color: string; bright: number }>> = { slices: { color: "#e0313f", bright: 0.85 }, claw: { color: "#e0313f", bright: 0.9 }, flurry: { color: SWOOSH.color, bright: 0.9 } };
+const SWOOSH_TINT: Partial<Record<Act["kind"], { color: string; bright: number }>> = { slices: { color: "#e0313f", bright: 0.85 }, claw: { color: "#e0313f", bright: 0.9 }, rake: { color: "#e0313f", bright: 0.95 }, flurry: { color: SWOOSH.color, bright: 0.9 } };
 
 /**
  * A swoosh: a ribbon of light left in the air where a swung weapon has just been, between where its tip was and
@@ -2359,7 +2387,7 @@ const RECORDER_LENGTH = 6.4;
 const HAMMER = { hit: 0.4, over: 0.86, up: [[0, 0.25], [0.3, 1], [0.4, 0], [0.48, 0.18], [0.86, 0.25]] as Keys };
 const STIR = { over: 30, turns: 25 };
 /** How long each kind of action lasts. */
-const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, slam: SLAM.over, drop: SEAT_DROP.over, claw: CLAW.over, flurry: FLURRY.over, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
+const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, slam: SLAM.over, drop: SEAT_DROP.over, claw: CLAW.over, flurry: FLURRY.over, rake: RAKE.over, roar: ROAR.over, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
 /** When each kind of blow lands. */
 const ACT_HIT = { strike: SWING.hit, stab: THRUST.hit, slices: SLICES.hit, slam: SLAM.hit, pounce: POUNCE.hit, heavy: SWEEP.hit, twin: TWIN.hit };
 /**
@@ -9087,7 +9115,8 @@ function fourLegs(top: THREE.Group, legs: Part[], head: Part, tail: Part | null,
     if (paws.length > 0 && a.act && CLAW_ACTS.has(a.act.kind)) {
       // Reared back on the hind legs (lifted as it tips, so their feet stay on the ground), a paw (or both) raised and raked down.
       const t = a.act.t;
-      const blow = a.act.kind === "flurry" ? FLURRY : CLAW;
+      const kind = a.act.kind;
+      const blow = kind === "flurry" ? FLURRY : kind === "rake" ? RAKE : kind === "roar" ? ROAR : CLAW;
       const rear = along(blow.rear, t);
       const behind = -Math.min(...legs.map((leg) => leg.joint.position.z));
       const hips = legs[0].joint.position.y;
@@ -9095,14 +9124,16 @@ function fourLegs(top: THREE.Group, legs: Part[], head: Part, tail: Part | null,
       top.position.set(0, (a.breath + 1) * 0.06 + behind * Math.sin(rear) + hips * (1 - Math.cos(rear)), along(blow.step, t) * STRIDE * 0.5 * a.scale);
       for (const leg of legs) {
         const i = paws.findIndex((p) => p.leg === leg);
-        const swing = blow === FLURRY ? FLURRY.paws[i] : i === 0 ? CLAW : undefined;
+        const swing = kind === "flurry" ? FLURRY.paws[i] : i === 0 && kind === "claw" ? CLAW : i === 0 && kind === "rake" ? RAKE : undefined;
         const side = Math.sign(leg.joint.position.x) || 1;
         if (swing) leg.joint.rotation.set(along(swing.lift, t), 0, -side * along(swing.sweep, t));
         // A foreleg not swiping comes up off the ground with the rest of the front, reaching a little; the hind legs stay upright.
         else leg.joint.rotation.set(leg.joint.position.z > 0 ? -rear * 0.8 : rear, 0, 0);
       }
       // The head kept on the target as the body rears (turned down by as much as it tips up), and dipped into each blow.
-      head.joint.rotation.set(stoop + rear + along(blow.head, t), 0, 0);
+      // A roar shakes the head as it bellows.
+      const shake = kind === "roar" && t > ROAR.shake[0] && t < ROAR.shake[1] ? Math.sin(t * 46) * 0.07 : 0;
+      head.joint.rotation.set(stoop + rear + along(blow.head, t) + shake, shake * 0.6, 0);
       if (tail) tail.joint.rotation.set(0, 0, 0);
       return;
     }
@@ -9155,6 +9186,7 @@ function clawTrail(top: THREE.Group, paw: Paw, which: number, a: Anim) {
   const t = a.act?.t ?? 0;
   const swiping =
     a.act?.kind === "claw" ? which === 0 && t >= CLAW.rake[0] && t <= CLAW.rake[1]
+    : a.act?.kind === "rake" ? which === 0 && t >= RAKE.rake[0] && t <= RAKE.rake[1]
     : a.act?.kind === "flurry" ? FLURRY_BLOWS.some((h, n) => n % 2 === which && t >= h - FLURRY.trail[0] && t <= h + FLURRY.trail[1])
     : false;
   if (swiping) paw.swoosh.tint(SWOOSH_TINT[a.act!.kind]!.color, SWOOSH_TINT[a.act!.kind]!.bright);
@@ -10277,11 +10309,14 @@ export interface Figure {
    * overhead and brought straight down on the mark (see SLAM). "claw" is a beast rearing up and
    * raking a forepaw down across its front (see CLAW), for one that has claws to swipe with (a bear); for anything
    * else it is "light". "flurry" is such a beast rearing right up and raking with both forepaws by turns (see
-   * FLURRY), the first blow landing when this says and the rest at FLURRY_BLOWS. A person, a giant or a skeleton (or a bear clawing) winds up and steps in first, and this
+   * FLURRY), the first blow landing when this says and the rest at FLURRY_BLOWS. "rake" is such a beast sweeping a
+   * forepaw wide and flat across everything before it (see RAKE); for anything else it is "light". "roar" is such a
+   * beast rearing right up and bellowing, head thrown back (see ROAR), and returns the seconds until the roar; anything
+   * else does nothing and returns 0. A person, a giant or a skeleton (or a bear clawing) winds up and steps in first, and this
    * returns the seconds until the blow lands, for whatever it hits to wait; a creature lunges at once, as it always
    * did, and this returns 0.
    */
-  strike(how?: "light" | "stab" | "heavy" | "slices" | "slam" | "drop" | "claw" | "flurry"): number;
+  strike(how?: "light" | "stab" | "heavy" | "slices" | "slam" | "drop" | "claw" | "flurry" | "rake" | "roar"): number;
   /**
    * Cast a spell, or throw something: the casting hand swings round overhead and comes down to point at the mark.
    * Returns the seconds until it points, which is when what is cast should leave; 0 for a creature, which only
@@ -10627,16 +10662,18 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
     hands: () => rig.hands ?? null,
     loose: () => rig.loose?.() ?? 0,
     strike(how = "light") {
-      if ((how === "claw" || how === "flurry") && rig.claws) {
+      if ((how === "claw" || how === "flurry" || how === "rake" || how === "roar") && rig.claws) {
         asked = how;
-        return how === "flurry" ? FLURRY.hit : CLAW.hit;
+        return { claw: CLAW.hit, flurry: FLURRY.hit, rake: RAKE.hit, roar: ROAR.hit }[how];
       }
+      // Nothing to rear up and roar with: it does nothing.
+      if (how === "roar") return 0;
       if (how === "drop") {
         if (!rig.acts) return 0;
         asked = "drop";
         return SEAT_DROP.hit;
       }
-      if (how === "claw" || how === "flurry") how = "light";
+      if (how === "claw" || how === "flurry" || how === "rake") how = "light";
       const kind = how === "heavy" ? (rig.twin ? "twin" : "heavy") : how === "stab" || how === "slices" || how === "slam" ? how : (rig.light ?? "strike");
       asked = kind;
       return rig.acts ? ACT_HIT[kind] : 0;

@@ -277,6 +277,7 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
             fx.push({ ...opts, sprite, age: 0 });
           },
           wave: (opts) => waves.push(groundWave(fxGroup, opts)),
+          lay: (lay) => waves.push(lay(fxGroup)),
           later: (run, seconds) => pending.push({ at: t + seconds, run }),
           sound: () => {},
           lunge: () => {
