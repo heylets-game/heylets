@@ -45,6 +45,7 @@ import { ITEM_AP, RARITY_COLOR, loadoutOf, maxHpFor, xpToNext } from "@gantt-que
 import { api, type Me } from "../api";
 import { Icon, ItemDetail, toOwned } from "../items";
 import { PixelIcon } from "../PixelIcon";
+import { BrassCorners } from "./BrassCorners";
 import { LiquidMeter } from "./LiquidMeter";
 import { ITEM_ICON } from "../zone/actionIcons";
 import { logbookNews } from "../Logbook";
@@ -367,7 +368,7 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
 
       <div className="hud-rack" ref={board} onPointerLeave={() => setTip(null)}>
         {/* Brass corners, as on the logbook's cover. */}
-        {(["tl", "tr", "bl", "br"] as const).map((k) => <i key={k} className={`hud-orn ${k}`} aria-hidden />)}
+        <BrassCorners />
         {/* Left: weapon and shield. */}
         <span className="hud-side">
           {/* Each with the card it has in the bag. On a map either hand can take a lit torch instead. */}

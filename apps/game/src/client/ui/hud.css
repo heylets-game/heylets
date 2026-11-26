@@ -56,16 +56,11 @@
   border: max(4px, calc(var(--u) * 6)) solid var(--h-out); border-image: var(--frame-panel) 36 / max(8px, calc(var(--u) * 12)) / max(3px, calc(var(--u) * 5)) round;
   box-shadow: inset 0 2px 0 rgba(214, 150, 96, 0.32), inset 0 -2px 0 rgba(0, 0, 0, 0.55), 0 8px 20px rgba(0, 0, 0, 0.55);
 }
-/* A brass corner at each corner of the frame, the logbook's own (ui/frames.ts, book.css), over the copper. */
-.hud-orn {
-  --at: calc(-1 * max(4px, calc(var(--u) * 6)) - max(3px, calc(var(--u) * 5)));
-  position: absolute; z-index: 2; width: max(20px, calc(var(--u) * 32)); height: max(20px, calc(var(--u) * 32)); pointer-events: none;
-  background: var(--book-corner) center / 100% 100% no-repeat;
+/* Brass corners (BrassCorners.tsx), the logbook's own, over the copper at each corner of the frame. */
+.hud-rack {
+  --corner-at: calc(-1 * max(4px, calc(var(--u) * 6)) - max(3px, calc(var(--u) * 5)));
+  --corner-size: max(20px, calc(var(--u) * 32));
 }
-.hud-orn.tl { left: var(--at); top: var(--at); }
-.hud-orn.tr { right: var(--at); top: var(--at); scale: -1 1; }
-.hud-orn.bl { left: var(--at); bottom: var(--at); scale: 1 -1; }
-.hud-orn.br { right: var(--at); bottom: var(--at); scale: -1 -1; }
 /* On a map, as wide as the turn bar over it (--fight-bar-w in zone/fight.css). */
 .hud.full .hud-rack { width: calc(var(--u) * 732); }
 /* The fight lab's stand-in: the board, empty, as tall as the real one on a map. */
@@ -208,10 +203,12 @@
    square one elsewhere, along its foot with the picture lifted a little. */
 .hud .hud-gold {
   position: absolute; left: 0; right: 0; bottom: max(1px, calc(var(--u) * 3)); display: flex; align-items: center; justify-content: center; gap: 1px;
-  font: bold max(9px, calc(var(--u) * 12)) ui-monospace, Consolas, monospace; line-height: 1; color: #ffe08a; text-shadow: 0 1px 0 #000, 1px 0 0 #000, -1px 0 0 #000; pointer-events: none;
+  font: bold max(10px, calc(var(--u) * 15)) ui-monospace, Consolas, monospace; line-height: 1; color: #ffe08a; text-shadow: 0 1px 0 #000, 1px 0 0 #000, -1px 0 0 #000; pointer-events: none;
 }
-.hud .hud-slot.bag .hud-gold .voxel-icon { width: max(10px, calc(var(--u) * 15)); height: max(10px, calc(var(--u) * 15)); }
-.hud.slim .hud-slot.bag > .voxel-icon { width: calc(var(--w) * 0.8); height: calc(var(--w) * 0.8); translate: 0 calc(var(--w) * -0.1); }
+.hud .hud-slot.bag .hud-gold .voxel-icon { width: max(12px, calc(var(--u) * 20)); height: max(12px, calc(var(--u) * 20)); }
+/* The bag's picture has room round it inside its own square: drawn a little past its well's width, it still sits inside the rim. */
+.hud.full .hud-slot.bag > .voxel-icon { width: calc(var(--w) * 1.18); height: calc(var(--w) * 1.18); margin-inline: calc(var(--w) * -0.09); }
+.hud.slim .hud-slot.bag > .voxel-icon { width: calc(var(--w) * 0.92); height: calc(var(--w) * 0.92); translate: 0 calc(var(--w) * -0.1); }
 .hud.full .hud-slot.bag { place-content: center; gap: calc(var(--u) * 6); }
 .hud.full .hud-gold { position: static; padding: 1px 5px; background: rgba(0, 0, 0, 0.35); box-shadow: 0 0 0 1px rgba(111, 82, 34, 0.6); }
 /* Three tabs stacked as tall as the bag beside them. */
