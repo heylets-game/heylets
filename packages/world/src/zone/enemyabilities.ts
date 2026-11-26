@@ -44,6 +44,13 @@ export interface EnemyAbilityDef {
   cooldown?: number;
   /** Left on a hero it gets through to, unless they save (a burst: on one who fails to brace). */
   saveOr?: Inflict;
+  /** Left on a hero it gets through to who does save against `saveOr`: a lesser share of it (Savage Bite). */
+  onSave?: Inflict;
+  /**
+   * A call to its own side, not an attack on the other (a Pack Leader's Howl): every ally of its user in the fight (not
+   * itself) is Frenzied for this many attacks. It does no harm, and is aimed at nobody.
+   */
+  rally?: { attacks: number };
   /** Left under the target when it lands. */
   surface?: { kind: SurfaceKind; rounds: number };
   /** Knocks the target back when it lands: `true` for a hex, or a number of hexes (it stops early at anything in the way). */
@@ -71,7 +78,7 @@ export interface EnemyAbilityDef {
   drain?: number;
   /**
    * How an enemy weighs up using it (behaviours.ts): `strike` for one target, `burst` for everyone round, `shove` for
-   * one beside it with a drop or a pit at their back. When not said, it follows the shape.
+   * one beside it with a drop or a pit at their back, `rally` for a call to its own side. When not said, it follows the shape.
    */
   behaviour?: string;
   /** How much its user favours it, beside its other abilities: a multiplier on what it is worth (ai.ts bestAttack). */
@@ -116,9 +123,13 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   // aimed at, so there is no roll to hit: everyone under it makes an Agility save for half. It takes all a turn's
   // AP, and a few turns to ready again.
   rain_of_arrows: { id: "rain_of_arrows", name: "Rain of Arrows", damage: 5, potency: 3, range: 6, area: 7, cost: 4, cooldown: 3, weight: 2 },
-  savage_bite: { id: "savage_bite", name: "Savage Bite", damage: 9, potency: 5, saveOr: { effect: "bleeding" }, weight: 2 },
-  pounce: { id: "pounce", name: "Pounce", damage: 8, potency: 4, saveOr: { effect: "stunned", turns: 1 }, weight: 2 },
-  rending_howl: { id: "rending_howl", name: "Rending Howl", damage: 5, potency: 3, shape: "burst", weight: 1 },
+  // A Pack Leader's bite tears deep: two stacks of Bleeding, or one for whoever pulls clear in time.
+  savage_bite: { id: "savage_bite", name: "Savage Bite", damage: 9, potency: 5, saveOr: { effect: "bleeding", stacks: 2 }, onSave: { effect: "bleeding" }, weight: 2 },
+  // A Pack Leader's leap: a Dire Wolf's Lunge with more weight behind it, that leaves whoever it lands on stunned.
+  great_lunge: { id: "great_lunge", name: "Great Lunge", damage: 8, potency: 4, range: 3, leap: true, saveOr: { effect: "stunned", turns: 1 }, cooldown: 2, weight: 2 },
+  // A Pack Leader's favourite, quick to give: it howls its pack on. Every ally in the fight is Frenzied for two attacks
+  // (advantage, and each that draws blood leaves Bleeding). It does no harm itself, and has to get its wind back after.
+  howl: { id: "howl", name: "Howl", damage: 0, potency: 0, cost: 1, cooldown: 3, rally: { attacks: 2 }, behaviour: "rally", weight: 3 },
   // A Great Bear's everyday blow: one great rake of a forepaw across the three hexes in front of it. Nobody is singled
   // out, so there is no roll to hit: everyone in its path makes an Agility save, taking half and no wound on a success.
   rending_cleave: { id: "rending_cleave", name: "Rending Cleave", damage: 10, potency: 5, sweep: 1, saveOr: { effect: "bleeding" }, weight: 2 },

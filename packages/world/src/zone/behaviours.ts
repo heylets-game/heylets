@@ -191,7 +191,29 @@ const shove: Behaviour = {
   },
 };
 
-export const BEHAVIOURS = { strike, burst, shove } satisfies Record<string, Behaviour>;
+/**
+ * What a call to its own side (a Pack Leader's Howl) is worth for each ally it would Frenzy: about what two blows with
+ * advantage, each leaving a stack of Bleeding, gain over two without.
+ */
+export const RALLY_WORTH = 5;
+
+/** Its allies in the fight a call would stir: standing, and not already stirred. */
+export const rallied = (state: ZoneState, enemy: Unit): Unit[] =>
+  state.units.filter((u) => u.side === enemy.side && u.id !== enemy.id && !u.down && inFight(state, u.id) && !has(u, "frenzied"));
+
+/**
+ * A call to its own side: worth RALLY_WORTH for each ally it would stir, wherever it stands, and nothing with none to
+ * stir. It reaches none of the other side, so it is nothing to walk toward.
+ */
+const rally: Behaviour = {
+  reaches: () => false,
+  value(look, _from, attack) {
+    const allies = rallied(look.state, look.enemy).length;
+    return allies > 0 ? { attack, target: null, worth: allies * RALLY_WORTH * (look.whim?.(attack, null) ?? 1) } : null;
+  },
+};
+
+export const BEHAVIOURS = { strike, burst, shove, rally } satisfies Record<string, Behaviour>;
 
 export type BehaviourId = keyof typeof BEHAVIOURS;
 

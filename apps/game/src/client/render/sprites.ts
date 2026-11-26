@@ -839,6 +839,8 @@ const GLYPHS: Record<string, string[]> = {
   inspired: ["...#...", "...#...", "#######", ".#####.", "..###..", ".##.##.", "#.....#"],
   guiding_light: ["...#...", ".#.#.#.", "..###..", "#######", "..###..", ".#.#.#.", "...#..."],
   north_star: ["...#...", "...#...", "..###..", "#######", "..###..", "...#...", "...#..."],
+  // Claw marks torn across it.
+  frenzied: ["#..#...", ".#..#..", "..#..#.", "#..#..#", ".#..#..", "..#..#.", "...#..#"],
   taunted: ["##...##", "#.#.#.#", "...#...", ".#####.", "#.....#", ".......", "..###.."],
   charted: ["#.....#", ".#...#.", "..#.#..", "...#...", "..#.#..", ".#...#.", "#.....#"],
   // The Warlock's: bubbles rising off a sinking head; a hand reaching up out of the waves; a black spot on a scrap of paper; a red sun on the sea.

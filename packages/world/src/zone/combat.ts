@@ -1070,16 +1070,36 @@ function lungeAt(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit): bool
 /**
  * An enemy uses an ability on `target`. One that lands on more than one hex (`area`, `sweep`) is aimed at `at`, which
  * may be a hex beside the target rather than theirs (ai.ts aims it to catch as many as it can); left out, at the target.
+ * Each attack it makes spends one count of a Frenzy, once it is over (so the blood it draws in that attack still
+ * bleeds); a call to its own side is no attack, and spends none.
  */
 export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | null, at?: HexPos): void {
+  if (attack.kit.rally) return howl(ctx, enemy, attack);
+  enemyAttack(ctx, enemy, attack, target, at);
+  const frenzy = enemy.conditions.find((c) => c.kind === "frenzied");
+  if (frenzy && --frenzy.rounds <= 0) removeCondition(enemy, "frenzied");
+}
+
+/** A call to its own side (a Pack Leader's Howl): every ally in the fight, bar itself, is Frenzied for so many attacks. */
+function howl(ctx: Ctx, enemy: Unit, attack: EnemyStrike): void {
+  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name });
+  for (const ally of ctx.state.units.filter((u) => u.side === enemy.side && u.id !== enemy.id && !u.down && inFight(ctx.state, u.id))) {
+    addCondition(ctx, ally, "frenzied", attack.kit.rally!.attacks);
+  }
+}
+
+function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | null, at?: HexPos): void {
   const { state } = ctx;
   const dc = 8 + attack.potency;
   const aim = at ?? target?.pos;
   ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name, target: target?.id, ...((attack.kit.area || attack.kit.sweep) && aim ? { at: aim } : {}) });
+  // What it leaves on whoever it gets through to: `saveOr` unless they save (`save`: they may), and its lesser share
+  // (`onSave`) if they do.
   const leave = (victim: Unit, save: boolean) => {
     if (victim.down || !attack.saveOr) return;
     const effect = attack.saveOr.effect;
     if (!save || !saveRoll(ctx, victim, SAVE_STAT[effect], dc, `Resist ${attack.name}`).ok) inflict(ctx, victim, attack.saveOr);
+    else if (attack.kit.onSave) inflict(ctx, victim, attack.kit.onSave);
   };
   if (attack.burst) {
     const dice = rollShown(ctx.rng, attack.dice);

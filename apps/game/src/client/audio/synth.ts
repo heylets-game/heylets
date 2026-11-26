@@ -31,6 +31,8 @@ export type SynthCombat =
   | "creak" | "knock" | "splinter"
   // The alarm bell on an open map, rung by an enemy to rouse the rest.
   | "alarm"
+  // A Pack Leader's Howl, calling its pack on.
+  | "howl"
   // Words typed out in a conversation, a short soft note a letter.
   | "blip";
 
@@ -74,6 +76,7 @@ const COMBAT_LENGTH: Record<SynthCombat, number> = {
   sick: 0.4, soak: 0.35,
   creak: 0.8, knock: 0.3, splinter: 0.9,
   alarm: 4.8,
+  howl: 1.9,
   blip: 0.09,
 };
 
@@ -275,6 +278,16 @@ function combat(r: Render, sound: SynthCombat) {
       toneAt(r, t + 0.02, { type: "square", freq: 660 * p, freqTo: 180 * p, decay: 0.18, gain: v * 0.16, cut: 2000 });
       toneAt(r, t + 0.2, { type: "sine", freq: 90 * p, freqTo: 44, decay: 0.16, gain: v * 0.7 });
       noiseAt(r, t + 0.2, { filter: "lowpass", freq: 380, decay: 0.09, gain: v * 0.4 });
+      break;
+    case "howl":
+      // A wolf's howl: the voice swells and climbs, holds at the top with a waver in it, and falls away, a second
+      // voice a fifth over it and breath under both. Rough, through a low-pass, as a throat is.
+      for (const [k, gain] of [[1, 0.42], [1.5, 0.14]] as const) {
+        toneAt(r, t, { type: "sawtooth", freq: 300 * p * k, freqTo: 560 * p * k, attack: 0.3, decay: 0.32, gain: v * gain, cut: 1500 * k });
+        for (let i = 0; i < 6; i++) toneAt(r, t + 0.55 + i * 0.09, { type: "sawtooth", freq: (575 + (i % 2 ? -18 : 18)) * p * k, decay: 0.1, attack: 0.03, gain: v * gain * 0.85, cut: 1500 * k });
+        toneAt(r, t + 1.05, { type: "sawtooth", freq: 570 * p * k, freqTo: 290 * p * k, attack: 0.04, decay: 0.75, gain: v * gain, cut: 1300 * k });
+      }
+      noiseAt(r, t, { filter: "bandpass", freq: 900 * p, freqTo: 1300 * p, q: 1.5, attack: 0.3, decay: 1.3, gain: v * 0.12 });
       break;
     case "boss_down":
       noiseAt(r, t, { filter: "lowpass", freq: 1800, freqTo: 120, q: 0.7, attack: 0.02, decay: 0.7, gain: v * 0.7 });

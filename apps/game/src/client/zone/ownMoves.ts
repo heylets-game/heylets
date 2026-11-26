@@ -3,8 +3,8 @@
 // ability (a bolt, a ring, a lob: zone/abilityFx.ts) must not get in first. So the way is decided here, once, from
 // the ability's shape, before its look is thought of (ZoneView's used and hit):
 //
-// - "burst": round its user, everyone near caught (an Ogre's Slam). Played round it as it is used
-//   (WorldRenderer.burst); each hero caught just flinches as their hit is told.
+// - "burst": round its user, everyone near caught (an Ogre's Slam), or a call to its own side (a Pack Leader's
+//   Howl). Played round it as it is used (WorldRenderer.burst); each hero caught just flinches as their hit is told.
 // - "at": thrown at a spot, landing on the hexes round it (a Cultist's Immolate), or swept toward one through the
 //   hexes in front of its user (a Great Bear's Rending Cleave). Played at the spot as it is used (WorldRenderer.moveAt);
 //   each hero caught just flinches. A sweep whose move strikes each hero caught in turn (`sweeps`: a Brute's Great
@@ -22,7 +22,7 @@ const BY_NAME = new Map(Object.values(ENEMY_ABILITIES).map((a) => [a.name, a]));
 export function ownRoute(name: string): OwnRoute | null {
   const def = BY_NAME.get(name);
   if (!def) return null;
-  if (def.shape === "burst") return "burst";
+  if (def.shape === "burst" || def.rally) return "burst";
   return def.area || (def.sweep && !SIGNATURE_MOVES[name]?.sweeps) ? "at" : "blow";
 }
 

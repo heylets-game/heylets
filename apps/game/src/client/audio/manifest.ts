@@ -70,6 +70,8 @@ export const AUDIO: AudioManifest = {
     "attack.melee": { files: "sfx/combat/swing_*", fallback: built("swing"), pitch: [-2, 2], volume: [-2, 0], reverb: -12 },
     "attack.ranged": { files: "sfx/combat/bow_*", fallback: built("arrow_loose"), pitch: [-1, 1], reverb: -12 },
     "attack.magic": { files: "sfx/combat/cast_*", fallback: built("spell_cast"), pitch: [-1, 1], reverb: -8 },
+    // A Pack Leader's Howl: a long, carrying call, heard across the field.
+    "attack.howl": { files: "sfx/combat/howl_*", fallback: built("howl"), pitch: [-1, 1], reverb: -4 },
     // A blow landing: a blunt thump by hand, unless it cuts or bites (blade abilities, below).
     impact: { files: "sfx/combat/hit_*", fallback: built("blunt"), pitch: [-2, 2], volume: [-2, 0], reverb: -8 },
     "impact.ranged": { files: "sfx/combat/arrow_hit_*", fallback: built("arrow_hit"), pitch: [-2, 2], reverb: -8 },
@@ -264,7 +266,7 @@ export const AUDIO: AudioManifest = {
 
 function bladeImpacts(): Record<string, SoundEvent> {
   /** Cutting and biting blows, heroes' and enemies': these land with a blade's bite rather than a thump. */
-  const BLADE = new Set(["Cleave", "Stab", "Eviscerate", "Tear", "Slash", "Cheap Shot", "Bite", "Savage Bite", "Pounce", "Sweeping Ruin", "Rake", "Rending Cleave"]);
+  const BLADE = new Set(["Cleave", "Stab", "Eviscerate", "Tear", "Slash", "Cheap Shot", "Bite", "Savage Bite", "Great Lunge", "Sweeping Ruin", "Rake", "Rending Cleave"]);
   const names = new Set([...Object.values(ABILITIES).map((a) => a.name), ...Object.values(ENEMY_ABILITIES).map((a) => a.name)]);
   const out: Record<string, SoundEvent> = {};
   for (const name of names) {

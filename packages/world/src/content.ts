@@ -44,7 +44,7 @@ export const STACK_TURNS: Record<StackingEffect, number> = { bleeding: 3, burnin
 /**
  * An effect an ability leaves: a stacking one (a stack of it, lasting STACK_TURNS), or any other for the turns it says.
  */
-export type Inflict = { effect: StackingEffect } | { effect: Exclude<EffectKind, StackingEffect>; turns: number; /** Reeling: the AP it takes off the next turn (REELING_AP when not said). */ amount?: number };
+export type Inflict = { effect: StackingEffect; /** How many stacks: 1 when not said. */ stacks?: number } | { effect: Exclude<EffectKind, StackingEffect>; turns: number; /** Reeling: the AP it takes off the next turn (REELING_AP when not said). */ amount?: number };
 
 // ---------- classes ----------
 
@@ -399,10 +399,10 @@ export const ENEMIES: Record<string, EnemyDef> = {
     kind: "archer", name: "Archer", hp: 13, defence: 12, move: 2, save: 0, init: 1, xp: 13,
     abilities: ["volley", "rain_of_arrows"],
   },
-  // A beast boss: fast, and it makes its victims bleed.
+  // A beast boss: it howls its pack into a frenzy, tears deep with its bite, and leaps on whoever stands apart.
   alpha: {
     kind: "alpha", name: "Pack Leader", hp: 39, defence: 13, move: 3, save: 3, init: 2, xp: 40, boss: true,
-    abilities: ["savage_bite", "pounce", "rending_howl"],
+    abilities: ["howl", "savage_bite", "great_lunge"],
   },
   // A beast boss that comes alone: slow, huge, and it tears through everyone in front of it; its roar leaves the whole crew reeling.
   great_bear: {
