@@ -7,7 +7,7 @@
 // (render/figures.ts, FigurePose and Figure): walk, strike, stab, sweep,
 // shoot, cast, play, flinch, lie down, sit, row. An enemy ability with an
 // animation of its own (render/signatureMoves.ts) plays here too, effects and
-// all, thrown at a ring a tile ahead. Time can be slowed, paused and stepped a frame at a time, and an
+// all, thrown at a ring a tile ahead, for the enemy it belongs to. Time can be slowed, paused and stepped a frame at a time, and an
 // action can be set to repeat, to watch it over and over. Drag the stage to
 // look round the figure, and scroll to come closer.
 //
@@ -401,6 +401,13 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
   }, [onClose]);
 
   const act = (action: Act) => setNote(stage.current?.act(action) ?? "");
+  // The enemy moves (render/signatureMoves.ts) of whoever is on the stage: none for anyone else.
+  const ownMoves = useMemo(() => Object.entries(SIGNATURE_MOVES).filter(([, move]) => move.who === kind), [kind]);
+  // A move set to repeat is let go when its enemy leaves the stage.
+  useEffect(() => {
+    if (live.repeat?.startsWith("move:") && !ownMoves.some(([name]) => `move:${name}` === live.repeat)) set({ repeat: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownMoves]);
   const view = (yaw: number, pitch: number) => {
     if (stage.current) Object.assign(stage.current.look, { yaw, pitch });
   };
@@ -489,15 +496,19 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
             </button>
           ))}
         </div>
-        <h4>Enemy moves</h4>
-        <p className="muted">An enemy ability's own animation, thrown at the red ring a tile ahead. Any figure can play one; its own enemy is named.</p>
-        <div className="dev-row">
-          {Object.entries(SIGNATURE_MOVES).map(([name, move]) => (
-            <button key={name} className="small primary" title={move.blurb} onClick={() => act(`move:${name}`)}>
-              {name} ({label("enemy", move.who)})
-            </button>
-          ))}
-        </div>
+        {ownMoves.length > 0 && (
+          <>
+            <h4>Enemy moves</h4>
+            <p className="muted">This enemy's abilities with an animation of their own, thrown at the red ring a tile ahead.</p>
+            <div className="dev-row">
+              {ownMoves.map(([name, move]) => (
+                <button key={name} className="small primary" title={move.blurb} onClick={() => act(`move:${name}`)}>
+                  {name}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
         <div className="dev-row">
           <label title="Do it again and again, this often.">
             Repeat
@@ -508,7 +519,7 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
                   {name}
                 </option>
               ))}
-              {Object.keys(SIGNATURE_MOVES).map((name) => (
+              {ownMoves.map(([name]) => (
                 <option key={name} value={`move:${name}`}>
                   {name}
                 </option>
