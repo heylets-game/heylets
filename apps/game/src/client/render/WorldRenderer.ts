@@ -1202,7 +1202,8 @@ export class WorldRenderer {
    * near it only zoom and turn. Once they wander PINCH_PAN_SLACK away it is a pan, and following stops.
    */
   private panFrom: { x: number; y: number } | null = null;
-  private pointer = { x: 0, y: 0, downX: 0, downY: 0, down: false, dragged: false, dirty: false, inside: false };
+  /** `button`: which mouse button the press began with (0 the main one, as a finger or pen always is). */
+  private pointer = { x: 0, y: 0, downX: 0, downY: 0, down: false, dragged: false, dirty: false, inside: false, button: 0 };
   /** Whether a finger's tap on the map must be held to count (setHoldToTap). */
   private holdToTap = false;
   /**
@@ -4872,9 +4873,11 @@ export class WorldRenderer {
     // otherwise land on the ground behind. Clicking someone (other than yourself) means the hex they stand on.
     {
       this.pickedUnit = null;
-      const entries = [...this.units.entries()].filter(([id]) => id !== this.state?.you);
+      // Only figures that are shown: a ray meets hidden ones as well (three.js casts past `visible`), and one unseen
+      // must not catch a click meant for whoever is drawn there.
+      const entries = [...this.units.entries()].filter(([id, u]) => id !== this.state?.you && u.root.visible);
       const others = entries.map(([, u]) => u);
-      const onFigure = this.raycaster.intersectObjects(others.flatMap((u) => (u.label ? [u.root, u.label] : [u.root])), true)[0];
+      const onFigure = this.raycaster.intersectObjects(others.flatMap((u) => (u.label?.visible ? [u.root, u.label] : [u.root])), true)[0];
       const within = (root: THREE.Object3D, o: THREE.Object3D | null): boolean => !!o && (o === root || within(root, o.parent));
       const unit = onFigure && others.find((u) => u.label === onFigure.object || within(u.root, onFigure.object));
       if (unit) {
@@ -4952,6 +4955,7 @@ export class WorldRenderer {
       this.rotating = e.button === 2 || e.shiftKey || e.altKey;
       this.pointer.down = true;
       this.pointer.dragged = false;
+      this.pointer.button = e.button;
       this.pointer.downX = this.pointer.x = e.clientX;
       this.pointer.downY = this.pointer.y = e.clientY;
       this.press = this.holdToTap && e.pointerType === "touch" && !this.rotating ? "hold" : "tap";
@@ -5194,8 +5198,9 @@ export class WorldRenderer {
     }
     this.pinch = null;
     this.panFrom = null;
-    // A right-click, or a Shift/Alt click, is the start of a turn, not an order to walk.
-    const wasClick = this.pointer.down && !this.pointer.dragged && !this.rotating && e.type === "pointerup";
+    // A right-click, or a Shift/Alt click, is the start of a turn, not an order to walk; a middle click only pans.
+    // Only the main button (or a finger) gives an order: to walk, strike, aim or place.
+    const wasClick = this.pointer.down && !this.pointer.dragged && !this.rotating && this.pointer.button === 0 && e.type === "pointerup";
     this.pointer.down = false;
     const press = this.press;
     this.press = "tap";

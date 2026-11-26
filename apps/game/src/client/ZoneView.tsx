@@ -38,6 +38,7 @@ import {
   ENEMIES,
   ENEMY_ABILITIES,
   FLEE_RANGE,
+  JOIN_RANGE,
   FREE_WALK,
   pathIn,
   HARBOR_CAVE,
@@ -147,7 +148,7 @@ import { playback, type Playback } from "./zone/playback";
 import { setZoneDev, useZoneDev } from "./zone/zoneDev";
 import "./zone/zone.css";
 import { CombatLog, RollToast, type LogEntry } from "./zone/CombatLog";
-import { TimedTurnBar } from "./zone/TurnBar";
+import { TimedTurnBar, type SongCall } from "./zone/TurnBar";
 import { TurnBanner, type TurnBannerShow } from "./zone/TurnBanner";
 import { InitiativeStrip } from "./zone/InitiativeStrip";
 import "./zone/fight.css";
@@ -304,7 +305,11 @@ const STACKED = new Set(["burning", "drowning"]);
 const stacksOf = (c: { kind: string; amount?: number }): number => (STACKED.has(c.kind) ? (c.amount ?? 1) : 0);
 
 /** The conditions on a unit, as badges over its head: in CONDITION_INFO's colours, with rounds left, and stacks where there are more than one. */
-const badgesOf = (u: Unit) => u.conditions.map((c) => ({ kind: c.kind, color: CONDITION_INFO[c.kind].color, rounds: c.rounds, ...(stacksOf(c) > 1 ? { stacks: stacksOf(c) } : {}) }));
+const badgesOf = (u: Unit) => u.conditions.map((c) => ({ kind: c.kind, color: CONDITION_INFO[c.kind].color, rounds: roundsShown(c), ...(stacksOf(c) > 1 ? { stacks: stacksOf(c) } : {}) }));
+/** The rounds a condition has left, as shown: none for a shield, which lasts until it is spent or the fight ends. */
+function roundsShown(c: { kind: string; rounds: number }): number {
+  return c.kind === "bolstered" ? 0 : c.rounds;
+}
 
 /** How a lit torch is drawn in a hand (figures.ts drawTorch). */
 const TORCH_IN_HAND = { icon: "torch", ref: "torch", rarity: "common" as const };
@@ -836,6 +841,13 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           const fxs = spells.current;
           if (!said) view?.floatOver(ev.id, ev.name, "#fff1c9");
           if (!fxs || !from || !user) return;
+          // Joining a shanty: a few notes in its colour rise off the one who joins, and nothing is swung at the Bard.
+          if (ev.what === "join") {
+            const bard = ev.target ? find(ev.target) : undefined;
+            const kind = bard ? shantyOf(bard)?.kind : undefined;
+            if (kind) fxs.chime(point(user.pos, 0.05), CONDITION_INFO[kind].color, SONG_MOOD[kind] ?? "lively");
+            return;
+          }
           // What comes of it (the blows it lands, the ground it changes, whoever it moves) waits till it leaves the
           // hand or the blow comes down, and, flung or fallen from the sky, till it lands: the clock stops till then.
           const release = play.hold();
@@ -1870,16 +1882,19 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   /** The hexes a hand reaches: beside you (and your own, for a friend who shares it: an enemy never does), where no cliff is between. */
   const inArm = () => (state && act ? state.map.tiles.filter((t) => hexDistance(t, act.pos) <= 1 && strikes(state.map, act.pos, t) && (hexDistance(t, act.pos) > 0 || state.units.some((u) => u.id !== act.id && !u.down && sameHex(u.pos, t)))) : []);
   /**
-   * Whoever a click on a hex is meant for, when more than one may be standing there: the figure clicked (`clicked`),
-   * if it is on that hex; else one of the sort wanted (an enemy for a blow, a friend for a heal), someone standing first.
+   * Whoever a click on a hex is meant for, when more than one may be standing there. Aimed at an enemy (`foe`: one
+   * still standing) or a friend: only one of that sort, the figure clicked (`clicked`) if it is one, else one standing
+   * first; none, if nobody there is, so a body lying under an enemy, or an ally, is never taken for the one aimed at.
+   * Not aimed at anyone (`any`): the figure clicked, else whoever is there, standing first.
    */
   const unitFor = (pos: HexPos, want: "foe" | "friend" | "any", clicked?: string): Unit | undefined => {
     if (!z || !act) return undefined;
     const there = unitsAt(z, pos).filter((u) => !u.lost);
-    const by = clicked ? there.find((u) => u.id === clicked) : undefined;
+    const suits = (u: Unit) => want === "any" || (want === "foe" ? u.side !== act.side && !u.down : u.side === act.side);
+    const by = clicked ? there.find((u) => u.id === clicked && suits(u)) : undefined;
     if (by) return by;
-    const suits = (u: Unit) => want === "any" || (want === "foe" ? u.side !== act.side : u.side === act.side);
-    return there.find((u) => !u.down && suits(u)) ?? there.find(suits) ?? unitOn(pos);
+    const found = there.find((u) => !u.down && suits(u)) ?? there.find(suits);
+    return found ?? (want === "any" ? unitOn(pos) : undefined);
   };
   /** What there is to search on a hex (a body, an open chest, the spoils), if anything. */
   const lootOn = (pos: HexPos | null): LootSpot | undefined => (pos && state ? state.loot?.find((s) => sameHex(s.pos, pos)) : undefined);
@@ -1895,6 +1910,17 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       if (members.length === 0) continue;
       const seen = state.map.tiles.filter((t) => members.some((m) => hexDistance(m.pos, t) <= ALERT_RANGE && sees(state.map, m.pos, t)));
       out.push({ hexes: seen, color: "#ff3b3b", line: 0.7, march: true, ...(dev.showAlert ? { fill: 0.08 } : {}) });
+    }
+    // A fight under way that the hero being played is out of: how near it they can come before it draws them in, in the
+    // same red as a band's sight. Within JOIN_RANGE of anyone standing in it; for one who fled it, only an enemy in it
+    // within FLEE_RANGE brings them back (zone.ts drawnIn).
+    const fight = state.encounter;
+    if (fight && !fight.order.includes(act.id) && !act.down) {
+      const fled = !!fight.fled?.includes(act.id);
+      const fighters = state.units.filter((u) => fight.order.includes(u.id) && !u.down && (!fled || u.side !== act.side));
+      const range = fled ? FLEE_RANGE : JOIN_RANGE;
+      const near = state.map.tiles.filter((t) => fighters.some((f) => hexDistance(f.pos, t) <= range));
+      if (near.length > 0) out.push({ hexes: near, color: "#ff3b3b", line: 0.7, march: true });
     }
     if (dev.tool?.tool === "paint" && hover) out.push({ hexes: dev.tool.wide ? zoneBlast(state.map, hover, 1) : [hover], color: dev.tool.surface ? SURFACE_INFO[dev.tool.surface].color : "#ffffff", fill: 0.35, line: 0.9 });
     if (dev.tool?.tool === "spawn" && hover) out.push({ hexes: [hover], color: "#ff3b3b", fill: 0.35, line: 0.9 });
@@ -1920,7 +1946,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       const first = pick.first ? state.units.find((u) => u.id === pick.first) : undefined;
       if (!self && !first) {
         out.push({ hexes: inArm(), color: "#ffd23f", fill: 0.1, line: 0.8 });
-        if (hover && unitOn(hover)) out.push({ hexes: [hover], color: "#ff6b6b", fill: 0.3, line: 0.9 });
+        if (hover && unitFor(hover, "foe")) out.push({ hexes: [hover], color: "#ff6b6b", fill: 0.3, line: 0.9 });
         return out;
       }
       const aim = (at: HexPos) => ({ at, ...(first ? { target: first.id } : {}) });
@@ -1943,10 +1969,12 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       // A blow by hand reaches whoever is in arm's length (no cliff between); a shot or a spell, further from above.
       if (tactic.shape !== "line" && tactic.shape !== "cone") out.push({ hexes: melee ? inArm() : within(tactic.range, !tactic.chart, !tactic.chart), color: "#ffd23f", fill: 0.1, line: 0.8 });
       // Round an ally (North Star): the ally under the pointer, or yourself.
-      const ally = tactic.northStar && hover && unitOn(hover)?.side === act.side ? unitOn(hover)!.id : undefined;
+      const ally = tactic.northStar && hover ? unitFor(hover, "friend")?.id : undefined;
       const area = abilityArea(z, act, pick.id, hover ?? undefined, ally);
       if (area.length > 0) out.push({ hexes: area, color: "#ff6b6b", fill: 0.3, line: 0.9 });
-      else if (hover && (unitOn(hover) || (crateOn(hover) && (tactic.shape === "single" || tactic.shape === "chain")))) out.push({ hexes: [hover], color: tactic.shape === "ally" ? "#7dff9a" : "#ff6b6b", fill: 0.3, line: 0.9 });
+      // The hex under the pointer lights only when a click there would aim at someone (or a crate) it can be used on,
+      // found as the click finds them (unitFor): never for a body, or for a friend under a blow.
+      else if (hover && (unitFor(hover, tactic.shape === "ally" ? "friend" : "foe") || (crateOn(hover) && (tactic.shape === "single" || tactic.shape === "chain")))) out.push({ hexes: [hover], color: tactic.shape === "ally" ? "#7dff9a" : "#ff6b6b", fill: 0.3, line: 0.9 });
     } else if (pick.kind === "item") {
       const def = THROWABLES[pick.item];
       const tint = def.surface ? SURFACE_INFO[def.surface.kind].color : "#7dff9a";
@@ -2284,11 +2312,13 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       const shape = tacticOf(pick.id).shape;
       if (tacticOf(pick.id).summon) return use(pick.id, { at: pos });
       if (shape === "blast" || shape === "line" || shape === "arc" || shape === "cone") return use(pick.id, { at: pos });
-      // An ally ability clicked on open ground is meant for yourself.
-      if (shape === "ally") return use(pick.id, { target: there?.side === "hero" ? there.id : act.id });
+      // An ally ability goes only on an ally clicked (yourself among them, on your own hex): open ground is no one,
+      // and the pick stays up to be aimed again.
+      if (shape === "ally") return there ? use(pick.id, { target: there.id }) : setNote("Pick an ally, or yourself.");
       const box = crateOn(pos);
       if (there) use(pick.id, { target: there.id });
       else if (box && (shape === "single" || shape === "chain")) use(pick.id, { target: box.id });
+      else if (shape === "single" || shape === "chain") setNote("Pick an enemy.");
     } else if (pick.kind === "item") {
       // Clicked on yourself, something drinkable is drunk and a torch is lit to hold; anywhere else it is thrown there.
       const onSelf = pos.q === act.pos.q && pos.r === act.pos.r;
@@ -2299,6 +2329,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       setPick(null);
     } else if (pick.what === "jump") common("jump", { at: pos });
     else if (there) common(pick.what, { target: there.id });
+    else setNote(want === "friend" ? "Pick an ally." : "Pick an enemy.");
   };
 
   useEffect(() => {
@@ -2606,15 +2637,26 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const surface = hover ? state.surfaces[posKey(hover)] : undefined;
   const weather = hover ? (state.weather ?? []).filter((w) => w.hexes.some((p) => p.q === hover.q && p.r === hover.r)) : [];
 
+  // The shanties an ally is singing that the hero stands in and has not joined: each a call of its own over the turn bar.
+  const joinCost = commonCost("join", act.kind);
+  const songCalls: SongCall[] = fighting && myTurn
+    ? joinable(asState(state), act).map((s) => ({
+        key: s.bard.id,
+        bard: s.bard.name,
+        song: CONDITION_INFO[s.song.kind].name,
+        color: CONDITION_INFO[s.song.kind].color,
+        cost: joinCost,
+        ...(canPay(joinCost) ? {} : { blocked: `You have too few AP left for it (${budget?.ap ?? 0}).` }),
+        // Its first line names the shanty, which the card says already.
+        tip: joinTip(s.bard.name, s.song.kind, !!act.summon).split("\n").slice(1),
+        onJoin: () => common("join", { target: s.bard.id }),
+      }))
+    : [];
+
   // What can be done right here, as buttons: over the rack out of a fight, over the turn bar in one.
   const quick = (
     <>
         {!fighting && !act.down && <EmoteWheel onEmote={zone.emote} />}
-        {fighting && myTurn && joinable(asState(state), act).map((s) => (
-          <button key={`join:${s.bard.id}`} className="small" style={{ fontSize: 12, padding: "1px 7px", color: CONDITION_INFO[s.song.kind].color, borderColor: CONDITION_INFO[s.song.kind].color }} disabled={!canPay(commonCost("join", act.kind))} title={joinTip(s.bard.name, s.song.kind, !!act.summon)} onClick={() => common("join", { target: s.bard.id })}>
-            ♪ Join song
-          </button>
-        ))}
         {torchBeside && (!fighting || myTurn) && (
           <button className="small" disabled={!canPay(ITEM_AP.pickup)} title={fighting ? costName(ITEM_AP.pickup) : undefined} onClick={() => reachFor({ type: "pickup", unit: act.id, at: torchBeside }, ITEM_AP.pickup, torchBeside)}>
             {act.torch ? "Stow the torch" : "Pick up the torch"}
@@ -2810,7 +2852,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           {under ? (
             <>
               <strong>{under.name}</strong> <span className="muted">· {under.hp}/{under.maxHp} HP · Defence {defenceOf(under, state)}{under.down ? " · down" : ""}</span>
-              {under.conditions.length > 0 && <div>{under.conditions.map((c) => <span key={c.kind} className="zone-cond" style={{ color: CONDITION_INFO[c.kind].color }} title={CONDITION_INFO[c.kind].blurb}>{CONDITION_INFO[c.kind].name}{stacksOf(c) > 1 ? ` ×${c.amount}` : ""} {c.rounds}</span>)}</div>}
+              {under.conditions.length > 0 && <div>{under.conditions.map((c) => <span key={c.kind} className="zone-cond" style={{ color: CONDITION_INFO[c.kind].color }} title={CONDITION_INFO[c.kind].blurb}>{CONDITION_INFO[c.kind].name}{stacksOf(c) > 1 ? ` ×${c.amount}` : ""}{roundsShown(c) > 0 ? ` ${roundsShown(c)}` : ""}</span>)}</div>}
               {under.side === "enemy" && <div className="muted">{under.abilities.map((id) => ENEMY_ABILITIES[id]?.name ?? id).join(", ")}</div>}
               {alsoHere.map((u) => <div key={u.id}><span className="muted">Sharing the hex:</span> <strong>{u.name}</strong> <span className="muted">· {u.hp}/{u.maxHp} HP{u.down ? " · down" : ""}</span></div>)}
               {/* Where a shove would send them: over an edge, into a pit, or only back a hex. */}
@@ -2988,6 +3030,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           deadline={enc.deadline}
           onEnd={myTurn ? endTurn : undefined}
           extra={<>{pick || dev.tool ? <span className="hud-place">{place}</span> : null}{quick}</>}
+          songs={songCalls}
         />
       )}
 

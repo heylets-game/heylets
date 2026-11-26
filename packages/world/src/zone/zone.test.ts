@@ -7,7 +7,7 @@ import { ABILITIES, EFFECT_TICK, ENEMIES, HERO_CLASSES, SUNDERED_DEFENCE, WEAPON
 import { CLIMES, type Tile } from "../map";
 import { makeRng } from "../rng";
 import { abilityArea, checkAbility, checkCommon, courseFor, crateBlow, enemyAct, moveLeft, walk, walkAp, wayBetween } from "./combat";
-import { addCondition, attackContext, burnOf, damage, defenceOf, kindle, shieldOf, type Ctx } from "./engine";
+import { addCondition, addShield, attackContext, burnOf, damage, defenceOf, kindle, shieldOf, shieldUnit, type Ctx } from "./engine";
 import { shantyOf, shantyRadius, songsOn } from "./song";
 import { chartOf, constellationLinks } from "./stars";
 import { ALERT_RANGE, DEFAULT_ZONE_OPTIONS, JOIN_RANGE, generateZone, zoneOptions } from "./gen";
@@ -3038,15 +3038,38 @@ describe("the Paladin's class abilities", () => {
   });
 
 
-  it("Bolster: wears off after 3 of the bearer's turns", () => {
+  it("Bolster: the shield never wears off with turns, and is gone from everyone once the fight is over", () => {
     let { state } = party();
     state = must(state, { type: "use", by: "ann", unit: "ann", ability: "bolster" });
-    for (let turn = 1; turn <= BOLSTER.rounds; turn++) {
+    const size = wardOf(state, "ann");
+    for (let turn = 1; turn <= 8; turn++) {
       state = nextTurn(state);
-      expect(lasts(state, "bolstered"), `turn ${turn}`).toBeGreaterThan(0);
+      expect(wardOf(state, "ann"), `turn ${turn}`).toBe(size);
+      expect(wardOf(state, "bo"), `turn ${turn}`).toBe(size);
     }
-    state = endShared(state);
-    expect(lasts(state, "bolstered")).toBeUndefined();
+    state = must(state, { type: "dev", by: "ann", dev: { op: "end_fight" } });
+    expect(state.encounter).toBeNull();
+    expect(state.units.filter((u) => u.conditions.some((c) => c.kind === "bolstered")).map((u) => u.id)).toEqual([]);
+  });
+
+  it("Shields are only for those in a fight: none is given out of one, and one who gets away leaves theirs behind", () => {
+    let { state, dummy } = party();
+    state = must(state, { type: "use", by: "ann", unit: "ann", ability: "bolster" });
+    expect(wardOf(state, "ann")).toBeGreaterThan(0);
+    expect(wardOf(state, "bo")).toBeGreaterThan(0);
+    // Ann flees (the dummy well off, so she can): her shield goes with her leaving; Bo, still in it, keeps his.
+    unit(state, dummy).pos = at(10, 6);
+    state = must(state, { type: "common", by: "ann", unit: "ann", what: "flee" });
+    expect(state.encounter!.fled).toContain("ann");
+    expect(wardOf(state, "ann")).toBeUndefined();
+    expect(wardOf(state, "bo")).toBeGreaterThan(0);
+    // Out of the fight, a shield given to her does nothing; to Bo, in it, it lands.
+    const ctx: Ctx = { state: structuredClone(state), rng: makeRng(1), events: [], effects: [] };
+    shieldUnit(ctx, unit(ctx.state, "ann"), 12);
+    addShield(ctx, unit(ctx.state, "ann"), 5);
+    expect(wardOf(ctx.state, "ann")).toBeUndefined();
+    addShield(ctx, unit(ctx.state, "bo"), 5);
+    expect(wardOf(ctx.state, "bo")).toBe(wardOf(state, "bo")! + 5);
   });
 
   it("Show the Way: lifts every harmful condition off an ally, and leaves the good ones", () => {
@@ -4954,6 +4977,33 @@ describe("Druid weapons", () => {
     expect(cone.map(posKey)).toContain(posKey(at(9, 6)));
     const checked = checkAbility(state, unit(state, "ann"), "coral_burst", {});
     expect(checked).toMatch(/Pick a direction/);
+  });
+
+  it("Coral Burst and Blasting Tone point any way at all, not only the six straight ways, and are always the same size", () => {
+    const state = board();
+    const from = at(8, 6);
+    hero(state, "ann", "backend_druid", from).abilities = ["coral_burst", "blasting_tone"];
+    const aims: HexPos[] = [];
+    for (let dq = -4; dq <= 4; dq++) for (let dr = -4; dr <= 4; dr++) {
+      const p = { q: from.q + dq, r: from.r + dr };
+      if (hexDistance(p, from) >= 1 && hexDistance(p, from) <= 4) aims.push(p);
+    }
+    const shapes = new Set<string>();
+    for (const to of aims) {
+      const tag = `${to.q},${to.r}`;
+      // The cone: 1, then 2, then 3, and the hex aimed at is in it whenever it is that near.
+      const cone = abilityArea(state, unit(state, "ann"), "coral_burst", to);
+      expect(rows(state, from, to), tag).toEqual([1, 2, 3]);
+      if (hexDistance(from, to) <= 3) expect(cone.map(posKey), tag).toContain(posKey(to));
+      // The line: 4 hexes, each a step further out and beside the last, through the hex aimed at.
+      const line = abilityArea(state, unit(state, "ann"), "blasting_tone", to);
+      expect(line.map((p) => hexDistance(p, from)), tag).toEqual([1, 2, 3, 4]);
+      for (let i = 1; i < line.length; i++) expect(hexDistance(line[i], line[i - 1]), tag).toBe(1);
+      expect(line.map(posKey), tag).toContain(posKey(to));
+      if (hexDistance(from, to) === 4) shapes.add(line.map(posKey).join(" "));
+    }
+    // Far more ways to point than six: every hex 4 out gives a line of its own.
+    expect(shapes.size).toBe(24);
   });
 
   it("Coral Burst: strikes only enemies in it, leaving an ally in the cone alone, and cuts those who fail to brace", () => {

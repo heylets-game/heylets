@@ -29,7 +29,7 @@ import { makeRng, seedFromString } from "../rng";
 import { enemyTurn } from "./ai";
 import { pickBellGoer, placeBell } from "./bell";
 import { abilityArea, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, doCommon, drinkItem, moveLeft, resolveAbility, throwItem, walk } from "./combat";
-import { UNTIMED, burnOf, has, heal, regrow, removeCondition, tick, unseen, type Ctx } from "./engine";
+import { UNTIMED, burnOf, dropShield, has, heal, regrow, removeCondition, tick, unseen, type Ctx } from "./engine";
 import { ALERT_RANGE, JOIN_RANGE, freeHexNear, generateZone } from "./gen";
 import { generateDelve } from "./delve";
 import { checkLoot, checkOpen, leaveBody, look, lootFor, openChest, payBounty, take } from "./loot";
@@ -358,6 +358,8 @@ function flee(ctx: Ctx, unit: Unit): void {
   if (acting && enc.acting.length === 0) enc.resume = enc.order[at] ?? null;
   enc.fled = [...(enc.fled ?? []), unit.id];
   enc.waits = [...(enc.waits ?? []), unit.id];
+  // Out of the fight, out from behind their shield: it does not come with them.
+  dropShield(unit);
   endTurn(ctx, unit);
   ctx.events.push({ t: "fled", id: unit.id });
 }
@@ -596,6 +598,8 @@ function settle(ctx: Ctx): boolean {
   // What was called into it goes with it.
   for (const u of state.units.filter((x) => x.summon)) dismiss(ctx, u);
   state.encounter = null;
+  // A shield lasts the fight and no longer: it goes from everyone, those who fled it and the enemy too.
+  for (const u of state.units) dropShield(u);
   // However it ended, every hero who was in it is whole again: the fallen get up, and nobody carries a wound out.
   for (const h of heroes) {
     if (h.down) {
