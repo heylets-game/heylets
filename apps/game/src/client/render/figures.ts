@@ -9348,7 +9348,7 @@ function furTuft(part: Part, color: string, spans: readonly Span[], z: number, a
 
 /**
  * A bear on all fours: heavier than the wolf, with a hump at the shoulders, round ears, a pale muzzle and
- * thick clawed legs. `mane` is the Great Bear's: tufts of slightly darker fur lying back along its body, from the shoulders to the rump. `claw` is the colour of its claws (a Snow Bear's are dark against its white).
+ * thick clawed legs. `mane` is the Great Bear's: tufts of slightly darker fur lying back along its body from the shoulders over the rump, and round the back of its head. `claw` is the colour of its claws (a Snow Bear's are dark against its white).
  */
 function bear(top: THREE.Group, fur = "#7a5232", dark = "#4f3420", muzzle = "#b98a5a", eye = "#f2a33a", mane?: string, claw: string = GEAR.paper): Rig {
   const parts: Part[] = [];
@@ -9359,10 +9359,10 @@ function bear(top: THREE.Group, fur = "#7a5232", dark = "#4f3420", muzzle = "#b9
   lengthwise(body, fur, trunk);
   pelt(body, dark, trunk, -4.6, 3.2, Math.PI - 0.75, Math.PI + 0.75, 0.12);
   body.ball(dark, 1, 0, 8.8, -6, 0);
-  // The mane: rows of tufts from the front of the shoulders all the way back to the rump (not on it), over the top
-  // and down the sides.
+  // The mane: rows of tufts from the front of the shoulders all the way back over the rump, over the top and down
+  // the sides; none on the very back of it, where it rounds off to the tail.
   if (mane) {
-    for (let row = 0; row < 9; row++) {
+    for (let row = 0; row < 11; row++) {
       const z = 4.4 - row * 0.9;
       for (let i = 0; i < 9; i++) furTuft(body, mane, trunk, z, -1.75 + (3.5 * (i + (row % 2) * 0.5)) / 9, 1.1 + ((i + row) % 3) * 0.2);
     }
@@ -9370,6 +9370,12 @@ function bear(top: THREE.Group, fur = "#7a5232", dark = "#4f3420", muzzle = "#b9
   const head = part(top, 0, 9.4, 4.2);
   const skull: Span[] = [[-0.6, 2.5, 2.45, 0.8], [0.5, 3.1, 2.9, 0.75], [2.2, 3.05, 2.75, 0.6], [3.5, 2.4, 2.1, 0.25], [4.1, 1.45, 1.3, 0]];
   lengthwise(head, fur, skull);
+  // And a ruff round the back of its head, lying back into the mane.
+  if (mane) {
+    [0.6, -0.1].forEach((z, row) => {
+      for (let i = 0; i < 9; i++) furTuft(head, mane, skull, z, -1.9 + (3.8 * (i + (row % 2) * 0.5)) / 9, 0.9 + ((i + row) % 3) * 0.15);
+    });
+  }
   lengthwise(head, muzzle, [[3, 1.55, 1.35, -0.55], [5, 1.45, 1.2, -0.55], [5.95, 1.05, 0.85, -0.45], [6.2, 0.5, 0.45, -0.4]]);
   head.ball(OUTLINE, 0.62, 0, 0.35, 6, 0, [1.2, 0.75, 0.8]);
   for (const s of [-1, 1]) {
