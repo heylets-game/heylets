@@ -18,13 +18,13 @@ export const EFFECT_INFO: Record<EffectKind, { name: string; blurb: string; colo
   exposed: { name: "Exposed", blurb: "Takes 3 more damage from every direct hit, for 2 of its turns.", color: "#facc15" },
   prone: { name: "Prone", blurb: "Knocked flat: standing up costs 1 AP.", color: "#cbd5e1" },
   sundered: { name: "Sundered", blurb: "Its armor is dented: 2 less Defence.", color: "#b0a48a" },
-  reeling: { name: "Reeling", blurb: "Shaken by a heavy blow: 2 less AP on its next turn.", color: "#c084fc" },
+  reeling: { name: "Reeling", blurb: "Shaken by a heavy blow: as much less AP on its next turn as its number says.", color: "#c084fc" },
 };
 
 /** Sundered targets have this much less Defence. */
 export const SUNDERED_DEFENCE = 2;
 
-/** AP a Reeling unit goes without on its next turn. */
+/** AP a Reeling unit goes without on its next turn, when what left it Reeling does not say. */
 export const REELING_AP = 2;
 
 /** The effects that stack, each stack hurting for its tick at the start of the bearer's turn. */
@@ -44,7 +44,7 @@ export const STACK_TURNS: Record<StackingEffect, number> = { bleeding: 3, burnin
 /**
  * An effect an ability leaves: a stacking one (a stack of it, lasting STACK_TURNS), or any other for the turns it says.
  */
-export type Inflict = { effect: StackingEffect } | { effect: Exclude<EffectKind, StackingEffect>; turns: number };
+export type Inflict = { effect: StackingEffect } | { effect: Exclude<EffectKind, StackingEffect>; turns: number; /** Reeling: the AP it takes off the next turn (REELING_AP when not said). */ amount?: number };
 
 // ---------- classes ----------
 

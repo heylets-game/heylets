@@ -79,7 +79,7 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   mauling_swipe: { id: "mauling_swipe", name: "Rending Swipe", damage: 12, potency: 4, saveOr: { effect: "bleeding" }, weight: 1 },
   // A cave bear's favourite: it rears and comes down with its whole weight. Slow to wind up (most of its turn), but
   // whoever it lands on is left reeling, with less to do on their next turn.
-  bear_maul: { id: "bear_maul", name: "Maul", damage: 12, potency: 4, saveOr: { effect: "reeling", turns: 1 }, cost: 3, cooldown: 3, weight: 2 },
+  bear_maul: { id: "bear_maul", name: "Maul", damage: 12, potency: 4, saveOr: { effect: "reeling", turns: 1, amount: 2 }, cost: 3, cooldown: 3, weight: 2 },
   roar: { id: "roar", name: "Roar", damage: 4, potency: 3, saveOr: { effect: "stunned", turns: 1 }, weight: 1 },
   // An ogre's everyday blow: the club comes down on one hero so hard that whoever stands beside them is battered too.
   club_smash: { id: "club_smash", name: "Club Smash", damage: 13, potency: 3, splash: true, weight: 1 },
@@ -88,7 +88,7 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   slam: { id: "slam", name: "Slam", damage: 10, potency: 3, shape: "burst", saveOr: { effect: "slowed", turns: 2 }, cooldown: 4, weight: 2 },
   rake: { id: "rake", name: "Rake", damage: 7, potency: 4, saveOr: { effect: "bleeding" }, weight: 1 },
   // A troll's throw at whoever keeps away: a rock heavy enough to leave them reeling. It has to find another first.
-  hurl_rock: { id: "hurl_rock", name: "Hurl Rock", damage: 6, potency: 3, range: 5, saveOr: { effect: "reeling", turns: 2 }, cooldown: 2, weight: 1 },
+  hurl_rock: { id: "hurl_rock", name: "Hurl Rock", damage: 6, potency: 3, range: 5, saveOr: { effect: "reeling", turns: 1, amount: 2 }, cooldown: 2, weight: 1 },
   // A troll's quick bite, its teeth in whoever is beside it: what it tears off, it grows back half of.
   chomp: { id: "chomp", name: "Chomp", damage: 6, potency: 3, drain: 0.5, cost: 1, cooldown: 2, weight: 1 },
   dark_bolt: { id: "dark_bolt", name: "Dark Bolt", damage: 7, potency: 4, range: 5, weight: 2 },

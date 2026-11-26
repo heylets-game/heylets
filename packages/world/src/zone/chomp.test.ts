@@ -10,13 +10,14 @@ import type { ZoneEvent } from "./types";
 
 const chomp = enemyStrikes("troll", 1).find((s) => s.name === "Chomp")!;
 
-function bite(seed: number, trollHp: number) {
+function bite(seed: number, trollHp: number, burning = false) {
   let state = flatBoard({ rng: 12345, start: at(2, 6), options: { party: 1 }, flags: { shareTurns: true } });
   state.aiOff = true;
   Object.assign(standHero(state, "ann", at(5, 6), { classId: "qa_paladin", level: 1, armor: 0, power: 1, abilities: ["bash"], items: {} }), { hp: 900, maxHp: 900 });
   const troll = enemy(state, "troll", at(6, 6)).id;
   state = must(state, { type: "dev", by: "ann", dev: { op: "start_fight" } });
   unit(state, troll).hp = trollHp;
+  if (burning) unit(state, troll).conditions.push({ kind: "burning", rounds: 2, amount: 1 });
   const events: ZoneEvent[] = [];
   const ctx: Ctx = { state: structuredClone(state), rng: makeRng(seed), events, effects: [] };
   enemyAct(ctx, unit(ctx.state, troll), chomp, unit(ctx.state, "ann"));
@@ -38,6 +39,17 @@ describe("a troll's Chomp", () => {
       landed++;
       expect(healed, `seed ${seed}`).toMatchObject({ actor: troll, what: "Chomp", amount: Math.floor(hit.amount / 2) });
       expect(unit(after, troll).hp).toBe(5 + Math.floor(hit.amount / 2));
+    }
+    expect(landed).toBeGreaterThan(0);
+  });
+
+  it("heals nothing while the troll is Burning", () => {
+    let landed = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      const { troll, events, after } = bite(seed, 5, true);
+      if (events.some((e) => e.t === "hit" && e.target === "ann")) landed++;
+      expect(events.some((e) => e.t === "heal" && e.target === troll), `seed ${seed}`).toBe(false);
+      expect(unit(after, troll).hp).toBe(5);
     }
     expect(landed).toBeGreaterThan(0);
   });

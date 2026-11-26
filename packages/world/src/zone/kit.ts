@@ -545,7 +545,7 @@ export const CONDITION_INFO: Record<Condition, { name: string; blurb: string; co
   poisoned: { name: "Poisoned", blurb: "Its attacks are rolled with disadvantage.", color: "#a3e635" },
   prone: info("prone", "Flat on the ground: standing up costs 1 AP. Melee attacks against it have advantage, ranged attacks disadvantage."),
   sundered: info("sundered", `Its armor is dented: ${SUNDERED_DEFENCE} less Defence.`),
-  reeling: info("reeling", `Shaken by a heavy blow: ${REELING_AP} less AP on its next turn.`),
+  reeling: info("reeling", `Shaken by a heavy blow: as much less AP on its next turn as its number says (${REELING_AP} unless said).`),
   wet: { name: "Wet", blurb: "Soaked through: lightning hits harder, and it cannot burn.", color: "#7dd3fc" },
   beacon: { name: "Beacon", blurb: `Gives light, and it and allies within 2 hexes get +${AURAS.beaconHit} to hit.`, color: "#fff7d6" },
   mending: { name: "Healing Aura", blurb: "At the start of each of its turns, it and every ally within 2 hexes heal a little.", color: "#5dffa0" },

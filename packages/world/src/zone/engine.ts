@@ -33,7 +33,7 @@ export function removeCondition(unit: Unit, kind: Condition): void {
 
 /**
  * Put a condition on a unit, or lengthen the one it has. Something soaked cannot be set burning.
- * `amount`: a shield's points (Bolstered); a bigger one replaces a smaller.
+ * `amount`: a shield's points (Bolstered), or the AP a Reeling takes; a bigger one replaces a smaller.
  */
 export function addCondition(ctx: Ctx, unit: Unit, kind: Condition, rounds: number, amount?: number): void {
   // Bleeding and Burning come in stacks that last as long as they always do, whatever asked for them.
@@ -154,7 +154,7 @@ export function countDown(unit: Unit): void {
 /** Leave an ability's effect on a unit: a stack of a stacking one, or any other for the turns it says. */
 export function inflict(ctx: Ctx, unit: Unit, what: Inflict): void {
   if (isStacking(what.effect)) addStacks(ctx, unit, what.effect);
-  else if ("turns" in what) addCondition(ctx, unit, what.effect, what.turns);
+  else if ("turns" in what) addCondition(ctx, unit, what.effect, what.turns, what.amount);
 }
 
 /** Whether a unit is Unseen (Sneak): no enemy can attack it, or pick it out to. */

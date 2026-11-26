@@ -84,7 +84,7 @@ describe("the troll", () => {
     const [rake, chomp, rock] = ["Rake", "Chomp", "Hurl Rock"].map((name) => attacksOf(ENEMIES.troll).find((a) => a.name === name)!);
     expect(rake).toMatchObject({ weight: 1, saveOr: { effect: "bleeding" } });
     expect(chomp).toMatchObject({ damage: 6, drain: 0.5, cost: 1, cooldown: 2, weight: 1 });
-    expect(rock).toMatchObject({ range: 5, cooldown: 2, weight: 1, saveOr: { effect: "reeling", turns: 2 } });
+    expect(rock).toMatchObject({ range: 5, cooldown: 2, weight: 1, saveOr: { effect: "reeling", amount: 2 } });
   });
 });
 
