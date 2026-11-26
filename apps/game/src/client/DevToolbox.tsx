@@ -1,8 +1,11 @@
 // The dev toolbox: a small spanner at the foot of the camera's buttons on the
 // right edge of a map (in the bottom-right corner where there is none), there
 // only on a development deployment (the worker's ENVIRONMENT is "dev":
-// local and staging; see devTools.ts). It opens a window with a tab for each
-// kind of tool:
+// local and staging; see devTools.ts). It opens a window docked down the left
+// side of the screen, top to bottom, in the big windows' frame (the bag's, the
+// menu's): its name, its tabs and its close and minimize buttons stay put at
+// the top, and only the tab under them scrolls. Minimized, it is that top
+// alone. It has a tab for each kind of tool:
 //
 //   Sky & sound   hold the time of day and the weather where you want them,
 //                 and see what the audio engine is doing. Your own tab only.
@@ -19,18 +22,18 @@
 // Gold and items are changed on the server (server/dev.ts), which refuses
 // outside a development deployment. They are your own hero's alone.
 //
-// Open or shut, and the tab it was on, it stays that way from view to view
-// and across a reload.
+// Open or shut, minimized or not, and the tab it was on, it stays that way
+// from view to view and across a reload.
 
 import { Suspense, lazy, useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { GEAR_BASES, HERO_CLASSES, RARITIES, RESOURCE_KINDS, SLOTS, SLOT_LABEL, WEAPONS, slotOfRef, type Rarity, type ResourceKind, type Slot } from "@gantt-quest/world";
 import { api, type Me } from "./api";
 import { SkyAndSound } from "./audio/SoundButton";
-import { DragPanel } from "./DragPanel";
 import { itemName, label } from "./labels";
 import { PixelIcon } from "./PixelIcon";
 import { BLOCKY_KEY } from "./render/figures";
+import { BrassCorners } from "./ui/BrassCorners";
 import { WRENCH } from "./ui/menuIcons";
 import { MapsTab } from "./zone/MapsTab";
 
@@ -39,6 +42,7 @@ const FigureLab = lazy(() => import("./FigureLab"));
 
 const OPEN_KEY = "gq.dev.readout";
 const TAB_KEY = "gq.dev.tab";
+const FOLDED_KEY = "gq.dev.folded";
 const TABS = [
   ["sky", "Sky & sound"],
   ["gold", "Gold"],
@@ -97,6 +101,11 @@ export function DevToolbox({ me, refresh }: { me: Me; refresh(): Promise<void> }
   const [open, setOpen] = useState(() => recall(OPEN_KEY) === "1");
   const [tab, setTab] = useState<Tab>(() => TABS.find(([id]) => id === recall(TAB_KEY))?.[0] ?? "sky");
   const [lab, setLab] = useState(false);
+  const [folded, setFolded] = useState(() => recall(FOLDED_KEY) === "1");
+  const fold = (on: boolean) => {
+    remember(FOLDED_KEY, on ? "1" : null);
+    setFolded(on);
+  };
   const show = (on: boolean) => {
     remember(OPEN_KEY, on ? "1" : null);
     setOpen(on);
@@ -114,26 +123,33 @@ export function DevToolbox({ me, refresh }: { me: Me; refresh(): Promise<void> }
     <>
       {column ? createPortal(spanner, column) : spanner}
       {open && (
-        <DragPanel id="dev.readout" title="Dev toolbox" compact resizable className="sound-readout panel">
-          <div className="sound-readout-head">
-            <strong>Dev toolbox</strong>
-            <button className="link" onClick={() => show(false)}>
-              Close
+        <aside className={`dev-dock panel window ${folded ? "folded" : ""}`} role="dialog" aria-label="Dev toolbox">
+          <span className="win-plate">Dev Toolbox</span>
+          <BrassCorners />
+          {/* Stays put while the tab under it scrolls. */}
+          <div className="dev-dock-top">
+            <div className="dev-tabs" role="tablist" aria-label="Dev tools">
+              {TABS.map(([id, name]) => (
+                <button key={id} role="tab" aria-selected={tab === id} className={`small ${tab === id ? "selected" : ""}`} onClick={() => (pick(id), fold(false))}>
+                  {name}
+                </button>
+              ))}
+            </div>
+            <button className="bag-close bag-min hud-btn" aria-expanded={!folded} aria-label={folded ? "Show the dev toolbox" : "Minimize the dev toolbox"} title={folded ? "Show" : "Minimize"} onClick={() => fold(!folded)}>
+              {folded ? "+" : "–"}
             </button>
+            <button className="bag-close hud-btn" aria-label="Close" title="Close" onClick={() => show(false)}>×</button>
           </div>
-          <div className="dev-tabs" role="tablist" aria-label="Dev tools">
-            {TABS.map(([id, name]) => (
-              <button key={id} role="tab" aria-selected={tab === id} className={`small ${tab === id ? "selected" : ""}`} onClick={() => pick(id)}>
-                {name}
-              </button>
-            ))}
-          </div>
+          {!folded && (
+            <div className="dev-dock-body">
           {tab === "sky" && <SkyAndSound />}
           {tab === "gold" && <Seeding key="gold" me={me} refresh={refresh}>{(seed) => <GoldSeed me={me} seed={seed} />}</Seeding>}
           {tab === "figures" && <FigureStyle openLab={() => setLab(true)} />}
           {tab === "maps" && (me.character?.status === "active" ? <MapsTab /> : <p className="muted">Create a character first: there is no hero to walk in.</p>)}
           {tab === "items" && <Seeding key="items" me={me} refresh={refresh}>{(seed) => <ItemSeed me={me} seed={seed} />}</Seeding>}
-        </DragPanel>
+            </div>
+          )}
+        </aside>
       )}
       {lab && (
         <Suspense fallback={null}>

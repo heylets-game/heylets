@@ -23,7 +23,18 @@
 .dev-tools .sound-corner { right: 40px; }
 .dev-tools .hud-corner { right: 40px; max-width: calc(100% - 54px); }
 /* Its window: tabs across the top, for the sky and the engine readout, and for seeding gold and items. */
-.dev-tabs { display: flex; gap: 4px; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+/* The dev toolbox (DevToolbox.tsx): docked down the left side, top to bottom, in the big windows' frame. Its name plate
+   hangs over the top edge, so it starts that far down. The top row (tabs, minimize, close) stays put; the body scrolls. */
+.dev-dock { position: fixed; left: 8px; top: 44px; bottom: 8px; z-index: 70; width: min(500px, calc(100vw - 16px)); display: flex; flex-direction: column; gap: 10px; font-size: 12px; white-space: normal; cursor: default; }
+.dev-dock.panel.window { padding: 14px 14px 10px; }
+.dev-dock.folded { bottom: auto; }
+.dev-dock-top { display: flex; align-items: flex-start; gap: 6px; flex: none; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.dev-dock-top .dev-tabs { flex: 1; }
+.dev-dock-top .bag-close { position: relative; top: auto; right: auto; flex: none; width: 28px; height: 28px; }
+.dev-dock-top .bag-min { font-size: 18px; font-weight: bold; }
+.dev-dock.folded .dev-dock-top { padding-bottom: 0; border-bottom: none; }
+.dev-dock-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
+.dev-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
 .dev-seed { display: flex; flex-direction: column; gap: 8px; border: none; padding: 0; margin: 0; min-width: 0; }
 .dev-seed h4 { margin: 6px 0 0; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
 .dev-seed p { margin: 0; }
@@ -36,15 +47,11 @@
 .dev-kit-hero p { margin: 0; }
 .dev-abilities { gap: 4px 12px; }
 .dev-said { min-height: 1.4em; }
-.sound-readout { position: fixed; left: 8px; bottom: 8px; z-index: 70; width: min(420px, calc(100vw - 16px)); max-height: 60vh; overflow-y: auto; white-space: normal; font-size: 12px; cursor: default; }
-/* Dev only. It can be dragged by any part of it that is not a control, and resized by its corners (DragPanel). */
-.sound-readout.draggable { cursor: grab; display: flex; flex-direction: column; overflow: hidden; }
-.sound-readout.draggable > .panel-body { display: block; overflow-y: auto; min-height: 0; }
-.sound-readout-head { display: flex; justify-content: space-between; margin-bottom: 6px; padding-right: 50px; }
-.sound-readout dl { margin: 0; }
-.sound-readout dl > div { display: grid; grid-template-columns: 130px 1fr; gap: 8px; padding: 2px 0; border-top: 1px dashed var(--line); }
-.sound-readout dt { color: var(--muted); }
-.sound-readout dd { margin: 0; overflow-wrap: anywhere; }
+/* The Sky & sound tab's readout of the audio engine. */
+.dev-dock dl { margin: 0; }
+.dev-dock dl > div { display: grid; grid-template-columns: 130px 1fr; gap: 8px; padding: 2px 0; border-top: 1px dashed var(--line); }
+.dev-dock dt { color: var(--muted); }
+.dev-dock dd { margin: 0; overflow-wrap: anywhere; }
 .sound-sky { margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
 .sound-sky .sound-row { grid-template-columns: 90px 1fr 40px; }
 .sound-presets { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 2px 0 8px; }
