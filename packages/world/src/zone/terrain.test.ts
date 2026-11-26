@@ -1577,6 +1577,29 @@ describe("the alarm bell rouses the place", () => {
     expect(went[made.first]).toBeGreaterThan(went[made.mate]);
   });
 
+  it("a Taunted enemy is never sent for the bell, and one already sent forgets it once Taunted and goes for its taunter", () => {
+    // Never picked: with the one not beside Ann Taunted, the one beside her goes.
+    for (let seed = 1; seed <= 10; seed++) {
+      const made = place();
+      const state = must(made.state, { type: "dev", by: "ann", dev: { op: "start_fight" } });
+      unit(state, made.mate).pos = at(3, 7);
+      unit(state, made.mate).conditions.push({ kind: "taunted", rounds: 9, by: "ann" });
+      Object.assign(state.encounter!, { round: 4, bell: { goer: null, rolled: 0 }, order: ["ann", made.first, made.mate] });
+      const ctx = { state, rng: makeRng(seed), events: [] as ZoneEvent[], effects: [] };
+      pickBellGoer(ctx);
+      expect(state.encounter!.bell!.goer, `seed ${seed}`).toBe(made.first);
+    }
+    // Already sent, then Taunted: it does not ring it, nor go for it, but comes at Ann.
+    const made = place();
+    let state = must(made.state, { type: "dev", by: "ann", dev: { op: "start_fight" } });
+    for (const id of [made.first, made.mate]) unit(state, id).conditions.push({ kind: "taunted", rounds: 9, by: "ann" });
+    state.encounter!.bell = { goer: made.mate, rolled: 99 };
+    const events: ZoneEvent[] = [];
+    for (let i = 0; i < 6; i++) state = must(state, { type: "timeout" }, events);
+    expect(got(events, "bell")).toEqual([]);
+    expect(events.some((e) => e.t === "roll" && e.roll.kind === "attack" && e.roll.id === made.mate && e.roll.target === "ann")).toBe(true);
+  });
+
   it("an enemy beside the bell rings it, for 4 AP, not in the first round, and every band that can get to the fight is in it, told as one crowd", () => {
     const made = place();
     const events: ZoneEvent[] = [];

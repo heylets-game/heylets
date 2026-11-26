@@ -25,8 +25,10 @@
 // it can get and waits its chance; and if what holds the way is someone it
 // has no quarrel with just now (a hero lying there down, or one not in the
 // fight), it leaps over them, where there is ground beyond to land on.
-// Taunted, it looks only at the one who taunted it first, and at the rest
-// only if it can get no blow in on them this turn.
+// Taunted, it attacks no one but the one who taunted it: if it can get no
+// blow in on them this turn, it goes toward them, and it leaves the alarm bell
+// to another. Which of its abilities it uses on them is still its own choice.
+// A taunter who is down, out of the fight or Unseen holds it no longer.
 //
 // How it is put together: a turn is a list of steps (TURN_STEPS: the bell,
 // the fight), each sharing one Turn. What it can use is its own
@@ -136,7 +138,7 @@ export interface Turn {
   look(): Unit[];
   /** It can do nothing more: down, or knocked flat. */
   out(): boolean;
-  /** The best place to end a move (with AP kept back for a blow from there, if `strike`), at the one who taunted it if a blow can be got in on them. */
+  /** The best place to end a move (with AP kept back for a blow from there, if `strike`): at the one who taunted it, and no one else, if it is Taunted. */
   choose(strike: boolean): Plan | null;
   /** Nothing to strike: the way toward where there would be a blow at one of `targets`, and a leap at the end of it. */
   approach(targets: Unit[]): { path: HexPos[]; leap?: HexPos } | null;
@@ -233,11 +235,8 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
     }
     return best;
   };
-  /** Taunted: at the taunter if a blow can be got in on them, else as it would anyway. */
-  const choose = (strike: boolean) => {
-    const forced = t.goaded ? chooseAmong([t.goaded], strike) : null;
-    return forced?.attacks ? forced : chooseAmong(t.heroes, strike);
-  };
+  /** Taunted: at the taunter, and only at them. */
+  const choose = (strike: boolean) => chooseAmong(t.goaded ? [t.goaded] : t.heroes, strike);
 
   /**
    * As much of `path` as `movement` covers over the ground as it is, ending where there is room to stand (out of fire and
@@ -373,6 +372,11 @@ const bellStep: TurnStep = {
   run(t) {
     const { ctx, state, enemy, budget } = t;
     if (has(enemy, "prone") || !goesForBell(state, enemy)) return "on";
+    // Taunted since it was sent, it has no mind for the bell: another is sent at the next round.
+    if (t.goaded) {
+      state.encounter!.bell!.goer = null;
+      return "on";
+    }
     const bell = liveBell(state)!;
     if (ringBell(ctx, enemy, budget)) {
       t.rang = true;
@@ -409,10 +413,10 @@ const fightStep: TurnStep = {
       t.whim = rollWhim(ctx);
       const plan = budget.ap >= cheapest ? t.choose(true) : null;
       if (!plan?.attacks) {
-        // Nothing it can reach and still strike: before any blow, it goes toward where it could (at the one who taunted it, if
-        // there is a way to them); after one, it waits. With no way over the ground to anyone, it at least gets as near as it can.
+        // Nothing it can reach and still strike: before any blow, it goes toward where it could (at the one who taunted it, and
+        // them only, if it is Taunted); after one, it waits. With no way over the ground, it at least gets as near as it can.
         if (attacks === 0) {
-          const way = (t.goaded ? t.approach([t.goaded]) : null) ?? t.approach(t.heroes) ?? { path: t.choose(false)?.path ?? [], leap: undefined };
+          const way = t.approach(t.goaded ? [t.goaded] : t.heroes) ?? { path: t.choose(false)?.path ?? [], leap: undefined };
           const stand = way.path[way.path.length - 1] ?? enemy.pos;
           if (way.path.length > 0) walk(ctx, enemy, way.path, budget);
           // Over whoever holds the way and is not to be struck, if it got to where it meant to leap from. Then it may have a blow.
@@ -439,7 +443,7 @@ const fightStep: TurnStep = {
       const still = t.look();
       const affordable = t.blows.filter((b) => b.cost <= budget.ap);
       const heaviest = Math.max(...t.blows.map((b) => b.weight));
-      const option = (t.goaded ? bestAttack(state, enemy, enemy.pos, affordable, [t.goaded], heaviest, t.whim) : null) ?? (still.length > 0 ? bestAttack(state, enemy, enemy.pos, affordable, still, heaviest, t.whim) : null);
+      const option = t.goaded ? bestAttack(state, enemy, enemy.pos, affordable, [t.goaded], heaviest, t.whim) : still.length > 0 ? bestAttack(state, enemy, enemy.pos, affordable, still, heaviest, t.whim) : null;
       if (!option) return "end";
       budget.ap -= option.attack.cost;
       if (option.attack.cooldown > 0) {

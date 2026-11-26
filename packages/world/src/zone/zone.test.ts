@@ -4504,7 +4504,23 @@ describe("the Warden's wall", () => {
     expect(fails(state, use("taunt"))).toMatch(/within 2 hexes/);
   });
 
-  it("Taunt: a Taunted enemy goes for the Warden over a softer target it would rather hit, and for anyone else only if it cannot", () => {
+  it("Taunt: a Taunted enemy with the Warden out of reach hits nobody else, and comes at the Warden instead", () => {
+    for (let seed = 1; seed < 8; seed++) {
+      // The bandit stands beside the Mage, out of reach of the Warden this turn even with a jump.
+      let { state, foes } = party([at(16, 6)], { kind: "bandit", bo: at(17, 6) });
+      state.rng = seed;
+      const bandit = unit(state, foes[0]);
+      bandit.conditions.push({ kind: "taunted", rounds: 2, by: "ann" });
+      const before = hexDistance(bandit.pos, unit(state, "ann").pos);
+      state.aiOff = false;
+      const events: ZoneEvent[] = [];
+      state = nextTurn(state, events);
+      expect(events.filter((e) => e.t === "roll" && e.roll.kind === "attack" && e.roll.id === foes[0]).map((e) => e.t === "roll" && e.roll.target), `seed ${seed}`).toEqual([]);
+      expect(hexDistance(unit(state, foes[0]).pos, unit(state, "ann").pos), `seed ${seed}`).toBeLessThan(before);
+    }
+  });
+
+  it("Taunt: a Taunted enemy goes for the Warden over a softer target it would rather hit, and for anyone else only once the Warden is Unseen", () => {
     const swings = (hide: boolean) => {
       const targets = new Set<string>();
       for (let seed = 1; seed < 12; seed++) {

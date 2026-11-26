@@ -84,7 +84,7 @@ function canReachBell(state: ZoneState, enemy: Unit, bell: Poi): boolean {
 /**
  * At the start of a round, from the second: if no enemy is going for the bell, the enemy side rolls (BELL_RUSH, once a
  * round), and on a success one is picked to go and told to everyone (`bell_goer`). Whoever it is, it must have a way
- * to the bell. The pick is at random from those not beside a hero or a summon (so the one sent is not the one holding the
+ * to the bell, and not be Taunted (it has a hero to go for: ai.ts). The pick is at random from those not beside a hero or a summon (so the one sent is not the one holding the
  * line), or from all of them if every one is beside one, by the same odds either way: the nearer the bell, the likelier
  * (BELL_PULL). Nobody is picked if there is nobody to send.
  */
@@ -101,7 +101,7 @@ export function pickBellGoer(ctx: Ctx): void {
   mark.rolled = enc.round;
   if (!ctx.rng.chance(BELL_RUSH[Math.min(enc.round - 1, BELL_RUSH.length - 1)])) return;
   const heroes = state.units.filter((u) => u.side === "hero" && !u.down);
-  const fighters = state.units.filter((u) => u.side === "enemy" && !u.down && enc.order.includes(u.id) && !has(u, "prone") && canReachBell(state, u, bell));
+  const fighters = state.units.filter((u) => u.side === "enemy" && !u.down && enc.order.includes(u.id) && !has(u, "prone") && !has(u, "taunted") && canReachBell(state, u, bell));
   const free = fighters.filter((u) => !heroes.some((h) => hexDistance(h.pos, u.pos) <= 1));
   const pool = (free.length > 0 ? free : fighters).sort((a, b) => (a.id < b.id ? -1 : 1));
   if (pool.length === 0) return;

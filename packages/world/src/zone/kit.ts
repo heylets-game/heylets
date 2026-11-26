@@ -561,7 +561,7 @@ export const CONDITION_INFO: Record<Condition, { name: string; blurb: string; co
   lucky: { name: "Lucky", blurb: "A coin in the town well: each of its next rolls to hit, one for each coin, has advantage.", color: "#f6d365" },
   guiding_light: { name: "Guiding Light", blurb: "Lit up by a star: every attack against it has advantage.", color: "#fff3a8" },
   north_star: { name: "North Star", blurb: "Every blow it lands sets the target Burning, one stack more if the blow would have set it Burning anyway.", color: "#ffd166" },
-  taunted: { name: "Taunted", blurb: "Goaded: it must go for the one who taunted it, if it can reach them.", color: "#ff5a3c" },
+  taunted: { name: "Taunted", blurb: "Goaded: it attacks no one but the one who taunted it, and comes at them if it cannot reach them yet.", color: "#ff5a3c" },
   charted: { name: "Course Charted", blurb: `A mark on the map: it and its allies move ${CHART.speed} further each turn, on steps that bring them nearer the mark.`, color: "#ff4d4d" },
   drowning: { name: "Drowning", blurb: `Loses ${DROWNING.tick} HP a stack at the start of each of its turns, then must hold its breath (harder for every stack) or lose ${ACTION_AP} AP. A new stack keeps them all going ${DROWNING.rounds} more turns.`, color: "#2fa4c9" },
   drowning_curse: { name: "Curse of Drowning", blurb: "Takes a stack of Drowning each time it starts or ends a turn standing in water.", color: "#1f7fa0" },

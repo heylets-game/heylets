@@ -23,7 +23,7 @@ export type Side = "hero" | "enemy";
  * the Bard's: a shanty sung (song.ts), and Inspired (from joining one, or Lead by Example: the next roll to hit has advantage);
  * and the Sage's (stars.ts): Guiding Light on an enemy (whoever attacks it has advantage), North Star on an ally (their blows
  * set what they hit Burning), and a course charted (on the Sage: the mark their allies move faster toward);
- * and the Warden's: Taunted, on an enemy (it must go for the Warden who taunted it, if it can);
+ * and the Warden's: Taunted, on an enemy (it attacks no one but the Warden who taunted it);
  * and the Warlock's (drowning.ts), all on an enemy: Drowning (stacks, `amount`), the Curse of Drowning, the Black Spot and Red Sky at Morning.
  */
 export type Condition = EffectKind | "poisoned" | "wet" | "beacon" | "mending" | "bolstered" | "invisible" | "contraband" | "regenerating" | "rejuvenating" | "rallied" | "coral_armor" | ShantyKind | "inspired" | "guiding_light" | "north_star" | "charted" | "taunted" | "drowning" | "drowning_curse" | "black_spot" | "red_sky" | "tailwind" | "lucky";
