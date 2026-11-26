@@ -42,6 +42,7 @@ import {
   CRATE_HP,
   ENEMIES,
   ENEMY_ABILITIES,
+  clusterHexes,
   retortDice,
   modsOf,
   checkStrike,
@@ -1027,7 +1028,12 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
             timers.current.push(setTimeout(() => spells.current?.aura({ key: `field:${holder}`, follow: () => renderer.current?.unitFeet(holder) ?? null, holding }, CONDITION_INFO.slowing_field.color, SLOWING_FIELD.reach), 1150));
           }
           if (own === "burst" && view) return void view.burst(ev.id, ev.name, false, thenOn(() => {}), !!ev.again, centre);
-          if (own === "at" && view && aim) return view.moveAt(ev.id, ev.name, aim, landing());
+          // One thrown onto a clump of hexes (`area`: an Acid Splash, an Immolate) lands in the middle of the clump, not
+          // on the hex it was aimed at, which is at one edge of it.
+          const area = Object.values(ENEMY_ABILITIES).find((a) => a.name === ev.name)?.area;
+          const clump = own === "at" && area && ev.at && user ? clusterHexes({ map: next.map }, user.pos, ev.at, area) : [];
+          const middle = clump.length > 0 ? clump.map((p) => point(p, 0.05)).reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(clump.length) : aim;
+          if (own === "at" && view && middle) return view.moveAt(ev.id, ev.name, middle, landing());
           // A dash is played as its user is seen to go, from the dash it is told by (see jumped).
           if (own === "blow" || own === "dash") return;
           if (links.length > 0) {
