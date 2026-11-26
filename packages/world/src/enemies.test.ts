@@ -60,7 +60,7 @@ describe("the ogre", () => {
     expect(smash.saveOr).toBeUndefined();
     // Its favourite, every few turns, is the stomp: it reaches the whole party, and leaves them slow.
     const stomp = attacksOf(ogre).find((a) => a.name === "Stomp")!;
-    expect(stomp).toMatchObject({ shape: "burst", damage: 10, cooldown: 4, weight: 3, saveOr: { effect: "slowed" } });
+    expect(stomp).toMatchObject({ shape: "burst", damage: 10, cooldown: 4, weight: 2, saveOr: { effect: "slowed" } });
     expect(ogre.xp).toBeGreaterThan(brute.xp);
   });
 

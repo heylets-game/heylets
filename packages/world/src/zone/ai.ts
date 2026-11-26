@@ -69,8 +69,9 @@ function rollWhim(ctx: Ctx): Whim {
 /**
  * The best ability an enemy could use standing on `pos`, on whom, and what it is worth, or null if it has none to use
  * from there. Each ability's behaviour (behaviours.ts) says what it is worth, for the AP it takes (one that takes
- * half an attack's AP is worth twice as much); the one the enemy favours (its `weight`, against the `heaviest` of
- * all it has) gets the benefit of a close call.
+ * half an attack's AP is worth twice as much), times its `weight` against the `heaviest` of all it has: a favourite at
+ * three times the weight of another is worth three times as much, and wins whenever it is ready. A shove goes by what
+ * the ground makes it worth only.
  */
 function bestAttack(state: ZoneState, enemy: Unit, pos: HexPos, blows: EnemyStrike[], heroes: Unit[], heaviest: number, whim?: Whim): Option | null {
   const look = { state, enemy, mind: mindOf(enemy.kind), whim };
@@ -78,7 +79,9 @@ function bestAttack(state: ZoneState, enemy: Unit, pos: HexPos, blows: EnemyStri
   for (const attack of blows) {
     const use = behaviourOf(attack).value(look, pos, attack, heroes);
     if (!use) continue;
-    const scored = use.worth * (ACTION_AP / attack.cost) * (0.75 + (0.25 * attack.weight) / heaviest);
+    // A shove is worth something only with a drop or a pit behind someone: then it is taken on that alone, favourite or not.
+    const favour = attack.behaviour === "shove" ? 1 : attack.weight / heaviest;
+    const scored = use.worth * (ACTION_AP / attack.cost) * favour;
     if (!best || scored > best.worth) best = { attack, target: use.target, worth: scored };
   }
   return best;
