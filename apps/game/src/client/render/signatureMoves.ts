@@ -644,7 +644,7 @@ export const BATTERING_RAM = { gather: 0.18, trail: 3, every: 0.07 };
 
 /**
  * A Brute's Battering Ram: it drops its shoulder and drives in at the target (figures.ts THRUST, then a spring at
- * them), dust kicked back off its heels and speed lines streaming off it. It hits like a door caving in: a flash,
+ * them), dust kicked back off its heels and speed lines streaming off it. It hits like a door caving in: a big flash and a shock pulsing out over the ground,
  * shock lines bursting out ahead, and the target jolted hard; then dust is driven up along the ground for the three
  * hexes the target is shoved back, one puff after another.
  */
@@ -668,10 +668,23 @@ function batteringRam(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: 
     }, s);
   }
   stage.later(() => {
-    stage.spawnFx("burst", color, false, { from: hitAt, to: hitAt, life: 0.26, size: [1, 2.8], spin: 0.6, fade: true });
-    for (const turn of [-0.5, -0.2, 0.1, 0.4]) stage.spawnFx("streak", color, flip, { from: hitAt, to: hitAt.clone().addScaledVector(on, 0.8), life: 0.22, size: [0.8, 2], turn, spin: 0, fade: true });
+    // A big flash where the shoulder meets them, a second, slower one swelling behind it, and a shock pulsing out
+    // over the ground from their feet.
+    stage.spawnFx("burst", color, false, { from: hitAt, to: hitAt, life: 0.26, size: [1.2, 3.4], spin: 0.6, fade: true });
+    stage.later(() => stage.spawnFx("burst", crit ? GOLD : DUST, true, { from: hitAt, to: hitAt, life: 0.34, size: [1, 2.6], spin: -0.5, fade: true }), 0.05);
+    const floor = hitAt.clone().setY(feet.y + 0.06);
+    stage.wave({ at: floor, radius: 1.6, life: 0.32, color: crit ? GOLD : "#f3e7c8", width: 0.12 });
+    // Shock lines bursting out ahead, the way they are going, and a few flung back the way it came.
+    for (const turn of [-0.6, -0.3, 0, 0.3, 0.6]) stage.spawnFx("streak", color, flip, { from: hitAt, to: hitAt.clone().addScaledVector(on, 1.1), life: 0.24, size: [0.9, 2.4], turn, spin: 0, fade: true });
+    for (const turn of [-0.4, 0.4]) stage.spawnFx("streak", color, !flip, { from: hitAt, to: hitAt.clone().addScaledVector(on, -0.5), life: 0.18, size: [0.6, 1.6], turn, spin: 0, fade: true });
+    // Grit and dust thrown up off them by the blow.
+    for (let i = 0; i < 6; i++) {
+      const to = hitAt.clone().addScaledVector(on, 0.4 + Math.random() * 0.6).setY(hitAt.y + (Math.random() - 0.3) * 0.8);
+      stage.spawnFx("fleck", ROCK_PALE, flip, { from: hitAt, to, life: 0.32, size: [0.4, 0.3], spin: 0, fade: true });
+    }
     stage.jolt();
     stage.later(() => stage.jolt(), 0.06);
+    stage.later(() => stage.jolt(), 0.12);
     onImpact();
     const ground = hitAt.clone().setY(feet.y + 0.12);
     for (let i = 0; i < BATTERING_RAM.trail * 2; i++) {
@@ -688,7 +701,7 @@ function batteringRam(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: 
 
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
   "Great Cleave": { who: "brute", sweeps: true, blurb: "A great two-handed sweep from side to side: a wide white swoosh runs across both rows of hexes in front of it, dust kicked up under it and grit flung past the far edge, and everyone caught takes a heavy slash with a red burst.", play: greatCleave },
-  "Battering Ram": { who: "brute", blurb: "Drops its shoulder and charges in, dust kicked off its heels and speed lines streaming off it: a flash and shock lines bursting out ahead as it hits, then dust driven up along the ground for the three hexes the target is shoved back.", play: batteringRam },
+  "Battering Ram": { who: "brute", blurb: "Drops its shoulder and charges in, dust kicked off its heels and speed lines streaming off it: a big flash, a shock pulsing over the ground, grit and shock lines bursting out ahead as it hits, then dust driven up along the ground for the three hexes the target is shoved back.", play: batteringRam },
   Immolate: { who: "cultist", blurb: "Sparks swirl round its staff as it winds up, then a fireball goes up in a high arc trailing embers and bursts where it lands: a ring of flame rolling out over the hexes round it, flames licking up, embers flung out and smoke rising.", play: immolate },
   Slam: { who: "ogre", blurb: "Crouches, springs up into the air and lands on its backside: a wave pulses out over the ground from its feet, clouds of dust rolling out after it, and each hero is jolted as it reaches them.", play: seatSlam },
   "Club Smash": { who: "ogre", blurb: "Heaves its club right up over its head and brings it straight down: the ground bursts where it lands, a pulse rolling out to the hexes round it, dust thrown out all round and chunks of rock flung every way.", play: clubSmash },
