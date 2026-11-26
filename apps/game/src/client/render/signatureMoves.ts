@@ -203,11 +203,11 @@ const STREAK_EVERY = 0.03;
 const STREAK_PALE = "#d6e4ff";
 
 /**
- * Jaws closing on the target: two white arches, the upper and the lower, `gape` apart, snapping together over `life`
- * seconds. `onShut` runs as they meet.
+ * Jaws closing on the target: two arches (white, or `teeth`), the upper and the lower, `gape` apart, snapping together
+ * over `life` seconds. `onShut` runs as they meet.
  */
-function jaws(stage: MoveStage, { hitAt, dir, crit }: MoveCtx, life: number, gape: number, onShut: () => void) {
-  const color = crit ? GOLD : TEETH;
+function jaws(stage: MoveStage, { hitAt, dir, crit }: MoveCtx, life: number, gape: number, onShut: () => void, teeth = TEETH) {
+  const color = crit ? GOLD : teeth;
   // The swipe is drawn as a quarter circle; turned an eighth it lies flat as an arch, and half a turn more turns it over.
   const flat = dir < 0 ? -Math.PI / 4 : Math.PI / 4;
   for (const upper of [false, true]) {
@@ -226,6 +226,30 @@ function wolfBite(stage: MoveStage, ctx: MoveCtx) {
     stage.jolt();
     ctx.onImpact();
   });
+}
+
+/** A troll's Chomp: a wolf's snap forward, its jaws closing on the target as two red arches. */
+function trollChomp(stage: MoveStage, ctx: MoveCtx) {
+  const red = ctx.crit ? GOLD : CHEAP_SHOT_RED;
+  stage.lunge();
+  jaws(stage, ctx, QUICK_BITE, 0.3, () => {
+    stage.spawnFx("burst", red, false, { from: ctx.hitAt, to: ctx.hitAt, life: 0.18, size: [0.5, 1.2], spin: 0.5, fade: true });
+    stage.jolt();
+    ctx.onImpact();
+  }, CHEAP_SHOT_RED);
+}
+
+/** A troll's Rake: its usual swing with a long clawed arm, leaving a red swoosh across the target. */
+function trollRake(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const red = crit ? GOLD : CHEAP_SHOT_RED;
+  const wait = figure.strike("light");
+  // A creature with no swing of its own springs at the target, and the swoosh lands as it does.
+  if (wait <= 0) stage.lunge();
+  stage.later(() => {
+    stage.spawnFx("slash", red, dir < 0, { from: hitAt, to: hitAt, life: 0.26, size: [1.3, 2.3], spin: -dir * 0.9, fade: true });
+    stage.spawnFx("burst", red, dir < 0, { from: hitAt, to: hitAt, life: 0.22, size: [0.6, 1.5], spin: 0.5, fade: true });
+    onImpact();
+  }, Math.max(0, wait));
 }
 
 /**
@@ -476,6 +500,8 @@ export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
   "Club Smash": { who: "ogre", blurb: "Heaves its club right up over its head and brings it straight down: the ground bursts where it lands, a pulse rolling out to the hexes round it, dust thrown out all round and chunks of rock flung every way.", play: clubSmash },
   Maul: { who: "bear", only: BEARS, blurb: "Rears right up on its hind legs and tears into the target with both forepaws by turns, white swooshes behind its claws, every blow tearing three black claw marks across it with white slashes flung off all round.", play: bearMaul },
   "Rending Swipe": { who: "bear", blurb: "Rears back on its hind legs and rakes a forepaw down across the target, its claws leaving a red swoosh, and three red claw marks torn across it.", play: rendingSwipe },
+  Chomp: { who: "troll", blurb: "A snap forward, jaws closing on the target as two red arches.", play: trollChomp },
+  Rake: { who: "troll", blurb: "A swing of a long clawed arm, leaving a red swoosh across the target.", play: trollRake },
   Bite: { who: "wolf", blurb: "A snap forward, jaws closing on the target as two white arches.", play: wolfBite },
   "Cheap Shot": { who: "bandit", blurb: "Two quick side slashes, a forehand then a backhand: the sword leaves a red trail, and each cut a flat red swipe across the target.", play: cheapShot },
   Lunge: { who: "wolf", blurb: "A crouch and a leap through the air (from up to 3 hexes off, taking the hex beside its target), dust kicked back and speed lines streaming off it the whole way, jaws snapping shut on the target with a flash as it lands.", play: wolfLunge },

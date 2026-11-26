@@ -545,7 +545,7 @@ export const CONDITION_INFO: Record<Condition, { name: string; blurb: string; co
   poisoned: { name: "Poisoned", blurb: "Its attacks are rolled with disadvantage.", color: "#a3e635" },
   prone: info("prone", "Flat on the ground: standing up costs 1 AP. Melee attacks against it have advantage, ranged attacks disadvantage."),
   sundered: info("sundered", `Its armor is dented: ${SUNDERED_DEFENCE} less Defence.`),
-  reeling: info("reeling", `Shaken by a heavy blow: ${REELING_AP} less AP on its next turn.`),
+  reeling: info("reeling", `Shaken by a heavy blow: as much less AP on its next turn as its number says (${REELING_AP} unless said).`),
   wet: { name: "Wet", blurb: "Soaked through: lightning hits harder, and it cannot burn.", color: "#7dd3fc" },
   beacon: { name: "Beacon", blurb: `Gives light, and it and allies within 2 hexes get +${AURAS.beaconHit} to hit.`, color: "#fff7d6" },
   mending: { name: "Healing Aura", blurb: "At the start of each of its turns, it and every ally within 2 hexes heal a little.", color: "#5dffa0" },
@@ -689,7 +689,7 @@ export function commonCostFor(unit: Pick<Unit, "kind" | "perks">, what: CommonAc
 // ---------- enemies ----------
 
 /** What an enemy's ability does besides its damage, when it lands. */
-export type EnemyAttackKit = Pick<EnemyAbilityDef, "surface" | "push" | "chills" | "splash" | "area">;
+export type EnemyAttackKit = Pick<EnemyAbilityDef, "surface" | "push" | "chills" | "splash" | "drain" | "area">;
 
 /** The share of a blow that splashes onto each other hero beside its target (EnemyAbilityDef `splash`). */
 export const SPLASH_SHARE = 0.5;
@@ -729,7 +729,7 @@ export const ENEMY_KIT: Record<string, EnemyKit> = {
   bear: {},
   // Its Slam, like anything that strikes the whole crew, is a burst around it.
   ogre: {},
-  // It rakes up close, and will throw a rock at whoever keeps away. (Its wounds closing is in zone.ts, at the start of its turn.)
+  // It rakes and chomps up close, and will throw a rock at whoever keeps away. (Its wounds closing is in zone.ts, at the start of its turn.)
   troll: {},
   cultist: { mind: SHOOTER },
   brute: {},
@@ -819,7 +819,7 @@ export function abilityStrikes(ids: readonly string[], level: number, more = 0):
         behaviour: (a.behaviour ?? (burst ? "burst" : "strike")) as BehaviourId,
         cost: a.cost ?? ACTION_AP,
         cooldown: a.cooldown ?? 0,
-        kit: { surface: a.surface, push: a.push, chills: a.chills, splash: a.splash, area: a.area },
+        kit: { surface: a.surface, push: a.push, chills: a.chills, splash: a.splash, drain: a.drain, area: a.area },
       },
     ];
   });

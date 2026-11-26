@@ -1352,6 +1352,19 @@ describe("the enemy's turn", () => {
     expect(apNext(true)).toBe(apNext(false) - REELING_AP);
   });
 
+  it("takes as much AP as its number says, when what left it Reeling says", () => {
+    const apNext = (amount?: number) => {
+      let { state } = duel("dummy", "qa_paladin", at(5, 6), at(9, 6));
+      if (amount !== undefined) unit(state, "ann").conditions.push({ kind: "reeling", rounds: 2, amount });
+      const events: ZoneEvent[] = [];
+      state = nextTurn(state, events);
+      if (amount !== undefined) expect(events.filter((e) => e.t === "reeled")).toEqual([{ t: "reeled", id: "ann", ap: amount }]);
+      return state.encounter!.budgets.ann.ap;
+    };
+    expect(apNext(1)).toBe(apNext() - 1);
+    expect(apNext(3)).toBe(apNext() - 3);
+  });
+
   it("runs when nothing is in reach, but puts no more than two of its AP into the ground in a turn, and keeps the rest", () => {
     let state = board();
     Object.assign(hero(state, "ann", "qa_paladin", at(1, 6)), { hp: 900, maxHp: 900 });

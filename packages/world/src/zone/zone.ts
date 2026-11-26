@@ -551,9 +551,10 @@ function beginTurn(ctx: Ctx, enc: Encounter, unit: Unit): boolean {
     ctx.events.push({ t: "stood", id: unit.id });
   }
   // Still reeling from a heavy blow: this turn comes with less to spend.
-  if (has(unit, "reeling")) {
+  const reel = unit.conditions.find((c) => c.kind === "reeling");
+  if (reel) {
     removeCondition(unit, "reeling");
-    const lost = Math.min(REELING_AP, Math.max(0, ap));
+    const lost = Math.min(reel.amount ?? REELING_AP, Math.max(0, ap));
     ap -= lost;
     // Said, so the turn is seen to start short before anything else it does.
     ctx.events.push({ t: "reeled", id: unit.id, ap: lost });
