@@ -16,7 +16,7 @@ import { useEffect, useState } from "react";
 import { ABILITIES, ENEMY_DEV_MAX_LEVEL, KIT_MAX_LEVEL, MAX_PARTY, CLIMES, DEFAULT_ZONE_OPTIONS, ENEMIES, HERO_CLASSES, SITES, SITE_IDS, SURFACE_INFO, WEAPONS, poolFor, type SurfaceKind, type ZoneBiome, type ZoneSize } from "@gantt-quest/world";
 import { api, PROFILE } from "../api";
 import { DevSection } from "../DevSection";
-import { setZoneDev, useZoneDev, type KitHero } from "./zoneDev";
+import { setZoneDev, useZoneDev, type KitHero, type ZoneDevTool } from "./zoneDev";
 
 const SIZES: ZoneSize[] = ["small", "medium", "large"];
 const BIOMES: ZoneBiome[] = ["meadow", "woods", "caves", "shore"];
@@ -82,6 +82,16 @@ export function MapsTab() {
   );
   const send = dev.open?.send;
   const tool = dev.tool;
+  // The tools as the settings beside them say now. An armed one follows the settings: change the enemy, how many,
+  // the level or the ground while placing or painting, and the next click uses the new choice.
+  const spawnTool = (): ZoneDevTool => ({ tool: "spawn", kinds: Array.from({ length: spawn.count }, () => spawn.kind), ...(Number(spawn.level) >= 1 ? { level: Math.min(ENEMY_DEV_MAX_LEVEL, Math.floor(Number(spawn.level))) } : {}) });
+  const paintTool = (): ZoneDevTool => ({ tool: "paint", surface: paint.surface === "clear" ? null : paint.surface, wide: paint.wide });
+  useEffect(() => {
+    if (tool?.tool === "spawn") setZoneDev({ tool: spawnTool() });
+  }, [spawn]);
+  useEffect(() => {
+    if (tool?.tool === "paint") setZoneDev({ tool: paintTool() });
+  }, [paint]);
   const link = dev.open ? `${location.origin}${location.pathname}?p=${PROFILE === "2" ? "3" : "2"}#zone/${dev.open.code}` : "";
 
   return (
@@ -189,7 +199,7 @@ export function MapsTab() {
               Level
               <input type="number" min={1} max={ENEMY_DEV_MAX_LEVEL} value={spawn.level} placeholder="the map's" onChange={(e) => setSpawn({ ...spawn, level: e.target.value })} />
             </label>
-            <button className={`small ${tool?.tool === "spawn" ? "selected" : ""}`} onClick={() => setZoneDev({ tool: tool?.tool === "spawn" ? null : { tool: "spawn", kinds: Array.from({ length: spawn.count }, () => spawn.kind), ...(Number(spawn.level) >= 1 ? { level: Math.min(ENEMY_DEV_MAX_LEVEL, Math.floor(Number(spawn.level))) } : {}) } })}>
+            <button className={`small ${tool?.tool === "spawn" ? "selected" : ""}`} onClick={() => setZoneDev({ tool: tool?.tool === "spawn" ? null : spawnTool() })}>
               {tool?.tool === "spawn" ? "Done placing" : "Place a group: click the map"}
             </button>
           </div>
@@ -202,7 +212,7 @@ export function MapsTab() {
               </select>
             </label>
             <label><input type="checkbox" checked={paint.wide} onChange={(e) => setPaint({ ...paint, wide: e.target.checked })} /> a hex and those round it</label>
-            <button className={`small ${tool?.tool === "paint" ? "selected" : ""}`} onClick={() => setZoneDev({ tool: tool?.tool === "paint" ? null : { tool: "paint", surface: paint.surface === "clear" ? null : paint.surface, wide: paint.wide } })}>
+            <button className={`small ${tool?.tool === "paint" ? "selected" : ""}`} onClick={() => setZoneDev({ tool: tool?.tool === "paint" ? null : paintTool() })}>
               {tool?.tool === "paint" ? "Done painting" : "Paint: click the map"}
             </button>
           </div>
