@@ -1068,12 +1068,14 @@ function lungeAt(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit): bool
 }
 
 /**
- * An enemy uses one of its abilities. Each attack it makes spends one count of a Frenzy, once it is over (so the blood
- * it draws in that attack still bleeds); a call to its own side is no attack, and spends none.
+ * An enemy uses an ability on `target`. One that lands on more than one hex (`area`, `sweep`) is aimed at `at`, which
+ * may be a hex beside the target rather than theirs (ai.ts aims it to catch as many as it can); left out, at the target.
+ * Each attack it makes spends one count of a Frenzy, once it is over (so the blood it draws in that attack still
+ * bleeds); a call to its own side is no attack, and spends none.
  */
-export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | null): void {
+export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | null, at?: HexPos): void {
   if (attack.kit.rally) return howl(ctx, enemy, attack);
-  enemyAttack(ctx, enemy, attack, target);
+  enemyAttack(ctx, enemy, attack, target, at);
   const frenzy = enemy.conditions.find((c) => c.kind === "frenzied");
   if (frenzy && --frenzy.rounds <= 0) removeCondition(enemy, "frenzied");
 }
@@ -1086,10 +1088,11 @@ function howl(ctx: Ctx, enemy: Unit, attack: EnemyStrike): void {
   }
 }
 
-function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | null): void {
+function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | null, at?: HexPos): void {
   const { state } = ctx;
   const dc = 8 + attack.potency;
-  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name, target: target?.id, ...(attack.kit.area && target ? { at: target.pos } : {}) });
+  const aim = at ?? target?.pos;
+  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name, target: target?.id, ...((attack.kit.area || attack.kit.sweep) && aim ? { at: aim } : {}) });
   // What it leaves on whoever it gets through to: `saveOr` unless they save (`save`: they may), and its lesser share
   // (`onSave`) if they do.
   const leave = (victim: Unit, save: boolean) => {
@@ -1113,7 +1116,7 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
   // Thrown at their hex, it lands on a clump of hexes round it: everyone there (in the fight) saves for half, and
   // whatever it leaves on the ground is left on all of it.
   if (attack.kit.area) {
-    const hexes = clusterHexes(state, enemy.pos, target.pos, attack.kit.area);
+    const hexes = clusterHexes(state, enemy.pos, aim!, attack.kit.area);
     const dice = rollShown(ctx.rng, attack.dice);
     for (const victim of state.units.filter((u) => u.side !== enemy.side && !u.down && !unseen(u) && inFight(state, u.id) && hexes.some((p) => sameHex(p, u.pos)))) {
       const saved = saveRoll(ctx, victim, "agi", dc, attack.name).ok;
@@ -1125,7 +1128,7 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
   }
   // A sweep: one great swing through rows of hexes. Everyone in it (in the fight) saves for half, as from a burst.
   if (attack.kit.sweep) {
-    const hexes = sweepHexes(state, enemy.pos, target.pos, attack.kit.sweep);
+    const hexes = sweepHexes(state, enemy.pos, aim!, attack.kit.sweep);
     const dice = rollShown(ctx.rng, attack.dice);
     for (const victim of state.units.filter((u) => u.side !== enemy.side && !u.down && !unseen(u) && inFight(state, u.id) && hexes.some((p) => sameHex(p, u.pos)))) {
       const saved = saveRoll(ctx, victim, "agi", dc, attack.name).ok;

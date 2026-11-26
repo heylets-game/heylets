@@ -49,6 +49,8 @@ import type { Budget, Unit, ZoneState } from "./types";
 interface Option {
   attack: EnemyStrike;
   target: Unit | null;
+  /** Where one that lands on more than one hex is aimed (behaviours.ts Use). */
+  at?: HexPos;
   worth: number;
 }
 
@@ -82,7 +84,7 @@ function bestAttack(state: ZoneState, enemy: Unit, pos: HexPos, blows: EnemyStri
     // A shove is worth something only with a drop or a pit behind someone: then it is taken on that alone, favourite or not.
     const favour = attack.behaviour === "shove" ? 1 : attack.weight / heaviest;
     const scored = use.worth * (ACTION_AP / attack.cost) * favour;
-    if (!best || scored > best.worth) best = { attack, target: use.target, worth: scored };
+    if (!best || scored > best.worth) best = { attack, target: use.target, ...(use.at ? { at: use.at } : {}), worth: scored };
   }
   return best;
 }
@@ -454,7 +456,7 @@ const fightStep: TurnStep = {
         enemy.cooldowns[option.attack.id] = option.attack.cooldown;
         t.ready();
       }
-      enemyAct(ctx, enemy, option.attack, option.target);
+      enemyAct(ctx, enemy, option.attack, option.target, option.at);
     }
     return "end";
   },

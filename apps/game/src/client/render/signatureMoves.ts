@@ -75,6 +75,11 @@ export interface MoveStage {
   spawnFx(kind: FxKind, color: string, flip: boolean, opts: FxOpts): void;
   /** A wave spreading out over the ground (see groundWave). */
   wave(opts: WaveOpts): void;
+  /**
+   * Lay something flat on the ground (see groundSlash): `lay` puts it in the group it is given and returns its step,
+   * run every frame with the seconds gone by until it says it is over (and has taken itself away).
+   */
+  lay(lay: (group: THREE.Object3D) => (dt: number) => boolean): void;
   /** Run this so many seconds on, on the stage's clock (slowed and paused with it, in the lab). */
   later(run: () => void, seconds: number): void;
   /** The attack's sound again, for a swing after the first (the stage plays the first itself). */
@@ -856,10 +861,172 @@ function rainOfArrows(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: 
   }, start + fall + over / 2);
 }
 
+/** How a slash laid on the ground looks (see groundSlash). */
+export interface SlashOpts {
+  /** The middle of the circle it is cut along, on the ground. */
+  at: THREE.Vector3;
+  /** How far out from `at` it runs, in world units. */
+  radius: number;
+  /** The way it faces, as an angle about the vertical (atan2 of z over x), and how far it runs either side of it, in radians. */
+  ahead: number;
+  half: number;
+  /** How wide it is at its widest, the middle, in world units: it tapers to points at either end. */
+  width: number;
+  /** Which end it is cut from: 1 from the side clockwise of `ahead` (as seen from above), -1 from the other. */
+  from: 1 | -1;
+  color: string;
+  /** Seconds to cut it from end to end, and then for it to fade. */
+  cut: number;
+  life: number;
+}
+
+/**
+ * A slash laid flat on the ground (see SlashOpts): a crescent along a circle round `at`, thickest in the middle and
+ * drawn on from one end to the other, then fading. Always on the plane of the ground, whichever way it is seen from.
+ * Lay it with MoveStage.lay.
+ */
+export function groundSlash(o: SlashOpts): (group: THREE.Object3D) => (dt: number) => boolean {
+  return (group) => {
+    const steps = 40;
+    const positions: number[] = [];
+    const index: number[] = [];
+    for (let i = 0; i <= steps; i++) {
+      const k = i / steps;
+      // From the end it is cut from, round to the other.
+      const a = o.ahead + o.half * (1 - 2 * k) * o.from;
+      const w = o.width * (0.06 + 0.94 * Math.pow(Math.sin(Math.PI * k), 0.8));
+      for (const r of [o.radius - w / 2, o.radius + w / 2]) positions.push(Math.cos(a) * r, 0, Math.sin(a) * r);
+      if (i > 0) index.push(2 * i - 2, 2 * i - 1, 2 * i, 2 * i - 1, 2 * i + 1, 2 * i);
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setIndex(index);
+    geometry.setDrawRange(0, 0);
+    const material = new THREE.MeshBasicMaterial({ color: o.color, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.copy(o.at);
+    mesh.renderOrder = 8;
+    group.add(mesh);
+    let age = 0;
+    return (dt) => {
+      age += dt;
+      geometry.setDrawRange(0, Math.ceil(Math.min(1, age / o.cut) * steps) * 6);
+      const k = Math.max(0, (age - o.cut) / o.life);
+      material.opacity = 0.95 * (1 - k * k);
+      if (k < 1) return true;
+      group.remove(mesh);
+      geometry.dispose();
+      material.dispose();
+      return false;
+    };
+  };
+}
+
+const BLOOD = "#e0313f";
+const BLOOD_DEEP = "#8c1420";
+/**
+ * A Rending Cleave's slash on the ground: how far out it runs (through the middle of the hexes beside the bear), how
+ * far either side of straight ahead (past the middle of the hexes either side), how wide it is, and the seconds to
+ * cut it and then to fade.
+ */
+export const RENDING_CLEAVE = { radius: HEX * 0.95, half: Math.PI / 3 + 0.4, width: 1.25, cut: 0.14, life: 0.55 };
+
+/**
+ * A Great Bear's Rending Cleave: it rears a little and carries a forepaw right out to its side, then sweeps it flat
+ * across its whole front (figures.ts RAKE), a red swoosh behind its claws. As the paw comes across, one great red slash
+ * is cut into the ground through the three hexes in front of it, from one end to the other, lying flat on the ground
+ * however the map is turned; a spray of red flecks is thrown off its far end and dust kicked up along it. `hitAt` is
+ * over the hex it is swept toward; everyone caught is told (and flinches) as it is cut.
+ */
+function rendingCleave(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const wait = figure.strike("rake");
+  // A creature with no rake of its own springs at the mark, and the slash is cut as it does.
+  if (wait <= 0) stage.lunge();
+  const { radius, half, width, cut, life } = RENDING_CLEAVE;
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const ahead = Math.atan2(hitAt.z - feet.z, hitAt.x - feet.x);
+  const color = crit ? GOLD : BLOOD;
+  const from = (-dir) as 1 | -1;
+  const lands = Math.max(0, wait - cut / 2);
+  stage.later(() => {
+    stage.lay(groundSlash({ at: feet.clone().setY(feet.y + 0.08), radius, ahead, half, width, from, color, cut, life }));
+    // Dust kicked up along it as it is cut, and red flecks thrown off the far end.
+    for (let i = 0; i <= 6; i++) {
+      const a = ahead + half * (1 - (2 * i) / 6) * from;
+      const out = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+      const at = feet.clone().addScaledVector(out, radius).setY(feet.y + 0.12);
+      stage.later(() => {
+        stage.spawnFx("dust", DUST, out.x < 0, { from: at, to: at.clone().addScaledVector(out, 0.45).setY(at.y + 0.35), life: 0.45, size: [0.55, 1.2], spin: 0, fade: true });
+        if (i >= 4) for (let n = 0; n < 2; n++) stage.spawnFx("fleck", n ? BLOOD_DEEP : color, out.x < 0, { from: at, to: at.clone().addScaledVector(out, 0.6 + Math.random() * 0.5).setY(at.y + 0.2), life: 0.38, size: [0.35, 0.22], spin: 0, fade: true, arc: 0.4 });
+      }, (cut * i) / 6);
+    }
+  }, lands);
+  stage.later(() => {
+    stage.jolt();
+    onImpact();
+  }, lands + cut / 2);
+}
+
+/** A Thunderous Roar's waves: as far as they roll (past every hero two hexes off, ENEMY_BURST), how long each takes, and the seconds between them. */
+export const THUNDEROUS_ROAR = { radius: 3.9, life: 0.6, apart: 0.13 };
+const ROAR_PALE = "#f3e7c8";
+/** What Reeling looks like (content.ts EFFECT_INFO): the colour of the waves behind the first. */
+const REELING = "#c084fc";
+
+/**
+ * A Great Bear's Thunderous Roar: it rears right up on its hind legs, throws its head back and bellows (figures.ts
+ * ROAR). As it roars, three rings roll out over the ground from its feet one after another, the first pale and the
+ * others Reeling's purple, sound lines burst out from its open mouth every way, and dust is blown out and away from
+ * it all round. Each hero is jolted as the first ring reaches them, with dust thrown up at their feet, and the blow on
+ * them is told then.
+ */
+function thunderousRoar(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alone }: MoveCtx) {
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const ground = feet.clone().setY(feet.y + 0.08);
+  const { radius, life, apart } = THUNDEROUS_ROAR;
+  // Only the first plays the roar: by the time the others are told, it has already gone out.
+  const roars = echo ? 0 : Math.max(0, figure.strike("roar"));
+  if (!echo) stage.later(() => {
+    [crit ? GOLD : ROAR_PALE, REELING, REELING].forEach((color, n) =>
+      stage.later(() => stage.wave({ at: ground, radius: radius * (1 - n * 0.08), life, color, width: n ? 0.14 : 0.08 }), n * apart),
+    );
+    // Sound lines bursting out of its mouth every way, twice.
+    const mouth = offset(feet, 0, 1.9, 0);
+    for (const again of [0, 0.16]) {
+      stage.later(() => {
+        for (let i = 0; i < 10; i++) {
+          const a = (i / 10) * Math.PI * 2 + again * 3;
+          const to = offset(mouth, Math.cos(a) * 1.4, Math.sin(a) * 0.9, 0);
+          stage.spawnFx("streak", crit ? GOLD : i % 2 ? REELING : ROAR_PALE, Math.cos(a) < 0, { from: mouth, to, life: 0.3, size: [0.8, 1.8], turn: a, spin: 0, fade: true });
+        }
+      }, again);
+    }
+    // Dust blown out and away from it all round.
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2 + Math.random() * 0.3;
+      const from = offset(ground, Math.cos(a) * 0.5, 0.1, Math.sin(a) * 0.5);
+      const to = offset(ground, Math.cos(a) * radius * 0.6, 0.2 + Math.random() * 0.2, Math.sin(a) * radius * 0.6);
+      stage.spawnFx("dust", DUST, Math.cos(a) < 0, { from, to, life: 0.7 + Math.random() * 0.2, size: [0.8, 2], spin: 0, fade: true });
+    }
+  }, roars);
+  if (alone) return stage.later(onImpact, roars);
+  // Whoever it reaches is caught as the first ring passes under them.
+  const far = Math.hypot(hitAt.x - feet.x, hitAt.z - feet.z);
+  stage.later(() => {
+    const at = hitAt.clone().setY(hitAt.y - 0.45);
+    for (const side of [-1, 1]) stage.spawnFx("dust", crit ? GOLD : DUST, side > 0, { from: at, to: offset(at, side * 0.6, 0.4, 0), life: 0.45, size: [0.7, 1.4], spin: 0, fade: true });
+    stage.jolt();
+    stage.later(() => stage.jolt(), 0.08);
+    onImpact();
+  }, roars + waveReaches(far, radius, life));
+}
+
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
   "Great Cleave": { who: "brute", sweeps: true, blurb: "A great two-handed sweep from side to side: a wide white swoosh runs across both rows of hexes in front of it, dust kicked up under it and grit flung past the far edge, and everyone caught takes a heavy slash with a red burst.", play: greatCleave },
   "Battering Ram": { who: "brute", blurb: "Drops its shoulder and charges in, dust kicked off its heels and speed lines streaming off it: a big flash, a shock pulsing over the ground, grit and shock lines bursting out ahead as it hits, then dust driven up along the ground for the three hexes the target is shoved back.", play: batteringRam },
   "Rain of Arrows": { who: "archer", blurb: "Draws and looses a sheaf of arrows straight up, then they come down slanting on the hex and all round it, one after another, each landing with a puff of dust and standing in the ground a moment, a pale ring pulsing out as the first hit.", play: rainOfArrows },
+  "Rending Cleave": { who: "great_bear", blurb: "Rears a little and sweeps a forepaw flat across its whole front, a red swoosh behind its claws: one great red slash is cut into the ground through the three hexes before it, dust kicked up along it and red flecks thrown off its far end.", play: rendingCleave },
+  "Thunderous Roar": { who: "great_bear", blurb: "Rears right up, throws its head back and bellows: rings roll out over the ground from its feet, pale then purple, sound lines burst from its mouth every way and dust is blown out all round; each hero is jolted as the first ring reaches them.", play: thunderousRoar },
   Immolate: { who: "cultist", blurb: "Sparks swirl round its staff as it winds up, then a fireball goes up in a high arc trailing embers and bursts where it lands: a ring of flame rolling out over the hexes round it, flames licking up, embers flung out and smoke rising.", play: immolate },
   Slam: { who: "ogre", blurb: "Crouches, springs up into the air and lands on its backside: a wave pulses out over the ground from its feet, clouds of dust rolling out after it, and each hero is jolted as it reaches them.", play: seatSlam },
   "Club Smash": { who: "ogre", blurb: "Heaves its club right up over its head and brings it straight down: the ground bursts where it lands, a pulse rolling out to the hexes round it, dust thrown out all round and chunks of rock flung every way.", play: clubSmash },

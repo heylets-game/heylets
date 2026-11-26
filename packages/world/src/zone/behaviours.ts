@@ -8,10 +8,11 @@
 // - `value`: at its best from there, on whom, and what is that worth? Null when there is nobody to use it on.
 // What the ability then does when used is the rules' business (combat.ts enemyAct), not the behaviour's.
 
-import { hexDistance, posKey, type HexPos } from "@gantt-quest/core";
+import { hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/core";
+import { tileAt } from "../map";
 import { leaps, leavesReach, lungeLanding, shiftInto, shoveDest, sweepHexes } from "./combat";
 import { has } from "./engine";
-import { HIGH_REACH, inFight, reachFrom, seesFor, strikes } from "./geometry";
+import { HIGH_REACH, inFight, reachFrom, sameHex, seesFor, strikes } from "./geometry";
 import { ENEMY_BURST, SPLASH_SHARE, type EnemyStrike, type Mind } from "./kit";
 import { diceAverage } from "./rules";
 import { clusterHexes } from "./weather";
@@ -32,6 +33,8 @@ export interface Look {
 export interface Use {
   attack: EnemyStrike;
   target: Unit | null;
+  /** For one that lands on more than one hex (`area`, `sweep`): the hex it is aimed at, which need not be the target's. */
+  at?: HexPos;
   worth: number;
 }
 
@@ -44,11 +47,57 @@ export interface Behaviour {
 export function strikeReaches(state: ZoneState, enemy: Unit, pos: HexPos, attack: EnemyStrike, hero: Unit): boolean {
   // A leap (a Dire Wolf's Lunge): anyone it could spring at and land beside.
   if (leaps(attack)) return !!lungeLanding(state, enemy, pos, attack, hero);
-  if (attack.range === 1) return strikes(state.map, pos, hero.pos);
+  return aimReaches(state, enemy, pos, attack, hero.pos);
+}
+
+/** Whether an attack of an enemy's (not a leap) reaches from `pos` to the hex `at`, whoever is on it: as strikeReaches. */
+function aimReaches(state: ZoneState, enemy: Unit, pos: HexPos, attack: EnemyStrike, at: HexPos): boolean {
+  if (attack.range === 1) return strikes(state.map, pos, at);
   // The lie of the land is looked up only where it could settle it: height adds up to HIGH_REACH to a range and takes nothing from it.
-  const far = hexDistance(pos, hero.pos);
+  const far = hexDistance(pos, at);
   if (far > attack.range + HIGH_REACH) return false;
-  return (far <= attack.range || far <= reachFrom(state.map, pos, hero.pos, attack.range)) && seesFor(state, enemy.side, pos, hero.pos);
+  return (far <= attack.range || far <= reachFrom(state.map, pos, at, attack.range)) && seesFor(state, enemy.side, pos, at);
+}
+
+/** Where an ability that lands on more than one hex is aimed, and the heroes caught there. */
+interface Aim {
+  at: HexPos;
+  caught: Unit[];
+}
+
+/**
+ * Where an ability that lands on more than one hex (`area`, `sweep`) could be aimed from `from`, and who each aim
+ * catches: any hex it reaches, not only one a hero stands on, so it can come down between two heroes and catch both.
+ * Aims that catch nobody are left out. Null for an ability aimed at one hero.
+ */
+function spreadAims(look: Look, from: HexPos, attack: EnemyStrike, targets: readonly Unit[]): Aim[] | null {
+  const { state, enemy } = look;
+  const { area, sweep } = attack.kit;
+  if (!area && !sweep) return null;
+  let aims: HexPos[];
+  if (area) {
+    // What lands on a clump round the hex aimed at covers no hex further than one from it: so a hero's own hex, or one beside it.
+    const seen = new Set<string>();
+    aims = [];
+    for (const h of targets) {
+      for (const p of [h.pos, ...hexNeighbors(h.pos, state.map.grid)]) {
+        const key = posKey(p);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (tileAt(state.map, p) && aimReaches(state, enemy, from, attack, p)) aims.push(p);
+      }
+    }
+  } else {
+    // A sweep is swung toward a hex beside it.
+    aims = hexNeighbors(from, state.map.grid).filter((p) => tileAt(state.map, p) && strikes(state.map, from, p));
+  }
+  const out: Aim[] = [];
+  for (const at of aims) {
+    const hexes = area ? clusterHexes(state, from, at, area) : sweepHexes(state, from, at, sweep!);
+    const caught = targets.filter((h) => hexes.some((p) => sameHex(p, h.pos)));
+    if (caught.length > 0) out.push({ at, caught });
+  }
+  return out;
 }
 
 /**
@@ -76,23 +125,32 @@ const caughtBy = (look: Look, pos: HexPos, targets: readonly Unit[]): Unit[] =>
  * less for what it risks on the way (leapRisk).
  */
 const strike: Behaviour = {
-  reaches: (look, from, attack, targets) => targets.some((h) => strikeReaches(look.state, look.enemy, from, attack, h)),
+  reaches: (look, from, attack, targets) => {
+    if (targets.some((h) => strikeReaches(look.state, look.enemy, from, attack, h))) return true;
+    // One that lands on several hexes may reach a hero from a hex beside them, though not their own.
+    return (spreadAims(look, from, attack, targets)?.length ?? 0) > 0;
+  },
   value(look, from, attack, targets) {
     const average = diceAverage(attack.dice);
     let best: Use | null = null;
+    // One that lands on several hexes (thrown onto a clump, or swept through rows) is worth what a burst is to each
+    // hero caught: about half save for half. It is weighed at every hex it could be aimed at, and its whim and any
+    // taunt go by whoever is on that hex, or else the first caught.
+    const aims = spreadAims(look, from, attack, targets);
+    if (aims) {
+      for (const { at, caught } of aims) {
+        const hero = caught.find((h) => sameHex(h.pos, at)) ?? caught[0];
+        let worth = average * 0.75 * caught.length * (look.whim?.(attack, hero) ?? 1);
+        if (caught.some((h) => has(h, "taunting"))) worth *= 3;
+        if (!best || worth > best.worth) best = { attack, target: hero, at, worth };
+      }
+      return best;
+    }
     for (const hero of targets) {
       if (!strikeReaches(look.state, look.enemy, from, attack, hero)) continue;
       // A blow that splashes is worth its share again for every other hero beside the one it is aimed at.
       const beside = attack.kit.splash ? targets.filter((h) => h !== hero && hexDistance(h.pos, hero.pos) === 1).length : 0;
-      // One thrown onto a clump of hexes is worth what a burst is to each hero on them: about half save for half.
-      const area = attack.kit.area ? clusterHexes(look.state, from, hero.pos, attack.kit.area) : null;
-      // A sweep is worth what a burst is to every hero in its rows: about half save for half.
-      const swept = attack.kit.sweep ? sweepHexes(look.state, from, hero.pos, attack.kit.sweep) : null;
-      const share = area
-        ? 0.75 * targets.filter((h) => area.some((p) => hexDistance(p, h.pos) === 0)).length
-        : swept
-          ? 0.75 * targets.filter((h) => swept.some((p) => hexDistance(p, h.pos) === 0)).length
-          : 1 + beside * SPLASH_SHARE;
+      const share = 1 + beside * SPLASH_SHARE;
       let worth = average * share * (look.whim?.(attack, hero) ?? 1);
       if (leaps(attack)) worth *= leapRisk(look.state, look.enemy, from, lungeLanding(look.state, look.enemy, from, attack, hero)!);
       if (has(hero, "taunting")) worth *= 3;
