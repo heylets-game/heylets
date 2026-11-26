@@ -1874,10 +1874,6 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   }, [mineKey]);
   const flags = { aiOff: !!state?.aiOff, undying: !!state?.undying, timerOff: !!state?.timerOff, sandbox: !!state?.sandbox };
   useEffect(() => setZoneDev({ flags }), [flags.aiOff, flags.undying, flags.timerOff, flags.sandbox]);
-  // And everyone standing on it, for its Combat section.
-  const onMap = state?.units.filter((u) => !u.down && !u.lost && !u.summon && !state.dark?.includes(u.id)) ?? [];
-  const onMapKey = onMap.map((u) => `${u.id}:${u.name}:${u.abilities.join(",")}`).join("|");
-  useEffect(() => setZoneDev({ units: onMap.map((u) => ({ id: u.id, name: u.name, side: u.side, abilities: u.abilities })) }), [onMapKey]);
   // In the sandbox, anyone in the fight may act whenever the dev likes.
   const ready = (u: Unit) => !!enc && !u.down && (sandboxed(u) || (enc.acting.includes(u.id) && !enc.done.includes(u.id)));
   const act = mine.find((u) => u.id === playAs && (!enc || !enc.order.includes(u.id) || ready(u))) ?? mine.find(ready) ?? mine.find((u) => u.id === state?.you) ?? mine[0];
@@ -1973,7 +1969,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const send = zone.send;
   useEffect(() => {
     setZoneDev({ open: { code, send: (op) => send({ type: "dev", dev: op }) } });
-    return () => setZoneDev({ open: null, tool: null, heroes: [], flags: NO_FLAGS, units: [], picked: null });
+    return () => setZoneDev({ open: null, tool: null, heroes: [], flags: NO_FLAGS, picked: null });
   }, [code, send]);
 
   /** An alarm bell rung where it stands: it swings, waves of sound pulse out of it, and its toll is heard. */
@@ -2112,8 +2108,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     }
     if (dev.tool?.tool === "paint" && hover) out.push({ hexes: dev.tool.wide ? zoneBlast(state.map, hover, 1) : [hover], color: dev.tool.surface ? SURFACE_INFO[dev.tool.surface].color : "#ffffff", fill: 0.35, line: 0.9 });
     if (dev.tool?.tool === "spawn" && hover) out.push({ hexes: [hover], color: "#ff3b3b", fill: 0.35, line: 0.9 });
-    if (dev.tool?.tool === "pick" && hover) out.push({ hexes: [hover], color: "#ffd84a", fill: 0.2, line: 0.9 });
-    const picked = dev.picked ? state.units.find((u) => u.id === dev.picked && !u.down) : undefined;
+    // The enemy the sandbox has the dev playing: ringed.
+    const picked = foe;
     if (picked) out.push({ hexes: [picked.pos], color: "#ffd84a", line: 1, march: true });
     // The sandbox's enemy ability, armed: where it would land from here, orange if it can be used so, grey if not.
     const aiming = dev.tool?.tool === "strike" && picked ? unitStrike(z, picked, dev.tool.ability) : undefined;
@@ -2201,7 +2197,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       out.push({ hexes: inArm(), color: pick.what === "help" ? "#7dff9a" : "#ffd23f", fill: 0.12, line: 0.8 });
     }
     return out;
-  }, [state, z, act, pick, hover, dev.tool, dev.picked, dev.anywhere, courseOnly, fighting]);
+  }, [state, z, act, pick, hover, dev.tool, foe, dev.anywhere, courseOnly, fighting]);
   useEffect(() => layer.current?.setOverlays(overlays), [overlays]);
 
   // ---------- what a move would cost, at the pointer ----------
@@ -2476,11 +2472,6 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     if (dev.tool?.tool === "spawn") return dev.open?.send({ op: "spawn", kinds: dev.tool.kinds, at: pos });
     if (dev.tool?.tool === "paint") return dev.open?.send({ op: "paint", kind: dev.tool.surface, hexes: dev.tool.wide ? zoneBlast(state.map, pos, 1) : [pos] });
     if (dev.tool?.tool === "place") return dev.open?.send({ op: "place", unit: foe?.id ?? act.id, at: pos });
-    if (dev.tool?.tool === "pick") {
-      const side = dev.tool.side;
-      const one = unitsAt(z ?? state, pos).find((u) => u.side === side && !u.down && !u.summon && !state.dark?.includes(u.id));
-      return one ? setZoneDev({ picked: one.id, tool: null }) : undefined;
-    }
     if (!pick) {
       // A click on a torch burning on the ground right beside you takes it up; from further off, it is walked to.
       if (state.lights?.[posKey(pos)] && hexDistance(pos, act.pos) <= 1) return reachFor({ type: "pickup", unit: act.id, at: pos }, ITEM_AP.pickup, pos);
@@ -2835,7 +2826,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const place: ReactNode = pick
     ? <>{pick.kind === "ability" ? ABILITIES[pick.id].name : pick.kind === "item" ? THROWABLES[pick.item].name : COMMON_ACTIONS[pick.what].name} <span className="muted">· {pick.kind === "item" && THROWABLES[pick.item].drink ? "click where to throw it, or yourself to drink it" : pick.kind === "item" && THROWABLES[pick.item].light && !act?.torch ? "click where to throw it, or yourself to light it to hold" : "click a target on the map"}, or Esc to put it back</span></>
     : dev.tool
-      ? <>Dev tool <span className="muted">· {dev.tool.tool === "spawn" ? "click a hex to place the group" : dev.tool.tool === "pick" ? `click ${dev.tool.side === "enemy" ? "an enemy" : "a hero"} to pick them` : dev.tool.tool === "place" ? `click a hex to put ${foe?.name ?? act?.name ?? "them"} there` : dev.tool.tool === "strike" ? `click to aim ${foe?.name ?? "its"}'s ${ENEMY_ABILITIES[dev.tool.ability]?.name ?? "ability"}, or Esc` : "click hexes to paint"}</span></>
+      ? <>Dev tool <span className="muted">· {dev.tool.tool === "spawn" ? "click a hex to place the group" : dev.tool.tool === "place" ? `click a hex to put ${foe?.name ?? act?.name ?? "them"} there` : dev.tool.tool === "strike" ? `click to aim ${foe?.name ?? "its"}'s ${ENEMY_ABILITIES[dev.tool.ability]?.name ?? "ability"}, or Esc` : "click hexes to paint"}</span></>
       : (!enc || !fighting) && doorBeside
         ? <>A locked door <span className="muted">· {keys > 0 ? `${keysText} on the ring: one opens it` : "no key: it can be forced, but not quietly"}</span></>
       : (!enc || !fighting) && chestBeside

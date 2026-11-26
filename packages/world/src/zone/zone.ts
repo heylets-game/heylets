@@ -774,7 +774,7 @@ function advance(ctx: Ctx): void {
     if (settle(ctx)) return;
     if (ready.length === 0) continue;
     // In the sandbox an enemy's turn waits on the dev, as a hero's does.
-    if (next[0].side === "enemy" && (!state.sandbox || ctx.order)) {
+    if (next[0].side === "enemy" && !state.sandbox) {
       // The bell, rung: the whole place is roused.
       if (enemyTurn(ctx, next[0], enc.budgets[next[0].id])) rouse(ctx);
       enc.done = [next[0].id];
@@ -844,9 +844,6 @@ function spend(budget: Budget | null, cost: number): string | null {
   budget.ap -= cost;
   return null;
 }
-
-/** How many turns a dev order (DevOp "enemy_use") passes, at the most, waiting for the enemy's own. */
-const MAX_PASSED_TURNS = 100;
 
 /** The highest level a dev kit (DevOp "kit") will make a hero. */
 export const KIT_MAX_LEVEL = 20;
@@ -918,27 +915,6 @@ function dev(ctx: Ctx, by: string, op: DevOp): string | null {
     else u.abilities = abilities;
   } else if (op.op === "ai") {
     state.aiOff = op.off;
-  } else if (op.op === "enemy_use") {
-    const foe = unitById(state, op.unit);
-    if (!foe || foe.side !== "enemy" || foe.down || foe.summon) return "There is no such enemy standing.";
-    if (!foe.abilities.includes(op.ability)) return `${foe.name} has no such ability.`;
-    const target = op.target ? unitById(state, op.target) : undefined;
-    if (op.target && (!target || target.side !== "hero" || target.down)) return "There is no such hero standing.";
-    ctx.order = { unit: foe.id, ability: op.ability, ...(target ? { target: target.id } : {}) };
-    if (!inFight(state, foe.id)) {
-      const owner = unitById(state, by);
-      if (!owner || !foe.group) return "There is nobody to fight it.";
-      engage(ctx, [foe.group], owner);
-    }
-    if (target && !inFight(state, target.id)) return `${target.name} is not in its fight.`;
-    // Pass whoever's turn it is, again and again, until its own has come and gone (advance plays it).
-    for (let passed = 0; ctx.order && state.encounter && passed < MAX_PASSED_TURNS; passed++) {
-      state.encounter.done = [...state.encounter.acting];
-      advance(ctx);
-    }
-    const missed = !!ctx.order;
-    delete ctx.order;
-    if (missed) return `${foe.name} gets no turn (stunned, or the fight is over).`;
   } else if (op.op === "sandbox") {
     if (op.on) {
       state.sandbox = true;
