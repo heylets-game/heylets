@@ -288,10 +288,13 @@ export function addShield(ctx: Ctx, unit: Unit, amount: number): void {
 export const OUTLASTS_FIGHT: ReadonlySet<Condition> = new Set(["lucky"]);
 
 /**
- * Whether a condition can be put on a unit now: on anyone in a fight, or touched by what opens one (Ctx.opening), and
- * out of one only what outlasts fights.
+ * Whether what fights do reaches a unit now: it is in one, or touched by what opens one (Ctx.opening). Out of a fight
+ * nothing takes hold on it (takesHold) and the ground and the weather do it no harm (surfaces.ts, weather.ts).
  */
-const takesHold = (ctx: Ctx, unit: Unit, kind: Condition): boolean => !!ctx.opening || inFight(ctx.state, unit.id) || OUTLASTS_FIGHT.has(kind);
+export const inPlay = (ctx: Ctx, unit: Unit): boolean => !!ctx.opening || inFight(ctx.state, unit.id);
+
+/** Whether a condition can be put on a unit now: on one in play (inPlay), and on any other only what outlasts fights. */
+const takesHold = (ctx: Ctx, unit: Unit, kind: Condition): boolean => inPlay(ctx, unit) || OUTLASTS_FIGHT.has(kind);
 
 /** The fight is over for this unit (it ended, or they got away from it): every condition on it goes, bar OUTLASTS_FIGHT. */
 export function leaveFight(unit: Unit): void {

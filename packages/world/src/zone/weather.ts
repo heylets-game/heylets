@@ -14,7 +14,7 @@
 // but as its maker's next turn begins it heaves once, hard, under everyone on it, and is gone (quakeAtTurn).
 
 import { hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/core";
-import { addCondition, damage, heal, inflict, saveRoll, type Ctx } from "./engine";
+import { addCondition, damage, heal, inPlay, inflict, saveRoll, type Ctx } from "./engine";
 import { HEX_DIRS, blockerAt, covers, directionToward, flies, inFight, solid, unitAt } from "./geometry";
 import { FORTIFY, WEATHER } from "./kit";
 import { tileAt } from "../map";
@@ -80,7 +80,8 @@ function wetGround(ctx: Ctx, w: Weather): void {
 /** What a weather does to one unit in it. `turn`: the turn it counts against, for rain's once-a-turn heal and coral's once-a-turn cut. */
 function weatherOn(ctx: Ctx, w: Weather, unit: Unit, turn: number): void {
   // A wall acts on nobody: nobody is ever in it. Cracked ground only acts as it heaves (quakeAtTurn).
-  if (unit.down || w.kind === "wall" || w.kind === "quake") return;
+  // Out of a fight it does nobody any harm, or good (inPlay).
+  if (unit.down || w.kind === "wall" || w.kind === "quake" || !inPlay(ctx, unit)) return;
   const friend = unit.side === w.side;
   if (w.kind === "rain") {
     if (!friend || w.touched[unit.id] === turn) return;

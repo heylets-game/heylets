@@ -36,6 +36,17 @@ describe("out of a fight", () => {
     expect(checkAbility(state, unit(state, "ann"), "mend", { target: "ann" })).toBe(FIGHTS_ONLY);
   });
 
+  it("the ground does no harm: fire and poison underfoot neither hurt nor leave anything", () => {
+    let { state } = calm([]);
+    // Nobody about to start a fight with.
+    state.units = state.units.filter((u) => u.side === "hero");
+    state = must(state, { type: "dev", by: "dev", dev: { op: "paint", kind: "fire", hexes: [at(5, 5)] } });
+    state = must(state, { type: "dev", by: "dev", dev: { op: "paint", kind: "poison", hexes: [at(5, 7)] } });
+    for (const to of [at(5, 5), at(5, 7)]) state = must(state, { type: "move", by: "ann", unit: "ann", to });
+    expect(state.encounter).toBeNull();
+    expect(unit(state, "ann")).toMatchObject({ hp: unit(state, "ann").maxHp, conditions: [] });
+  });
+
   it("a blow that starts a fight leaves what it leaves, as the fight begins", () => {
     let landed = 0;
     for (let seed = 1; seed <= 40; seed++) {
