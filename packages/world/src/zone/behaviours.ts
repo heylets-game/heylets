@@ -51,7 +51,7 @@ export function strikeReaches(state: ZoneState, enemy: Unit, pos: HexPos, attack
 }
 
 /** Whether an attack of an enemy's (not a leap) reaches from `pos` to the hex `at`, whoever is on it: as strikeReaches. */
-function aimReaches(state: ZoneState, enemy: Unit, pos: HexPos, attack: EnemyStrike, at: HexPos): boolean {
+export function aimReaches(state: ZoneState, enemy: Unit, pos: HexPos, attack: EnemyStrike, at: HexPos): boolean {
   if (attack.range === 1) return strikes(state.map, pos, at);
   // The lie of the land is looked up only where it could settle it: height adds up to HIGH_REACH to a range and takes nothing from it.
   const far = hexDistance(pos, at);

@@ -28,14 +28,15 @@ import { addStats, maxHpFor } from "../progression";
 import { makeRng, seedFromString } from "../rng";
 import { enemyTurn } from "./ai";
 import { pickBellGoer, placeBell } from "./bell";
-import { abilityArea, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, doCommon, drinkItem, isBlink, moveLeft, resolveAbility, throwItem, walk } from "./combat";
+import { abilityArea, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, doCommon, drinkItem, enemyAct, isBlink, moveLeft, resolveAbility, throwItem, walk } from "./combat";
+import { checkStrike } from "./strikes";
 import { UNTIMED_KEEPS, countDown, dropShield, has, heal, regrow, removeCondition, tick, tickStacks, unseen, usesLeft, type Ctx } from "./engine";
 import { ALERT_RANGE, JOIN_RANGE, freeHexNear, generateZone } from "./gen";
 import { generateDelve } from "./delve";
 import { checkLoot, checkOpen, leaveBody, look, lootFor, openChest, payBounty, take } from "./loot";
 import { PARTY_SIZES, siteOpen, spaced } from "./sites";
 import { FREE_WALK, blast, blockerAt, inFight, isDead, pathIn, perkOf, roomAt, sameHex, sees, solid, unitAt, unitById, zoneReach } from "./geometry";
-import { AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, ENEMY_MOVE_AP, FLEE_RANGE, ITEM_AP, STROLL_GRACE_MS, STROLL_STEP_MS, SUMMONS, STARTING_ITEMS, THROWABLES, THROWABLE_KINDS, cleanItems, commonCostFor, enemyHp, enemyMove, tacticOf } from "./kit";
+import { AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, ENEMY_MOVE_AP, FLEE_RANGE, ITEM_AP, STROLL_GRACE_MS, STROLL_STEP_MS, SUMMONS, STARTING_ITEMS, THROWABLES, THROWABLE_KINDS, cleanItems, unitStrike, commonCostFor, enemyHp, enemyMove, tacticOf } from "./kit";
 import { d20, heroMove, mod, rollDice, statOf } from "./rules";
 import { hiddenEnemies, sentToClient } from "./light";
 import { quakeAtTurn, tickWeather, weatherAtTurn } from "./weather";
@@ -955,6 +956,15 @@ function dev(ctx: Ctx, by: string, op: DevOp): string | null {
       if (enemyTurn(ctx, foe, enc.budgets[foe.id])) rouse(ctx);
       enc.done.push(foe.id);
     }
+  } else if (op.op === "strike") {
+    const foe = unitById(state, op.unit);
+    if (!foe || foe.side !== "enemy" || foe.down || !sandboxing(state, foe)) return "Pick an enemy in the fight, in the sandbox.";
+    const attack = unitStrike(state, foe, op.ability);
+    if (!attack) return `${foe.name} has no such ability.`;
+    const target = op.target ? unitById(state, op.target) : undefined;
+    const why = checkStrike(state, foe, attack, { target, at: op.at }, op.anywhere);
+    if (why) return why;
+    enemyAct(ctx, foe, attack, target ?? null, op.at);
   } else if (op.op === "place") {
     const u = unitById(state, op.unit);
     if (!u || u.down) return "There is nobody standing to put there.";

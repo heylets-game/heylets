@@ -578,6 +578,7 @@ describe("ZoneRoom", () => {
     expect(zoneActionFrom({ type: "dev", dev: { op: "sandbox", on: 1 } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "sandbox", on: true } });
     expect(zoneActionFrom({ type: "dev", dev: { op: "next_turn", round: true } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "next_turn", round: true } });
     expect(zoneActionFrom({ type: "dev", dev: { op: "next_turn" } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "next_turn" } });
+    expect(zoneActionFrom({ type: "dev", dev: { op: "strike", unit: "e1", ability: "slash", at: { q: 2, r: 3 }, anywhere: 1 } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "strike", unit: "e1", ability: "slash", at: { q: 2, r: 3 }, anywhere: true } });
     expect(zoneActionFrom({ type: "dev", dev: { op: "place", unit: "e1", at: { q: 2, r: 3 } } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "place", unit: "e1", at: { q: 2, r: 3 } } });
     expect(zoneActionFrom({ type: "dev", dev: { op: "enemy_use", unit: "e1", ability: "slash", target: "bob" } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "enemy_use", unit: "e1", ability: "slash", target: "bob" } });
     expect(zoneActionFrom({ type: "dev", dev: { op: "enemy_use", unit: "e1", ability: "slash", target: 3 } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "enemy_use", unit: "e1", ability: "slash" } });

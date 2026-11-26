@@ -1124,11 +1124,11 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
     }
     return;
   }
-  if (!target) return;
   // Thrown at their hex, it lands on a clump of hexes round it: everyone there (in the fight) saves for half, and
   // whatever it leaves on the ground is left on all of it.
-  if (attack.kit.area) {
-    const hexes = clusterHexes(state, enemy.pos, aim!, attack.kit.area);
+  // (Aimed at a hex, it needs nobody on it: the combat sandbox aims these by hand. Anything else needs its target.)
+  if (attack.kit.area && aim) {
+    const hexes = clusterHexes(state, enemy.pos, aim, attack.kit.area);
     const dice = rollShown(ctx.rng, attack.dice);
     for (const victim of state.units.filter((u) => u.side !== enemy.side && !u.down && !unseen(u) && inFight(state, u.id) && hexes.some((p) => sameHex(p, u.pos)))) {
       const saved = saveRoll(ctx, victim, "agi", dc, attack.name).ok;
@@ -1139,8 +1139,8 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
     return;
   }
   // A sweep: one great swing through rows of hexes. Everyone in it (in the fight) saves for half, as from a burst.
-  if (attack.kit.sweep) {
-    const hexes = sweepHexes(state, enemy.pos, aim!, attack.kit.sweep);
+  if (attack.kit.sweep && aim) {
+    const hexes = sweepHexes(state, enemy.pos, aim, attack.kit.sweep);
     const dice = rollShown(ctx.rng, attack.dice);
     for (const victim of state.units.filter((u) => u.side !== enemy.side && !u.down && !unseen(u) && inFight(state, u.id) && hexes.some((p) => sameHex(p, u.pos)))) {
       const saved = saveRoll(ctx, victim, "agi", dc, attack.name).ok;
@@ -1149,6 +1149,7 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
     }
     return;
   }
+  if (!target) return;
   // A leap: through the air to beside them first, then a blow by hand.
   const leap = leaps(attack);
   if (leap && !lungeAt(ctx, enemy, attack, target)) return;
