@@ -12,7 +12,7 @@ import { DEBUFFS, UNTIMED_KEEPS, attackMade, addCondition, addUses, addShield, a
 import { cratesOn, crateById, hurtCrate, isCrateId } from "./crates";
 import { ENEMY_ABILITIES } from "./enemyabilities";
 import { bearing, big, caught, close, blast, blockerAt, courseShare, covers, directionToward, gap, gapTo, meet, nearOf, reaches, ringToward, elevOf, fetterBars, flies, heldAgainst, inFight, lineFrom, pathIn, perkOf, pitAt, reachFrom, roomAt, roomFor, sameHex, sees, seesFor, solid, span, stepCost, strikes, unitById, zoneReach, type Course, type Pit } from "./geometry";
-import { ACTION_AP, CHART, COMMON_ACTIONS, CORAL_ARMOR, ENEMY_EDGE, RALLY, SHANTY, SUMMON_CALLS, ENEMY_BURST, FLEE_RANGE, JUMP_DOWN, JUMP_UP, blinkRange, jumpRange, POTION_EDGE, SAVE_STAT, SMUGGLED, SPLASH_SHARE, THROWABLES, TORCH_GROUND_ROUNDS, abilityDice, abilityStrikes, enemySave, unitStrikes, healDice, reactionStrike, tacticOf, throwRange, type EnemyAttackKit, type EnemyStrike, type Tactic } from "./kit";
+import { ACTION_AP, CHART, COMMON_ACTIONS, CORAL_ARMOR, ENEMY_EDGE, RALLY, SHANTY, SUMMON_CALLS, ENEMY_BURST, FLEE_RANGE, JUMP_DOWN, JUMP_UP, blinkRange, jumpRange, POTION_EDGE, SAVE_STAT, SMUGGLED, SPLASH_SHARE, THROWABLES, TORCH_GROUND_ROUNDS, abilityDice, abilityStrikes, enemySave, retortDice, unitStrikes, healDice, reactionStrike, tacticOf, throwRange, type EnemyAttackKit, type EnemyStrike, type Tactic } from "./kit";
 import { modsOf } from "./mods";
 import { d20, diceFor, hitChance, mod, proficiency, rollDice, rollShown, statOf } from "./rules";
 import { seenByHeroes } from "./light";
@@ -731,9 +731,18 @@ function bind(ctx: Ctx, unit: Unit, def: AbilityDef, target: Unit, turns: { slow
   return true;
 }
 
-/** Coral Armor, and Barnacle Mail: whoever lands a blow up close on one wearing it is cut by it. */
+/**
+ * Coral Armor, Barnacle Mail, and an enemy's own retort (a slime's Acid Armor): whoever lands a blow up close on one
+ * wearing it is hurt by it. A retort bites back even from one the blow has just killed.
+ */
 function thorns(ctx: Ctx, attacker: Unit, target: Unit): void {
   if (attacker.down) return;
+  const retort = target.side === "enemy" ? ENEMIES[target.kind]?.retort : undefined;
+  if (retort) {
+    const rolled = rollShown(ctx.rng, retortDice(retort, target.level, modsOf(ctx.state.options).edge));
+    damage(ctx, attacker, rolled.total, { actor: target.id, what: retort.name, dice: rolled });
+    if (attacker.down) return;
+  }
   if (has(target, "coral_armor")) {
     const rolled = rollShown(ctx.rng, CORAL_ARMOR.thorns);
     damage(ctx, attacker, rolled.total, { actor: target.id, what: "coral_armor", dice: rolled });

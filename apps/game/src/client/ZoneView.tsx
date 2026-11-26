@@ -42,6 +42,9 @@ import {
   CRATE_HP,
   ENEMIES,
   ENEMY_ABILITIES,
+  clusterHexes,
+  retortDice,
+  modsOf,
   checkStrike,
   strikeAim,
   strikeHexes,
@@ -163,7 +166,7 @@ import { useZone, type ZoneSend } from "./useZone";
 import { Icon } from "./items";
 import { label } from "./labels";
 import { FLOURISH, GUARDS, SONG_MOOD, SOUND_KIND, SUMMONS, THROW_COLOR, aimKind, fxFor } from "./zone/abilityFx";
-import { ownRoute } from "./zone/ownMoves";
+import { RETORTS, enemyAbilityNamed, ownRoute } from "./zone/ownMoves";
 import { COMMON_ICON, ITEM_ICON, abilityIcon } from "./zone/actionIcons";
 import { BAR_SLOTS, assignSlot, barChoices, loadBar, moveSlot, saveBar } from "./zone/hotbar";
 import { believe, foreseeWalk, giveUp, settle, standing, type Ahead } from "./zone/ahead";
@@ -1012,20 +1015,25 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           const aim = ev.at ? point(ev.at, 0.05) : struck ? point(struck, 0.05) : null;
           // An enemy ability with a move of its own is played as that, whatever its usual look (zone/ownMoves.ts): round
           // its user, or at the spot it is thrown at, now; one at a single target, as the blow is told (see hit).
-          const own = ev.what === "attack" && view?.ownsMove(ev.id, ev.name) ? ownRoute(ev.name) : null;
+          const own = ev.what === "attack" && view?.ownsMove(ev.id, ev.name) ? ownRoute(ev.name, user?.kind) : null;
           // Its second part (an Earthquake's heave) goes off from the middle of where its user stood when it was first
           // used: from the ground it cracked, not from wherever it is now.
           const centre = ev.again && ev.at && user ? span(user, ev.at).map((p) => point(p)).reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(span(user, ev.at).length) : undefined;
           // A field raised round it (a Guardian's Slowing Field): once it has gone out, it stays round its user, following
           // it, for as long as the picture shows it carrying the field.
-          const field = Object.values(ENEMY_ABILITIES).find((a) => a.name === ev.name)?.field;
+          const field = enemyAbilityNamed(ev.name, user?.kind)?.field;
           if (field && !ev.again) {
             const holder = ev.id;
             const holding = () => !!shownNow.current?.units.find((u) => u.id === holder && u.hp > 0)?.conditions.some((c) => c.kind === "slowing_field");
             timers.current.push(setTimeout(() => spells.current?.aura({ key: `field:${holder}`, follow: () => renderer.current?.unitFeet(holder) ?? null, holding }, CONDITION_INFO.slowing_field.color, SLOWING_FIELD.reach), 1150));
           }
           if (own === "burst" && view) return void view.burst(ev.id, ev.name, false, thenOn(() => {}), !!ev.again, centre);
-          if (own === "at" && view && aim) return view.moveAt(ev.id, ev.name, aim, landing());
+          // One thrown onto a clump of hexes (`area`: an Acid Splash, an Immolate) lands in the middle of the clump, not
+          // on the hex it was aimed at, which is at one edge of it.
+          const area = enemyAbilityNamed(ev.name, user?.kind)?.area;
+          const clump = own === "at" && area && ev.at && user ? clusterHexes({ map: next.map }, user.pos, ev.at, area) : [];
+          const middle = clump.length > 0 ? clump.map((p) => point(p, 0.05)).reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(clump.length) : aim;
+          if (own === "at" && view && middle) return view.moveAt(ev.id, ev.name, middle, landing());
           // A dash is played as its user is seen to go, from the dash it is told by (see jumped).
           if (own === "blow" || own === "dash") return;
           if (links.length > 0) {
@@ -1323,8 +1331,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         // An enemy's move of its own (zone/ownMoves.ts): one at a single target is played as this blow, struck by hand
         // whatever its usual look (WorldRenderer.attack plays it); one round its user or at a spot was played as it was
         // used, and whoever it catches just flinches.
-        const own = ev.actor && !(hit && ev.splash) && actor?.side === "enemy" && view?.ownsMove(ev.actor, ev.what) ? ownRoute(ev.what) : null;
-        const passive = (!mine && (ev.what === "coral_field" || ev.what === "coral_armor")) || (hit && !!ev.splash) || own === "burst" || own === "at" || own === "dash";
+        const own = ev.actor && !(hit && ev.splash) && actor?.side === "enemy" && view?.ownsMove(ev.actor, ev.what) ? ownRoute(ev.what, actor?.kind) : null;
+        // A retort (a slime's Acid Armor) from one that cannot play it (it has just been killed): the victim just flinches.
+        const passive = (!mine && (ev.what === "coral_field" || ev.what === "coral_armor")) || (!own && RETORTS.has(ev.what)) || (hit && !!ev.splash) || own === "burst" || own === "at" || own === "dash";
         const kind = passive ? "ground" : own === "blow" ? "melee" : !ev.actor || ev.actor === ev.target || ev.what.startsWith("throw:") || ev.what === "shove" || ev.what === "fall" ? "none" : (mine?.look.kind ?? "melee");
         // The log's line for it: the roll that decided it (if it has a card), then what it did.
         const logged = () => {
@@ -2966,6 +2975,37 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const under = unitOn(hover);
   // Whoever else is on the same hex (two of a side can share one; the two sides never do).
   const alsoHere = hover && z && under ? unitsAt(z, hover).filter((u) => !u.lost && u.id !== under.id) : [];
+  // The "hold Alt" hint goes on the first card with effects only, not on each.
+  const hintFor = under ? [under, ...alsoHere].find((u) => shownConditions(u).length > 0)?.id : undefined;
+  // One creature's part of the hover card: name and numbers, its effects (each in full while Alt is held),
+  // an enemy's moves and its passive. Used for the one under the pointer and for anyone sharing its hex.
+  const unitCard = (u: NonNullable<typeof under>) => (
+    <>
+      <strong>{u.name}</strong> <span className="muted">{u.side === "enemy" ? ` · Level ${u.level}` : ""} · {u.hp}/{u.maxHp} HP{shieldOf(u) > 0 ? ` + ${shieldOf(u)} shield` : ""} · Defence {defenceOf(u, state)}{u.down ? " · down" : ""}</span>
+      {shownConditions(u).length > 0 && (closer ? (
+        // Held Alt: each effect on its own line, with what it does to them, in their numbers.
+        <div className="zone-conds-full">
+          {shownConditions(u).map((c) => (
+            <div key={c.kind} className="zone-cond-full">
+              <span className="zone-cond" style={{ color: CONDITION_INFO[c.kind].color }}>{condLabel(c)}</span>
+              <span className="muted">{conditionText(c, (id) => names.current.get(id))}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div>
+          {shownConditions(u).map((c) => <span key={c.kind} className="zone-cond" style={{ color: CONDITION_INFO[c.kind].color }} title={conditionText(c, (id) => names.current.get(id))}>{condLabel(c)}</span>)}
+          {u.id === hintFor && <span className="zone-cond-hint muted">hold {altName} for more</span>}
+        </div>
+      ))}
+      {u.side === "enemy" && <div className="muted">{u.abilities.map((id) => ENEMY_ABILITIES[id]?.name ?? id).join(", ")}</div>}
+      {/* Its passive that bites back (EnemyDef retort), with what it hurts for at its level. */}
+      {u.side === "enemy" && ENEMIES[u.kind]?.retort && (() => {
+        const retort = ENEMIES[u.kind]!.retort!;
+        return <div className="muted"><strong>{retort.name}</strong>: {retort.blurb} ({diceText(retortDice(retort, u.level, modsOf(asState(state).options).edge))})</div>;
+      })()}
+    </>
+  );
   const ground = hover ? tileAt(state.map, hover) : undefined;
   // What a shove would do to whoever is under the pointer, while Shove is picked and they are in arm's length.
   const shoving = pick?.kind === "common" && pick.what === "shove" && under && under.side !== act.side && !under.down && strikes(state.map, act.pos, under.pos);
@@ -3005,6 +3045,11 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const preview = under && z && pick?.kind === "ability" && under.side !== act.side ? previewAttack(z, act, pick.id, under) : null;
   const surface = hover ? state.surfaces[posKey(hover)] : undefined;
   const weather = hover ? (state.weather ?? []).filter((w) => w.hexes.some((p) => p.q === hover.q && p.r === hover.r)) : [];
+  // Weather and a surface on the hovered hex, in one shape for the hover card (rounds left, unless it lasts).
+  const hexEffects: { key: string; name: string; color: string; rounds?: number; blurb: string }[] = [
+    ...weather.map((w, i) => ({ key: `w${i}`, name: WEATHER_INFO[w.kind].name, color: WEATHER_INFO[w.kind].color, rounds: w.rounds, blurb: WEATHER_INFO[w.kind].blurb })),
+    ...(surface ? [{ key: "s", name: SURFACE_INFO[surface.kind].name, color: SURFACE_INFO[surface.kind].color, rounds: surface.lasting ? undefined : surface.rounds, blurb: SURFACE_INFO[surface.kind].blurb }] : []),
+  ];
 
   // The shanties an ally is singing that the hero stands in and has not joined: each a call of its own over the turn bar.
   const joinCost = commonCost("join", act.kind);
@@ -3232,25 +3277,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           <span className="zone-tip-glass" aria-hidden><PixelIcon rows={MAGNIFIER} size={13} /></span>
           {under ? (
             <>
-              <strong>{under.name}</strong> <span className="muted">{under.side === "enemy" ? ` · Level ${under.level}` : ""} · {under.hp}/{under.maxHp} HP{shieldOf(under) > 0 ? ` + ${shieldOf(under)} shield` : ""} · Defence {defenceOf(under, state)}{under.down ? " · down" : ""}</span>
-              {shownConditions(under).length > 0 && (closer ? (
-                // Held Alt: each effect on its own line, with what it does to them, in their numbers.
-                <div className="zone-conds-full">
-                  {shownConditions(under).map((c) => (
-                    <div key={c.kind} className="zone-cond-full">
-                      <span className="zone-cond" style={{ color: CONDITION_INFO[c.kind].color }}>{condLabel(c)}</span>
-                      <span className="muted">{conditionText(c, (id) => names.current.get(id))}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div>
-                  {shownConditions(under).map((c) => <span key={c.kind} className="zone-cond" style={{ color: CONDITION_INFO[c.kind].color }} title={conditionText(c, (id) => names.current.get(id))}>{condLabel(c)}</span>)}
-                  <span className="zone-cond-hint muted">hold {altName} for more</span>
-                </div>
-              ))}
-              {under.side === "enemy" && <div className="muted">{under.abilities.map((id) => ENEMY_ABILITIES[id]?.name ?? id).join(", ")}</div>}
-              {alsoHere.map((u) => <div key={u.id} className="zone-tip-also"><span className="muted">Sharing the hex:</span> <strong>{u.name}</strong> <span className="muted">· {u.hp}/{u.maxHp} HP{u.down ? " · down" : ""}</span></div>)}
+              {unitCard(under)}
+              {/* Everyone else on the hex gets the same card: stats, effects (in full on Alt), moves and passive. */}
+              {alsoHere.map((u) => <div key={u.id} className="zone-tip-also">{unitCard(u)}</div>)}
               {/* Where a shove would send them: over an edge, into a pit, or only back a hex. */}
               {/* One that stands on more than one hex: nothing moves it. */}
               {span(under).length > 1 && (shoveInto || shoveBlocked) && <div className="muted">Too heavy to shove, pull or knock back.</div>}
@@ -3313,8 +3342,27 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
               {hover && act && !under && edgeBelow(hover) > 0 && <div className="muted">An edge: {edgeBelow(hover)} levels down on one side. Whoever is shoved off it falls.</div>}
             </>
           )}
-          {weather.map((w, i) => <div key={i} style={{ color: WEATHER_INFO[w.kind].color }}>{WEATHER_INFO[w.kind].name} <span className="muted">· {w.rounds} round{w.rounds === 1 ? "" : "s"} · {WEATHER_INFO[w.kind].blurb}</span></div>)}
-          {surface && <div style={{ color: SURFACE_INFO[surface.kind].color }}>{SURFACE_INFO[surface.kind].name} <span className="muted">{surface.lasting ? "" : ` · ${surface.rounds} round${surface.rounds === 1 ? "" : "s"}`} · {SURFACE_INFO[surface.kind].blurb}</span></div>}
+          {/* What lies on the hex itself (weather, a surface), under its own divider: shown like a creature's effects,
+              names and rounds left, and what each does only while Alt is held. */}
+          {hexEffects.length > 0 && (
+            <div className="zone-tip-also">
+              {closer ? (
+                <div className="zone-conds-full">
+                  {hexEffects.map((e) => (
+                    <div key={e.key} className="zone-cond-full">
+                      <span className="zone-cond" style={{ color: e.color }}>{e.name}{e.rounds !== undefined && <> <span className="zone-cond-time">⌛{e.rounds}</span></>}</span>
+                      <span className="muted">{e.blurb}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div>
+                  {hexEffects.map((e) => <span key={e.key} className="zone-cond" style={{ color: e.color }} title={e.blurb}>{e.name}{e.rounds !== undefined && <> <span className="zone-cond-time">⌛{e.rounds}</span></>}</span>)}
+                  {hintFor === undefined && <span className="zone-cond-hint muted">hold {altName} for more</span>}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

@@ -80,6 +80,7 @@ export {
   ENEMY_BURST,
   abilityStrikes,
   enemyStrikes,
+  retortDice,
   unitStrikes,
   unitStrike,
   mindOf,
@@ -104,7 +105,7 @@ export { SPURS, UNTIMED, attackContext, defenceOf, has as hasCondition, shieldOf
 export { FIGHTS_ONLY, abilityArea, carrySpot, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, crateBlow, isBlink, moveLeft, walkAp, apForMove, payMove, previewAttack, leavesReach, shiftInto, shoveDest, edgeDc, EDGE_DC, BARD_AURA_RANGE, type Aim, type Shift } from "./combat";
 export { chartOf, constellationHexes, constellationLinks, courseMarks, litFoes } from "./stars";
 export { SURFACE_INFO, HARMFUL as HARMFUL_SURFACES } from "./surfaces";
-export { WEATHER_INFO, wallHexes } from "./weather";
+export { WEATHER_INFO, clusterHexes, wallHexes } from "./weather";
 export { summonsOf, summonSpots } from "./summon";
 export { breathDc, drowningStacks } from "./drowning";
 export { SHANTIES, isShanty, joinable, shantyOf, shantyRadius, songsOn, type Song } from "./song";

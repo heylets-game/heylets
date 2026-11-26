@@ -6,15 +6,18 @@ import { ABILITIES, ENEMIES, ENEMY_ABILITIES } from "@gantt-quest/world";
 import { SIGNATURE_MOVES, moveName } from "../src/client/render/signatureMoves";
 import { ownMove, ownRoute, playsFor } from "../src/client/zone/ownMoves";
 
+/** Whether an enemy kind has the ability, or the retort (a slime's Acid Armor), called `name`. */
+const hasMove = (e: (typeof ENEMIES)[string], name: string) => e.abilities.some((id) => ENEMY_ABILITIES[id]?.name === name) || e.retort?.name === name;
+
 describe("an enemy's own moves in a fight", () => {
-  it("are each named for an enemy ability, so a fight finds them by the name its events carry", () => {
-    const names = new Set(Object.values(ENEMY_ABILITIES).map((a) => a.name));
+  it("are each named for an enemy ability or retort, so a fight finds them by the name its events carry", () => {
+    const names = new Set([...Object.values(ENEMY_ABILITIES).map((a) => a.name), ...Object.values(ENEMIES).flatMap((e) => (e.retort ? [e.retort.name] : []))]);
     for (const key of Object.keys(SIGNATURE_MOVES)) expect(names, key).toContain(moveName(key));
   });
 
   it("are each used by the kind the lab shows them for", () => {
     for (const [key, move] of Object.entries(SIGNATURE_MOVES)) {
-      const users = Object.values(ENEMIES).filter((e) => e.abilities.some((id) => ENEMY_ABILITIES[id]?.name === moveName(key))).map((e) => e.kind);
+      const users = Object.values(ENEMIES).filter((e) => hasMove(e, moveName(key))).map((e) => e.kind);
       expect(users, key).toContain(move.who);
     }
   });
@@ -26,6 +29,9 @@ describe("an enemy's own moves in a fight", () => {
     expect(ownRoute("Club Smash")).toBe("blow");
     expect(ownRoute("Lunge")).toBe("blow");
     expect(ownRoute("Fell Swoop")).toBe("dash");
+    expect(ownRoute("Acid Splash")).toBe("at");
+    // A retort bites back at whoever struck its bearer: at one target.
+    expect(ownRoute("Acid Armor")).toBe("blow");
     expect(ownRoute("No Such Thing")).toBeNull();
   });
 
@@ -51,7 +57,7 @@ describe("an enemy's own moves in a fight", () => {
 
   it("each play for every kind that has the ability they are shown for in the lab", () => {
     for (const [key, move] of Object.entries(SIGNATURE_MOVES)) {
-      const users = Object.values(ENEMIES).filter((e) => e.abilities.some((id) => ENEMY_ABILITIES[id]?.name === moveName(key)));
+      const users = Object.values(ENEMIES).filter((e) => hasMove(e, moveName(key)));
       expect(users.filter((e) => ownMove(moveName(key), e) === move).length, key).toBeGreaterThan(0);
     }
   });

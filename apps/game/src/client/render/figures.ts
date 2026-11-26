@@ -1580,7 +1580,7 @@ const GET_UP_HIPS = -1;
  * `n` counts the figure's actions, so two flinches in a row need not be the same.
  */
 interface Act {
-  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "slam" | "drop" | "pound" | "channel" | "spook" | "claw" | "flurry" | "howl" | "rake" | "roar" | "grasp" | "wail" | "hurl" | "dive" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
+  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "slam" | "drop" | "pound" | "channel" | "spook" | "claw" | "flurry" | "howl" | "rake" | "roar" | "grasp" | "wail" | "hurl" | "engulf" | "spit" | "fang" | "web" | "dive" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
   t: number;
   n: number;
   /** A jump's seconds off the ground (see JUMP), or how long a dive is held (see DIVE). */
@@ -1886,6 +1886,65 @@ export const HURL = {
 };
 /** The moves a ghost (Rig.spectral) plays as animations of its own. */
 const SPECTRAL_ACTS = new Set<Act["kind"]>(["grasp", "wail", "hurl"]);
+
+/**
+ * An ooze's engulf, for one that is all one wet blob (Rig.oozes): it draws itself up tall and thin and leans back, then
+ * pours itself forward over the target at `hit`, flattened and spread wide over them (`reach` world units out),
+ * churning as it holds them (`churn`), and draws back into shape by `over`. `tall` and `wide` are its height and
+ * breadth, as shares of its own. A Cave Slime's Engulf (signatureMoves.ts).
+ */
+export const ENGULF = {
+  hit: 0.46,
+  over: 1.25,
+  tall: [[0, 1], [0.3, 1.38], [0.46, 0.6], [0.88, 0.64], [1.08, 1.1], [1.25, 1]] as Keys,
+  wide: [[0, 1], [0.3, 0.8], [0.46, 1.42], [0.88, 1.36], [1.08, 0.94], [1.25, 1]] as Keys,
+  reach: [[0, 0], [0.3, -0.25], [0.46, 1.0], [0.88, 0.95], [1.25, 0]] as Keys,
+  churn: [[0, 0], [0.46, 0], [0.52, 1], [0.86, 1], [0.98, 0]] as Keys,
+};
+/**
+ * An ooze's spit (Rig.oozes): it squashes down low and wide, gathering itself, then springs up tall and tips forward at
+ * `hit`, throwing a gob from its crown, and wobbles back into shape by `over`. A Cave Slime's Acid Splash.
+ */
+export const SPIT = {
+  hit: 0.34,
+  over: 0.85,
+  tall: [[0, 1], [0.22, 0.7], [0.34, 1.34], [0.5, 1.18], [0.66, 0.92], [0.85, 1]] as Keys,
+  wide: [[0, 1], [0.22, 1.24], [0.34, 0.8], [0.5, 0.9], [0.66, 1.06], [0.85, 1]] as Keys,
+  tip: [[0, 0], [0.22, -0.16], [0.34, 0.28], [0.5, 0.22], [0.85, 0]] as Keys,
+};
+/** The moves an ooze (Rig.oozes) plays as animations of its own. */
+const OOZE_ACTS = new Set<Act["kind"]>(["engulf", "spit"]);
+
+/**
+ * A spider's fang strike (Rig.spins): it rears up (`rear`, nose up), its first pair of legs thrown up and wide (`legs`)
+ * and its fangs spread open (`gape`), then plunges down and in at `hit` (`reach`, in its own units over 2.8), driving
+ * its fangs into the target (`gape` below 0), holds there a moment and draws back by `over`. A Giant Spider's
+ * Venomous Bite (signatureMoves.ts).
+ */
+export const FANG = {
+  hit: 0.36,
+  over: 0.85,
+  rear: [[0, 0], [0.26, 1], [0.36, -0.45], [0.52, -0.4], [0.85, 0]] as Keys,
+  reach: [[0, 0], [0.26, -0.4], [0.36, 1], [0.52, 0.95], [0.85, 0]] as Keys,
+  legs: [[0, 0], [0.22, 1], [0.33, 0.15], [0.6, 0.1], [0.85, 0]] as Keys,
+  gape: [[0, 0], [0.24, 1], [0.34, -0.35], [0.52, -0.35], [0.85, 0]] as Keys,
+};
+/**
+ * A spider's silk throw (Rig.spins): it sinks low (`sink`) on legs set wide (`brace`), nose down (`pitch`), and arches
+ * its abdomen up over its back (`arch`, radians), spinnerets aimed ahead; then snaps it on over at `hit`, throwing a
+ * ball of silk, shuddering with it (`shake`), and settles by `over`. A Giant Spider's Web Spit (signatureMoves.ts).
+ */
+export const WEB = {
+  hit: 0.4,
+  over: 1.0,
+  arch: [[0, 0], [0.3, 1.2], [0.4, 1.5], [0.62, 1.3], [1.0, 0]] as Keys,
+  pitch: [[0, 0], [0.3, 0.14], [0.4, 0.24], [0.62, 0.2], [1.0, 0]] as Keys,
+  sink: [[0, 0], [0.3, -0.55], [0.4, -0.7], [0.62, -0.55], [1.0, 0]] as Keys,
+  brace: [[0, 0], [0.3, 1], [0.62, 1], [1.0, 0]] as Keys,
+  shake: [[0, 0], [0.38, 0], [0.42, 1], [0.6, 1], [0.72, 0]] as Keys,
+};
+/** The moves a spider (Rig.spins) plays as animations of its own. */
+const SPIN_ACTS = new Set<Act["kind"]>(["fang", "web"]);
 
 /** The blows a beast with claws (Rig.claws) plays as animations of its own. */
 const CLAW_ACTS = new Set<Act["kind"]>(["claw", "flurry", "rake", "roar"]);
@@ -2528,7 +2587,7 @@ const RECORDER_LENGTH = 6.4;
 const HAMMER = { hit: 0.4, over: 0.86, up: [[0, 0.25], [0.3, 1], [0.4, 0], [0.48, 0.18], [0.86, 0.25]] as Keys };
 const STIR = { over: 30, turns: 25 };
 /** How long each kind of action lasts. */
-const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, slam: SLAM.over, drop: SEAT_DROP.over, pound: POUND.over, channel: CHANNEL.over, spook: SPOOK.over, claw: CLAW.over, flurry: FLURRY.over, howl: HOWL.over, rake: RAKE.over, roar: ROAR.over, grasp: GRASP.over, wail: WAIL.over, hurl: HURL.over, dive: DIVE.into + DIVE.flare + DIVE.settle, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
+const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, slam: SLAM.over, drop: SEAT_DROP.over, pound: POUND.over, channel: CHANNEL.over, spook: SPOOK.over, claw: CLAW.over, flurry: FLURRY.over, howl: HOWL.over, rake: RAKE.over, roar: ROAR.over, grasp: GRASP.over, wail: WAIL.over, hurl: HURL.over, engulf: ENGULF.over, spit: SPIT.over, fang: FANG.over, web: WEB.over, dive: DIVE.into + DIVE.flare + DIVE.settle, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
 /** When each kind of blow lands. */
 const ACT_HIT = { strike: SWING.hit, stab: THRUST.hit, slices: SLICES.hit, slam: SLAM.hit, pounce: POUNCE.hit, heavy: SWEEP.hit, twin: TWIN.hit };
 /**
@@ -2568,6 +2627,10 @@ interface Rig {
   dives?: boolean;
   /** A ghost: it plays its grasp and its wail (see GRASP, WAIL) as animations of its own, and is leant into the rest. */
   spectral?: boolean;
+  /** An ooze: it plays its engulf and its spit (see ENGULF, SPIT) as animations of its own, and is leant into the rest. */
+  oozes?: boolean;
+  /** A spider: it plays its fang strike and its silk throw (see FANG, WEB) as animations of its own, and is leant into the rest. */
+  spins?: boolean;
   /** Its ordinary strike, where what it carries does not cut (see LIGHT): a leaping stab, or a straight thrust. */
   light?: "pounce" | "stab";
   /** It carries an instrument, and plays it (see Figure.play). */
@@ -9904,11 +9967,25 @@ function slime(top: THREE.Group): Rig {
   spot(body, "#c9f5b8", 0.36, 0.72, 0.6, -3.6, 5.6, 4.3, [-0.45, -0.65, 0]);
   for (const s of [-1, 1]) body.ball("#14301a", 1, s * 1.9, 4.6, 5.45, 1, [0.78, 0.95, 0.45]);
   const animate = (a: Anim) => {
+    const act = a.act?.kind === "engulf" || a.act?.kind === "spit" ? a.act : null;
+    if (act && !a.lying) {
+      // Its own moves (ENGULF, SPIT): stretched and squashed as their keys say, and churning as it holds what it engulfs.
+      const t = act.t;
+      const engulf = act.kind === "engulf";
+      const churn = engulf ? along(ENGULF.churn, t) * Math.sin(t * 30) * 0.07 : 0;
+      const tall = along(engulf ? ENGULF.tall : SPIT.tall, t) + churn;
+      const wide = along(engulf ? ENGULF.wide : SPIT.wide, t) - churn * 0.5;
+      top.scale.set(wide, tall, wide);
+      top.position.set(0, 0, engulf ? along(ENGULF.reach, t) * a.scale : 0);
+      top.rotation.x = engulf ? 0 : along(SPIT.tip, t);
+      return;
+    }
     const squash = a.lying ? -0.6 : a.breath * 0.05 + Math.abs(a.swing) * 0.18 - a.strike * 0.25;
     top.scale.set(1 - squash * 0.5, 1 + squash, 1 - squash * 0.5);
     top.position.set(0, 0, a.strike * 1.5);
+    top.rotation.x = 0;
   };
-  return { parts: [body], animate, clean: true };
+  return { parts: [body], animate, clean: true, oozes: true };
 }
 
 /** A Druid's sea turtle, nose toward +z: a high domed shell over four broad flippers, a blunt beaked head. */
@@ -10115,7 +10192,7 @@ function spider(top: THREE.Group, shell = "#24332b", dark = "#121a16", back = "#
       strut(lower, dark, [0, bend[0], bend[1]], [0, foot[0], foot[1]], 0.38 * stout, 0.07, 6);
       // Where the foot stands, in the figure's space; which of the two sets of four it walks with.
       const stand = new THREE.Vector3(s * (x + Math.sin(yaw) * reach) * k, 0, (cz + z + Math.cos(yaw) * reach) * k);
-      return { upper, lower, thigh: thigh * k, shin: shin * k, e1, e2, yaw: s * yaw, stand, first: (i + (s > 0 ? 0 : 1)) % 2 === 0, front: i === 0, side: s };
+      return { upper, lower, thigh: thigh * k, shin: shin * k, e1, e2, yaw: s * yaw, stand, first: (i + (s > 0 ? 0 : 1)) % 2 === 0, front: i === 0, pair: i, side: s };
     }),
   );
   /** Bend a leg so its thigh and shin point `e1` and `e2` above level, the leg turned `yaw` round from straight ahead. */
@@ -10151,12 +10228,24 @@ function spider(top: THREE.Group, shell = "#24332b", dark = "#121a16", back = "#
       feelers.forEach((p) => p.joint.rotation.set(0.5, 0, 0));
       return;
     }
+    // Its own moves (FANG, WEB) are posed from their keys; anything else it is leant into, rearing and lunging as it strikes.
+    const fang = a.act?.kind === "fang" ? a.act.t : -1;
+    const web = a.act?.kind === "web" ? a.act.t : -1;
+    const rear = fang >= 0 ? along(FANG.rear, fang) : a.strike;
+    const arch = web >= 0 ? along(WEB.arch, web) + Math.sin(web * 70) * along(WEB.shake, web) * 0.06 : 0;
+    const pitch = web >= 0 ? along(WEB.pitch, web) : 0;
+    const sink = web >= 0 ? along(WEB.sink, web) : 0;
+    const brace = web >= 0 ? along(WEB.brace, web) : 0;
+    const ahead = fang >= 0 ? along(FANG.reach, fang) * 2.8 : a.strike * 2.6;
+    const frontUp = fang >= 0 ? along(FANG.legs, fang) : a.strike;
+    // Its fangs: spread wide and lifted as it opens them; below 0, driven down and in.
+    const gape = fang >= 0 ? along(FANG.gape, fang) : a.strike;
     // The body over its feet: it rises and sinks as it breathes, rides the walk, and on a strike rears and lunges.
-    top.rotation.set(-a.strike * 0.24, a.swing * 0.04, 0);
-    top.position.set(Math.sin(a.t * 0.8 + quirk) * 0.14 * k, ((a.breath + 1) * 0.14 + gait * gait * 0.3 + a.strike * 0.7) * k, a.strike * 2.6 * k);
+    top.rotation.set(-rear * (fang >= 0 ? 0.42 : 0.24) + pitch, a.swing * 0.04, 0);
+    top.position.set(Math.sin(a.t * 0.8 + quirk) * 0.14 * k, ((a.breath + 1) * 0.14 + gait * gait * 0.3 + Math.max(0, rear) * (fang >= 0 ? 1.3 : 0.7) + sink) * k, ahead * k);
     chest.joint.rotation.set(0, 0, 0);
-    belly.joint.rotation.set(a.breath * 0.035 + a.strike * 0.14, -a.swing * 0.07, 0);
-    fangs.forEach((jaw, i) => jaw.joint.rotation.set(Math.sin(a.t * 2.3 + i * 2 + quirk) * 0.05 - a.strike * 1.05, 0, (i ? 1 : -1) * a.strike * 0.4));
+    belly.joint.rotation.set(a.breath * 0.035 + Math.max(0, rear) * 0.14 + arch, -a.swing * 0.07, 0);
+    fangs.forEach((jaw, i) => jaw.joint.rotation.set(Math.sin(a.t * 2.3 + i * 2 + quirk) * 0.05 - gape * 1.05, 0, (i ? 1 : -1) * gape * (fang >= 0 ? 0.55 : 0.4)));
     feelers.forEach((p, i) => p.joint.rotation.set(Math.sin(a.t * 3.1 + i * 1.7 + quirk) * 0.14 - a.strike * 0.6, 0, 0));
     top.updateMatrix();
     inTop.copy(top.matrix).invert();
@@ -10170,17 +10259,22 @@ function spider(top: THREE.Group, shell = "#24332b", dark = "#121a16", back = "#
       if (leg.front) {
         // The first pair: thrown up and wide on a strike; now and then one taps the ground, standing.
         const tap = Math.max(0, Math.sin(a.t * 0.9 + quirk + leg.side) - 0.9) * 10;
-        at.y += (a.strike * 9 + tap * 0.9) * k;
-        at.x += leg.side * a.strike * 2 * k;
-        at.z += a.strike * 2.2 * k;
+        at.y += (frontUp * 9 + tap * 0.9) * k;
+        at.x += leg.side * frontUp * (fang >= 0 ? 2.6 : 2) * k;
+        at.z += frontUp * 2.2 * k;
+      } else if (leg.pair === 1 && fang >= 0) {
+        // The second pair is lifted a little with them as it rears.
+        at.y += frontUp * 2.5 * k;
       }
+      // Braced to throw silk: every foot set out a little wider.
+      at.x += leg.side * brace * 0.9 * k;
       at.applyMatrix4(inTop).sub(leg.upper.joint.position);
       const [e1, e2] = kneeHigh(Math.hypot(at.x, at.z), at.y, leg.thigh, leg.shin);
       set(leg, Math.atan2(at.x, at.z), e1, e2);
     }
   };
   // (No mud: slung this low, all of it would be the colour of the ground.)
-  return { parts, animate, clean: true };
+  return { parts, animate, clean: true, spins: true };
 }
 
 /** The sparring ring's training dummy: a straw sack on a post, with a target painted on its chest. */
@@ -10728,12 +10822,17 @@ export interface Figure {
    * beast rearing right up and bellowing, head thrown back (see ROAR), and returns the seconds until the roar; anything
    * else does nothing and returns 0. "grasp" is a ghost surging in with its arms stretched out to lay its hands on the
    * target (see GRASP); for anything else it is "light". "wail" is a ghost flinging itself up and back to scream (see
-   * WAIL), and returns the seconds until the scream; anything else does nothing and returns 0. "spook" is the head tipped over to one side and the whole body twitching in jerks (see SPOOK), for anything with poses of its own, and returns the seconds until it is at its worst; anything else does nothing and returns 0. "pound" is both fists heaved up overhead and driven down into the ground before
+   * WAIL), and returns the seconds until the scream; anything else does nothing and returns 0. "engulf" is an ooze pouring
+   * itself over the target (see ENGULF); for anything else it is "light". "spit" is an ooze squashing down and springing
+   * up to spit (see SPIT), and returns the seconds until the gob leaves it; anything else does nothing and returns 0. "fang"
+   * is a spider rearing up and plunging its fangs into the target (see FANG); for anything else it is "light". "web" is a
+   * spider arching its abdomen up over its back to throw silk (see WEB), and returns the seconds until the silk leaves it;
+   * anything else does nothing and returns 0. "spook" is the head tipped over to one side and the whole body twitching in jerks (see SPOOK), for anything with poses of its own, and returns the seconds until it is at its worst; anything else does nothing and returns 0. "pound" is both fists heaved up overhead and driven down into the ground before
    * its feet (see POUND), for a person or a giant; a creature does nothing and it returns 0. A person, a giant or a skeleton (or a bear clawing) winds up and steps in first, and this
    * returns the seconds until the blow lands, for whatever it hits to wait; a creature lunges at once, as it always
    * did, and this returns 0.
    */
-  strike(how?: "light" | "stab" | "heavy" | "slices" | "slam" | "drop" | "pound" | "channel" | "spook" | "claw" | "flurry" | "rake" | "roar" | "grasp" | "wail" | "hurl"): number;
+  strike(how?: "light" | "stab" | "heavy" | "slices" | "slam" | "drop" | "pound" | "channel" | "spook" | "claw" | "flurry" | "rake" | "roar" | "grasp" | "wail" | "hurl" | "engulf" | "spit" | "fang" | "web"): number;
   /**
    * How bright what glows on it is (eyes, gems, lamps), as a share of its own: 1 as made, more to flare it up (a
    * Guardian channelling). Greyed when down all the same.
@@ -10982,7 +11081,7 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
     const want = p.walking ? Math.sin(p.stride * 3.6) : 0;
     swing += (want - swing) * Math.min(1, dt * 20);
     const rowing = p.rowing !== undefined && !!rig.hands && !p.lying;
-    const anim: Anim = { t: p.time, swing, breath: Math.sin(p.time * 2.2 + beat), strike: Math.min(1, Math.abs(p.lean) * 2), act: action && (rig.acts || (rig.claws && CLAW_ACTS.has(action.kind)) || (rig.howls && action.kind === "howl") || (rig.dives && action.kind === "dive") || (rig.spectral && SPECTRAL_ACTS.has(action.kind))) ? { kind: action.kind, t: action.kind === "cast" ? since / pace : since, n: action.n, air: action.air } : null, scale: 1 / scaler.scale.x, lying: p.lying, sitting: rowing ? 1 : typeof p.sitting === "number" ? Math.max(0, Math.min(1, p.sitting)) : p.sitting ? 1 : 0, floor: rowing || p.lying ? 0 : Math.max(0, Math.min(1, p.floor ?? 0)), oars: rowing ? Math.max(0, Math.min(1, p.rowing!)) : -1, getUp: null };
+    const anim: Anim = { t: p.time, swing, breath: Math.sin(p.time * 2.2 + beat), strike: Math.min(1, Math.abs(p.lean) * 2), act: action && (rig.acts || (rig.claws && CLAW_ACTS.has(action.kind)) || (rig.howls && action.kind === "howl") || (rig.dives && action.kind === "dive") || (rig.spectral && SPECTRAL_ACTS.has(action.kind)) || (rig.oozes && OOZE_ACTS.has(action.kind)) || (rig.spins && SPIN_ACTS.has(action.kind))) ? { kind: action.kind, t: action.kind === "cast" ? since / pace : since, n: action.n, air: action.air } : null, scale: 1 / scaler.scale.x, lying: p.lying, sitting: rowing ? 1 : typeof p.sitting === "number" ? Math.max(0, Math.min(1, p.sitting)) : p.sitting ? 1 : 0, floor: rowing || p.lying ? 0 : Math.max(0, Math.min(1, p.floor ?? 0)), oars: rowing ? Math.max(0, Math.min(1, p.rowing!)) : -1, getUp: null };
     // A rig with no animations of its own is leant into a blow, and a little into a hit, easing off as it always has.
     if (action && !rig.acts && !anim.act) anim.strike = Math.max(anim.strike, Math.min(1, (action.kind === "hit" ? 0.5 : 1.8) * Math.exp(-8 * since)));
     if (sling) stow(sling, p.walking, Math.max(anim.strike, anim.act && anim.act.kind !== "hit" ? 1 : 0), dt);
@@ -11111,6 +11210,18 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
       }
       if (how === "wail") return 0;
       if (how === "grasp" || how === "hurl") how = "light";
+      if ((how === "engulf" || how === "spit") && rig.oozes) {
+        asked = how;
+        return how === "engulf" ? ENGULF.hit : SPIT.hit;
+      }
+      if (how === "spit") return 0;
+      if (how === "engulf") how = "light";
+      if ((how === "fang" || how === "web") && rig.spins) {
+        asked = how;
+        return how === "fang" ? FANG.hit : WEB.hit;
+      }
+      if (how === "web") return 0;
+      if (how === "fang") how = "light";
       if (how === "drop") {
         if (!rig.acts) return 0;
         asked = "drop";
