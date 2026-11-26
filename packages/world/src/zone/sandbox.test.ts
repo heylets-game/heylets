@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { at, flatBoard, must, standEnemy as enemy, standHero, unit } from "../test/zoneBoard";
-import { zoneUntimed } from "./zone";
+import { stepZone, zoneUntimed } from "./zone";
 import type { ZoneEvent, ZoneState } from "./types";
 
 // The combat sandbox (the Maps tab): a fight that goes by the dev's hand.
@@ -81,5 +81,51 @@ describe("placing enemies", () => {
 
   it("leaves one put down out of earshot out of it", () => {
     expect(place(at(14, 6))).toBe(false);
+  });
+});
+
+describe("acting in the combat sandbox", () => {
+  const fight = () => {
+    const state = board();
+    Object.assign(standHero(state, "cat", at(4, 6), { ...kit, controller: "someone_else" }), { hp: 900, maxHp: 900 });
+    return dev(dev(state, { op: "sandbox", on: true }), { op: "start_fight" });
+  };
+
+  it("lets the dev act as anyone in the fight, on anyone's turn, for nothing", () => {
+    let state = fight();
+    // Whoever's turn it is, cat (someone else's hero) can walk, and ann can strike, again and again.
+    state = must(state, { type: "move", by: "ann", unit: "cat", to: at(3, 6) });
+    expect(unit(state, "cat").pos).toEqual(at(3, 6));
+    const foe = state.units.find((u) => u.side === "enemy" && u.kind === "wolf")!.id;
+    Object.assign(unit(state, foe), { hp: 900, maxHp: 900 });
+    for (let i = 0; i < 4; i++) {
+      const events: ZoneEvent[] = [];
+      state = must(state, { type: "use", by: "ann", unit: "ann", ability: "bash", target: foe }, events);
+      expect(events.some((e) => e.t === "used" && e.id === "ann")).toBe(true);
+      expect(state.encounter!.budgets.ann.ap).toBe(6);
+      expect(unit(state, "ann").cooldowns).toEqual({});
+    }
+  });
+
+  it("lets the dev walk an enemy", () => {
+    let state = fight();
+    const foe = state.units.find((u) => u.side === "enemy" && u.kind === "bandit")!.id;
+    state = must(state, { type: "move", by: "ann", unit: foe, to: at(9, 9) });
+    expect(unit(state, foe).pos).toEqual(at(9, 9));
+  });
+
+  it("puts anyone straight on a hex with room", () => {
+    const state = fight();
+    const events: ZoneEvent[] = [];
+    const after = dev(state, { op: "place", unit: "ann", at: at(10, 3) }, events);
+    expect(unit(after, "ann").pos).toEqual(at(10, 3));
+    expect(events).toContainEqual(expect.objectContaining({ t: "blinked", id: "ann" }));
+  });
+
+  it("outside the sandbox, still only lets a player act as their own", () => {
+    let state = board();
+    Object.assign(standHero(state, "cat", at(4, 6), { ...kit, controller: "someone_else" }), { hp: 900, maxHp: 900 });
+    state = dev(state, { op: "start_fight" });
+    expect(stepZone(state, { type: "move", by: "ann", unit: "cat", to: at(3, 6) }).ok).toBe(false);
   });
 });

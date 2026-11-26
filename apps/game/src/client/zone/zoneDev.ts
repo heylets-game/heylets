@@ -7,8 +7,11 @@
 import { useSyncExternalStore } from "react";
 import type { DevOp, SurfaceKind } from "@gantt-quest/world";
 
-/** A tool that takes clicks on the map until it is put down. `pick`: the next click on a unit of that side picks it (`picked`), and puts the tool down. */
-export type ZoneDevTool = { tool: "spawn"; kinds: string[] } | { tool: "paint"; surface: SurfaceKind | null; wide: boolean } | { tool: "pick"; side: "hero" | "enemy" };
+/**
+ * A tool that takes clicks on the map until it is put down. `pick`: the next click on a unit of that side picks it
+ * (`picked`), and puts the tool down. `place`: each click puts the one being played straight on that hex.
+ */
+export type ZoneDevTool = { tool: "spawn"; kinds: string[] } | { tool: "paint"; surface: SurfaceKind | null; wide: boolean } | { tool: "pick"; side: "hero" | "enemy" } | { tool: "place" };
 
 export interface ZoneDevState {
   /** The zone on screen, if there is one. */
