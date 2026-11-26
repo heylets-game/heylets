@@ -5,7 +5,9 @@
 // Pick who stands on the stage (a hero class, a townsperson or an enemy),
 // dress a person in any gear, and drive the same pose the game drives
 // (render/figures.ts, FigurePose and Figure): walk, strike, stab, sweep,
-// shoot, cast, play, flinch, lie down, sit, row. Time can be slowed, paused and stepped a frame at a time, and an
+// shoot, cast, play, flinch, lie down, sit, row. An enemy ability with an
+// animation of its own (render/signatureMoves.ts) plays here too, effects and
+// all, thrown at a ring a tile ahead. Time can be slowed, paused and stepped a frame at a time, and an
 // action can be set to repeat, to watch it over and over. Drag the stage to
 // look round the figure, and scroll to come closer.
 //
@@ -19,7 +21,8 @@ import type { Me } from "./api";
 import { label } from "./labels";
 import { makeFigure, type Figure } from "./render/figures";
 import { LOOKS } from "./render/looks";
-import { lookFor } from "./render/sprites";
+import { SIGNATURE_MOVES, type FxOpts, type MoveStage } from "./render/signatureMoves";
+import { fxTexture, lookFor } from "./render/sprites";
 import "./figureLab.css";
 
 /** The kinds drawn as creatures, with a body of their own: they wear no gear (dressed, a kind is drawn as a person). */
@@ -56,6 +59,10 @@ const ACTIONS = [
   ["lean", "Lean", "The plain lean, easing off: what every attack used to be, and a stomp still is."],
 ] as const;
 type Action = (typeof ACTIONS)[number][0];
+/** An action, or an enemy ability's own animation (render/signatureMoves.ts) by its name. */
+type Act = Action | `move:${string}`;
+/** How far in front of the figure an enemy move's target stands: about the next tile's middle. */
+const TARGET_AHEAD = 1.6;
 
 const nameOf = (kind: string) => (HEROES.includes(kind) ? label("class", kind) : FOES.includes(kind) ? label("enemy", kind) : kind.replace(/_/g, " "));
 /** Models with no weapon in the game yet: offered in the main hand, to see them held. */
@@ -82,7 +89,7 @@ interface Live {
   spin: boolean;
   /** The figure itself turns on the spot, a quarter turn one way and then the other, to fling what hangs loose. */
   pivot: boolean;
-  repeat: Action | null;
+  repeat: Act | null;
   every: number;
 }
 
@@ -118,7 +125,7 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
   const readout = useRef<HTMLSpanElement>(null);
   const liveRef = useRef(live);
   liveRef.current = live;
-  const stage = useRef<{ stand: THREE.Group; camera: THREE.PerspectiveCamera; figure: Figure | null; look: { yaw: number; pitch: number; away: number; mid: number }; act(action: Action): string; step(): void } | null>(null);
+  const stage = useRef<{ stand: THREE.Group; camera: THREE.PerspectiveCamera; figure: Figure | null; look: { yaw: number; pitch: number; away: number; mid: number }; act(action: Act): string; step(): void } | null>(null);
 
   // The stage: a floor, lights that throw the figure's shadow, and a camera that looks round it. Made once.
   useEffect(() => {
@@ -153,7 +160,12 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
     const ground = new THREE.Mesh(new THREE.CircleGeometry(6, 48).rotateX(-Math.PI / 2).translate(0, -0.08, 0), new THREE.MeshLambertMaterial({ color: "#77838f" }));
     ground.receiveShadow = true;
     const stand = new THREE.Group();
-    scene.add(floor, ground, stand);
+    // Where an enemy move lands: a ring on the ground a tile ahead, and the effects thrown at it, drawn over all.
+    const mark = new THREE.Mesh(new THREE.RingGeometry(0.3, 0.38, 32).rotateX(-Math.PI / 2).translate(0, 0.01, TARGET_AHEAD), new THREE.MeshBasicMaterial({ color: "#e0313f", transparent: true, opacity: 0.55 }));
+    const fxGroup = new THREE.Group();
+    scene.add(floor, ground, stand, mark, fxGroup);
+    const fx: (FxOpts & { sprite: THREE.Sprite; age: number })[] = [];
+    const pending: { at: number; run: () => void }[] = [];
     const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 60);
     const look = { yaw: 0.5, pitch: 0.28, away: 6, mid: 0.8 };
 
@@ -168,6 +180,29 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
       const now = liveRef.current;
       if (!s) return;
       t += dt;
+      // What a move left to happen later, on this clock (so it slows and stops with it).
+      for (const due of pending.filter((p) => p.at <= t)) {
+        pending.splice(pending.indexOf(due), 1);
+        due.run();
+      }
+      // The effects in flight, as the game moves them (WorldRenderer).
+      for (let i = fx.length - 1; i >= 0; i--) {
+        const f = fx[i];
+        f.age += dt;
+        const k = Math.min(1, f.age / f.life);
+        f.sprite.position.lerpVectors(f.from, f.to, k);
+        if (f.arc) f.sprite.position.y += f.arc * 4 * k * (1 - k);
+        const size = f.size[0] + (f.size[1] - f.size[0]) * k;
+        f.sprite.scale.set(size, size, 1);
+        f.sprite.material.rotation = f.spin * k;
+        if (f.fade) f.sprite.material.opacity = 1 - k * k;
+        if (k >= 1) {
+          fxGroup.remove(f.sprite);
+          f.sprite.material.dispose();
+          fx.splice(i, 1);
+          f.onEnd?.();
+        }
+      }
       lean *= Math.exp(-dt * LEAN_EASE);
       if (now.walking) stride += dt * now.pace;
       if (now.repeat) {
@@ -188,10 +223,38 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
       if (s.figure) s.figure.root.position.y = up > 0 && up < 1 ? 4 * JUMP_HIGH * up * (1 - up) : 0;
       if (readout.current) readout.current.textContent = `${t.toFixed(2)}s · lean ${lean.toFixed(2)} · strike ${Math.min(1, Math.abs(lean) * 2).toFixed(2)}`;
     };
-    const act = (action: Action): string => {
+    const act = (action: Act): string => {
       sinceAct = 0;
       const figure = stage.current?.figure;
       if (!figure) return "";
+      if (action.startsWith("move:")) {
+        const move = SIGNATURE_MOVES[action.slice(5)];
+        if (!move) return "";
+        // As the game does it: left or right is which way the target is as the camera sees it.
+        const body = figure.root.position.clone().setY(SIZE * 0.4);
+        const hitAt = new THREE.Vector3(0, SIZE * 0.4, TARGET_AHEAD);
+        const dir = hitAt.clone().project(camera).x >= body.clone().project(camera).x ? 1 : -1;
+        const stage: MoveStage = {
+          spawnFx(kind, color, flip, opts) {
+            const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: fxTexture(kind, color, flip), transparent: true, depthTest: false }));
+            sprite.position.copy(opts.from);
+            sprite.scale.set(opts.size[0], opts.size[0], 1);
+            sprite.renderOrder = 9;
+            fxGroup.add(sprite);
+            fx.push({ ...opts, sprite, age: 0 });
+          },
+          later: (run, seconds) => pending.push({ at: t + seconds, run }),
+          bladeAt: () => hitAt.clone().sub(figure.root.position).setY(0).setLength(0.45).add(figure.root.position).setY(SIZE * 0.55),
+          sound: () => {},
+          lunge: () => {
+            lean = -0.9;
+          },
+          jolt: () => {},
+        };
+        const began = t;
+        move.play(stage, { figure, hitAt, dir, perfect: false, onImpact: () => setNote(`The blow is told ${(t - began).toFixed(2)}s in.`) });
+        return "";
+      }
       if (action === "hit") {
         figure.hit();
         return "";
@@ -290,6 +353,9 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
       el.removeEventListener("pointercancel", up);
       el.removeEventListener("wheel", wheel);
       stage.current?.figure?.dispose();
+      for (const f of fx) f.sprite.material.dispose();
+      mark.geometry.dispose();
+      mark.material.dispose();
       floor.geometry.dispose();
       ground.geometry.dispose();
       renderer.dispose();
@@ -334,7 +400,7 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
     return () => window.removeEventListener("keydown", key, true);
   }, [onClose]);
 
-  const act = (action: Action) => setNote(stage.current?.act(action) ?? "");
+  const act = (action: Act) => setNote(stage.current?.act(action) ?? "");
   const view = (yaw: number, pitch: number) => {
     if (stage.current) Object.assign(stage.current.look, { yaw, pitch });
   };
@@ -423,13 +489,27 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
             </button>
           ))}
         </div>
+        <h4>Enemy moves</h4>
+        <p className="muted">An enemy ability's own animation, thrown at the red ring a tile ahead. Any figure can play one; its own enemy is named.</p>
+        <div className="dev-row">
+          {Object.entries(SIGNATURE_MOVES).map(([name, move]) => (
+            <button key={name} className="small primary" title={move.blurb} onClick={() => act(`move:${name}`)}>
+              {name} ({label("enemy", move.who)})
+            </button>
+          ))}
+        </div>
         <div className="dev-row">
           <label title="Do it again and again, this often.">
             Repeat
-            <select value={live.repeat ?? ""} onChange={(e) => set({ repeat: (e.target.value || null) as Action | null })}>
+            <select value={live.repeat ?? ""} onChange={(e) => set({ repeat: (e.target.value || null) as Act | null })}>
               <option value="">Off</option>
               {ACTIONS.map(([id, name]) => (
                 <option key={id} value={id}>
+                  {name}
+                </option>
+              ))}
+              {Object.keys(SIGNATURE_MOVES).map((name) => (
+                <option key={name} value={`move:${name}`}>
                   {name}
                 </option>
               ))}
