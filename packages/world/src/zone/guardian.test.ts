@@ -5,6 +5,7 @@ import { makeRng } from "../rng";
 import { checkAbility, enemyAct, push, shift } from "./combat";
 import { covers, gapTo, roomFor, span, unitAt, zoneReach } from "./geometry";
 import { loadZone } from "./zone";
+import { BEHAVIOURS } from "./behaviours";
 import { ENEMIES } from "../content";
 import { enemyStrikes } from "./kit";
 import { quakeAtTurn, tickWeather } from "./weather";
@@ -32,8 +33,8 @@ function setUp(guardAt: HexPos, heroes: HexPos[]) {
 const ctxOf = (state: ZoneState, seed: number): Ctx => ({ state: structuredClone(state), rng: makeRng(seed), events: [] as ZoneEvent[], effects: [] });
 
 describe("a Guardian's kit", () => {
-  it("is Stone Fist and Earthquake, and no Shove: it pushes nobody about but by its fist", () => {
-    expect(ENEMIES.guardian.abilities).toEqual(["stone_fist", "earthquake"]);
+  it("is Stone Fist, Earthquake and Slowing Field, and no Shove: it pushes nobody about but by its fist", () => {
+    expect(ENEMIES.guardian.abilities).toEqual(["stone_fist", "earthquake", "slowing_field"]);
   });
 });
 
@@ -240,5 +241,59 @@ describe("a Guardian is three hexes big", () => {
   it("cannot jump", () => {
     let { state, guardian } = setUp(at(8, 6), [at(2, 2)]);
     expect(fails(state, { type: "common", by: "ann", unit: guardian, what: "jump", at: at(8, 4) })).toBeTruthy();
+  });
+});
+
+describe("a Guardian's Slowing Field", () => {
+  const slowingField = strike("Slowing Field");
+
+  it("costs 2 AP, waits 4 turns, does no harm, and is weighed as a field", () => {
+    expect(slowingField).toMatchObject({ cost: 2, cooldown: 4, harmless: true, behaviour: "field" });
+    expect(slowingField.kit.field).toEqual({ rounds: 3, radius: 2 });
+    expect(slowingField.weight).toBeGreaterThanOrEqual(2);
+  });
+
+  it("goes up round it for 3 of its turns, with no roll and no harm", () => {
+    const { state, guardian } = setUp(at(8, 6), [at(7, 6)]);
+    const ctx = ctxOf(state, 1);
+    enemyAct(ctx, unit(ctx.state, guardian), slowingField, null);
+    expect(unit(ctx.state, guardian).conditions.find((c) => c.kind === "slowing_field")).toMatchObject({ rounds: 3, amount: 2 });
+    expect(ctx.events.some((e) => e.t === "roll" || e.t === "hit")).toBe(false);
+  });
+
+  it("Slows a hero whose turn starts within 2 hexes of any of its hexes, and not one further off", () => {
+    let { state, guardian } = setUp(at(8, 6), [at(11, 6), at(12, 6)]);
+    expect([gapTo(unit(state, guardian), at(11, 6)), gapTo(unit(state, guardian), at(12, 6))]).toEqual([2, 3]);
+    unit(state, guardian).conditions.push({ kind: "slowing_field", rounds: 3, amount: 2 });
+    // Round to each of their turns.
+    const slowedAtTurn = new Map<string, boolean>();
+    // Only turns begun since it went up count.
+    const began = state.encounter!.turnNo;
+    for (let n = 0; n < 8 && slowedAtTurn.size < 2; n++) {
+      state = must(state, { type: "timeout" });
+      const enc = state.encounter!;
+      if (enc.turnNo === began) continue;
+      for (const id of ["ann", "bo"]) if (enc.acting.includes(id) && !enc.done.includes(id) && !slowedAtTurn.has(id)) slowedAtTurn.set(id, has(state, id, "slowed"));
+    }
+    expect(slowedAtTurn.get("ann")).toBe(true);
+    expect(slowedAtTurn.get("bo")).toBe(false);
+  });
+
+  it("Slows a hero who walks into it, for the rest of the walk", () => {
+    let { state, guardian } = setUp(at(8, 6), [at(13, 6)]);
+    unit(state, guardian).conditions.push({ kind: "slowing_field", rounds: 3, amount: 2 });
+    state = annsTurn(state);
+    expect(has(state, "ann", "slowed")).toBe(false);
+    state = must(state, { type: "move", by: "ann", unit: "ann", to: at(11, 6) });
+    expect(has(state, "ann", "slowed")).toBe(true);
+  });
+
+  it("is worth raising with heroes near, and nothing with none", () => {
+    const near = setUp(at(8, 6), [at(10, 6)]);
+    const far = setUp(at(8, 6), [at(14, 6)]);
+    const look = (s: ZoneState, g: string) => ({ state: s, enemy: unit(s, g) });
+    const heroes = (s: ZoneState) => s.units.filter((u) => u.side === "hero");
+    expect(BEHAVIOURS.field.value(look(near.state, near.guardian) as never, at(8, 6), slowingField, heroes(near.state))?.worth).toBeGreaterThan(0);
+    expect(BEHAVIOURS.field.value(look(far.state, far.guardian) as never, at(8, 6), slowingField, heroes(far.state))).toBeNull();
   });
 });

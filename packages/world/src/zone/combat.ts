@@ -1104,6 +1104,7 @@ function lungeAt(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit): bool
  */
 export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | null, at?: HexPos): void {
   if (attack.kit.rally) return howl(ctx, enemy, attack);
+  if (attack.kit.field) return raiseField(ctx, enemy, attack);
   enemyAttack(ctx, enemy, attack, target, at);
   attackMade(ctx, enemy);
 }
@@ -1119,6 +1120,37 @@ export const alliesReached = (state: ZoneState, enemy: Unit, pos: HexPos, attack
 function howl(ctx: Ctx, enemy: Unit, attack: EnemyStrike): void {
   ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name });
   for (const ally of alliesReached(ctx.state, enemy, enemy.pos, attack)) addCondition(ctx, ally, "frenzied", UNTIMED_KEEPS, attack.kit.rally!.attacks);
+}
+
+/**
+ * A field round its user (a Guardian's Slowing Field): it carries it for so many of its turns, and whoever of the other
+ * side is in it now is Slowed for the rest of their turn, if it is theirs (fieldSlows). No attack: no Frenzy is spent.
+ */
+function raiseField(ctx: Ctx, enemy: Unit, attack: EnemyStrike): void {
+  const field = attack.kit.field!;
+  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name });
+  addCondition(ctx, enemy, "slowing_field", field.rounds, field.radius);
+  // However long it was up for before, it reaches as far as this one does.
+  const held = enemy.conditions.find((c) => c.kind === "slowing_field");
+  if (held) held.amount = field.radius;
+}
+
+/** Whoever of the other side carries a Slowing Field that reaches `unit` where it stands, if anyone does. */
+export const fieldOver = (state: ZoneState, unit: Unit): Unit | undefined =>
+  state.units.find((u) => u.side !== unit.side && !u.down && inFight(state, u.id) && gap(u, unit) <= (u.conditions.find((c) => c.kind === "slowing_field")?.amount ?? -1));
+
+/**
+ * A unit in the fight is in a Slowing Field of the other side's (as its turn starts, or as it steps in): it is Slowed
+ * until its turn is over, and its movement left this turn is halved at once (engine.ts addCondition). Leaving the field
+ * does not lift it; out of it, its next turn is its own pace again. Those who fly are caught as well: it is the air.
+ */
+export function fieldSlows(ctx: Ctx, unit: Unit): void {
+  const { state } = ctx;
+  if (unit.down || !inFight(state, unit.id) || has(unit, "slowed") || !fieldOver(state, unit)) return;
+  addCondition(ctx, unit, "slowed", 1);
+  // Only for this turn of theirs: they are Slowed again next turn only if they are still in it then.
+  const c = unit.conditions.find((x) => x.kind === "slowed");
+  if (c) delete c.fresh;
 }
 
 function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | null, at?: HexPos): void {

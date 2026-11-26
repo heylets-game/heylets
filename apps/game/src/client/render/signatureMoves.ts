@@ -1214,7 +1214,49 @@ function earthquakeHeave(stage: MoveStage, { figure, hitAt, crit, onImpact, echo
   }, lands + waveReaches(far, reach * 1.1, 0.5));
 }
 
+/** A Slowing Field going up: how far it reaches from the middle of a Guardian (two hexes past its own), and its slow rings. */
+export const SLOWING_FIELD = { reach: HEX * 2.75, rings: 3, life: 1.3, apart: 0.32 };
+
+/**
+ * A Guardian's Slowing Field: it lifts a hand overhead and holds it there (figures.ts cast), and the cyan light in it
+ * gathers, motes drawn in round its body; as the hand comes down, the field goes out from it: a pale flash about it and
+ * three slow cyan rings rolling out over the ground one after another to the edge of its reach, the air in it thick
+ * with motes drifting lazily up. (What stays round it while it lasts is the map's: ZoneView, SpellFx.aura.)
+ */
+function slowingField(stage: MoveStage, { figure, crit, onImpact, alone, hitAt }: MoveCtx) {
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const ground = feet.clone().setY(feet.y + 0.07);
+  const { reach, rings, life, apart } = SLOWING_FIELD;
+  const color = crit ? GOLD : GUARDIAN_GLOW;
+  const wait = Math.max(0.35, figure.cast());
+  // Gathering: motes drawn in toward it, and up.
+  for (let s = 0; s < wait; s += 0.05) {
+    stage.later(() => {
+      const a = Math.random() * Math.PI * 2;
+      const from = offset(feet, Math.cos(a) * 1.6, 0.4 + Math.random() * 1.2, Math.sin(a) * 1.6);
+      stage.spawnFx("mote", color, Math.cos(a) < 0, { from, to: offset(feet, Math.cos(a) * 0.4, 1.6 + Math.random() * 0.6, Math.sin(a) * 0.4), life: 0.35, size: [0.35, 0.15], spin: 0, fade: true });
+    }, s);
+  }
+  stage.later(() => {
+    stage.spawnFx("burst", color, false, { from: offset(feet, 0, 1.4, 0), to: offset(feet, 0, 1.4, 0), life: 0.4, size: [1.2, 3.4], spin: 0.3, fade: true });
+    for (let n = 0; n < rings; n++) stage.later(() => stage.wave({ at: ground, radius: reach * (1 - n * 0.04), life, color, width: n ? 0.06 : 0.1 }), n * apart);
+    // The air in it thickening: motes drifting slowly up all over it.
+    for (let k = 0; k < 18; k++) {
+      stage.later(() => {
+        const at = spotWithin(ground, reach, 0.1);
+        stage.spawnFx("mote", color, Math.random() < 0.5, { from: at, to: offset(at, (Math.random() - 0.5) * 0.2, 0.6 + Math.random() * 0.4, 0), life: 1.1, size: [0.3, 0.2], spin: 0, fade: true });
+      }, 0.1 + Math.random() * 0.9);
+    }
+    if (alone) onImpact();
+  }, wait);
+  if (alone) return;
+  // In the lab, nobody is reached: told as the field goes out to where the target stands.
+  const far = Math.hypot(hitAt.x - feet.x, hitAt.z - feet.z);
+  stage.later(onImpact, wait + waveReaches(far, reach, life));
+}
+
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
+  "Slowing Field": { who: "guardian", blurb: "Lifts a hand overhead as motes of cyan light are drawn in round it, then brings it down: a pale flash, three slow cyan rings rolling out over the ground two hexes past it, and motes drifting lazily up all over the field.", play: slowingField },
   "Stone Fist": { who: "guardian", blurb: "Heaves its fist up overhead and brings it straight down: a pale stone flash and a cyan glint, a pulse at the target's feet, shock lines and chips of stone driven on past them, and the view jolted.", play: stoneFist },
   Earthquake: {
     who: "guardian",
