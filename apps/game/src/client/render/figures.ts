@@ -9690,10 +9690,26 @@ function bear(top: THREE.Group, fur = "#7a5232", dark = "#4f3420", muzzle = "#b9
 
 /**
  * A ghost of the Haunted Caverns: a pale hooded shape with a ragged hem, hollow eyes and reaching hands,
- * hanging in the air. `crown` gives the bound Haunt the tarnished crown of whoever it was in life. `rime` is the
- * ice on a Rime Wraith: shards of it stand from its shoulders and back, and it is the cold light in its eyes.
+ * hanging in the air. What sets one ghost apart from another is in `look` (GhostLook).
  */
-function ghost(top: THREE.Group, pale = "#dfe8f2", shade = "#a7b6cc", eye = "#24203a", crown?: string, rime?: string): Rig {
+interface GhostLook {
+  /** The tarnished crown of whoever it was in life. */
+  crown?: string;
+  /** A gem set in the front of the crown, glowing. */
+  gem?: string;
+  /** Ice on it: shards stand from its shoulders and back, and it is the cold light in its eyes. */
+  rime?: string;
+  /** A light burning in its eyes (rime's light when not said). */
+  glare?: string;
+  /** A high collar standing up behind its head and a cape down its back: the state it kept in life. */
+  mantle?: string;
+  /** Iron on its wrists, each with a broken chain hanging from it: what binds it here. */
+  shackles?: string;
+}
+
+function ghost(top: THREE.Group, pale = "#dfe8f2", shade = "#a7b6cc", eye = "#24203a", look: GhostLook = {}): Rig {
+  const { crown, rime, mantle, shackles } = look;
+  const glare = look.glare ?? rime;
   const parts: Part[] = [];
   const body = (parts[0] = new Part(top, 0, 2, 0));
   // One shape from the hem up over a round head, narrowing at the neck.
@@ -9708,8 +9724,15 @@ function ghost(top: THREE.Group, pale = "#dfe8f2", shade = "#a7b6cc", eye = "#24
   }
   for (const s of [-1, 1]) body.ball(eye, 1, s * 1.5, 13, 3.35, 1, [0.92, 1.12, 0.55]);
   body.ball(eye, 1, 0, 10.2, 3.42, 1, [1.15, 0.8, 0.5]);
+  if (glare) for (const s of [-1, 1]) body.glowBall(glare, 0.55, s * 1.5, 13, 3.72);
+  if (mantle) {
+    // The collar: flaring up and out behind the head, open at the front. The cape: from the shoulders to the hem,
+    // widening as it falls, over the back only (half a turn about y puts a front loft behind).
+    const back: Rot = [0, Math.PI, 0];
+    body.frontLoft(mantle, [[12.2, 3.95, 3.85, 0.1], [13.6, 4.15, 4.05, 0.25], [15.4, 4.6, 4.4, 0.55], [16.6, 5.1, 4.8, 0.8]], [1.7, 1.75, 1.85, 1.95], 10, back);
+    body.frontLoft(mantle, [[4.4, 4.85, 4.75, 0.05], [7, 4.5, 4.4, 0.05], [10, 3.98, 3.88, 0.12], [12.4, 3.98, 3.88, 0.1]], [1.25, 1.2, 1.15, 1.25], 10, back);
+  }
   if (rime) {
-    for (const s of [-1, 1]) body.glowBall(rime, 0.55, s * 1.5, 13, 3.72);
     // Shards of ice round the shoulders and down the back (not the front, where the arms reach), long and short by turns.
     for (let i = 0; i < 7; i++) {
       const a = Math.PI + (i - 3) * 0.42;
@@ -9726,12 +9749,18 @@ function ghost(top: THREE.Group, pale = "#dfe8f2", shade = "#a7b6cc", eye = "#24
       const at = (r: number, y: number, turn = 0): Pt => [Math.sin(a + turn) * r, y, Math.cos(a + turn) * r - 0.1];
       body.shape(crown, [at(3.05, 16.1, -0.3), at(3.05, 16.1, 0.3), at(2.6, 16.1), at(2.85, 17.55)]);
     }
+    if (look.gem) body.glowBall(look.gem, 0.5, 0, 15.75, 3.12);
   }
   const arms = [-1, 1].map((s) => {
     const arm = (parts[parts.length] = new Part(body.joint, s * 3.6, 9.6, 1));
     // A sleeve reaching forward, flaring at the cuff, and a pale hand with long fingers.
     lengthwise(arm, shade, [[-0.6, 1, 1], [1.5, 0.92, 0.88], [3.6, 0.82, 0.78], [4.4, 1.02, 0.95]], 6);
     arm.shape(pale, [[-0.7, 0.35, 4.2], [0.7, 0.35, 4.2], [-0.7, -0.45, 4.2], [0.7, -0.45, 4.2], [-0.75, 0.05, 5.55], [0, 0.2, 5.95], [0.75, 0.05, 5.55], [0, -0.55, 5.3]]);
+    if (shackles) {
+      // A cuff of iron round the sleeve, and a few links hanging from it, each turned across the last, ending broken.
+      arm.ring(shackles, 1.02, 0.24, 0, 0, 3.05);
+      for (let i = 0; i < 4; i++) arm.ring(shackles, 0.36, 0.11, 0, -1.4 - i * 0.6, 3.05 - i * 0.08, i % 2 ? [0, HALF_PI, 0] : undefined);
+    }
     return arm;
   });
   const animate = (a: Anim) => {
@@ -10174,7 +10203,7 @@ function rigFor(kind: string, top: THREE.Group, look: Look, outfit: Outfit | und
     case "shade":
       return ghost(top);
     case "haunt":
-      return ghost(top, "#c7b8f0", "#8b74c9", "#ff4d4d", "#c9a24a");
+      return ghost(top, "#c7b8f0", "#8b74c9", "#2a1838", { crown: "#c9a24a", gem: "#ff4d4d", glare: "#ff4d4d", mantle: "#4b3778", shackles: "#4a4658" });
     case "bat":
       return bat(top);
     case "skeleton":
@@ -10200,7 +10229,7 @@ function rigFor(kind: string, top: THREE.Group, look: Look, outfit: Outfit | und
     case "snow_bear":
       return bear(top, "#eef3f6", "#c9d5de", "#dbe4ea", "#1d2230", undefined, "#2b2f3a");
     case "wraith":
-      return ghost(top, "#e4f6ff", "#8fc9e8", "#16384f", undefined, "#7ff1ff");
+      return ghost(top, "#e4f6ff", "#8fc9e8", "#16384f", { rime: "#7ff1ff" });
     case "drowned_cutlass":
       return skeleton(top, "cutlass");
     case "drowned_gunner":
