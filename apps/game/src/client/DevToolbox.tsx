@@ -166,13 +166,16 @@ export function DevToolbox({ me, refresh }: { me: Me; refresh(): Promise<void> }
           {/* Stays put while the tab under it scrolls. */}
           <div className="dev-dock-top">
             <strong className="dev-dock-title">Dev toolbox</strong>
-            <div className="dev-tabs" role="tablist" aria-label="Dev tools">
-              {TABS.map(([id, name]) => (
-                <button key={id} role="tab" aria-selected={tab === id} className={`small ${tab === id ? "selected" : ""}`} onClick={() => (pick(id), fold(false))}>
-                  {name}
-                </button>
-              ))}
-            </div>
+            {/* Minimized, the name and the two buttons are all there is. */}
+            {folded ? <span className="dev-dock-gap" /> : (
+              <div className="dev-tabs" role="tablist" aria-label="Dev tools">
+                {TABS.map(([id, name]) => (
+                  <button key={id} role="tab" aria-selected={tab === id} className={`small ${tab === id ? "selected" : ""}`} onClick={() => (pick(id), fold(false))}>
+                    {name}
+                  </button>
+                ))}
+              </div>
+            )}
             <button className="dev-dock-btn" aria-expanded={!folded} aria-label={folded ? "Show the dev toolbox" : "Minimize the dev toolbox"} title={folded ? "Show" : "Minimize"} onClick={() => fold(!folded)}>
               {folded ? "+" : "–"}
             </button>
