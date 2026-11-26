@@ -1,21 +1,31 @@
 /* The bottom bar and the game menu (ui/Hud.tsx, OptionsMenu.tsx).
 
-   The bar is a ship's rack in pixel art: hard edges, a lit side and a shadowed side, nothing blurred. Warm
-   red-brown timber in four tones does all the work: --hw-hi where the light
-   catches, --hw-lit and --hw for the faces, --hw-dark in shadow, --hw-out for the outline. */
+   The bar is a board of the fight's tarred timber (zone/fight.css), as the shops' shelves are (shelf.css): dark
+   boards under a wash of red, lit along the top and shadowed at the foot, rimmed in near-black with a line of
+   brown round that, and dull brass for what is set into it. Sizes are given in --u, one of the board's own
+   pixels: a screen pixel on a computer, less on a phone, so the whole board shrinks to fit as one. On a map
+   (.full) it carries the slots and is as wide as the turn bar over it; anywhere else (.slim) it is one row. */
 .hud {
-  --hw-out: #3a1d20; --hw-dark: #6b3524; --hw: #8e4a2f; --hw-lit: #b1633c; --hw-hi: #d18a55; --well: #3b2119;
-  position: absolute; left: 0; right: 0; bottom: 18px; margin: 0 auto; z-index: 14; width: fit-content; max-width: calc(100% - 24px);
+  --h-out: #1c0d0e; --h-rim: #6b3524; --h-wood: #2a1614; --h-wood-hi: #3d231d; --h-well: #120908;
+  --h-brass: #c9a24a; --h-brass-hi: #f6e2a1; --h-brass-lo: #6f5222; --h-gold: #f4c64e; --h-parch: #e9d8ab;
+  --u: 1px;
+  position: absolute; left: 0; right: 0; bottom: 14px; margin: 0 auto; z-index: 14; width: fit-content; max-width: calc(100% - 24px);
   display: flex; flex-direction: column; align-items: center; pointer-events: none;
   /* The timber dims a little with the hour (ui/env.ts). */
   filter: brightness(calc(0.78 + 0.22 * var(--env-level, 1)));
 }
 .hud > * { pointer-events: auto; }
+.hud button { font: inherit; }
 
-/* Over everything: where you stand and what to do there, on a plain dark strip. */
-.hud-here { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; padding: 4px 10px; background: rgba(18, 12, 8, 0.86); border: 2px solid var(--hw-out); box-shadow: 0 0 0 2px var(--hw-dark); }
-.hud-place { font-family: var(--font-head); font-size: 15px; letter-spacing: 0.04em; }
-.hud-place .muted { font-family: var(--font-book); font-size: 13px; letter-spacing: 0; }
+/* Over everything: where you stand and what to do there, on a thin board of the same timber. */
+.hud-here {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 8px; padding: 4px 6px 4px 12px;
+  background: linear-gradient(180deg, rgba(255, 214, 170, 0.08), rgba(0, 0, 0, 0.3)), linear-gradient(rgba(18, 7, 6, 0.55), rgba(18, 7, 6, 0.55)), var(--tex-wood, none) 0 0 / 128px 128px, var(--h-wood);
+  border: 2px solid var(--h-out);
+  box-shadow: inset 0 1px 0 rgba(214, 150, 96, 0.25), 0 0 0 1px var(--h-rim), 0 4px 12px rgba(0, 0, 0, 0.45);
+}
+.hud-place { font-family: var(--font-head); font-size: 15px; letter-spacing: 0.04em; color: #f0e2c4; text-shadow: 0 1px 0 #000; }
+.hud-place .muted { font-family: var(--font-book); font-size: 13px; letter-spacing: 0; color: #c9ad8c; }
 .hud-here button { white-space: nowrap; }
 
 /* The turn's points: pips over each meter. */
@@ -23,96 +33,148 @@
 .hud-points-side { display: flex; align-items: center; gap: 10px; }
 .hud-points-side.end { justify-content: flex-end; }
 .hud-pips { display: inline-flex; align-items: center; gap: 4px; }
-.hud-pips i { width: 10px; height: 10px; background: var(--well); border: 2px solid var(--hw-out); box-shadow: 0 0 0 2px var(--hw-dark); margin: 2px; }
+.hud-pips i { width: 10px; height: 10px; background: var(--h-well); border: 2px solid var(--h-out); box-shadow: 0 0 0 1px var(--h-brass-lo); margin: 2px; }
 /* Action Points: round pips, told apart from movement by shape as well as colour. */
 .hud-pips.ap i { border-radius: 50%; width: 12px; height: 12px; }
 .hud-pips.ap i.on { background: #8fd49a; box-shadow: 0 0 0 2px #3f7a52; }
 .hud-pips.move i.on { background: #f0c552; box-shadow: 0 0 0 2px #8a6a26; }
 /* A course charted (Chart a Course): movement good only for steps toward the mark, in the mark's red. */
 .hud-pips.course i.on { background: #ff5a5a; box-shadow: 0 0 0 2px #8a2626; }
-.hud-chip { color: var(--muted); background: rgba(18, 12, 8, 0.86); border: 2px solid var(--hw-out); padding: 0 6px; white-space: nowrap; }
+.hud-chip { color: #c9ad8c; background: rgba(18, 9, 8, 0.88); border: 2px solid var(--h-out); box-shadow: 0 0 0 1px var(--h-brass-lo); padding: 0 6px; white-space: nowrap; }
 .hud-chip.bad { color: var(--bad); }
 
-/* The meters and the plaque are part of the rack's picture; what moves is laid over it (below). */
-/* A meter's fill lies in its channel: liquid, drawn on the rack's own grid (LiquidMeter.tsx). */
-.hud-meter { position: absolute; overflow: hidden; }
-.liquid-meter { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
-/* The card for whatever on the bar the pointer is over: above the bar, over that thing. */
-.hud .hud-tip { position: absolute; bottom: calc(100% + 16px); translate: -50% 0; z-index: 6; width: max-content; max-width: 300px; padding: 8px 12px; pointer-events: none; font-size: 13px; text-align: left; }
-.hud-tip-text { display: flex; flex-direction: column; gap: 2px; }
-.hud-tip-text strong { font-family: var(--font-head); font-size: 16px; font-weight: normal; letter-spacing: 0.03em; color: var(--brass-hi); display: flex; align-items: center; justify-content: space-between; gap: 14px; }
-.hud-tip-text kbd { font: bold 11px ui-monospace, Consolas, monospace; color: var(--text); padding: 0 5px; border: 2px solid var(--out); background: var(--raise); }
-.hud-tip .detail { font-size: 13px; }
-/* The plaque's face: the level, or the turn, lettered on the board the picture has for it. */
-.hud .hud-plaque {
-  position: absolute; padding: 0; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: none; border-radius: 0; background: none; box-shadow: none;
-  font-family: var(--font-head); font-size: calc(var(--p) * 5.4); letter-spacing: 0.05em; line-height: 1; color: #fbe6c8; text-shadow: 0 var(--p) 0 #3a1d20; white-space: nowrap;
+/* ---------- The board ---------- */
+.hud-rack {
+  position: relative; flex: none; box-sizing: border-box; display: flex; align-items: center; gap: calc(var(--u) * 8);
+  padding: calc(var(--u) * 8);
+  background:
+    linear-gradient(180deg, rgba(255, 214, 170, 0.1), rgba(0, 0, 0, 0) 32%, rgba(0, 0, 0, 0.42)),
+    linear-gradient(rgba(96, 30, 24, 0.34), rgba(96, 30, 24, 0.34)),
+    var(--tex-wood, none) 0 0 / 128px 128px,
+    var(--h-wood);
+  /* Framed as the game's windows are (theme.css), in the copper rim with a stud at each corner. */
+  border: max(4px, calc(var(--u) * 6)) solid var(--h-out); border-image: var(--frame-panel) 36 / max(8px, calc(var(--u) * 12)) / max(3px, calc(var(--u) * 5)) round;
+  box-shadow: inset 0 2px 0 rgba(214, 150, 96, 0.32), inset 0 -2px 0 rgba(0, 0, 0, 0.55), 0 8px 20px rgba(0, 0, 0, 0.55);
 }
-.hud .hud-plaque:hover:not(:disabled) { background: rgba(255, 236, 190, 0.22); border: none; box-shadow: none; }
+/* On a map, as wide as the turn bar over it (--fight-bar-w in zone/fight.css). */
+.hud.full .hud-rack { width: calc(var(--u) * 732); }
+/* The fight lab's stand-in: the board, empty, as tall as the real one on a map. */
+.hud-rack.lab { height: calc(var(--u) * 140); }
+
+/* Each end: two small tabs stacked, the cog among them. */
+.hud-tabs { flex: none; display: flex; flex-direction: column; gap: calc(var(--u) * 6); }
+.hud .hud-tab {
+  position: relative; width: calc(var(--u) * 24); height: calc(var(--u) * 24); padding: 0; display: grid; place-items: center;
+  font: bold max(9px, calc(var(--u) * 12)) ui-monospace, Consolas, monospace; line-height: 1; color: var(--h-brass-hi); text-shadow: 0 1px 0 #000;
+  background: linear-gradient(180deg, rgba(255, 214, 170, 0.12), rgba(0, 0, 0, 0.25)), var(--h-wood-hi);
+  border: 2px solid var(--h-out); border-radius: 0;
+  box-shadow: inset 0 1px 0 rgba(214, 150, 96, 0.35), 0 0 0 1px var(--h-brass-lo);
+}
+.hud .hud-tab:hover:not(:disabled) { color: #fff6cf; background: linear-gradient(180deg, rgba(255, 214, 170, 0.22), rgba(0, 0, 0, 0.15)), var(--h-wood-hi); border: 2px solid var(--h-out); box-shadow: inset 0 1px 0 rgba(214, 150, 96, 0.5), 0 0 0 1px var(--h-brass); }
+.hud .hud-tab:disabled { color: #8a6f58; opacity: 1; }
+.hud .hud-tab.news { color: #ffe27a; animation: hud-tab-news 0.9s steps(2) infinite; }
+@keyframes hud-tab-news { 50% { color: #fff; } }
+@media (prefers-reduced-motion: reduce) { .hud .hud-tab.news { animation: none; } }
+.hud-tab .pixel-glyph { width: calc(var(--u) * 11); height: auto; }
+/* The emote wheel's button fills its tab, as the cog does. */
+.hud-tab.emote .emote-button { width: 100%; height: 100%; min-width: 0; padding: 0; background: none; border: none; box-shadow: none; border-radius: 0; color: var(--h-brass-hi); }
+.hud-tab.emote .emote-button:hover:not(:disabled) { background: rgba(255, 236, 190, 0.18); }
+/* The menu's cog fills its tab. */
+.hud-tab.cog .options { display: grid; width: 100%; height: 100%; }
+.hud-tab.cog .hud-btn { width: 100%; height: 100%; padding: 0; background: none; border: none; box-shadow: none; border-radius: 0; color: var(--h-brass-hi); }
+.hud-tab.cog .hud-btn svg { width: 70%; height: 70%; }
+.hud-tab.cog .hud-btn:hover:not(:disabled) { background: rgba(255, 236, 190, 0.18); }
+
+/* What is in hand, and the bag. */
+.hud-hands { flex: none; display: flex; gap: calc(var(--u) * 4); }
+
+/* The middle: health, the plaque and energy over the slots, and experience along the foot, between two lines of
+   brass let into the board. */
+.hud-core {
+  flex: 1 1 auto; min-width: 0; align-self: stretch; display: flex; flex-direction: column; justify-content: center; gap: calc(var(--u) * 6);
+  padding: 0 calc(var(--u) * 8);
+  border-inline: 2px solid var(--h-out); box-shadow: inset 1px 0 0 rgba(201, 162, 74, 0.3), inset -1px 0 0 rgba(201, 162, 74, 0.3), -1px 0 0 rgba(214, 150, 96, 0.15), 1px 0 0 rgba(214, 150, 96, 0.15);
+}
+.hud.slim .hud-core { width: calc(var(--u) * 300); }
+.hud-gauges { display: flex; align-items: center; gap: calc(var(--u) * 8); }
+
+/* A meter's channel: sunk into the board and rimmed in brass, its liquid drawn in it (LiquidMeter.tsx). */
+.hud-meter {
+  position: relative; flex: 1 1 0; min-width: 0; height: calc(var(--u) * 12); overflow: hidden;
+  background: var(--h-well); border: 2px solid var(--h-out);
+  box-shadow: 0 0 0 1px var(--h-brass-lo), inset 0 2px 3px rgba(0, 0, 0, 0.7);
+}
+.hud-meter.none { opacity: 0.4; }
+.liquid-meter { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+
+/* The plaque: the level on a dark board, trimmed in brass (or, handed a turn, its clock). */
+.hud .hud-plaque {
+  flex: none; position: relative; min-width: max(36px, calc(var(--u) * 58)); height: max(18px, calc(var(--u) * 26)); padding: 0 calc(var(--u) * 8);
+  display: inline-flex; align-items: center; justify-content: center; gap: max(2px, calc(var(--u) * 4));
+  font-family: var(--font-title); font-size: max(13px, calc(var(--u) * 20)); line-height: 1; letter-spacing: 0.02em; color: #ffe9a8; text-shadow: 0 2px 0 #000;
+  background: linear-gradient(180deg, #4a332c, #2b1a17); border: 2px solid var(--h-out); border-radius: 0;
+  box-shadow: 0 0 0 1px var(--h-brass), inset 0 1px 0 rgba(255, 240, 200, 0.22), 0 2px 0 rgba(0, 0, 0, 0.45);
+}
+.hud .hud-plaque small { font-family: var(--font-head); font-size: max(8px, calc(var(--u) * 11)); letter-spacing: 0.1em; text-transform: uppercase; color: #c9a877; }
+.hud .hud-plaque:hover:not(:disabled) { color: #fff6cf; background: linear-gradient(180deg, #5a3f35, #33201c); border: 2px solid var(--h-out); box-shadow: 0 0 0 1px var(--h-brass-hi), inset 0 1px 0 rgba(255, 240, 200, 0.3), 0 2px 0 rgba(0, 0, 0, 0.45); }
 .hud .hud-plaque:disabled { opacity: 1; cursor: default; }
-.hud .hud-plaque.news { color: #ffe27a; }
-.hud .hud-plaque.turn.mine { color: #ffe27a; background: rgba(244, 198, 78, 0.28); }
+.hud .hud-plaque.news { color: #ffe27a; box-shadow: 0 0 0 1px var(--h-gold), 0 0 10px rgba(244, 198, 78, 0.45), inset 0 1px 0 rgba(255, 240, 200, 0.22), 0 2px 0 rgba(0, 0, 0, 0.45); }
+.hud .hud-plaque.turn.mine { color: #ffe27a; background: linear-gradient(180deg, #6a4a1c, #3b2408); }
 .hud .hud-plaque.turn.low { color: #ffb0a0; }
 
-/* The rack: one picture of timber (rackArt.ts), drawn large with hard edges; --p is how many screen pixels one
-   of its pixels takes. What changes is laid over it at places given in the picture's own pixels. */
-.hud-rack { --p: 3px; position: relative; flex: none; filter: drop-shadow(0 calc(var(--p) * 1) 0 rgba(0, 0, 0, 0.5)); }
-.hud-rack-art { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; pointer-events: none; }
-/* Experience: three rows of green in the beam's channel, lit along the top. */
-.hud-xp { position: absolute; overflow: hidden; }
-.hud-xp div { height: 100%; background: linear-gradient(180deg, #86d86c 0 33.4%, #45a84c 33.4% 66.7%, #2c7c3e 66.7%); transition: width 0.3s steps(12); }
-/* A slot lies over its well in the picture, which is already drawn: it only holds what is in it. */
-.hud .hud-slot { position: absolute; padding: 0; display: grid; place-items: center; border: none; border-radius: 0; background: none; box-shadow: none; text-shadow: none; color: #4a2418; }
-/* A fight's slots: picked (waiting for its target) is lit; spent (nothing left to pay for it) is faded. */
+/* Experience: a thin channel along the foot, filled green. */
+.hud-xp { display: block; height: calc(var(--u) * 6); overflow: hidden; background: var(--h-well); border: 1px solid var(--h-out); box-shadow: 0 0 0 1px rgba(111, 82, 34, 0.7); }
+.hud-xp i { display: block; height: 100%; background: linear-gradient(180deg, #b6f09a, #5fbf4a 55%, #2c7c3e); box-shadow: inset 0 1px 0 rgba(230, 255, 210, 0.5); transition: width 0.3s; }
+
+/* The slots, on a map: two rows of ten (--cols, BAR_ROW in zone/hotbar.ts). */
+.hud-slots { display: grid; grid-template-columns: repeat(var(--cols, 10), calc(var(--u) * 42)); gap: calc(var(--u) * 2); justify-content: center; }
+
+/* A slot: a socket sunk into the board, rimmed in brass, holding its picture. */
+.hud .hud-slot {
+  --w: calc(var(--u) * 42);
+  position: relative; flex: none; box-sizing: border-box; width: var(--w); height: var(--w); padding: 0; display: grid; place-items: center;
+  color: var(--h-parch); text-shadow: none;
+  background: radial-gradient(circle at 50% 38%, #3d2622, var(--h-well) 80%);
+  border: 2px solid var(--h-out); border-radius: 0;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.75), 0 0 0 1px var(--h-brass-lo), 0 1px 0 1px rgba(214, 150, 96, 0.12);
+}
+.hud .hud-slot.hand, .hud .hud-slot.bag { --w: calc(var(--u) * 54); }
+.hud .hud-slot.bag { box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.75), 0 0 0 1px var(--h-brass), 0 1px 0 1px rgba(214, 150, 96, 0.12); }
+.hud-slot .voxel-icon, .hud-slot .pixel-icon { width: calc(var(--w) * 0.74); height: calc(var(--w) * 0.74); }
+.hud-slot.hand .voxel-icon, .hud-slot.bag .voxel-icon { width: calc(var(--w) * 0.96); height: calc(var(--w) * 0.96); }
+.hud .hud-slot.act .pixel-icon { image-rendering: pixelated; }
+.hud button.hud-slot:hover:not(:disabled) { background: radial-gradient(circle at 50% 38%, #5a3a30, #1f100d 80%); border: 2px solid var(--h-out); box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--h-brass-hi), 0 0 8px rgba(244, 198, 78, 0.3); }
+.hud .hud-slot:disabled { opacity: 1; cursor: default; }
+/* Picked (waiting for its target) is lit gold; spent (nothing left to pay for it) is faded. */
 .hud .hud-slot.act { cursor: pointer; }
-.hud .hud-slot.act.picked { background: rgba(255, 244, 214, 0.55); box-shadow: inset 0 0 0 var(--p) #ffd23f; }
+.hud .hud-slot.act.picked, .hud button.hud-slot.act.picked:hover:not(:disabled) { background: radial-gradient(circle at 50% 38%, #7a5a22, #2a1a08 80%); box-shadow: inset 0 0 0 2px var(--h-gold), 0 0 0 1px var(--h-gold), 0 0 12px rgba(244, 198, 78, 0.6); }
 .hud .hud-slot.act.spent, .hud .hud-slot.act:disabled { opacity: 0.4; cursor: default; }
 .hud .hud-slot.act.empty { cursor: pointer; }
-/* Out of a fight the slots are there to look at and rearrange, not to press. */
-.hud .hud-slot.act.reminder { cursor: grab; }
-.hud .hud-slot.act .pixel-icon { image-rendering: pixelated; }
 /* On cooldown: the picture greyed and dimmed under a dark wash, and the turns left in a big number over it. The slot itself
    is not faded, or the number would fade with it. */
 .hud .hud-slot.act.cooling { opacity: 1; }
 .hud .hud-slot.act.cooling .pixel-icon, .hud .hud-slot.act.cooling .voxel-icon { opacity: 0.35; filter: grayscale(0.85); }
-.hud .hud-slot.act.cooling::after { content: ""; position: absolute; inset: calc(var(--p) * 2); background: rgba(20, 10, 8, 0.45); pointer-events: none; }
+.hud .hud-slot.act.cooling::after { content: ""; position: absolute; inset: 2px; background: rgba(10, 5, 4, 0.5); pointer-events: none; }
 .hud-wait {
   position: absolute; inset: 0; z-index: 1; display: grid; place-items: center; pointer-events: none;
-  font-family: var(--font-head); font-size: calc(var(--p) * 9); line-height: 1; color: #fbe6c8;
-  text-shadow: calc(var(--p) * -0.5) 0 0 #3a1d20, calc(var(--p) * 0.5) 0 0 #3a1d20, 0 calc(var(--p) * -0.5) 0 #3a1d20, 0 var(--p) 0 #3a1d20;
+  font-family: var(--font-head); font-size: calc(var(--w) * 0.6); line-height: 1; color: #fbe6c8;
+  text-shadow: -1px 0 0 #000, 1px 0 0 #000, 0 -1px 0 #000, 0 2px 0 #000;
 }
-.hud .hud-slot:disabled { opacity: 1; cursor: default; }
-.hud button.hud-slot:hover:not(:disabled) { background: rgba(255, 244, 214, 0.35); box-shadow: inset 0 0 0 var(--p) #fff1c9; border: none; }
-.hud-slot .voxel-icon, .hud-slot .pixel-icon { width: calc(var(--p) * 10); height: calc(var(--p) * 10); }
-/* What is in hand, and the bag, are drawn as big as their wells allow. */
-.hud-slot.hand .voxel-icon, .hud-slot.bag .voxel-icon { width: calc(var(--p) * 13.4); height: calc(var(--p) * 13.4); }
-.hud-glyph { font-family: var(--font-title); font-size: calc(var(--p) * 6.4); line-height: 1; color: #5a2a17; }
-.hud-key { position: absolute; left: calc(var(--p) * 2 + 1px); top: calc(var(--p) * 2); font-size: 9px; line-height: 1; font-weight: bold; color: #9a5a3a; }
-.hud-count { position: absolute; right: calc(var(--p) * 2 + 1px); bottom: calc(var(--p) * 2); font-size: 11px; line-height: 1; font-weight: bold; color: #4a2418; }
+.hud-key { position: absolute; left: 3px; top: 2px; font-size: max(7px, calc(var(--u) * 10)); line-height: 1; font-weight: bold; color: var(--h-brass); text-shadow: 0 1px 0 #000; }
+.hud-count { position: absolute; right: 3px; bottom: 2px; font-size: max(8px, calc(var(--u) * 11)); line-height: 1; font-weight: bold; color: var(--h-parch); text-shadow: 0 1px 0 #000, 1px 0 0 #000, -1px 0 0 #000; }
 /* A hand on a map glows while a lit torch burns in it. (Where one can be lit, the slot shows only what it holds: the tip says a torch can be lit there.) */
-.hud-slot.hand.lit { box-shadow: inset 0 0 calc(var(--p) * 4) rgba(255, 150, 60, 0.75); }
-.hud-slot.hand.lit .hud-count { color: #ffe08a; text-shadow: 0 1px 0 #3a1d20; }
+.hud .hud-slot.hand.lit { box-shadow: inset 0 0 calc(var(--u) * 14) rgba(255, 150, 60, 0.75), 0 0 0 1px #ffb070; cursor: pointer; }
+.hud-slot.hand.lit .hud-count { color: #ffe08a; }
 /* The lit torch is a button: a click puts it away. When it cannot be (not your turn), it is only there to read. */
-.hud .hud-slot.hand.lit { box-shadow: inset 0 0 calc(var(--p) * 4) rgba(255, 150, 60, 0.75); cursor: pointer; }
 .hud .hud-slot.hand.lit[aria-disabled="true"] { cursor: default; }
-/* A tab lies over its block in the picture: a key's letter, or a small glyph, in pale cream. */
-.hud .hud-tab {
-  position: absolute; padding: 0; display: grid; place-items: center; border: none; border-radius: 0; background: none; box-shadow: none;
-  font: bold calc(var(--p) * 4) ui-monospace, Consolas, monospace; line-height: 1; color: #fbe6c8; text-shadow: 0 var(--p) 0 #3a1d20;
-}
-.hud .hud-tab:hover:not(:disabled) { background: rgba(255, 236, 190, 0.3); border: none; box-shadow: none; }
-.hud .hud-tab:disabled { color: #b98d6a; opacity: 1; }
-.hud .hud-tab.news { color: #ffe27a; animation: hud-tab-news 0.9s steps(2) infinite; }
-@keyframes hud-tab-news { 50% { color: #fff; } }
-@media (prefers-reduced-motion: reduce) { .hud .hud-tab.news { animation: none; } }
-.hud-tab .pixel-glyph { width: calc(var(--p) * 3.6); height: auto; }
-/* The emote wheel's button fills its tab, as the cog does. */
-.hud-tab.emote .emote-button { width: 100%; height: 100%; min-width: 0; padding: 0; background: none; border: none; box-shadow: none; border-radius: 0; color: #fbe6c8; }
-.hud-tab.emote .emote-button:hover:not(:disabled) { background: rgba(255, 236, 190, 0.3); }
-/* The menu's cog fills its tab. */
-.hud-tab.cog .options { display: grid; width: 100%; height: 100%; }
-.hud-tab.cog .hud-btn { width: 100%; height: 100%; padding: 0; background: none; border: none; box-shadow: none; border-radius: 0; color: #fbe6c8; }
-.hud-tab.cog .hud-btn:hover:not(:disabled) { background: rgba(255, 236, 190, 0.3); }
+
+/* The card for whatever on the bar the pointer is over: above the bar, over that thing. */
+.hud .hud-tip { position: absolute; bottom: calc(100% + 12px); translate: -50% 0; z-index: 6; width: max-content; max-width: min(300px, calc(100vw - 24px)); padding: 8px 12px; pointer-events: none; font-size: 13px; text-align: left; }
+.hud-tip-text { display: flex; flex-direction: column; gap: 2px; }
+.hud-tip-text strong { font-family: var(--font-head); font-size: 16px; font-weight: normal; letter-spacing: 0.03em; color: var(--brass-hi); display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.hud-tip-text kbd { font: bold 11px ui-monospace, Consolas, monospace; color: var(--text); padding: 0 5px; border: 2px solid var(--out); background: var(--raise); }
+.hud-tip .detail { font-size: 13px; }
+.hud-glyph { font-family: var(--font-title); font-size: calc(var(--u) * 19); line-height: 1; color: var(--h-parch); }
 
 /* The same button elsewhere (the bag's close, the corner cog). */
 .hud-btn { position: relative; width: 32px; height: 32px; padding: 0; display: grid; place-items: center; color: var(--brass-hi); }
@@ -138,27 +200,28 @@
 .crew-cards .roster li.cm.away { opacity: 0.7; }
 .run:has(> .hud-corner) .hud-left { top: 16px; }
 .run:has(> .hud) .harbor-chat, .run:has(> .hud) .chat { left: 20px; right: auto; bottom: 20px; }
-.run:has(> .hud) .tip { bottom: 206px; }
+/* Clear of the bar and the strip over it, wherever their top is (--hud-all-h, measured in Hud.tsx). */
+.run:has(> .hud) .tip { bottom: calc(var(--hud-all-h, 190px) / var(--ui-z, 1) + 16px); }
 .run:has(> .hud) .toast { top: 16px; }
 @media (max-width: 1500px) {
   /* The talk would sit under the bar on a narrower screen: lift it clear, and the column above it. */
-  .run:has(> .hud) .harbor-chat, .run:has(> .hud) .chat { bottom: 200px; }
-  .hud-left { bottom: calc(336px + var(--chat-tall, 110px)); }
+  .run:has(> .hud) .harbor-chat, .run:has(> .hud) .chat { bottom: calc(var(--hud-all-h, 190px) / var(--ui-z, 1) + 10px); }
+  .hud-left { bottom: calc(var(--hud-all-h, 190px) / var(--ui-z, 1) + 146px + var(--chat-tall, 110px)); }
 }
 
 /* A phone, held either way: narrow, or (on its side) short. */
 @media (max-width: 760px), (max-height: 520px) {
   .hud { bottom: 8px; max-width: calc(100% - 12px); }
-  /* The whole rack is drawn smaller: two screen pixels to one of its own, or less where even that is too wide
-     (244 is RACK.w in rackArt.ts, with a 16px margin). */
-  .hud-rack { --p: min(2px, calc((100vw - 16px) / 244)); }
+  /* The whole board is drawn smaller, and smaller still where even that is too wide: 732 is a map's board across,
+     600 about a slim one's, each with a 16px margin. */
+  .hud.full { --u: min(0.67px, calc((100vw - 16px) / 732)); }
+  .hud.slim { --u: min(0.8px, calc((100vw - 16px) / 600)); }
   /* Terse on a phone: the muted explainer after where you stand goes; the place itself stays. */
   .hud-place .muted { display: none; }
   /* Where you stand gets a line of its own over the buttons, rather than a narrow column beside them. */
   .hud-here { flex-wrap: wrap; justify-content: center; gap: 4px 8px; }
   .hud-place { flex: 1 1 100%; text-align: center; font-size: 13px; }
   .hud-place:empty, .hud-place:has(> .muted:only-child) { display: none; }
-  .hud-slot .voxel-icon, .hud-slot .pixel-icon { width: 20px; height: 20px; }
   .hud-left { top: 8px; left: 8px; gap: 10px; }
   /* The crew's cards: as wide as a name needs, and close together (the rows themselves shrink in roster.css). */
   .run .hud-left > .crew { width: fit-content; max-width: 190px; gap: 4px; }
