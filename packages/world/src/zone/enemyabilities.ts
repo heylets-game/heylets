@@ -48,6 +48,8 @@ export interface EnemyAbilityDef {
   surface?: { kind: SurfaceKind; rounds: number };
   /** Knocks the target back a hex when it lands. */
   push?: boolean;
+  /** When it lands, every other hero beside the target takes half the blow too (SPLASH_SHARE), with no save. */
+  splash?: boolean;
   /** Freezes water under the target. */
   chills?: boolean;
   /**
@@ -77,8 +79,11 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   // whoever it lands on is left reeling, with less to do on their next turn.
   bear_maul: { id: "bear_maul", name: "Maul", damage: 12, potency: 4, saveOr: { effect: "reeling", turns: 1 }, cost: 3, cooldown: 3, weight: 3 },
   roar: { id: "roar", name: "Roar", damage: 4, potency: 3, saveOr: { effect: "stunned", turns: 1 }, weight: 1 },
-  club_smash: { id: "club_smash", name: "Club Smash", damage: 13, potency: 3, saveOr: { effect: "stunned", turns: 1 }, weight: 3 },
-  stomp: { id: "stomp", name: "Stomp", damage: 4, potency: 3, shape: "burst", saveOr: { effect: "slowed", turns: 2 }, weight: 1 },
+  // An ogre's everyday blow: the club comes down on one hero so hard that whoever stands beside them is battered too.
+  club_smash: { id: "club_smash", name: "Club Smash", damage: 13, potency: 3, splash: true, weight: 1 },
+  // An ogre's favourite: it stamps the ground and the whole crew round it is thrown about and left slow on their feet.
+  // It needs a few turns to gather itself for another.
+  stomp: { id: "stomp", name: "Stomp", damage: 10, potency: 3, shape: "burst", saveOr: { effect: "slowed", turns: 2 }, cooldown: 4, weight: 3 },
   rake: { id: "rake", name: "Rake", damage: 7, potency: 4, saveOr: { effect: "bleeding" }, weight: 3 },
   hurl_rock: { id: "hurl_rock", name: "Hurl Rock", damage: 6, potency: 3, range: 5, saveOr: { effect: "stunned", turns: 1 }, weight: 1 },
   dark_bolt: { id: "dark_bolt", name: "Dark Bolt", damage: 7, potency: 4, range: 5, weight: 3 },

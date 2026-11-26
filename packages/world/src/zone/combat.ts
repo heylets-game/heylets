@@ -12,7 +12,7 @@ import { DEBUFFS, addCondition, addShield, addStacks, inflict, attackContext, at
 import { cratesOn, crateById, hurtCrate, isCrateId } from "./crates";
 import { ENEMY_ABILITIES } from "./enemyabilities";
 import { bearing, close, blast, blockerAt, courseShare, directionToward, ringToward, elevOf, flies, heldAgainst, inFight, lineFrom, pathIn, perkOf, pitAt, reachFrom, roomAt, sameHex, sees, seesFor, solid, stepCost, strikes, unitById, zoneReach, type Course, type Pit } from "./geometry";
-import { ACTION_AP, CHART, COMMON_ACTIONS, CORAL_ARMOR, ENEMY_EDGE, RALLY, SHANTY, SUMMON_CALLS, ENEMY_BURST, FLEE_RANGE, JUMP_DOWN, JUMP_UP, blinkRange, jumpRange, POTION_EDGE, SAVE_STAT, SMUGGLED, THROWABLES, TORCH_GROUND_ROUNDS, abilityDice, abilityStrikes, enemySave, unitStrikes, healDice, reactionStrike, tacticOf, throwRange, type EnemyStrike, type Tactic } from "./kit";
+import { ACTION_AP, CHART, COMMON_ACTIONS, CORAL_ARMOR, ENEMY_EDGE, RALLY, SHANTY, SUMMON_CALLS, ENEMY_BURST, FLEE_RANGE, JUMP_DOWN, JUMP_UP, blinkRange, jumpRange, POTION_EDGE, SAVE_STAT, SMUGGLED, SPLASH_SHARE, THROWABLES, TORCH_GROUND_ROUNDS, abilityDice, abilityStrikes, enemySave, unitStrikes, healDice, reactionStrike, tacticOf, throwRange, type EnemyStrike, type Tactic } from "./kit";
 import { modsOf } from "./mods";
 import { d20, diceFor, hitChance, mod, proficiency, rollDice, rollShown, statOf } from "./rules";
 import { seenByHeroes } from "./light";
@@ -1085,6 +1085,13 @@ export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Uni
     const rolled = rollShown(ctx.rng, attack.dice, 0, roll.crit);
     damage(ctx, target, rolled.total, { actor: enemy.id, what: attack.name, crit: roll.crit, dice: rolled });
     if (melee) thorns(ctx, enemy, target);
+    // A splash: every other hero in the fight beside the target is battered by a share of the same blow.
+    if (attack.kit.splash) {
+      const share = Math.floor(rolled.total * SPLASH_SHARE);
+      for (const near of state.units.filter((u) => u.side !== enemy.side && u.id !== target.id && !u.down && inFight(state, u.id) && hexDistance(u.pos, target.pos) === 1)) {
+        damage(ctx, near, share, { actor: enemy.id, what: attack.name });
+      }
+    }
   }
   leave(target, true);
   if (attack.kit.surface) placeSurface(ctx, [target.pos], attack.kit.surface.kind, attack.kit.surface.rounds, enemy.id);

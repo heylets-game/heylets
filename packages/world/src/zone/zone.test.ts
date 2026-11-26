@@ -2035,6 +2035,35 @@ describe("fleeing", () => {
   });
 
 
+  it("splashes half of a landed Club Smash onto every other hero beside its target, and nobody further off", () => {
+    let state = board();
+    state.aiOff = true;
+    const ann = at(5, 6);
+    const [ogreAt, boAt] = hexNeighbors(ann, GRID);
+    const cyAt = hexNeighbors(boAt, GRID).find((p) => hexDistance(p, ann) === 2 && hexDistance(p, ogreAt) > 1)!;
+    for (const [id, pos] of [["ann", ann], ["bo", boAt], ["cy", cyAt]] as const) Object.assign(hero(state, id, "qa_paladin", pos), { hp: 900, maxHp: 900 });
+    const ogre = enemy(state, "ogre", ogreAt);
+    state = provoke(state);
+    const smash = enemyStrikes("ogre", 1).find((s) => s.name === "Club Smash")!;
+    let landed = false;
+    for (let seed = 1; seed < 40 && !landed; seed++) {
+      const events: ZoneEvent[] = [];
+      const ctx: Ctx = { state: structuredClone(state), rng: makeRng(seed), events, effects: [] };
+      enemyAct(ctx, unit(ctx.state, ogre.id), smash, unit(ctx.state, "ann"));
+      const hits = events.filter((e): e is Extract<ZoneEvent, { t: "hit" }> => e.t === "hit");
+      const onAnn = hits.find((e) => e.target === "ann");
+      if (!onAnn) {
+        expect(hits).toEqual([]);
+        continue;
+      }
+      landed = true;
+      expect(hits.find((e) => e.target === "bo")?.amount).toBe(Math.max(1, Math.floor(onAnn.dice!.total / 2)));
+      expect(hits.some((e) => e.target === "cy")).toBe(false);
+      expect(unit(ctx.state, "ann").conditions.some((c) => c.kind === "stunned")).toBe(false);
+    }
+    expect(landed).toBe(true);
+  });
+
   it("brings a hero's class abilities with them, after the weapon's, and refreshes them on a return", () => {
     const sheet = standInHero("qa_paladin", "cy", 3)!;
     let state = must(board(), { type: "join", hero: { ...sheet, classAbilities: ["shock", "bash"] } });

@@ -54,9 +54,13 @@ describe("the ogre", () => {
     expect(ogre.init).toBeLessThan(bear.init);
     const rank = Object.values(ENEMIES).filter((e) => !e.boss && e.kind !== "dummy");
     expect(Math.max(...attacksOf(ogre).map((a) => a.damage))).toBe(Math.max(...rank.flatMap((e) => attacksOf(e).map((a) => a.damage))));
-    expect(attacksOf(ogre).find((a) => a.name === "Club Smash")?.saveOr?.effect).toBe("stunned");
-    // Its stomp reaches the whole party, and leaves them slow.
-    expect(attacksOf(ogre).some((a) => a.shape === "burst" && a.saveOr?.effect === "slowed")).toBe(true);
+    // Its club does not stun: it batters whoever stands beside its target too.
+    const smash = attacksOf(ogre).find((a) => a.name === "Club Smash")!;
+    expect(smash).toMatchObject({ splash: true, weight: 1 });
+    expect(smash.saveOr).toBeUndefined();
+    // Its favourite, every few turns, is the stomp: it reaches the whole party, and leaves them slow.
+    const stomp = attacksOf(ogre).find((a) => a.name === "Stomp")!;
+    expect(stomp).toMatchObject({ shape: "burst", damage: 10, cooldown: 4, weight: 3, saveOr: { effect: "slowed" } });
     expect(ogre.xp).toBeGreaterThan(brute.xp);
   });
 

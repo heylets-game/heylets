@@ -1571,7 +1571,7 @@ const GET_UP_HIPS = -1;
  * `n` counts the figure's actions, so two flinches in a row need not be the same.
  */
 interface Act {
-  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "claw" | "flurry" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
+  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "slam" | "claw" | "flurry" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
   t: number;
   n: number;
   /** A jump's seconds off the ground (see JUMP). */
@@ -1656,6 +1656,27 @@ const SLICES: Blow & { second: number } = {
 };
 /** Seconds from the first of the two side slashes landing to the second. */
 export const SLICES_APART = SLICES.second - SLICES.hit;
+
+/**
+ * An overhead slam: the weapon heaved right up over the head and laid back behind it, the free arm thrown up with it
+ * and the body rising onto its toes and leaning back; then brought straight down on the mark with the whole weight
+ * behind it, the body driven forward and deep into the knees as it lands, held there a moment, and gathered back up.
+ * An Ogre's Club Smash (signatureMoves.ts).
+ */
+const SLAM: Blow = {
+  hit: 0.42,
+  over: 1.0,
+  arm: [[0, -0.4], [0.3, -3.0], [0.34, -3.05], [0.42, -1.0], [0.6, -0.9], [1.0, -0.3]],
+  bend: [[0, -1.2], [0.3, -0.5], [0.34, -0.45], [0.42, -0.1], [0.6, -0.2], [1.0, -1.2]],
+  out: [[0, 0.1], [0.3, 0.25], [0.42, 0.05], [1.0, 0.1]],
+  blade: [[0, 0.3], [0.3, -1.3], [0.34, -1.4], [0.42, 2.1], [0.6, 2.0], [1.0, 0.3]],
+  lean: [[0, 0], [0.3, -0.25], [0.34, -0.28], [0.42, 0.5], [0.62, 0.45], [1.0, 0]],
+  twist: [[0, 0], [0.3, -0.15], [0.42, 0.1], [1.0, 0]],
+  rise: [[0, 0], [0.3, 0.25], [0.36, 0.22], [0.42, 0], [1.0, 0]],
+  crouch: [[0, 0], [0.3, 0], [0.42, 0.55], [0.62, 0.45], [1.0, 0]],
+  off: [[0, 0], [0.3, -2.6], [0.34, -2.65], [0.42, -1.0], [0.62, -0.9], [1.0, 0]],
+  step: [[0, 0], [0.3, 0.3], [0.42, 1], [0.65, 1], [1.0, 0]],
+};
 
 /**
  * A beast's claw swipe, for one on four legs with a forepaw to swipe with (Rig.claws): it rears back onto its hind
@@ -2310,9 +2331,9 @@ const RECORDER_LENGTH = 6.4;
 const HAMMER = { hit: 0.4, over: 0.86, up: [[0, 0.25], [0.3, 1], [0.4, 0], [0.48, 0.18], [0.86, 0.25]] as Keys };
 const STIR = { over: 30, turns: 25 };
 /** How long each kind of action lasts. */
-const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, claw: CLAW.over, flurry: FLURRY.over, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
+const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, slam: SLAM.over, claw: CLAW.over, flurry: FLURRY.over, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
 /** When each kind of blow lands. */
-const ACT_HIT = { strike: SWING.hit, stab: THRUST.hit, slices: SLICES.hit, pounce: POUNCE.hit, heavy: SWEEP.hit, twin: TWIN.hit };
+const ACT_HIT = { strike: SWING.hit, stab: THRUST.hit, slices: SLICES.hit, slam: SLAM.hit, pounce: POUNCE.hit, heavy: SWEEP.hit, twin: TWIN.hit };
 /**
  * The weapons whose ordinary blow is not a cut, by weapon or by the icon in the hand: a dagger's is a leap and a
  * stab downward (see POUNCE), a rapier's a straight thrust at arm's length (see THRUST). An archer strikes with
@@ -2320,7 +2341,7 @@ const ACT_HIT = { strike: SWING.hit, stab: THRUST.hit, slices: SLICES.hit, pounc
  */
 const LIGHT: Record<string, "pounce" | "stab"> = { daggers: "pounce", dirk: "pounce", rapier: "stab", shortbow: "pounce", crossbow: "pounce", pistol: "pounce", blunderbuss: "pounce", harpoon_gun: "pounce", bow: "pounce", none: "stab" };
 /** The blows a knife kept out of sight is drawn for (see biped's sidearm). */
-const DRAWN = new Set<Act["kind"]>(["strike", "stab", "pounce", "heavy", "twin", "slices"]);
+const DRAWN = new Set<Act["kind"]>(["strike", "stab", "pounce", "heavy", "twin", "slices", "slam"]);
 /** Things cast with by being held up, not swung: lifted high beside the head, then presented to the mark in both hands, upright all the while. */
 const FOCUS = new Set(["orb", "astrolabe", "bilge-chalice"]);
 
@@ -2738,7 +2759,7 @@ function biped(top: THREE.Group, parts: Part[], drawnElbow = ELBOW) {
       if (levels.length === 0) heldL.joint.rotation.x -= lift * left;
       return;
     }
-    const k = act.kind === "stab" ? THRUST : act.kind === "pounce" ? POUNCE : act.kind === "twin" ? TWIN : act.kind === "slices" ? SLICES : SWING;
+    const k = act.kind === "stab" ? THRUST : act.kind === "pounce" ? POUNCE : act.kind === "twin" ? TWIN : act.kind === "slices" ? SLICES : act.kind === "slam" ? SLAM : SWING;
     // Eased in over the first moments and back out over the last, so it starts and ends wherever the figure was.
     const over = act.kind === "heavy" ? SWEEP.over : act.kind === "cast" ? CAST.over : act.kind === "play" ? PLAY.over : act.kind === "guard" ? GUARD.over : act.kind === "taunt" ? TAUNT.over : act.kind === "hammer" || act.kind === "stir" ? ACT_OVER[act.kind] : k.over;
     const fade = Math.min(1, Math.max(0, (over - t) / 0.18));
@@ -10128,14 +10149,15 @@ export interface Figure {
    * Strike a blow. "light" is the ordinary one for what is in hand: a cut, with a dagger a leap and a stab
    * downward, with a rapier a straight thrust. "stab" is that thrust at arm's length, with whatever is held. "heavy" is a great two-handed sweep from side to side, or with a weapon
    * in each hand both tossed up, caught points down and jabbed downward. "slices" is two flat side slashes, one
-   * each way, the first landing when this says and the second SLICES_APART after. "claw" is a beast rearing up and
+   * each way, the first landing when this says and the second SLICES_APART after. "slam" is the weapon heaved up
+   * overhead and brought straight down on the mark (see SLAM). "claw" is a beast rearing up and
    * raking a forepaw down across its front (see CLAW), for one that has claws to swipe with (a bear); for anything
    * else it is "light". "flurry" is such a beast rearing right up and raking with both forepaws by turns (see
    * FLURRY), the first blow landing when this says and the rest at FLURRY_BLOWS. A person, a giant or a skeleton (or a bear clawing) winds up and steps in first, and this
    * returns the seconds until the blow lands, for whatever it hits to wait; a creature lunges at once, as it always
    * did, and this returns 0.
    */
-  strike(how?: "light" | "stab" | "heavy" | "slices" | "claw" | "flurry"): number;
+  strike(how?: "light" | "stab" | "heavy" | "slices" | "slam" | "claw" | "flurry"): number;
   /**
    * Cast a spell, or throw something: the casting hand swings round overhead and comes down to point at the mark.
    * Returns the seconds until it points, which is when what is cast should leave; 0 for a creature, which only
@@ -10486,7 +10508,7 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
         return how === "flurry" ? FLURRY.hit : CLAW.hit;
       }
       if (how === "claw" || how === "flurry") how = "light";
-      const kind = how === "heavy" ? (rig.twin ? "twin" : "heavy") : how === "stab" || how === "slices" ? how : (rig.light ?? "strike");
+      const kind = how === "heavy" ? (rig.twin ? "twin" : "heavy") : how === "stab" || how === "slices" || how === "slam" ? how : (rig.light ?? "strike");
       asked = kind;
       return rig.acts ? ACT_HIT[kind] : 0;
     },

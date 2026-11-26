@@ -371,8 +371,9 @@ export const ENEMIES: Record<string, EnemyDef> = {
     kind: "bear", name: "Cave Bear", hp: 38, defence: 11, move: 2, save: 2, init: -1, xp: 20,
     abilities: ["bear_maul", "mauling_swipe", "shove"],
   },
-  // The heaviest thing that walks ashore: very slow, and its club lands like a dropped mast. Its stomp
-  // shakes the whole crew and leaves them slow on their feet. A pair's worth on its own, like a bear.
+  // The heaviest thing that walks ashore: very slow, and its club lands like a dropped mast, battering whoever
+  // stands beside its target too. Its favourite is the stomp, every few turns: it shakes the whole crew and leaves
+  // them slow on their feet. A pair's worth on its own, like a bear.
   ogre: {
     kind: "ogre", name: "Ogre", hp: 46, defence: 10, move: 2, save: 2, init: -2, xp: 24,
     abilities: ["club_smash", "stomp", "shove"],

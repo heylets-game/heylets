@@ -12,7 +12,7 @@ import { hexDistance, posKey, type HexPos } from "@gantt-quest/core";
 import { leaps, leavesReach, lungeLanding, shiftInto, shoveDest } from "./combat";
 import { has } from "./engine";
 import { HIGH_REACH, inFight, reachFrom, seesFor, strikes } from "./geometry";
-import { ENEMY_BURST, type EnemyStrike, type Mind } from "./kit";
+import { ENEMY_BURST, SPLASH_SHARE, type EnemyStrike, type Mind } from "./kit";
 import { diceAverage } from "./rules";
 import { HARMFUL } from "./surfaces";
 import type { Unit, ZoneState } from "./types";
@@ -81,7 +81,9 @@ const strike: Behaviour = {
     let best: Use | null = null;
     for (const hero of targets) {
       if (!strikeReaches(look.state, look.enemy, from, attack, hero)) continue;
-      let worth = average * (look.whim?.(attack, hero) ?? 1);
+      // A blow that splashes is worth its share again for every other hero beside the one it is aimed at.
+      const beside = attack.kit.splash ? targets.filter((h) => h !== hero && hexDistance(h.pos, hero.pos) === 1).length : 0;
+      let worth = average * (1 + beside * SPLASH_SHARE) * (look.whim?.(attack, hero) ?? 1);
       if (leaps(attack)) worth *= leapRisk(look.state, look.enemy, from, lungeLanding(look.state, look.enemy, from, attack, hero)!);
       if (has(hero, "taunting")) worth *= 3;
       if (!best || worth > best.worth) best = { attack, target: hero, worth };

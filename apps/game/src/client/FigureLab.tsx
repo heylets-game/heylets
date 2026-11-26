@@ -21,7 +21,7 @@ import type { Me } from "./api";
 import { label } from "./labels";
 import { makeFigure, type Figure } from "./render/figures";
 import { LOOKS } from "./render/looks";
-import { POUNCE_LANDS, SIGNATURE_MOVES, pounceAt, type FxOpts, type MoveStage } from "./render/signatureMoves";
+import { POUNCE_LANDS, SIGNATURE_MOVES, groundWave, pounceAt, type FxOpts, type MoveStage } from "./render/signatureMoves";
 import { fxTexture, lookFor } from "./render/sprites";
 import "./figureLab.css";
 
@@ -187,6 +187,7 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
     const fxGroup = new THREE.Group();
     scene.add(floor, ground, stand, mark, fxGroup);
     const fx: (FxOpts & { sprite: THREE.Sprite; age: number })[] = [];
+    let waves: ((dt: number) => boolean)[] = [];
     const pending: { at: number; run: () => void }[] = [];
     const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 60);
     const look = { yaw: 0.5, pitch: 0.28, away: 6, mid: 0.8 };
@@ -210,6 +211,7 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
         due.run();
       }
       // The effects in flight, as the game moves them (WorldRenderer).
+      waves = waves.filter((step) => step(dt));
       for (let i = fx.length - 1; i >= 0; i--) {
         const f = fx[i];
         f.age += dt;
@@ -274,6 +276,7 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
             fxGroup.add(sprite);
             fx.push({ ...opts, sprite, age: 0 });
           },
+          wave: (opts) => waves.push(groundWave(fxGroup, opts)),
           later: (run, seconds) => pending.push({ at: t + seconds, run }),
           sound: () => {},
           lunge: () => {

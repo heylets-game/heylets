@@ -29,7 +29,7 @@ import { FlotsamMarks, type FlotsamMark } from "./flotsam";
 import { OVERLAY_LAYER, PostFx, type Air } from "./post";
 import { fishMount } from "./catchArt";
 import { FRAME, OUTLINE, SITTING_DROP, inflate, makeFigure, type Figure } from "./figures";
-import { POUNCE, SIGNATURE_MOVES, leapAir, pounceAt, pounceLands, pounceOver, type MoveStage } from "./signatureMoves";
+import { POUNCE, SIGNATURE_MOVES, groundWave, leapAir, pounceAt, pounceLands, pounceOver, type MoveStage } from "./signatureMoves";
 import { HIDES, hidingMaterial } from "./silhouette";
 import { BOAT_SCALE, OARLOCKS, ROWER_SEAT, aimOar, rowboatModel, shipOar } from "./rowboat";
 import { BoatWake, WAKE_STEP } from "./wake";
@@ -1142,6 +1142,8 @@ export class WorldRenderer {
   private fx: Fx[] = [];
   /** When each attacker last shook the ground, on the render clock: a stomp hits everyone, but shakes the ground once. */
   private quakeAt = new Map<string, number>();
+  /** Waves spreading over the ground (signatureMoves.ts groundWave), each stepped every frame until it is over. */
+  private waves: ((dt: number) => boolean)[] = [];
   /** Speech over units' heads, by unit id; kept apart from the unit so a change of gear does not cut it short. */
   private bubbles = new Map<string, Bubble>();
   private pending: { at: number; run: () => void }[] = [];
@@ -2382,10 +2384,15 @@ export class WorldRenderer {
     if (QUAKES.has(ability)) {
       // It stays where it is and brings its weight down: dust rings out from its feet (once for the whole crew),
       // and each hero it reaches is jolted off their feet.
-      if (this.clock - (this.quakeAt.get(actorId) ?? -Infinity) > 1) {
-        this.quakeAt.set(actorId, this.clock);
-        this.quakeRing(a);
+      const first = this.clock - (this.quakeAt.get(actorId) ?? -Infinity) > 1;
+      if (first) this.quakeAt.set(actorId, this.clock);
+      // One with an animation of its own (an Ogre's Stomp) plays it for each hero caught, drawn round it only once.
+      const own = SIGNATURE_MOVES[ability];
+      if (own && (!own.only || own.only.includes(a.kind))) {
+        own.play(this.moveStage(actorId, targetId, ability, t, dir, landed), { figure: a.figure, hitAt, dir, crit, onImpact, echo: !first });
+        return;
       }
+      if (first) this.quakeRing(a);
       if (landed) {
         t.kick.set(dir * 0.12, 0.22, 0);
         this.dustAt(t, crit);
@@ -2435,16 +2442,7 @@ export class WorldRenderer {
     // An enemy ability with an animation of its own (signatureMoves.ts), the same one the figure lab plays.
     const signature = SIGNATURE_MOVES[ability];
     if (signature && (!signature.only || signature.only.includes(a.kind))) {
-      const stage: MoveStage = {
-        spawnFx: (kind, color, flipped, opts) => this.spawnFx(kind, color, flipped, opts),
-        later: (run, seconds) => this.later(run, seconds),
-        sound: () => sounds.attack(ability, attackStyle(ability), this.fighter(actorId), this.spot(actorId)),
-        lunge: () => this.lunge(actorId, targetId),
-        pounce: () => this.pounce(actorId, targetId),
-        jolt: () => {
-          if (landed) t.kick.set(dir * 0.1, 0, 0);
-        },
-      };
+      const stage = this.moveStage(actorId, targetId, ability, t, dir, landed);
       signature.play(stage, { figure: a.figure, hitAt, dir, crit, onImpact });
       return;
     }
@@ -2469,6 +2467,21 @@ export class WorldRenderer {
       return land();
     }
     this.later(land, wait);
+  }
+
+  /** The map lent to an enemy's own animation (signatureMoves.ts) of `ability`, from one unit at another (`t`). */
+  private moveStage(actorId: string, targetId: string, ability: string, t: Unit, dir: number, landed: boolean): MoveStage {
+    return {
+      wave: (opts) => this.waves.push(groundWave(this.fxGroup, opts)),
+      spawnFx: (kind, color, flipped, opts) => this.spawnFx(kind, color, flipped, opts),
+      later: (run, seconds) => this.later(run, seconds),
+      sound: () => sounds.attack(ability, attackStyle(ability), this.fighter(actorId), this.spot(actorId)),
+      lunge: () => this.lunge(actorId, targetId),
+      pounce: () => this.pounce(actorId, targetId),
+      jolt: () => {
+        if (landed) t.kick.set(dir * 0.1, 0, 0);
+      },
+    };
   }
 
   /** Dust thrown up either side of a unit's feet: a heavy landing, a rock breaking, the ground shaking under it. */
@@ -6048,6 +6061,8 @@ export class WorldRenderer {
 
     // An XP glow on a plate has run its course: draw the bar plain again.
     for (const unit of this.units.values()) if (unit.glowing && this.clock >= unit.glowUntil) this.applyLabel(unit);
+
+    this.waves = this.waves.filter((step) => step(dt));
 
     for (let i = this.fx.length - 1; i >= 0; i--) {
       const f = this.fx[i];

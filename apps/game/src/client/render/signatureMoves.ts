@@ -5,7 +5,7 @@
 // Each is played on a stage that lends it the effects and the clock: the game's map (WorldRenderer), or the
 // figure lab (FigureLab.tsx), where each one has a button of its own. A new one added here shows in both.
 
-import type * as THREE from "three";
+import * as THREE from "three";
 import { FLURRY_BLOWS, SLICES_APART, type Figure } from "./figures";
 import type { FxKind } from "./sprites";
 
@@ -24,9 +24,57 @@ export interface FxOpts {
   onEnd?: () => void;
 }
 
+/** A ring lying flat on the ground, spreading out from `at` to `radius` over `life` seconds and fading as it goes. */
+export interface WaveOpts {
+  at: THREE.Vector3;
+  radius: number;
+  life: number;
+  color: string;
+  /** How thick the ring is, as a share of how far out it has spread. */
+  width: number;
+}
+
+/** How far out a wave has spread, `k` of the way through its life: fast at first, slowing as it goes. */
+const waveOut = (k: number, radius: number) => WAVE_START + (radius - WAVE_START) * (1 - (1 - k) * (1 - k));
+const WAVE_START = 0.2;
+
+/** Seconds until a wave of `radius` over `life` reaches `far` out (never, past its radius: then as it ends). */
+export function waveReaches(far: number, radius: number, life: number): number {
+  const out = Math.min(1, Math.max(0, (far - WAVE_START) / (radius - WAVE_START)));
+  return (1 - Math.sqrt(1 - out)) * life;
+}
+
+/**
+ * Lay a wave on the ground in `group` (see WaveOpts). Returns its step: run it every frame with the seconds gone by,
+ * and it says whether it is still going; once it is over it has taken itself away.
+ */
+export function groundWave(group: THREE.Object3D, o: WaveOpts): (dt: number) => boolean {
+  const material = new THREE.MeshBasicMaterial({ color: o.color, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+  const mesh = new THREE.Mesh(new THREE.RingGeometry(1 - o.width, 1, 48), material);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.copy(o.at);
+  mesh.renderOrder = 8;
+  group.add(mesh);
+  let age = 0;
+  return (dt) => {
+    age += dt;
+    const k = Math.min(1, age / o.life);
+    const r = waveOut(k, o.radius);
+    mesh.scale.set(r, r, 1);
+    material.opacity = 0.85 * (1 - k) * (1 - k * 0.3);
+    if (k < 1) return true;
+    group.remove(mesh);
+    mesh.geometry.dispose();
+    material.dispose();
+    return false;
+  };
+}
+
 /** What a stage lends a move. */
 export interface MoveStage {
   spawnFx(kind: FxKind, color: string, flip: boolean, opts: FxOpts): void;
+  /** A wave spreading out over the ground (see groundWave). */
+  wave(opts: WaveOpts): void;
   /** Run this so many seconds on, on the stage's clock (slowed and paused with it, in the lab). */
   later(run: () => void, seconds: number): void;
   /** The attack's sound again, for a swing after the first (the stage plays the first itself). */
@@ -53,6 +101,11 @@ export interface MoveCtx {
   crit: boolean;
   /** When the blow is told: the damage and what it leaves show then. */
   onImpact(): void;
+  /**
+   * For a move that catches several at once (a Stomp), played once for each: this one is not the first, so what it
+   * throws out round its user has been drawn already, and only its landing on this target is left to time.
+   */
+  echo?: boolean;
 }
 
 export interface SignatureMove {
@@ -305,7 +358,107 @@ function rendingSwipe(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: 
   }, Math.max(0, wait));
 }
 
+const DUST = "#c9b994";
+const ROCK = "#8a8070";
+const ROCK_PALE = "#a89f8c";
+/** A point so far off another. */
+const offset = (p: THREE.Vector3, x: number, y: number, z: number) => p.clone().set(p.x + x, p.y + y, p.z + z);
+
+/**
+ * An Ogre's Club Smash: it heaves the club right up over its head and brings it straight down on the target
+ * (figures.ts SLAM). Where it lands the ground bursts like a small explosion: a flash, a ring of dust thrown out all
+ * round and billowing up, chunks of rock flung out every way in arcs, grit spraying up, and shock lines bursting out.
+ * The target is jolted twice, and the blow is told as the club lands.
+ */
+function clubSmash(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const wait = figure.strike("slam");
+  // A creature has no slam of its own: it springs at the target, and the ground bursts as it lands.
+  if (wait <= 0) stage.lunge();
+  stage.later(() => {
+    const ground = hitAt.clone().setY(hitAt.y - 0.45);
+    const flash = crit ? GOLD : "#fff3d6";
+    stage.spawnFx("burst", flash, false, { from: ground, to: ground, life: 0.24, size: [1, 3], spin: 0.6, fade: true });
+    stage.spawnFx("bang", crit ? GOLD : DUST, dir < 0, { from: ground, to: ground, life: 0.3, size: [1.2, 2.6], spin: 0, fade: true });
+    // Shock lines bursting out from where it landed, all round.
+    for (const side of [false, true]) for (const turn of [-0.7, -0.3, 0.1, 0.5]) stage.spawnFx("streak", flash, side, { from: ground, to: ground, life: 0.2, size: [0.7, 2.2], turn: side ? -turn : turn, spin: 0, fade: true });
+    // A ring of dust thrown out along the ground and billowing up, then a slower cloud hanging over it.
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 + Math.random() * 0.3;
+      const far = 0.7 + Math.random() * 0.35;
+      const to = offset(ground, Math.cos(a) * far, 0.15 + Math.random() * 0.35, Math.sin(a) * far * 0.6);
+      stage.spawnFx("dust", DUST, Math.cos(a) < 0, { from: ground, to, life: 0.45 + Math.random() * 0.2, size: [0.7, 1.6], spin: 0, fade: true });
+    }
+    stage.later(() => {
+      for (const x of [-0.35, 0, 0.35]) {
+        const at = ground.clone().setX(ground.x + x);
+        stage.spawnFx("dust", DUST, x < 0, { from: at, to: at.clone().setY(at.y + 0.7), life: 0.7, size: [1.2, 2.2], spin: 0, fade: true });
+      }
+    }, 0.08);
+    // Chunks of rock flung out every way in arcs, tumbling, and grit sprayed up between them.
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2 + Math.random() * 0.5;
+      const far = 0.8 + Math.random() * 0.7;
+      const to = offset(ground, Math.cos(a) * far, -0.05, Math.sin(a) * far * 0.6);
+      const big = 0.35 + Math.random() * 0.25;
+      stage.spawnFx("rock", i % 2 ? ROCK : ROCK_PALE, Math.cos(a) < 0, { from: ground, to, life: 0.4 + Math.random() * 0.2, size: [big, big * 0.8], spin: (Math.random() - 0.5) * 16, fade: false, arc: 0.4 + Math.random() * 0.5 });
+    }
+    for (let i = 0; i < 8; i++) {
+      const to = offset(ground, (Math.random() - 0.5) * 1.4, 0.5 + Math.random() * 0.6, (Math.random() - 0.5) * 0.4);
+      stage.spawnFx("fleck", ROCK_PALE, Math.random() < 0.5, { from: ground, to, life: 0.35, size: [0.4, 0.3], spin: 0, fade: true });
+    }
+    stage.jolt();
+    stage.later(() => stage.jolt(), 0.06);
+    onImpact();
+  }, Math.max(0, wait));
+}
+
+/** An Ogre's Stomp wave: as far as it spreads (past every hero two hexes off, ENEMY_BURST) and how long it takes. */
+export const STOMP_WAVE = { radius: 3.8, life: 0.6 };
+
+/**
+ * An Ogre's Stomp: it brings its weight down and the ground pulses out from its feet, a bright wave spreading over
+ * the ground with a broad dusty one just behind it, and great clouds of dust rolling out after them and billowing up
+ * round it. Each hero is jolted, with dust thrown up at their feet, as the wave reaches them, and the blow on them is
+ * told then.
+ */
+function stomp(stage: MoveStage, { figure, hitAt, crit, onImpact, echo }: MoveCtx) {
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const ground = feet.clone().setY(feet.y + 0.08);
+  const { radius, life } = STOMP_WAVE;
+  if (!echo) {
+    stage.wave({ at: ground, radius, life, color: crit ? GOLD : "#f3e7c8", width: 0.08 });
+    stage.later(() => stage.wave({ at: ground, radius: radius * 0.85, life: life * 1.15, color: DUST, width: 0.3 }), 0.06);
+    stage.spawnFx("bang", crit ? GOLD : DUST, false, { from: offset(ground, 0, 0.25, 0), to: offset(ground, 0, 0.3, 0), life: 0.3, size: [1.2, 2.8], spin: 0, fade: true });
+    // Clouds of dust rolling out after the wave, all round, swelling as they go.
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2 + Math.random() * 0.25;
+      const far = radius * (0.5 + Math.random() * 0.3);
+      const from = offset(ground, Math.cos(a) * 0.5, 0.15, Math.sin(a) * 0.5);
+      const to = offset(ground, Math.cos(a) * far, 0.25 + Math.random() * 0.25, Math.sin(a) * far);
+      stage.spawnFx("dust", DUST, Math.cos(a) < 0, { from, to, life: 0.75 + Math.random() * 0.25, size: [0.9, 2.3], spin: 0, fade: true });
+    }
+    // And a slower cloud billowing up round its feet.
+    stage.later(() => {
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + Math.random() * 0.5;
+        const from = offset(ground, Math.cos(a) * 0.6, 0.1, Math.sin(a) * 0.6);
+        stage.spawnFx("dust", DUST, Math.cos(a) < 0, { from, to: offset(from, Math.cos(a) * 0.4, 0.8, Math.sin(a) * 0.4), life: 1, size: [1.4, 2.8], spin: 0, fade: true });
+      }
+    }, 0.1);
+  }
+  // Whoever it reaches is caught as the wave passes under them.
+  const far = Math.hypot(hitAt.x - feet.x, hitAt.z - feet.z);
+  stage.later(() => {
+    const at = hitAt.clone().setY(hitAt.y - 0.45);
+    for (const side of [-1, 1]) stage.spawnFx("dust", crit ? GOLD : DUST, side > 0, { from: at, to: offset(at, side * 0.6, 0.4, 0), life: 0.45, size: [0.7, 1.4], spin: 0, fade: true });
+    stage.jolt();
+    onImpact();
+  }, waveReaches(far, radius, life));
+}
+
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
+  Stomp: { who: "ogre", blurb: "Brings its weight down: a wave pulses out over the ground from its feet, clouds of dust rolling out after it, and each hero is jolted as it reaches them.", play: stomp },
+  "Club Smash": { who: "ogre", blurb: "Heaves its club right up over its head and brings it straight down: the ground bursts where it lands, dust thrown out all round and chunks of rock flung every way.", play: clubSmash },
   Maul: { who: "bear", only: BEARS, blurb: "Rears right up on its hind legs and tears into the target with both forepaws by turns, white swooshes behind its claws, every blow tearing three black claw marks across it with white slashes flung off all round.", play: bearMaul },
   "Rending Swipe": { who: "bear", blurb: "Rears back on its hind legs and rakes a forepaw down across the target, its claws leaving a red swoosh, and three red claw marks torn across it.", play: rendingSwipe },
   Bite: { who: "wolf", blurb: "A snap forward, jaws closing on the target as two white arches.", play: wolfBite },
