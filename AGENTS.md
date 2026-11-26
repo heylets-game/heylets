@@ -2,6 +2,8 @@
 
 The game is **The Harbor of Heylets** in `apps/game`, with its rules in `packages/world` and `packages/core`. The [root README](README.md) says how to run it, test it and ship a change; [`apps/game/README.md`](apps/game/README.md) says where each piece of code lives. Read those before changing things. This file only holds what agents have got wrong before.
 
+**[`TODO.md`](TODO.md) lists work still to be done.** Read it before you start, and add a line to it whenever you notice something that needs doing but is not part of your task.
+
 ## Release notes for the notice board
 
 Players read what changed in each release on the Harbor's notice board, and a tab left open on an older build lists the same notes under "What's in this release?" when a newer one is out. **Nobody writes those notes at release time. They are read out of git when the game is built**, so they are only as good as the commits on `main`. Writing them is part of every PR that changes the game, and checking them is part of every release.
