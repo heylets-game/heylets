@@ -351,6 +351,14 @@ const LEAP = { air: 0.3, airPer: 0.045, longest: 0.56, high: 0.45, highPer: 0.13
 const PIXEL = 2;
 /** Nearest and farthest the camera may sit from what it looks at. */
 const MIN_ZOOM = 7;
+/** Closer than this, the level's medallion on a plate grows, to MEDAL_CLOSE times its size at MIN_ZOOM. */
+const MEDAL_FROM = 16;
+const MEDAL_CLOSE = 1.6;
+/** The level medallion's size at a camera distance (PlateStats.medal), in tenths, so plates are redrawn only on a step. */
+function medalAt(dist: number): number {
+  const close = THREE.MathUtils.clamp((MEDAL_FROM - dist) / (MEDAL_FROM - MIN_ZOOM), 0, 1);
+  return Math.round((1 + (MEDAL_CLOSE - 1) * close) * 10) / 10;
+}
 const MAX_ZOOM = 40;
 /** On a map of the world (RenderState.far): how far back the camera may pull, and where it starts. */
 const FAR_MAX_ZOOM = 66;
@@ -4752,7 +4760,9 @@ export class WorldRenderer {
     const lw = unit.labelWant;
     if (!lw) return;
     unit.glowing = this.clock < unit.glowUntil;
-    const plate = lw.plate && unit.glowing ? { ...lw.plate, glow: true } : lw.plate;
+    // Zoomed in close, a hero's level is on a bigger medallion (medalAt).
+    const sized = lw.plate?.level !== undefined && this.medal !== 1 ? { ...lw.plate, medal: this.medal } : lw.plate;
+    const plate = sized && unit.glowing ? { ...sized, glow: true } : sized;
     // A dead enemy, fallen, goes without its name.
     const label = unit.nameless && unit.down && unit.lying ? undefined : lw.label;
     // A plate with no name to it still shows its bars; a tag with no name is nothing.
@@ -5442,6 +5452,8 @@ export class WorldRenderer {
   }
 
   private camDist = 24;
+  /** How big the plates' level medallions are drawn now (medalAt), so a step in zoom redraws them. */
+  private medal = 1;
   /** Seconds left of coming in from an opening view (see swoop). */
   private swooping = 0;
 
@@ -5743,6 +5755,11 @@ export class WorldRenderer {
 
     // The height of one view pixel, in the units an unattenuated sprite is sized in.
     const labelRow = (this.fine * 2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2))) / this.renderer.domElement.height;
+    const medal = medalAt(this.camDist);
+    if (medal !== this.medal) {
+      this.medal = medal;
+      for (const unit of this.units.values()) this.applyLabel(unit);
+    }
     this.layoutPlates();
     for (const [id, unit] of this.units) {
       const p = unit.root.position;
