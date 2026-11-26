@@ -9119,6 +9119,16 @@ function fourLegs(top: THREE.Group, legs: Part[], head: Part, tail: Part | null,
   };
 }
 
+/**
+ * A beast's leg rings (top first) with its top rounded off into a dome, a haunch or a shoulder: a flat-cut top
+ * showed its square edge wherever the leg stood out past the body.
+ */
+function domed(rings: Ring[]): Ring[] {
+  const [y, rx, rz, dz = 0] = rings[0];
+  const h = Math.min(rx, rz) * 0.9;
+  return [[y + h, rx * 0.2, rz * 0.2, dz], [y + h * 0.8, rx * 0.62, rz * 0.62, dz], [y + h * 0.45, rx * 0.9, rz * 0.9, dz], ...rings];
+}
+
 /** A forepaw a beast swipes with (see fourLegs): the leg, where its claws' tips are on it, and the swoosh they leave. */
 interface Paw {
   leg: Part;
@@ -9280,12 +9290,12 @@ function wolf(top: THREE.Group, fur = "#7d8793", dark = "#59616c", eye = "#ffd23
   lengthwise(tail, dark, [[-3.3, 0.96, 0.9], [-4.6, 0.7, 0.66], [-5.2, 0.2, 0.2]], 6, 0, 0, 0, 0.61);
   const legs = [[-1.5, 3], [1.5, 3], [-1.5, -3.6], [1.5, -3.6]].map(([x, z]) => {
     const fore = z > 0;
-    const leg = part(top, x * (mangy ? (fore ? 1.3 : 1.15) : 1), 4.6, z);
+    const leg = part(top, x * (mangy ? (fore ? 1.3 : 1.05) : 1), 4.6, z);
     // A mangy one's are thicker, the forelegs most (see bulk).
-    if (mangy) leg.skin.scale.set(fore ? 1.35 : 1.2, 1, fore ? 1.25 : 1.15);
+    if (mangy) leg.skin.scale.set(fore ? 1.35 : 1.15, 1, fore ? 1.25 : 1.15);
     // The hind legs bend back at the hock.
     const rings: Ring[] = z > 0 ? [[1.2, 1.05, 1.2, 0.1], [-0.6, 0.88, 0.98, 0.05], [-2.6, 0.68, 0.72, 0.05], [-3.9, 0.62, 0.68, 0.1]] : [[1.4, 1.2, 1.55, -0.25], [-0.6, 0.98, 1.12, -0.4], [-2.3, 0.66, 0.75, -0.6], [-3.1, 0.58, 0.66, -0.45], [-3.9, 0.62, 0.68, -0.15]];
-    leg.loft(dark, rings, 6);
+    leg.loft(dark, domed(rings), 6);
     leg.shape(tone(dark, -0.06), sym([[0.72, -4.6, -0.55], [0.82, -4.6, 0.7], [0.5, -4.6, 1.35], [0, -4.6, 1.5], [0.58, -3.7, -0.5], [0.58, -3.8, 0.4], [0, -4, 1.2]]));
     return leg;
   });
@@ -9320,7 +9330,7 @@ function bear(top: THREE.Group, fur = "#7a5232", dark = "#4f3420", muzzle = "#b9
   const legs = [[-2.3, 3.2], [2.3, 3.2], [-2.3, -4], [2.3, -4]].map(([x, z]) => {
     const leg = part(top, x, 4.8, z);
     const rings: Ring[] = z > 0 ? [[1.5, 1.55, 1.75], [-0.8, 1.35, 1.55, 0.1], [-3, 1.25, 1.45, 0.2], [-4.2, 1.35, 1.6, 0.35]] : [[1.8, 1.75, 2.2, -0.3], [-0.6, 1.45, 1.7, -0.3], [-2.8, 1.25, 1.45, -0.05], [-4.2, 1.35, 1.6, 0.25]];
-    leg.loft(dark, rings, 8);
+    leg.loft(dark, domed(rings), 8);
     leg.shape(tone(dark, -0.05), sym([[1.4, -4.8, -1.25], [1.5, -4.8, 1], [1.1, -4.8, 1.85], [0, -4.8, 2.05], [1.35, -3.9, -1.15], [1.4, -3.9, 0.9], [0, -3.9, 1.7]]));
     for (const cx of [-0.8, 0, 0.8]) leg.shape(claw, [[cx - 0.25, -4.8, 1.55], [cx + 0.25, -4.8, 1.55], [cx, -4.25, 1.6], [cx, -4.75, 2.55]]);
     return leg;
