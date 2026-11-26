@@ -72,6 +72,13 @@ export interface EnemyAbilityDef {
    * a success and suffering `saveOr` on a failure.
    */
   sweep?: number;
+  /**
+   * Laid on the ground round its user: every hex within ENEMY_BURST of where it stands (not rock) shakes now, for
+   * `damage`, and is left cracked (weather.ts, a `quake`). As its user's next turn begins, the same hexes heave again
+   * for this `damage`, leaving `saveOr` on a failure. Whoever is on them each time (not flying) makes an Agility save
+   * for half. Its user's own sight does not come into it: the ground shakes behind cover as much as before it.
+   */
+  aftershock?: { damage: number; saveOr?: Inflict };
   /** Freezes water under the target. */
   chills?: boolean;
   /** When it lands, its user heals this share of the damage it dealt (a troll's Chomp). */
@@ -136,8 +143,12 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   // A Great Bear's roar: everyone round it is shaken, and slow to act on their next turn unless they save (and then
   // take half). It needs a few turns to get its breath back for another.
   thunderous_roar: { id: "thunderous_roar", name: "Thunderous Roar", damage: 8, potency: 3, shape: "burst", saveOr: { effect: "reeling", turns: 1, amount: 2 }, cooldown: 3, weight: 2 },
-  stone_fist: { id: "stone_fist", name: "Stone Fist", damage: 12, potency: 5, saveOr: { effect: "stunned", turns: 1 }, weight: 2 },
-  quake: { id: "quake", name: "Quake", damage: 6, potency: 3, shape: "burst", weight: 2 },
+  // A guardian's fist of stone: whoever it lands on is knocked back a hex, and off their feet unless they stand firm.
+  stone_fist: { id: "stone_fist", name: "Stone Fist", damage: 12, potency: 5, push: 1, saveOr: { effect: "prone", turns: 1 }, weight: 2 },
+  // A guardian pounds the ground and it starts to shake all round it: small tremors now, and the ground cracking,
+  // then on its next turn the whole of it heaves, throwing whoever is still on it off their feet. Most of its turn,
+  // and it needs a few to gather itself for another.
+  earthquake: { id: "earthquake", name: "Earthquake", damage: 5, potency: 3, shape: "burst", cost: 4, cooldown: 4, aftershock: { damage: 10, saveOr: { effect: "prone", turns: 1 } }, weight: 2 },
   chill_touch: { id: "chill_touch", name: "Chill Touch", damage: 5, potency: 3, saveOr: { effect: "slowed", turns: 2 }, chills: true, weight: 2 },
   wail: { id: "wail", name: "Wail", damage: 3, potency: 3, shape: "burst", weight: 1 },
   bat_bite: { id: "bat_bite", name: "Bite", damage: 4, potency: 4, saveOr: { effect: "bleeding" }, weight: 2 },

@@ -165,7 +165,9 @@ const burst: Behaviour = {
   reaches: (look, from, _attack, targets) => caughtBy(look, from, targets).length > 0,
   value(look, from, attack, targets) {
     const caught = caughtBy(look, from, targets);
-    return caught.length > 0 ? { attack, target: null, worth: caught.length * diceAverage(attack.dice) * 0.75 * (look.whim?.(attack, null) ?? 1) } : null;
+    // An Earthquake's heave on its next turn counts for half: some will have got off the cracked ground by then.
+    const heave = attack.kit.aftershock ? diceAverage(attack.kit.aftershock.dice) * 0.5 : 0;
+    return caught.length > 0 ? { attack, target: null, worth: caught.length * (diceAverage(attack.dice) + heave) * 0.75 * (look.whim?.(attack, null) ?? 1) } : null;
   },
 };
 

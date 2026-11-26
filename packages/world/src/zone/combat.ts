@@ -18,7 +18,7 @@ import { d20, diceFor, hitChance, mod, proficiency, rollDice, rollShown, statOf 
 import { seenByHeroes } from "./light";
 import { HARMFUL, HINDERING, chill, clearSurfaces, dropTorch, enterSurface, ignite, letGoTorch, placeSurface } from "./surfaces";
 import type { Budget, CommonAction, Throwable, Unit, ZoneState } from "./types";
-import { clusterHexes, enterWeather, makeWeather, rainHexes, wallHexes } from "./weather";
+import { clusterHexes, enterWeather, makeQuake, makeWeather, quakeHexes, rainHexes, wallHexes } from "./weather";
 import { summonCall, summonSpots } from "./summon";
 import { layCurse, drown } from "./drowning";
 import { SHANTIES, joinable, shantyOf, songDamage, songMove, windward } from "./song";
@@ -1101,6 +1101,11 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
     if (!save || !saveRoll(ctx, victim, SAVE_STAT[effect], dc, `Resist ${attack.name}`).ok) inflict(ctx, victim, attack.saveOr);
     else if (attack.kit.onSave) inflict(ctx, victim, attack.kit.onSave);
   };
+  // An Earthquake: the ground round it shakes now, and is left cracked to heave again as its next turn begins.
+  if (attack.kit.aftershock) {
+    makeQuake(ctx, enemy, quakeHexes(state, enemy.pos, ENEMY_BURST), attack.name, attack.dice, dc, attack.kit.aftershock);
+    return;
+  }
   if (attack.burst) {
     const dice = rollShown(ctx.rng, attack.dice);
     const rolled = dice.total;

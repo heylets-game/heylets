@@ -89,8 +89,8 @@ const SMASHES = new Set(["Club Smash"]);
  * in each hand both tossed and jabbed down: the smashes, and the other all-or-nothing swings.
  */
 const HEAVY_SWINGS = new Set([...SMASHES, "Cleave", "Eviscerate", "Crushing Strike", "Sweeping Ruin", "Stone Fist", "Shockwave"]);
-/** A ground-pound (the ogre's Slam, the guardian's Quake): no step in; the ground shakes out from the attacker's feet and jolts whoever it reaches. */
-const QUAKES = new Set(["Slam", "Quake"]);
+/** A ground-pound (the ogre's Slam, the guardian's Earthquake): no step in; the ground shakes out from the attacker's feet and jolts whoever it reaches. */
+const QUAKES = new Set(["Slam", "Earthquake"]);
 /** How an attack travels, for its sound: the same split the effects above are drawn by. */
 const attackStyle = (ability: string): AttackStyle => (SPELL_COLOR[ability] ? "magic" : ARROW_ABILITIES.has(ability) || THROWN[ability] ? "ranged" : "melee");
 const isBoss = (kind: string) => !!ENEMIES[kind]?.boss;
@@ -2122,17 +2122,19 @@ export class WorldRenderer {
    * (an Ogre's Slam). `then` runs as the blow lands. Returns whether it played its own move, which draws the
    * ground shaking round it itself (so whoever asked draws no ring of their own).
    */
-  burst(actorId: string, name: string, sung: boolean, then: () => void): boolean {
+  burst(actorId: string, name: string, sung: boolean, then: () => void, again = false): boolean {
     const unit = this.units.get(actorId);
     let wait = 0;
     if (unit && !unit.lying) {
-      // Any burst with a move of its own plays it, not only a ground-pound (zone/ownMoves.ts).
+      // Any burst with a move of its own plays it, not only a ground-pound (zone/ownMoves.ts); the second part of
+      // one (an Earthquake's heave, `again`) plays that part of it.
       const own = SIGNATURE_MOVES[name];
       if (own && playsFor(own, unit)) {
         sounds.attack(name, "melee", this.fighter(actorId), this.spot(actorId));
         // Should a hit on someone come through attack after all, it is not played a second time.
         this.quakeAt.set(actorId, this.clock);
-        own.play(this.moveStage(actorId, actorId, name, unit, 1, false), { figure: unit.figure, hitAt: unit.goal.clone(), dir: 1, crit: false, onImpact: then, alone: true });
+        const play = (again && own.again?.play) || own.play;
+        play(this.moveStage(actorId, actorId, name, unit, 1, false), { figure: unit.figure, hitAt: unit.goal.clone(), dir: 1, crit: false, onImpact: then, alone: true });
         return true;
       }
       if (QUAKES.has(name)) unit.lean = -0.9;
@@ -2525,6 +2527,7 @@ export class WorldRenderer {
       sound: () => sounds.attack(ability, attackStyle(ability), this.fighter(actorId), this.spot(actorId)),
       lunge: () => this.lunge(actorId, targetId),
       pounce: () => this.pounce(actorId, targetId),
+      shake: (by, seconds) => this.shake(by, seconds),
       jolt: () => {
         if (landed) t.kick.set(dir * 0.1, 0, 0);
       },

@@ -5,7 +5,7 @@
 // puts them on a map. A test fails if an ability or an enemy has no entry.
 
 import type { StatKey, Stats } from "@gantt-quest/core";
-import { ABILITIES, EFFECT_INFO, EFFECT_TICK, ENEMIES, STACK_TURNS, SUNDERED_DEFENCE, REELING_AP, type AbilityDef, type EffectKind } from "../content";
+import { ABILITIES, EFFECT_INFO, EFFECT_TICK, ENEMIES, STACK_TURNS, SUNDERED_DEFENCE, REELING_AP, type AbilityDef, type EffectKind, type Inflict } from "../content";
 import type { BehaviourId } from "./behaviours";
 import { ENEMY_ABILITIES, type EnemyAbilityDef } from "./enemyabilities";
 import { BLINK_AP } from "../gear";
@@ -224,6 +224,9 @@ export const WEATHER = {
   coral: { rounds: 4, damage: { n: 1, d: 6, plus: 1 } satisfies Dice },
   // Fortify: a wall, standing where it was raised.
   wall: { rounds: FORTIFY.rounds },
+  // An Earthquake's cracked ground: it heaves as its maker's next turn begins, and is gone (weather.ts quakeAtTurn).
+  // Should that turn not come in the next round, it settles at the round's end.
+  quake: { rounds: 1 },
 };
 
 /** Aqueous Regeneration: the heal again at the start of each of the ally's turns for `rounds`, and `water` more on each heal for one standing in water. */
@@ -692,7 +695,10 @@ export function commonCostFor(unit: Pick<Unit, "kind" | "perks">, what: CommonAc
 // ---------- enemies ----------
 
 /** What an enemy's ability does besides its damage, when it lands. */
-export type EnemyAttackKit = Pick<EnemyAbilityDef, "surface" | "push" | "chills" | "splash" | "drain" | "area" | "sweep" | "onSave" | "rally">;
+export type EnemyAttackKit = Pick<EnemyAbilityDef, "surface" | "push" | "chills" | "splash" | "drain" | "area" | "sweep" | "onSave" | "rally"> & {
+  /** Its second shaking (EnemyAbilityDef `aftershock`), its damage grown with level as the first's is. */
+  aftershock?: { dice: Dice; saveOr?: Inflict };
+};
 
 /** The share of a blow that splashes onto each other hero beside its target (EnemyAbilityDef `splash`). */
 export const SPLASH_SHARE = 0.5;
@@ -822,7 +828,10 @@ export function abilityStrikes(ids: readonly string[], level: number, more = 0):
         behaviour: (a.behaviour ?? (burst ? "burst" : "strike")) as BehaviourId,
         cost: a.cost ?? ACTION_AP,
         cooldown: a.cooldown ?? 0,
-        kit: { surface: a.surface, push: a.push, chills: a.chills, splash: a.splash, drain: a.drain, area: a.area, sweep: a.sweep, onSave: a.onSave, rally: a.rally },
+        kit: {
+          surface: a.surface, push: a.push, chills: a.chills, splash: a.splash, drain: a.drain, area: a.area, sweep: a.sweep, onSave: a.onSave, rally: a.rally,
+          ...(a.aftershock ? { aftershock: { dice: diceFor(scaled(a.aftershock.damage, a.scales?.damage ?? DEFAULT_SCALE, level) + edge), saveOr: a.aftershock.saveOr } } : {}),
+        },
       },
     ];
   });

@@ -1577,7 +1577,7 @@ const GET_UP_HIPS = -1;
  * `n` counts the figure's actions, so two flinches in a row need not be the same.
  */
 interface Act {
-  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "slam" | "drop" | "claw" | "flurry" | "howl" | "rake" | "roar" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
+  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "slam" | "drop" | "pound" | "claw" | "flurry" | "howl" | "rake" | "roar" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
   t: number;
   n: number;
   /** A jump's seconds off the ground (see JUMP). */
@@ -1692,6 +1692,23 @@ const SLAM: Blow = {
  * units; `seat` how far into the sit, 0 to 1; `coil` the crouch; `arms` -1 swung back to 1 thrown up; `jolt` the
  * shock of landing, dying away; `rise` the crouch it gets back up through. An Ogre's Slam (signatureMoves.ts).
  */
+/**
+ * A ground-pound with both fists (a Guardian's Earthquake): both arms heaved up overhead together, the body drawn up
+ * tall, and then a deep crouch, bent right forward, both fists driven down into the ground before its feet (at `hit`),
+ * held there a moment as the ground takes it, jolted, and up again. Keys by seconds in: `lift` the arms overhead,
+ * `rise` up on its toes with them, `down` them driven to the ground, `crouch` the knees, `lean` forward, `jolt` the shock of it.
+ */
+const POUND = {
+  hit: 0.5,
+  over: 1.25,
+  lift: [[0, 0], [0.3, 1], [0.38, 1.05], [0.5, 0], [1.25, 0]] as Keys,
+  down: [[0, 0], [0.38, 0], [0.5, 1], [0.85, 1], [1.2, 0]] as Keys,
+  rise: [[0, 0], [0.3, 1], [0.38, 1], [0.46, 0]] as Keys,
+  crouch: [[0, 0], [0.38, 0], [0.5, 0.85], [0.85, 0.75], [1.2, 0]] as Keys,
+  lean: [[0, 0], [0.3, -0.25], [0.38, -0.25], [0.5, 0.75], [0.85, 0.65], [1.2, 0]] as Keys,
+  jolt: [[0, 0], [0.5, 0], [0.56, 1], [0.72, 0.2], [0.9, 0]] as Keys,
+};
+
 const SEAT_DROP = {
   hit: 0.62,
   over: 1.65,
@@ -2402,7 +2419,7 @@ const RECORDER_LENGTH = 6.4;
 const HAMMER = { hit: 0.4, over: 0.86, up: [[0, 0.25], [0.3, 1], [0.4, 0], [0.48, 0.18], [0.86, 0.25]] as Keys };
 const STIR = { over: 30, turns: 25 };
 /** How long each kind of action lasts. */
-const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, slam: SLAM.over, drop: SEAT_DROP.over, claw: CLAW.over, flurry: FLURRY.over, howl: HOWL.over, rake: RAKE.over, roar: ROAR.over, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
+const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, slam: SLAM.over, drop: SEAT_DROP.over, pound: POUND.over, claw: CLAW.over, flurry: FLURRY.over, howl: HOWL.over, rake: RAKE.over, roar: ROAR.over, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
 /** When each kind of blow lands. */
 const ACT_HIT = { strike: SWING.hit, stab: THRUST.hit, slices: SLICES.hit, slam: SLAM.hit, pounce: POUNCE.hit, heavy: SWEEP.hit, twin: TWIN.hit };
 /**
@@ -2830,6 +2847,32 @@ function biped(top: THREE.Group, parts: Part[], drawnElbow = ELBOW) {
       armR.joint.rotation.z -= wide * right;
       heldR.joint.rotation.x -= lift * right;
       if (levels.length === 0) heldL.joint.rotation.x -= lift * left;
+      return;
+    }
+    if (act.kind === "pound") {
+      const p = POUND;
+      const lift = along(p.lift, t);
+      const down = along(p.down, t);
+      const jolt = along(p.jolt, t);
+      const lean = along(p.lean, t);
+      knees(along(p.crouch, t));
+      // Drawn up tall as the fists go up: a little up on its toes.
+      top.position.y += 0.5 * along(p.rise, t);
+      bow(lean, 0);
+      head.joint.rotation.x -= lean * 0.45;
+      // Both arms together: straight up overhead, then driven down and forward to the ground before its feet, fists
+      // close together; the forearms straight for the blow.
+      const arm = -2.9 * lift - 1.05 * down;
+      const close = 0.22 * (lift + down);
+      armL.joint.rotation.x += arm;
+      armR.joint.rotation.x += arm;
+      armL.joint.rotation.z -= close;
+      armR.joint.rotation.z += close;
+      foreL.joint.rotation.x *= 1 - 0.8 * Math.max(lift, down);
+      foreR.joint.rotation.x *= 1 - 0.8 * Math.max(lift, down);
+      // The shock of it: the body thrown down a little, and the head jerked.
+      top.position.y -= 0.35 * jolt;
+      head.joint.rotation.x += 0.2 * jolt;
       return;
     }
     if (act.kind === "drop") {
@@ -10361,11 +10404,12 @@ export interface Figure {
    * FLURRY), the first blow landing when this says and the rest at FLURRY_BLOWS. "rake" is such a beast sweeping a
    * forepaw wide and flat across everything before it (see RAKE); for anything else it is "light". "roar" is such a
    * beast rearing right up and bellowing, head thrown back (see ROAR), and returns the seconds until the roar; anything
-   * else does nothing and returns 0. A person, a giant or a skeleton (or a bear clawing) winds up and steps in first, and this
+   * else does nothing and returns 0. "pound" is both fists heaved up overhead and driven down into the ground before
+   * its feet (see POUND), for a person or a giant; a creature does nothing and it returns 0. A person, a giant or a skeleton (or a bear clawing) winds up and steps in first, and this
    * returns the seconds until the blow lands, for whatever it hits to wait; a creature lunges at once, as it always
    * did, and this returns 0.
    */
-  strike(how?: "light" | "stab" | "heavy" | "slices" | "slam" | "drop" | "claw" | "flurry" | "rake" | "roar"): number;
+  strike(how?: "light" | "stab" | "heavy" | "slices" | "slam" | "drop" | "pound" | "claw" | "flurry" | "rake" | "roar"): number;
   /**
    * Cast a spell, or throw something: the casting hand swings round overhead and comes down to point at the mark.
    * Returns the seconds until it points, which is when what is cast should leave; 0 for a creature, which only
@@ -10726,6 +10770,11 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
         if (!rig.acts) return 0;
         asked = "drop";
         return SEAT_DROP.hit;
+      }
+      if (how === "pound") {
+        if (!rig.acts) return 0;
+        asked = "pound";
+        return POUND.hit;
       }
       if (how === "claw" || how === "flurry" || how === "rake") how = "light";
       const kind = how === "heavy" ? (rig.twin ? "twin" : "heavy") : how === "stab" || how === "slices" || how === "slam" ? how : (rig.light ?? "strike");

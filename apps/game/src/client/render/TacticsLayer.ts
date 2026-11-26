@@ -11,6 +11,7 @@ import { SURFACE_INFO, WEATHER_INFO, tileAt, type SurfaceKind, type WeatherKind,
 import { OUTLINE } from "./figures";
 import { inkLine } from "./fancy";
 import { setSqualls } from "./wind";
+import { CRACK_DARK, CRACK_EDGE, crackGeometry, crackPaths } from "./cracks";
 import { hexToWorld, tileTop, type WorldRenderer } from "./WorldRenderer";
 
 /**
@@ -177,6 +178,8 @@ export class TacticsLayer {
   private drift: { points: THREE.Points; base: Float32Array; floor: Float32Array }[] = [];
   /** Streaks of wind over the hexes Trade Winds blows across (see streaks). */
   private winds: THREE.InstancedMesh[] = [];
+  /** Cracked ground (an Earthquake's), trembling until it heaves (see cracked). */
+  private quakes: THREE.Group[] = [];
   /** Each rain cloud over the ground, its drops, and when it was first drawn (it grows in from nothing). */
   private clouds: { cloud: THREE.Group; drops: THREE.InstancedMesh; base: Float32Array; floor: Float32Array; born: number; veil: { material: THREE.Material; full: number }[] }[] = [];
   /**
@@ -599,6 +602,7 @@ export class TacticsLayer {
     this.drift = [];
     this.clouds = [];
     this.winds = [];
+    this.quakes = [];
     for (const w of list) {
       const color = WEATHER_INFO[w.kind].color;
       const wash = new THREE.Mesh(this.fill(w.hexes, 0.05, 0.95), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }));
@@ -613,6 +617,10 @@ export class TacticsLayer {
       }
       if (w.kind === "wall") {
         this.sky.add(this.stones(w.hexes, color));
+        continue;
+      }
+      if (w.kind === "quake") {
+        this.sky.add(this.cracked(w.hexes));
         continue;
       }
       if (w.kind === "rain") {
@@ -772,6 +780,31 @@ export class TacticsLayer {
     return mesh;
   }
 
+  /**
+   * Cracked ground (a Guardian's Earthquake): on each hex a few jagged cracks running out from somewhere near its
+   * middle, dark over a pale broken edge, lying on the ground however high it is. It trembles until it heaves (tickSky).
+   */
+  private cracked(hexes: HexPos[]): THREE.Group {
+    const group = new THREE.Group();
+    const edge = new THREE.MeshBasicMaterial({ color: CRACK_EDGE, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false });
+    const dark = new THREE.MeshBasicMaterial({ color: CRACK_DARK, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false });
+    for (const p of hexes) {
+      const { x, z } = hexToWorld(p);
+      const y = this.top(p) + 0.03;
+      const cracks = crackPaths({ count: 3, reach: 0.75, width: 0.07, step: 0.16, wander: 0.55, fork: 0.15 });
+      const at = { x: x + (Math.random() - 0.5) * 0.4, z: z + (Math.random() - 0.5) * 0.4 };
+      for (const [material, wide, lift, order] of [[edge, 2, 0, 2], [dark, 1, 0.004, 3]] as const) {
+        const mesh = new THREE.Mesh(crackGeometry(cracks.map((c) => ({ ...c, width: c.width * wide + (wide > 1 ? 0.02 : 0) }))), material);
+        mesh.position.set(at.x, y + lift, at.z);
+        mesh.rotation.y = Math.random() * Math.PI * 2;
+        mesh.renderOrder = order;
+        group.add(mesh);
+      }
+    }
+    this.quakes.push(group);
+    return group;
+  }
+
   /** A wall (Fortify): courses of rough stone blocks stacked up off each hex, each a little off true, in shades of the colour. */
   private stones(hexes: HexPos[], color: string): THREE.InstancedMesh {
     const courses = 3;
@@ -808,6 +841,11 @@ export class TacticsLayer {
   /** Rain clouds grow in and bob, and their rain falls and starts again at the top; wind blows its motes along and round again. */
   private tickSky(clock: number) {
     const m = SKY_M;
+    // Cracked ground trembles: shivering a little this way and that, now and then harder.
+    for (const g of this.quakes) {
+      const hard = 0.5 + 0.5 * Math.max(0, Math.sin(clock * 1.7)) ** 6;
+      g.position.set(Math.sin(clock * 41) * 0.012 * hard, 0, Math.cos(clock * 37) * 0.012 * hard);
+    }
     for (const c of this.clouds) {
       if (c.born < 0) c.born = clock;
       // Growing in from nothing as the rain begins, then bobbing, each puff swelling and settling on its own.
