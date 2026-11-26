@@ -115,7 +115,7 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   // An archer's favourite: a sheaf of arrows loosed high, to come down on a hex and every hex round it. Nobody is
   // aimed at, so there is no roll to hit: everyone under it makes an Agility save for half. It takes all a turn's
   // AP, and a few turns to ready again.
-  rain_of_arrows: { id: "rain_of_arrows", name: "Rain of Arrows", damage: 5, potency: 3, range: 6, area: 7, cost: 4, cooldown: 3, weight: 2 },
+  rain_of_arrows: { id: "rain_of_arrows", name: "Rain of Arrows", damage: 5, potency: 3, range: 6, area: 7, cost: 4, cooldown: 3, weight: 3 },
   savage_bite: { id: "savage_bite", name: "Savage Bite", damage: 9, potency: 5, saveOr: { effect: "bleeding" }, weight: 2 },
   pounce: { id: "pounce", name: "Pounce", damage: 8, potency: 4, saveOr: { effect: "stunned", turns: 1 }, weight: 2 },
   rending_howl: { id: "rending_howl", name: "Rending Howl", damage: 5, potency: 3, shape: "burst", weight: 1 },
