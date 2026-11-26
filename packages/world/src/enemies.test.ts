@@ -33,7 +33,7 @@ describe("the bear", () => {
     expect(big.boss).toBe(true);
     expect(big.hp).toBeGreaterThan(ENEMIES.bear.hp);
     expect(big.move).toBeLessThan(ENEMIES.alpha.move);
-    expect(attacksOf(big).some((a) => a.shape === "burst" && a.saveOr?.effect === "stunned")).toBe(true);
+    expect(attacksOf(big).some((a) => a.shape === "burst" && a.saveOr?.effect === "reeling")).toBe(true);
   });
 
   it("roams alone, or as a pair for a full party", () => {

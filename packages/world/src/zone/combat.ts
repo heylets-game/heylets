@@ -1075,7 +1075,7 @@ export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Uni
   const { state } = ctx;
   const dc = 8 + attack.potency;
   const aim = at ?? target?.pos;
-  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name, target: target?.id, ...(attack.kit.area && aim ? { at: aim } : {}) });
+  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name, target: target?.id, ...((attack.kit.area || attack.kit.sweep) && aim ? { at: aim } : {}) });
   const leave = (victim: Unit, save: boolean) => {
     if (victim.down || !attack.saveOr) return;
     const effect = attack.saveOr.effect;

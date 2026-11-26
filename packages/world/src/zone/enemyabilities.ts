@@ -119,8 +119,12 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   savage_bite: { id: "savage_bite", name: "Savage Bite", damage: 9, potency: 5, saveOr: { effect: "bleeding" }, weight: 2 },
   pounce: { id: "pounce", name: "Pounce", damage: 8, potency: 4, saveOr: { effect: "stunned", turns: 1 }, weight: 2 },
   rending_howl: { id: "rending_howl", name: "Rending Howl", damage: 5, potency: 3, shape: "burst", weight: 1 },
-  crushing_maul: { id: "crushing_maul", name: "Crushing Maul", damage: 13, potency: 5, saveOr: { effect: "bleeding" }, weight: 2 },
-  thunderous_roar: { id: "thunderous_roar", name: "Thunderous Roar", damage: 5, potency: 3, shape: "burst", saveOr: { effect: "stunned", turns: 1 }, weight: 2 },
+  // A Great Bear's everyday blow: one great rake of a forepaw across the three hexes in front of it. Nobody is singled
+  // out, so there is no roll to hit: everyone in its path makes an Agility save, taking half and no wound on a success.
+  rending_cleave: { id: "rending_cleave", name: "Rending Cleave", damage: 10, potency: 5, sweep: 1, saveOr: { effect: "bleeding" }, weight: 2 },
+  // A Great Bear's roar: everyone round it is shaken, and slow to act on their next turn unless they save (and then
+  // take half). It needs a few turns to get its breath back for another.
+  thunderous_roar: { id: "thunderous_roar", name: "Thunderous Roar", damage: 8, potency: 3, shape: "burst", saveOr: { effect: "reeling", turns: 1, amount: 2 }, cooldown: 3, weight: 2 },
   stone_fist: { id: "stone_fist", name: "Stone Fist", damage: 12, potency: 5, saveOr: { effect: "stunned", turns: 1 }, weight: 2 },
   quake: { id: "quake", name: "Quake", damage: 6, potency: 3, shape: "burst", weight: 2 },
   chill_touch: { id: "chill_touch", name: "Chill Touch", damage: 5, potency: 3, saveOr: { effect: "slowed", turns: 2 }, chills: true, weight: 2 },

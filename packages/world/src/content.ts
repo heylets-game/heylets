@@ -404,10 +404,10 @@ export const ENEMIES: Record<string, EnemyDef> = {
     kind: "alpha", name: "Pack Leader", hp: 39, defence: 13, move: 3, save: 3, init: 2, xp: 40, boss: true,
     abilities: ["savage_bite", "pounce", "rending_howl"],
   },
-  // A beast boss that comes alone: slow, huge, and it tears; its roar can stun the whole crew.
+  // A beast boss that comes alone: slow, huge, and it tears through everyone in front of it; its roar leaves the whole crew reeling.
   great_bear: {
     kind: "great_bear", name: "Great Bear", hp: 60, defence: 12, move: 2, save: 3, init: -1, xp: 44, boss: true,
-    abilities: ["crushing_maul", "thunderous_roar", "shove"],
+    abilities: ["rending_cleave", "thunderous_roar", "shove"],
   },
   // A guardian boss: slow and alone, but each blow lands like a wall.
   guardian: {
