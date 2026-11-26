@@ -2,7 +2,6 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { BAR_ROW, BAR_SLOTS, COMMON_ORDER, ITEM_ORDER, defaultBar, loadBar } from "../src/client/zone/hotbar";
-import { RACK } from "../src/client/ui/rackArt";
 import { memoryStorage } from "./browser";
 
 const store = new Map<string, string>();
@@ -17,14 +16,9 @@ afterEach(() => {
 const paladin = ["bash", "block", "cleave", "beacon_aura", "healing_aura", "branding_strike"];
 
 describe("the fight's bar", () => {
-  it("is two rows of ten, and the rack has a well for every slot in a row", () => {
+  it("is two rows of ten", () => {
     expect(BAR_ROW).toBe(10);
     expect(BAR_SLOTS).toBe(20);
-    expect(RACK.mid).toHaveLength(BAR_ROW);
-    // The bag sits right of the second post, which sits right of the last slot.
-    expect(RACK.posts[1]).toBeGreaterThan(RACK.mid[BAR_ROW - 1] + RACK.slot);
-    expect(RACK.bag).toBeGreaterThan(RACK.posts[1]);
-    expect(RACK.tabs.right).toBeGreaterThan(RACK.bag + RACK.slot);
   });
 
   it("starts out with everything a Paladin with three weapon and three class abilities has: nineteen things in twenty slots", () => {

@@ -138,6 +138,7 @@ import { TacticsLayer, type Overlay } from "./render/TacticsLayer";
 import { spriteDataUrl } from "./render/sprites";
 import { WorldRenderer, hexToWorld, tileTop, type RenderState } from "./render/WorldRenderer";
 import { HudBar, type HudSlot } from "./ui/Hud";
+import { PixelIcon } from "./PixelIcon";
 import { EmoteWheel } from "./EmoteWheel";
 import { useZone, type ZoneSend } from "./useZone";
 import { Icon } from "./items";
@@ -169,6 +170,9 @@ interface Picture {
   /** The places on the map: a chest is drawn thrown open, and a crate knocked about or broken, as each is shown happening. */
   pois: Poi[];
 }
+
+/** A magnifying glass, for the card saying what is under the pointer. */
+const MAGNIFIER = ["..####.....", ".#....#....", "#..##..#...", "#.#....#...", "#......#...", "#......#...", ".#....#....", "..####.#...", ".......##..", "........##.", ".........##"];
 
 const asState = (view: ZoneViewState) => view as unknown as ZoneState;
 
@@ -2842,6 +2846,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
 
       {hover && ground && (
         <div className="zone-tip panel">
+          {/* A magnifying glass on its corner: this is what the pointer is over, looked at closely. */}
+          <span className="zone-tip-glass" aria-hidden><PixelIcon rows={MAGNIFIER} size={13} /></span>
           {under ? (
             <>
               <strong>{under.name}</strong> <span className="muted">· {under.hp}/{under.maxHp} HP · Defence {defenceOf(under, state)}{under.down ? " · down" : ""}</span>

@@ -123,6 +123,7 @@ import { SplitPrompt, StackIcon, stackName, toStacks, type Stack } from "./ui/Sl
 import { ITEM_ICON, STONE_ICON } from "./zone/actionIcons";
 import { uiZoom } from "./uiScale";
 import { useMovable } from "./DragPanel";
+import { BrassCorners } from "./ui/BrassCorners";
 import { useDropTarget } from "./dragDrop";
 import { ownLook } from "./ownLook";
 import { withLook } from "./render/sprites";
@@ -1060,6 +1061,7 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
       {trade && (
         <div className={`bag trade-window panel window ${held ? "holding" : ""}`} role="dialog" aria-label={`Trade with ${trade.with}`} style={{ "--u": `${CU}px` } as CSSProperties} onContextMenu={putBack}>
           <span className="win-plate">Trade</span>
+          <BrassCorners />
           <button className="bag-close hud-btn" aria-label="Cancel the trade" title="Cancel the trade (Esc)" onClick={onClose}>×</button>
           <div className="trade-tabs"><span className="trade-tab">{trade.with}</span></div>
 
@@ -1141,6 +1143,7 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
       {chest && box && (
         <div className={`bag chest-window panel window ${held ? "holding" : ""}`} role="dialog" aria-label={box.label} style={{ "--u": `${CU}px` } as CSSProperties} onContextMenu={putBack}>
           <span className="win-plate">{box.label}</span>
+          <BrassCorners />
           <button className="bag-close hud-btn" aria-label={`Close the ${box.label}`} title="Close (Esc)" onClick={chest.onClose}>×</button>
           {!own ? <p className="muted chest-wait">Counting…</p> : (
             <div className="pack-wrap">
@@ -1202,6 +1205,7 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
       {town && (
         <div className={`bag chest-window town-window panel window ${held ? "holding" : ""}`} role="dialog" aria-label="The town chest" style={{ "--u": `${CU}px` } as CSSProperties} onContextMenu={putBack}>
           <span className="win-plate">Town Chest</span>
+          <BrassCorners />
           <button className="bag-close hud-btn" aria-label="Close the town chest" title="Close (Esc)" onClick={town.onClose}>×</button>
           {town.bar}
           {/* Not read yet (the Harbor reads it ahead, so this is rare): the bare squares, which fill as it comes. */}
@@ -1293,6 +1297,7 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
         {...lootDrop}
       >
         <span className="win-plate">Sea Bag</span>
+        <BrassCorners />
         {/* The close button and the one that minimizes it, and the way into the logbook beside them. Minimized, the
             bag is only this row: whatever was in hand goes back where it was. */}
         <div className="bag-top">
