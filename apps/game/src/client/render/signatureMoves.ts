@@ -1218,13 +1218,13 @@ function earthquakeHeave(stage: MoveStage, { figure, hitAt, crit, onImpact, echo
 export const SLOWING_FIELD = { reach: HEX * 2.75, rings: 3, life: 1.3, apart: 0.32 };
 
 /** How bright a Guardian's eyes and the gem in its chest flare as it channels a Slowing Field (Figure.setGlow): built up to `held`, flashed to `flash` as it lets go, and back to its own over `fade` seconds. */
-export const CHANNEL_GLOW = { held: 2.2, flash: 3.4, fade: 0.9 };
+export const CHANNEL_GLOW = { held: 2.2, flash: 3.4, fade: 0.9, pulse: 0.22, rays: 6, rayEvery: 0.14 };
 
 /**
  * A Guardian's Slowing Field: it opens its arms out wide, chest thrown out and head lifted, and holds there, trembling,
  * as it draws the field up through itself (figures.ts CHANNEL). Its eyes and the gem in its chest burn brighter and
- * brighter (Figure.setGlow), flickers of cyan light coming off them, and motes of it are drawn in from all round to its
- * chest. As it lets go, the glow flashes white-bright and the field goes out from it: a flash at its chest, three slow
+ * brighter (Figure.setGlow), a halo round each pulsing out bigger and bigger, little rays of light shooting out of them
+ * every way, flickers of cyan coming off them, and motes of it drawn in from all round to its chest. As it lets go, the glow flashes white-bright and the field goes out from it: a flash at its chest, three slow
  * cyan rings rolling out over the ground one after another to the edge of its reach, and the air in it thick with motes
  * drifting lazily up; its glow settles back as they go. (What stays round it while it lasts is the map's: ZoneView,
  * SpellFx.aura.)
@@ -1263,8 +1263,38 @@ function slowingField(stage: MoveStage, { figure, crit, onImpact, alone, hitAt }
       }
     }, s);
   }
+  // Light pouring off its eyes and its gem: a halo round each, pulsing out bigger and brighter as it builds, and little
+  // rays shooting out of them every way, longer as it goes.
+  const { pulse, rays, rayEvery } = CHANNEL_GLOW;
+  for (let s = 0; s < wait; s += pulse) {
+    const k = s / wait;
+    stage.later(() => {
+      for (const [at, big] of [[chest(), 1], [eyes(), 0.6]] as const) {
+        stage.spawnFx("burst", color, Math.random() < 0.5, { from: at, to: at, life: pulse * 1.6, size: [0.3 * big, (1 + 2.2 * k) * big], spin: 0.2, fade: true });
+      }
+    }, s);
+  }
+  for (let s = 0.1; s < wait; s += rayEvery) {
+    const k = s / wait;
+    stage.later(() => {
+      for (const [at, long] of [[chest(), 1], [eyes(), 0.7]] as const) {
+        for (let i = 0; i < rays; i++) {
+          const a = (i / rays) * Math.PI * 2 + Math.random() * 0.6;
+          const reach = (0.35 + 0.65 * k) * long;
+          const to = offset(at, Math.cos(a) * reach, Math.sin(a) * reach, 0.05);
+          stage.spawnFx("streak", i % 2 ? "#f4feff" : color, false, { from: at, to, life: 0.22, size: [0.35 * long, (0.6 + 0.9 * k) * long], turn: a, spin: 0, fade: true });
+        }
+      }
+    }, s);
+  }
   stage.later(() => {
-    // Let go: the glow flashes, and settles back to its own as the field goes out.
+    // Let go: a last burst of rays from both, long, and the glow flashes and settles back to its own as the field goes out.
+    for (const [at, long] of [[chest(), 1.4], [eyes(), 0.9]] as const) {
+      for (let i = 0; i < rays + 2; i++) {
+        const a = (i / (rays + 2)) * Math.PI * 2;
+        stage.spawnFx("streak", "#f4feff", false, { from: at, to: offset(at, Math.cos(a) * long, Math.sin(a) * long, 0.05), life: 0.3, size: [0.4 * long, 1.6 * long], turn: a, spin: 0, fade: true });
+      }
+    }
     for (let s = 0; s <= fade; s += 0.03) stage.later(() => figure.setGlow(1 + (flash - 1) * (1 - s / fade) ** 2), s);
     stage.later(() => figure.setGlow(1), fade + 0.05);
     const heart = chest();
@@ -1288,7 +1318,7 @@ function slowingField(stage: MoveStage, { figure, crit, onImpact, alone, hitAt }
 }
 
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
-  "Slowing Field": { who: "guardian", blurb: "Opens its arms out wide, chest out and head lifted, and holds there trembling as its eyes and chest gem burn brighter and motes of cyan light are drawn in to it; then lets go: the glow flashes, three slow cyan rings roll out over the ground two hexes past it, and motes drift lazily up all over the field.", play: slowingField },
+  "Slowing Field": { who: "guardian", blurb: "Opens its arms out wide, chest out and head lifted, and holds there trembling as its eyes and chest gem burn brighter, haloes pulsing bigger round them and little rays of light shooting off them, and motes of cyan light are drawn in to it; then lets go: a last burst of long rays, the glow flashes, three slow cyan rings roll out over the ground two hexes past it, and motes drift lazily up all over the field.", play: slowingField },
   "Stone Fist": { who: "guardian", blurb: "Heaves its fist up overhead and brings it straight down: a pale stone flash and a cyan glint, a pulse at the target's feet, shock lines and chips of stone driven on past them, and the view jolted.", play: stoneFist },
   Earthquake: {
     who: "guardian",
