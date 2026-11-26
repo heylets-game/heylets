@@ -4121,7 +4121,7 @@ let face: Face | null = null;
 /** The kinds that are townsfolk, each given a face of their own (see faceFor). */
 const TOWNSFOLK = /^(npc|dealer|regular_|salesman_|keeper_)/;
 /** The enemies drawn as people, each given a face of its own by its id (see faceFor), so no two in a fight are twins. */
-const FACED_FOES = new Set(["bandit", "brute", "archer", "cultist", "guardian", "villain"]);
+const FACED_FOES = new Set(["bandit", "brute", "archer", "cultist", "villain"]);
 /** Of those, the living raiders, who also get their own skin, hair colour and facial hair; the drowned and the stone keep their look's. */
 const COLOURED_FOES = new Set(["bandit", "brute", "archer"]);
 /** Whether a kind's figure picks its face from a key (makeFigure's `face`): townsfolk and the enemies drawn as people. */
@@ -9096,6 +9096,77 @@ function troll(top: THREE.Group): Rig {
   return { parts, animate: stooped(b, 0.42, 0.1), acts: true, getUp: BIPED_GET_UP };
 }
 
+/**
+ * A guardian: a golem of sea-worn stone, only roughly a body. A great craggy boulder of a chest, hunched forward,
+ * with boulders heaped up over each shoulder; a small blunt block of a head sunk low between them, no face but two
+ * slits of cyan light; long arms of stacked stones ending in fists bigger than its head, hanging near the ground;
+ * short stumps of legs on slab feet. A seam of cyan light glows out of its chest and along the joins of its stones,
+ * and it is crusted with barnacles and patched with weed from the sea.
+ */
+function golem(top: THREE.Group): Rig {
+  const parts: Part[] = [];
+  const b = giant(top, parts, { ...USUAL, legs: 0.8, girth: 1.5, shoulders: 1.7, hips: 1.3, head: 1 }, 1.3, -3.0);
+  const stone = "#8b9097";
+  const pale = tone(stone, 0.1);
+  const dark = tone(stone, -0.14);
+  const weed = "#4f6b34";
+  const shell = "#e2dccb";
+  const glow = "#7fe3ff";
+  // Stumps of legs: a block of a thigh, a boulder of a knee, a pillar of a shin, and a slab of a foot.
+  for (const [thigh, shin, foot] of [[b.thighR, b.shinR, b.footR], [b.thighL, b.shinL, b.footL]] as const) {
+    thigh.loft(stone, [[-2.8, 1.55, 1.6], [-1.2, 1.85, 1.9, 0.1], [0.7, 1.7, 1.75]], 5);
+    shin.ball(dark, 1.25, 0, 0.1, 0.35, 0, [1, 0.85, 0.9]);
+    shin.loft(stone, [[-2.4, 1.75, 1.8], [-1, 1.55, 1.6], [0.2, 1.3, 1.35]], 5);
+    foot.box(dark, 3.6, 1.3, 4.4, 0, 0.6, 0.9);
+    foot.box(stone, 3.2, 0.7, 1.6, 0, 1.35, 1.9, [0.25, 0, 0]);
+  }
+  // The trunk: a craggy boulder, broad and deep, its front pushed out like a cliff.
+  const t = b.torso;
+  t.loft(stone, [[-0.9, 3.8, 3.0, 0.1], [1, 4.6, 3.5, 0.35], [3.3, 5.6, 3.9, 0.55], [5.3, 6.0, 3.6, 0.2], [6.7, 4.6, 3.0, -0.3], [7.5, 2.4, 2.0, -0.5]], 6);
+  // Stones set into it: slabs over the chest and the belly, a great one over the back.
+  t.box(pale, 3.6, 2.6, 1.2, -1.6, 4.6, 3.75, [0.1, -0.25, 0.08]);
+  t.box(pale, 3.4, 2.4, 1.1, 1.8, 4.4, 3.8, [0.05, 0.3, -0.1]);
+  t.box(dark, 4.2, 2.2, 1.0, 0, 1.2, 3.4, [-0.15, 0, 0.05]);
+  t.box(dark, 6.4, 4.6, 1.4, 0, 4.5, -3.4, [-0.15, 0, 0.04]);
+  // Boulders heaped over each shoulder, and one more across the top of the back.
+  for (const s of [-1, 1]) {
+    t.ball(stone, 2.5, s * 4.7, 6.6, -0.2, 0, [1, 0.85, 1]);
+    t.ball(pale, 1.5, s * 3.4, 7.7, -1.3, 0, [1.1, 0.8, 1]);
+  }
+  t.ball(dark, 2.0, 0, 7.4, -1.8, 0, [1.4, 0.7, 1]);
+  // The seam of light: a core glowing out of a crack in the chest, and thin lines of it along the joins.
+  t.glowBall(glow, 0.85, 0, 4.4, 4.15);
+  t.glowBox(glow, 0.22, 2.4, 0.2, 0.05, 3.1, 4.05, [0, 0, 0.25]);
+  t.glowBox(glow, 1.8, 0.16, 0.2, -1.3, 4.0, 4.05, [0, 0, -0.35]);
+  t.glowBox(glow, 1.5, 0.16, 0.2, 1.3, 5.0, 4.0, [0, 0, 0.3]);
+  // From the sea: barnacles crusted over a shoulder and the back, and weed hanging off the other.
+  for (const [x, y, z, r] of [[4.2, 7.9, 1.2, 0.42], [5.1, 7.4, 1.6, 0.34], [3.6, 7.0, 2.0, 0.3], [-1.6, 6.2, -3.9, 0.36], [-0.6, 5.4, -4.0, 0.3], [1.4, 3.2, -4.0, 0.32], [-2.8, 1.6, 3.4, 0.3]] as const) {
+    t.cone(shell, r, r * 1.1, x, y, z, 6);
+  }
+  t.ball(weed, 1.4, -4.6, 7.7, 0.3, 0, [1.3, 0.4, 1.3]);
+  for (const [x, z] of [[-5.6, 1.2], [-4.8, 1.9], [-3.7, 1.6]] as const) t.shape(weed, [[x - 0.3, 7.6, z], [x + 0.3, 7.6, z], [x, 7.6, z - 0.4], [x + 0.2, 4.6, z + 0.5]]);
+  // The head: a small blunt block of stone sunk low and forward between the shoulders, a ledge of brow over two
+  // slits of light, and no more face than that.
+  const h = b.head;
+  h.joint.position.set(0, 6.4, 2.2);
+  h.loft(stone, [[0, 1.9, 1.7, 0.2], [1.3, 2.2, 1.9, 0.15], [2.5, 1.9, 1.7, 0], [3.1, 1.1, 1.1, -0.1]], 5);
+  h.shape(dark, sym([[2.0, 2.05, 1.5], [2.1, 2.55, 1.4], [0, 2.15, 2.25], [0, 2.7, 2.1], [1.0, 1.9, 2.15]]));
+  for (const s of [-1, 1]) h.glowBox(glow, 0.8, 0.24, 0.2, s * 0.85, 1.6, 1.98, [0, 0, s * -0.12]);
+  // Long arms of stacked stones, the elbows boulders, ending in fists bigger than its head.
+  for (const arm of [b.armR, b.armL]) {
+    arm.ball(stone, 1.6, 0, -0.4, 0, 0, [1, 1.1, 1]);
+    arm.loft(dark, [[-0.6, 1.2, 1.2], [-2.4, 1.0, 1.05]], 5);
+    arm.ball(stone, 1.25, 0, -3.0, 0.1, 0, [1, 0.9, 1]);
+    arm.loft(stone, [[-3.6, 1.25, 1.3], [-4.6, 1.5, 1.5], [-5.6, 1.3, 1.35]], 5);
+    arm.glowBox(glow, 0.15, 0.16, 2.2, 0, -3.0, 0, [0, 0, 0]);
+    arm.box(stone, 2.7, 2.6, 2.7, 0, -6.9, 0.25, [0.12, 0.25, 0.05]);
+    arm.box(pale, 2.0, 0.9, 1.0, 0, -6.4, 1.6, [0.12, 0.25, 0.05]);
+  }
+  b.rest.armR = -0.15;
+  b.rest.armL = -0.15;
+  return { parts, animate: stooped(b, 0.32, 0.12), acts: true, getUp: BIPED_GET_UP };
+}
+
 // ---------- creatures ----------
 
 /** Rings for a loft lying along z, nose toward +z: each its z, half-width, half-height, and how high its middle is. */
@@ -9924,6 +9995,8 @@ function rigFor(kind: string, top: THREE.Group, look: Look, outfit: Outfit | und
       return ogre(top);
     case "troll":
       return troll(top);
+    case "guardian":
+      return golem(top);
     case "sea_turtle":
       return seaTurtle(top);
     case "spider":
