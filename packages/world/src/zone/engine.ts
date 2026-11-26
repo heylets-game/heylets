@@ -153,7 +153,7 @@ export function countDown(unit: Unit): void {
 
 /** Leave an ability's effect on a unit: a stack of a stacking one, or any other for the turns it says. */
 export function inflict(ctx: Ctx, unit: Unit, what: Inflict): void {
-  if (isStacking(what.effect)) addStacks(ctx, unit, what.effect);
+  if (isStacking(what.effect)) addStacks(ctx, unit, what.effect, "stacks" in what ? (what.stacks ?? 1) : 1);
   else if ("turns" in what) addCondition(ctx, unit, what.effect, what.turns, what.amount);
 }
 
@@ -252,9 +252,10 @@ export function addShield(ctx: Ctx, unit: Unit, amount: number): void {
   if (amount > 0 && shieldable(ctx, unit)) addCondition(ctx, unit, "bolstered", SHIELD_KEEPS, shieldOf(unit) + amount);
 }
 
-/** The fight is over for this unit (it ended, or they got away from it): its shield goes. */
+/** The fight is over for this unit (it ended, or they got away from it): its shield goes, and any Frenzy. */
 export function dropShield(unit: Unit): void {
   removeCondition(unit, "bolstered");
+  removeCondition(unit, "frenzied");
 }
 
 /** The points of shield a unit has left (Bolstered), 0 for none. */
@@ -289,6 +290,8 @@ export function damage(ctx: Ctx, target: Unit, amount: number, opts: { actor: st
   // North Star: whatever its bearer strikes on the other side catches fire.
   const by = opts.actor ? ctx.state.units.find((u) => u.id === opts.actor) : undefined;
   if (by && by.side !== target.side && has(by, "north_star")) addStacks(ctx, target, "burning");
+  // Frenzied (a Pack Leader's Howl): whatever its bearer draws blood from on the other side bleeds.
+  if (by && by.side !== target.side && dealt > 0 && has(by, "frenzied")) addStacks(ctx, target, "bleeding");
   return dealt;
 }
 
@@ -343,6 +346,7 @@ export function attackContext(state: ZoneState, attacker: Unit, target: Unit, op
   if (has(attacker, "invisible")) adv("you are Unseen");
   if (has(attacker, "inspired")) adv("you are Inspired");
   if (has(attacker, "lucky")) adv("you are Lucky");
+  if (has(attacker, "frenzied")) adv("you are Frenzied");
   if (has(target, "guiding_light") && target.side !== attacker.side) adv("the target is lit by Guiding Light");
   if (attacker.side === "enemy" && ENEMY_KIT[attacker.kind]?.pack && state.units.some((u) => u.id !== attacker.id && u.side === "enemy" && !u.down && close(u.pos, target.pos))) adv("the pack is on the target");
   if (has(attacker, "poisoned")) dis("Poisoned");
@@ -405,10 +409,11 @@ export function spendLuck(unit: Unit): void {
 }
 
 /**
- * Conditions that keep, turn after turn, until something else uses them up: Lucky, spent a roll at a time; and a
- * shield (Bolstered), spent by blows, which lasts the fight and goes with it (zone.ts settle, and flee for one who gets away).
+ * Conditions that keep, turn after turn, until something else uses them up: Lucky, spent a roll at a time; Frenzied,
+ * spent an attack at a time (combat.ts enemyAct); and a shield (Bolstered), spent by blows. A shield and a Frenzy last
+ * the fight at most and go with it (zone.ts settle, and flee for one who gets away).
  */
-export const UNTIMED: ReadonlySet<string> = new Set(["lucky", "bolstered"]);
+export const UNTIMED: ReadonlySet<string> = new Set(["lucky", "bolstered", "frenzied"]);
 
 /** Roll a save against a difficulty and say so. */
 export function saveRoll(ctx: Ctx, unit: Unit, stat: StatKey, vs: number, label: string, disadvantage = false): Roll {

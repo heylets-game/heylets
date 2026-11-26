@@ -1577,7 +1577,7 @@ const GET_UP_HIPS = -1;
  * `n` counts the figure's actions, so two flinches in a row need not be the same.
  */
 interface Act {
-  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "slam" | "drop" | "claw" | "flurry" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
+  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "slam" | "drop" | "claw" | "flurry" | "howl" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
   t: number;
   n: number;
   /** A jump's seconds off the ground (see JUMP). */
@@ -1757,6 +1757,21 @@ const FLURRY = {
 };
 /** The blows a beast with claws (Rig.claws) plays as animations of its own. */
 const CLAW_ACTS = new Set<Act["kind"]>(["claw", "flurry"]);
+
+/**
+ * A beast's howl, for one on four legs that howls (Rig.howls): it drops its head and draws breath, then sits back on
+ * its haunches (`rear`, nose-up, the hind feet kept on the ground) and throws its head right up at the sky (`head`,
+ * on top of keeping level as the body tips), holding the note with a tremble in it (`shake`), and comes back down
+ * onto all fours by `over`. `peak` is when the head is right up and the howl rings out. A Pack Leader's Howl
+ * (signatureMoves.ts).
+ */
+export const HOWL = {
+  peak: 0.42,
+  over: 1.55,
+  rear: [[0, 0], [0.18, -0.05], [0.42, 0.38], [1.2, 0.36], [1.55, 0]] as Keys,
+  head: [[0, 0], [0.18, 0.35], [0.42, -1.35], [1.2, -1.25], [1.55, 0]] as Keys,
+  shake: [[0, 0], [0.42, 0], [0.5, 1], [1.15, 1], [1.3, 0]] as Keys,
+};
 
 /**
  * A thrust, for a weapon that stabs: the hand drawn back to the hip with the point levelled at the mark, then a
@@ -2359,7 +2374,7 @@ const RECORDER_LENGTH = 6.4;
 const HAMMER = { hit: 0.4, over: 0.86, up: [[0, 0.25], [0.3, 1], [0.4, 0], [0.48, 0.18], [0.86, 0.25]] as Keys };
 const STIR = { over: 30, turns: 25 };
 /** How long each kind of action lasts. */
-const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, slam: SLAM.over, drop: SEAT_DROP.over, claw: CLAW.over, flurry: FLURRY.over, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
+const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, slam: SLAM.over, drop: SEAT_DROP.over, claw: CLAW.over, flurry: FLURRY.over, howl: HOWL.over, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
 /** When each kind of blow lands. */
 const ACT_HIT = { strike: SWING.hit, stab: THRUST.hit, slices: SLICES.hit, slam: SLAM.hit, pounce: POUNCE.hit, heavy: SWEEP.hit, twin: TWIN.hit };
 /**
@@ -2393,6 +2408,8 @@ interface Rig {
    * leant into every other, as a rig without `acts` is.
    */
   claws?: boolean;
+  /** A beast that howls (see HOWL, Figure.howl): it plays that as an animation of its own. */
+  howls?: boolean;
   /** Its ordinary strike, where what it carries does not cut (see LIGHT): a leaping stab, or a straight thrust. */
   light?: "pounce" | "stab";
   /** It carries an instrument, and plays it (see Figure.play). */
@@ -9084,6 +9101,21 @@ function fourLegs(top: THREE.Group, legs: Part[], head: Part, tail: Part | null,
       head.joint.rotation.set(0, 0, 0);
       return;
     }
+    if (a.act?.kind === "howl") {
+      // Sat back on its haunches (lifted as it tips, so the hind feet stay on the ground), forelegs reaching a little,
+      // the head thrown right up at the sky and trembling as it holds the note.
+      const t = a.act.t;
+      const rear = along(HOWL.rear, t);
+      const behind = -Math.min(...legs.map((leg) => leg.joint.position.z));
+      const hips = legs[0].joint.position.y;
+      top.rotation.set(-rear, 0, 0);
+      top.position.set(0, (a.breath + 1) * 0.06 + behind * Math.sin(rear) + hips * (1 - Math.cos(rear)), 0);
+      for (const leg of legs) leg.joint.rotation.set(leg.joint.position.z > 0 ? -rear * 0.6 : rear, 0, 0);
+      const shake = along(HOWL.shake, t) * Math.sin(t * 55) * 0.04;
+      head.joint.rotation.set(stoop + rear + along(HOWL.head, t) + shake, 0, shake * 0.5);
+      if (tail) tail.joint.rotation.set(0, 0, 0);
+      return;
+    }
     if (paws.length > 0 && a.act && CLAW_ACTS.has(a.act.kind)) {
       // Reared back on the hind legs (lifted as it tips, so their feet stay on the ground), a paw (or both) raised and raked down.
       const t = a.act.t;
@@ -9299,7 +9331,7 @@ function wolf(top: THREE.Group, fur = "#7d8793", dark = "#59616c", eye = "#ffd23
     leg.shape(tone(dark, -0.06), sym([[0.72, -4.6, -0.55], [0.82, -4.6, 0.7], [0.5, -4.6, 1.35], [0, -4.6, 1.5], [0.58, -3.7, -0.5], [0.58, -3.8, 0.4], [0, -4, 1.2]]));
     return leg;
   });
-  return { parts, animate: fourLegs(top, legs, head, tail, mangy ? 3.2 : 2.6, 9, 0.3), getUp: BEAST_GET_UP };
+  return { parts, animate: fourLegs(top, legs, head, tail, mangy ? 3.2 : 2.6, 9, 0.3), getUp: BEAST_GET_UP, howls: true };
 }
 
 /**
@@ -10312,6 +10344,11 @@ export interface Figure {
    */
   taunt(): number;
   /**
+   * Howl (a Pack Leader's Howl): sit back on its haunches and throw its head up at the sky (see HOWL). Returns the
+   * seconds until the head is right up and the howl rings out; 0 for anything that does not howl, which does nothing.
+   */
+  howl(): number;
+  /**
    * Work at a trade: `hammer` brings a hammer down on an anvil before the figure, and returns the seconds until it
    * lands, for the sparks and the ring of it to wait; `stir` stirs a pot before it, round and round for half a
    * minute, and returns 0. A creature does nothing and returns 0.
@@ -10510,7 +10547,7 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
     const want = p.walking ? Math.sin(p.stride * 3.6) : 0;
     swing += (want - swing) * Math.min(1, dt * 20);
     const rowing = p.rowing !== undefined && !!rig.hands && !p.lying;
-    const anim: Anim = { t: p.time, swing, breath: Math.sin(p.time * 2.2 + beat), strike: Math.min(1, Math.abs(p.lean) * 2), act: action && (rig.acts || (rig.claws && CLAW_ACTS.has(action.kind))) ? { kind: action.kind, t: action.kind === "cast" ? since / pace : since, n: action.n, air: action.air } : null, scale: 1 / scaler.scale.x, lying: p.lying, sitting: rowing ? 1 : typeof p.sitting === "number" ? Math.max(0, Math.min(1, p.sitting)) : p.sitting ? 1 : 0, floor: rowing || p.lying ? 0 : Math.max(0, Math.min(1, p.floor ?? 0)), oars: rowing ? Math.max(0, Math.min(1, p.rowing!)) : -1, getUp: null };
+    const anim: Anim = { t: p.time, swing, breath: Math.sin(p.time * 2.2 + beat), strike: Math.min(1, Math.abs(p.lean) * 2), act: action && (rig.acts || (rig.claws && CLAW_ACTS.has(action.kind)) || (rig.howls && action.kind === "howl")) ? { kind: action.kind, t: action.kind === "cast" ? since / pace : since, n: action.n, air: action.air } : null, scale: 1 / scaler.scale.x, lying: p.lying, sitting: rowing ? 1 : typeof p.sitting === "number" ? Math.max(0, Math.min(1, p.sitting)) : p.sitting ? 1 : 0, floor: rowing || p.lying ? 0 : Math.max(0, Math.min(1, p.floor ?? 0)), oars: rowing ? Math.max(0, Math.min(1, p.rowing!)) : -1, getUp: null };
     // A rig with no animations of its own is leant into a blow, and a little into a hit, easing off as it always has.
     if (action && !rig.acts && !anim.act) anim.strike = Math.max(anim.strike, Math.min(1, (action.kind === "hit" ? 0.5 : 1.8) * Math.exp(-8 * since)));
     if (sling) stow(sling, p.walking, Math.max(anim.strike, anim.act && anim.act.kind !== "hit" ? 1 : 0), dt);
@@ -10688,6 +10725,11 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
       if (!rig.acts) return 0;
       asked = "taunt";
       return TAUNT.roar;
+    },
+    howl() {
+      if (!rig.howls) return 0;
+      asked = "howl";
+      return HOWL.peak;
     },
     emote(emote) {
       // A sit is not played out but held, as a pose (FigurePose.floor).

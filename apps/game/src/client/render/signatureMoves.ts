@@ -264,6 +264,20 @@ function trollRake(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Mov
  * moment, then hops back (or settles onto the hex it took). The blow is told when the jaws meet.
  */
 function wolfLunge(stage: MoveStage, ctx: MoveCtx) {
+  lunge(stage, ctx, false);
+}
+
+/**
+ * A Pack Leader's Great Lunge: a Dire Wolf's Lunge (wolfLunge) with more weight behind it. Thicker speed lines, red
+ * among the pale, stream off it through the air; where it lands the ground shakes, a shock rolling out over it with
+ * dust after, a ring of dust and grit thrown up all round, a second, bigger flash and the target jolted again.
+ */
+function greatLunge(stage: MoveStage, ctx: MoveCtx) {
+  lunge(stage, ctx, true);
+}
+
+/** A lunge (wolfLunge); `great`, a Pack Leader's (greatLunge). */
+function lunge(stage: MoveStage, ctx: MoveCtx, great: boolean) {
   const { figure, hitAt, dir, crit, onImpact } = ctx;
   const flip = dir < 0;
   // Where the wolf's body is just now, wherever the leap has carried it.
@@ -286,9 +300,10 @@ function wolfLunge(stage: MoveStage, ctx: MoveCtx) {
     for (let s = POUNCE.crouch; s < lands; s += STREAK_EVERY) {
       stage.later(() => {
         const at = body();
-        for (let i = 0; i < 2; i++) {
-          const from = at.clone().setY(at.y - 0.3 + Math.random() * 0.65).addScaledVector(back, 0.2 + Math.random() * 0.25);
-          stage.spawnFx("streak", crit ? GOLD : STREAK_PALE, flip, { from, to: from.clone().addScaledVector(back, 0.55), life: 0.16, size: [1.1, 0.7], spin: 0, fade: true });
+        for (let i = 0; i < (great ? 3 : 2); i++) {
+          const from = at.clone().setY(at.y - 0.3 + Math.random() * (great ? 0.9 : 0.65)).addScaledVector(back, 0.2 + Math.random() * 0.25);
+          const color = crit ? GOLD : great && i === 2 ? SAVAGE_RED : STREAK_PALE;
+          stage.spawnFx("streak", color, flip, { from, to: from.clone().addScaledVector(back, great ? 0.8 : 0.55), life: 0.16, size: great ? [1.5, 0.9] : [1.1, 0.7], spin: 0, fade: true });
         }
       }, s);
     }
@@ -303,9 +318,93 @@ function wolfLunge(stage: MoveStage, ctx: MoveCtx) {
       for (const side of [-1, 1]) stage.spawnFx("dust", "#c9b994", side > 0, { from: feet, to: feet.clone().setX(feet.x + side * 0.55).setY(feet.y + 0.3), life: 0.4, size: [0.6, 1.1], spin: 0, fade: true });
       stage.jolt();
       stage.later(() => stage.jolt(), 0.05);
+      if (great) {
+        // The ground shakes where it lands: a shock rolling out with dust after, dust and grit thrown up all round,
+        // a second, bigger flash, and the target jolted again.
+        const floor = feet.clone().setY(feet.y + 0.05);
+        stage.wave({ at: floor, radius: 2.2, life: 0.42, color: crit ? GOLD : "#f3e7c8", width: 0.1 });
+        stage.later(() => stage.wave({ at: floor, radius: 1.9, life: 0.5, color: DUST, width: 0.3 }), 0.05);
+        for (let i = 0; i < 10; i++) {
+          const a = (i / 10) * Math.PI * 2 + Math.random() * 0.3;
+          const far = 0.7 + Math.random() * 0.4;
+          stage.spawnFx("dust", DUST, Math.cos(a) < 0, { from: feet, to: offset(feet, Math.cos(a) * far, 0.2 + Math.random() * 0.3, Math.sin(a) * far * 0.6), life: 0.5 + Math.random() * 0.2, size: [0.7, 1.6], spin: 0, fade: true });
+        }
+        for (let i = 0; i < 7; i++) {
+          const to = offset(feet, (Math.random() - 0.5) * 1.3, 0.4 + Math.random() * 0.5, (Math.random() - 0.5) * 0.4);
+          stage.spawnFx("fleck", ROCK_PALE, Math.random() < 0.5, { from: feet, to, life: 0.35, size: [0.4, 0.3], spin: 0, fade: true });
+        }
+        stage.later(() => {
+          stage.spawnFx("burst", crit ? GOLD : SAVAGE_RED, false, { from: hitAt, to: hitAt, life: 0.3, size: [1.2, 3.1], spin: -0.5, fade: true });
+          stage.jolt();
+        }, 0.09);
+      }
       onImpact();
     });
   }, Math.max(0, lands - LUNGE_BITE));
+}
+
+const SAVAGE_RED = "#e0322b";
+const SAVAGE_DEEP = "#8f1414";
+
+/**
+ * A Pack Leader's Savage Bite: a snap forward, wide red jaws closing hard on the target. As they meet, a red flash
+ * with a deeper one swelling after it, red lines bursting out either side, blood sprayed off in arcs, and the target
+ * jolted twice.
+ */
+function savageBite(stage: MoveStage, ctx: MoveCtx) {
+  const { hitAt, crit, onImpact } = ctx;
+  const red = crit ? GOLD : SAVAGE_RED;
+  const deep = crit ? GOLD : SAVAGE_DEEP;
+  stage.lunge();
+  jaws(stage, ctx, LUNGE_BITE, 0.48, () => {
+    stage.spawnFx("burst", red, false, { from: hitAt, to: hitAt, life: 0.24, size: [0.8, 2.3], spin: 0.6, fade: true });
+    stage.later(() => stage.spawnFx("burst", deep, true, { from: hitAt, to: hitAt, life: 0.32, size: [1, 2.8], spin: -0.4, fade: true }), 0.06);
+    for (const side of [false, true]) for (const [n, turn] of [-0.5, -0.1, 0.3].entries()) stage.spawnFx("streak", n === 1 ? TEETH : red, side, { from: hitAt, to: hitAt, life: 0.2, size: [0.6, 1.9], turn: side ? -turn : turn, spin: 0, fade: true });
+    // Blood sprayed off in arcs, falling.
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2 + Math.random() * 0.4;
+      const far = 0.5 + Math.random() * 0.5;
+      stage.spawnFx("fleck", i % 3 ? red : deep, Math.cos(a) < 0, { from: hitAt, to: offset(hitAt, Math.cos(a) * far, -0.35 - Math.random() * 0.2, Math.sin(a) * far * 0.5), life: 0.4 + Math.random() * 0.15, size: [0.45, 0.3], spin: 0, fade: true, arc: 0.35 });
+    }
+    stage.jolt();
+    stage.later(() => stage.jolt(), 0.07);
+    onImpact();
+  }, SAVAGE_RED);
+}
+
+/** A Howl's sound waves: how far out each spreads over the ground, how long it takes, and how many there are, how far apart. */
+const HOWL_WAVES = { radius: 4.6, life: 0.85, count: 5, every: 0.17 };
+
+/**
+ * A Pack Leader's Howl: it sits back on its haunches and throws its head up at the sky (figures.ts HOWL). As the howl
+ * rings out, red sound waves pulse out from it one after another: rings spreading over the ground round it, and arcs
+ * of sound rolling off its raised muzzle and out either side, growing as they go, with a red flare at its mouth. It
+ * reaches its own side, not the other, so nobody is jolted; what it does to them is told as it rings out.
+ */
+function howlMove(stage: MoveStage, { figure, crit, onImpact }: MoveCtx) {
+  const peak = Math.max(0, figure.howl());
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const ground = feet.clone().setY(feet.y + 0.08);
+  // Its muzzle, thrown up: about as high over its feet as its head is when it sits back.
+  const mouth = () => figure.root.getWorldPosition(new THREE.Vector3()).setY(feet.y + 1.35);
+  const red = crit ? GOLD : SAVAGE_RED;
+  const deep = crit ? GOLD : SAVAGE_DEEP;
+  stage.later(() => {
+    const at = mouth();
+    stage.spawnFx("burst", red, false, { from: at, to: at, life: 0.3, size: [0.6, 1.9], spin: 0.5, fade: true });
+    for (let n = 0; n < HOWL_WAVES.count; n++) {
+      stage.later(() => {
+        stage.wave({ at: ground, radius: HOWL_WAVES.radius, life: HOWL_WAVES.life, color: n % 2 ? deep : red, width: 0.06 });
+        // Arcs of sound off the muzzle, out and up either side.
+        const from = mouth();
+        for (const side of [-1, 1]) {
+          const to = offset(from, side * (1.1 + n * 0.1), 0.35 + n * 0.05, 0);
+          stage.spawnFx("slash", n % 2 ? deep : red, side < 0, { from, to, life: 0.5, size: [0.5, 2], turn: side < 0 ? Math.PI * 0.75 : -Math.PI * 0.25, spin: 0, fade: true });
+        }
+      }, n * HOWL_WAVES.every);
+    }
+    onImpact();
+  }, peak);
 }
 
 /** How far apart a bear's three claw marks lie across the target, and the seconds between each being torn. */
@@ -770,5 +869,8 @@ export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
   Rake: { who: "troll", blurb: "A swing of a long clawed arm, leaving a red swoosh across the target.", play: trollRake },
   Bite: { who: "wolf", blurb: "A snap forward, jaws closing on the target as two white arches.", play: wolfBite },
   "Cheap Shot": { who: "bandit", blurb: "Two quick side slashes, a forehand then a backhand: the sword leaves a red trail, and each cut a flat red swipe across the target.", play: cheapShot },
+  Howl: { who: "alpha", blurb: "Sits back on its haunches and throws its head up at the sky: red sound waves pulse out one after another, rings spreading over the ground round it and arcs of sound rolling off its muzzle either side.", play: howlMove },
+  "Savage Bite": { who: "alpha", blurb: "A snap forward, wide red jaws closing hard on the target: a red flash and a deeper one after it, red lines bursting out, blood sprayed off in arcs, and the target jolted twice.", play: savageBite },
+  "Great Lunge": { who: "alpha", blurb: "A Lunge with more weight behind it: thicker speed lines, red among them, and where it lands a shock rolling over the ground, dust and grit thrown up all round, and a second, bigger red flash.", play: greatLunge },
   Lunge: { who: "wolf", blurb: "A crouch and a leap through the air (from up to 3 hexes off, taking the hex beside its target), dust kicked back and speed lines streaming off it the whole way, jaws snapping shut on the target with a flash as it lands.", play: wolfLunge },
 };
