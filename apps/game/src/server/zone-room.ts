@@ -40,7 +40,7 @@
 // written on the socket itself, which outlives the room's hibernation.
 
 import { DurableObject } from "cloudflare:workers";
-import { EMOTE_MIN_MS, THROWABLE_KINDS, ZONE_CLIENT_ACTIONS, createZone, hiddenEnemies, loadZone, nextTick, stepZone, zoneAwaiting, zoneHero, zoneOptions, zoneView, validEmote, type ZoneAction, type ZoneEvent, type ZoneState } from "@gantt-quest/world";
+import { EMOTE_MIN_MS, HARBOR_MAX_SAY, THROWABLE_KINDS, ZONE_CLIENT_ACTIONS, createZone, hiddenEnemies, loadZone, nextTick, stepZone, zoneAwaiting, zoneHero, zoneOptions, zoneView, validEmote, type ZoneAction, type ZoneEvent, type ZoneState } from "@gantt-quest/world";
 import { consumablesOf, gainConsumables, kitStatements, spendConsumables, type Consumables } from "./consumables";
 import { returnLuck, takeLuck } from "./well";
 import { applyZoneGrant, crewFor, heroInitFor, refreshHarbor, type Env } from "./db";
@@ -242,7 +242,7 @@ export class ZoneRoom extends DurableObject<Env> {
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     if (typeof message !== "string" || message.length > 8000) return;
-    let msg: { type?: string; action?: unknown; n?: unknown; emote?: unknown; as?: unknown };
+    let msg: { type?: string; action?: unknown; n?: unknown; emote?: unknown; text?: unknown; as?: unknown };
     try {
       msg = JSON.parse(message);
     } catch {
@@ -261,6 +261,8 @@ export class ZoneRoom extends DurableObject<Env> {
       return;
     }
     if (msg.type === "emote") return this.serial(() => this.emote(playerId, msg.emote));
+    // Chat is the player's own, whichever of their party they are acting as.
+    if (msg.type === "say") return this.serial(() => this.say(seat.playerId, msg.text));
     if (msg.type !== "action") return;
     // The client's own number for this action, sent back with its answer so it can tell which of its actions was answered.
     const n = typeof msg.n === "number" && Number.isSafeInteger(msg.n) && msg.n >= 0 ? msg.n : undefined;
@@ -454,6 +456,19 @@ export class ZoneRoom extends DurableObject<Env> {
     if (!hero || hero.down) return;
     this.emotedAt.set(playerId, now);
     for (const ws of this.ctx.getWebSockets()) sendTo(ws, { type: "emoted", id: playerId, emote });
+  }
+
+  /**
+   * A line of chat, tidied and cut to length, to everyone on the map (the speaker too), in a fight or out of one, and
+   * from a hero who is down as well: words cost nothing and take no turn. Not kept, and the reducer never hears of it.
+   */
+  private async say(playerId: string, said: unknown) {
+    const text = (typeof said === "string" ? said : "").replace(/\s+/g, " ").trim().slice(0, HARBOR_MAX_SAY);
+    if (!text) return;
+    const zone = await this.load();
+    const hero = zone.units.find((u) => u.id === playerId && u.side === "hero");
+    if (!hero) return;
+    for (const ws of this.ctx.getWebSockets()) sendTo(ws, { type: "said", id: playerId, name: hero.name, text });
   }
 
   /** Heroes connected right now: each player's, and their party's. */

@@ -554,6 +554,16 @@
 .fl-tag.flat { color: #2c2318; background: #cdb8a0; }
 .fight-ui button.fl-jump { position: absolute; right: 12px; bottom: 8px; padding: 1px 9px 2px; font-size: 11px; color: var(--f-ink); background: var(--f-gold); border: 2px solid var(--f-out); border-radius: 0; box-shadow: 0 2px 0 rgba(0, 0, 0, 0.5); text-shadow: none; }
 .fight-ui button.fl-jump:hover:not(:disabled) { background: #ffe08a; border-color: var(--f-out); box-shadow: 0 2px 0 rgba(0, 0, 0, 0.5); }
+/* What the crew say: plain words between the rolls, the speaker's name in sea-green (yours gold). */
+.fl-e.said { --c: var(--f-ally); color: #f6ead2; overflow-wrap: anywhere; }
+.fl-e.said.mine { --c: var(--f-hero); }
+.fl-e.said::before { opacity: 0.35; }
+/* The line to say something, at the log's foot. */
+.fl-say { flex: none; padding: 5px 6px 6px; border-top: 2px solid var(--f-out); background: rgba(0, 0, 0, 0.22); }
+.fl-say .row { flex-wrap: nowrap; gap: 5px; }
+.fl-say input { flex: 1; min-width: 0; padding: 3px 7px; font: inherit; font-size: 12px; }
+.fl-say button { flex: none; padding: 2px 10px; font-size: 12px; }
+.fight-log.talk button.fl-jump { bottom: 48px; }
 
 /* A die, as a chip in its own shape: three corners for a d4, a square d6, a d8's diamond, a kite, a d12's five
    sides, a d20's six. Bone, with the number inked on; the one dropped is struck through. */
