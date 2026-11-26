@@ -1002,7 +1002,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           if (field && !ev.again) {
             const holder = ev.id;
             const holding = () => !!shownNow.current?.units.find((u) => u.id === holder && u.hp > 0)?.conditions.some((c) => c.kind === "slowing_field");
-            timers.current.push(setTimeout(() => spells.current?.aura({ key: `field:${holder}`, follow: () => renderer.current?.unitFeet(holder) ?? null, holding }, CONDITION_INFO.slowing_field.color, SLOWING_FIELD.reach), 900));
+            timers.current.push(setTimeout(() => spells.current?.aura({ key: `field:${holder}`, follow: () => renderer.current?.unitFeet(holder) ?? null, holding }, CONDITION_INFO.slowing_field.color, SLOWING_FIELD.reach), 1150));
           }
           if (own === "burst" && view) return void view.burst(ev.id, ev.name, false, thenOn(() => {}), !!ev.again, centre);
           if (own === "at" && view && aim) return view.moveAt(ev.id, ev.name, aim, landing());
