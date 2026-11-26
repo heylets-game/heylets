@@ -592,9 +592,9 @@ const saveDc = (unit: Unit, def: AbilityDef): number => 8 + proficiency(unit.lev
 /** The conditions an ability leaves on a target it has got through to. */
 function afflict(ctx: Ctx, unit: Unit, def: AbilityDef, target: Unit, save: boolean): void {
   if (target.down) return;
-  if (def.perfect) {
-    const effect = def.perfect.effect;
-    if (!save || !saveRoll(ctx, target, SAVE_STAT[effect], saveDc(unit, def), `Resist ${def.name}`).ok) inflict(ctx, target, def.perfect);
+  if (def.saveOr) {
+    const effect = def.saveOr.effect;
+    if (!save || !saveRoll(ctx, target, SAVE_STAT[effect], saveDc(unit, def), `Resist ${def.name}`).ok) inflict(ctx, target, def.saveOr);
   }
   if (def.targetEffect && !target.down) inflict(ctx, target, def.targetEffect);
 }
@@ -1010,9 +1010,9 @@ export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Uni
   const dc = 8 + attack.potency;
   ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name, target: target?.id });
   const leave = (victim: Unit, save: boolean) => {
-    if (victim.down || !attack.perfect) return;
-    const effect = attack.perfect.effect;
-    if (!save || !saveRoll(ctx, victim, SAVE_STAT[effect], dc, `Resist ${attack.name}`).ok) inflict(ctx, victim, attack.perfect);
+    if (victim.down || !attack.saveOr) return;
+    const effect = attack.saveOr.effect;
+    if (!save || !saveRoll(ctx, victim, SAVE_STAT[effect], dc, `Resist ${attack.name}`).ok) inflict(ctx, victim, attack.saveOr);
   };
   if (attack.burst) {
     const dice = rollShown(ctx.rng, attack.dice);

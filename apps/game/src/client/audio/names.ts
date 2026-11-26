@@ -48,7 +48,7 @@ export const soundName = {
   attackVoice: (f: Fighter) => voice(f, "attack"),
   /** A blow landing. */
   impact: (ability: string, style: AttackStyle) => [`impact.${slug(ability)}`, `impact.${style}`, "impact"],
-  /** Laid over the impact when the roll was perfect. */
+  /** Laid over the impact of a critical hit. */
   crit: () => ["impact.crit"],
   /** The target's voice as it is hit. */
   hurt: (f: Fighter) => voice(f, "hurt"),

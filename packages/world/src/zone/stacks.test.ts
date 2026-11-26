@@ -24,8 +24,8 @@ describe("stacking Bleeding and Burning", () => {
     expect(cond(foe, "burning")).toMatchObject({ rounds: STACK_TURNS.burning, amount: 1 });
     // No ability says how long one lasts.
     const left: (Inflict | undefined)[] = [
-      ...Object.values(ABILITIES).flatMap((a) => [a.perfect, a.targetEffect, a.selfEffect]),
-      ...Object.values(ENEMY_ABILITIES).map((a) => a.perfect),
+      ...Object.values(ABILITIES).flatMap((a) => [a.saveOr, a.targetEffect, a.selfEffect]),
+      ...Object.values(ENEMY_ABILITIES).map((a) => a.saveOr),
     ];
     for (const what of left) if (what && isStacking(what.effect)) expect("turns" in what, what.effect).toBe(false);
   });

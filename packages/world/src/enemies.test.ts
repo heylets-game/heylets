@@ -20,8 +20,8 @@ describe("the bear", () => {
     expect(hardest).toBeGreaterThan(Math.max(...attacksOf(wolf).map((a) => a.damage)));
     // Its heavy blow makes them bleed; only its roar stuns.
     const swipe = attacksOf(bear).find((a) => a.damage === hardest)!;
-    expect(swipe.perfect?.effect).toBe("bleeding");
-    expect(attacksOf(bear).some((a) => a.name === "Roar" && a.perfect?.effect === "stunned")).toBe(true);
+    expect(swipe.saveOr?.effect).toBe("bleeding");
+    expect(attacksOf(bear).some((a) => a.name === "Roar" && a.saveOr?.effect === "stunned")).toBe(true);
   });
 
   it("has a boss of its own: bigger, and its roar shakes the whole party", () => {
@@ -29,7 +29,7 @@ describe("the bear", () => {
     expect(big.boss).toBe(true);
     expect(big.hp).toBeGreaterThan(ENEMIES.bear.hp);
     expect(big.move).toBeLessThan(ENEMIES.alpha.move);
-    expect(attacksOf(big).some((a) => a.shape === "burst" && a.perfect?.effect === "stunned")).toBe(true);
+    expect(attacksOf(big).some((a) => a.shape === "burst" && a.saveOr?.effect === "stunned")).toBe(true);
   });
 
   it("roams alone, or as a pair for a full party", () => {
@@ -50,9 +50,9 @@ describe("the ogre", () => {
     expect(ogre.init).toBeLessThan(bear.init);
     const rank = Object.values(ENEMIES).filter((e) => !e.boss && e.kind !== "dummy");
     expect(Math.max(...attacksOf(ogre).map((a) => a.damage))).toBe(Math.max(...rank.flatMap((e) => attacksOf(e).map((a) => a.damage))));
-    expect(attacksOf(ogre).find((a) => a.name === "Club Smash")?.perfect?.effect).toBe("stunned");
+    expect(attacksOf(ogre).find((a) => a.name === "Club Smash")?.saveOr?.effect).toBe("stunned");
     // Its stomp reaches the whole party, and leaves them slow.
-    expect(attacksOf(ogre).some((a) => a.shape === "burst" && a.perfect?.effect === "slowed")).toBe(true);
+    expect(attacksOf(ogre).some((a) => a.shape === "burst" && a.saveOr?.effect === "slowed")).toBe(true);
     expect(ogre.xp).toBeGreaterThan(brute.xp);
   });
 

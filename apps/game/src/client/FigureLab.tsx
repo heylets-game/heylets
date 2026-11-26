@@ -252,7 +252,7 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
           jolt: () => {},
         };
         const began = t;
-        move.play(stage, { figure, hitAt, dir, perfect: false, onImpact: () => setNote(`The blow is told ${(t - began).toFixed(2)}s in.`) });
+        move.play(stage, { figure, hitAt, dir, crit: false, onImpact: () => setNote(`The blow is told ${(t - began).toFixed(2)}s in.`) });
         return "";
       }
       if (action === "hit") {

@@ -4752,9 +4752,9 @@ describe("Paladin weapons", () => {
     expect(WEAPONS.greatsword.abilities).toEqual(["cleave", "block"]);
     expect(WEAPONS.ballast_flail.abilities).toEqual(["flail_strike", "armor_crush"]);
     for (const id of ["bash", "recover", "cleave", "block", "flail_strike", "armor_crush"]) expect(tacticOf(id).cooldown, id).toBe(Object.values(WEAPONS).some((w) => w.abilities[0] === id) ? undefined : 1);
-    expect(ABILITIES.bash.perfect).toEqual({ effect: "prone", turns: 1 });
-    expect(ABILITIES.flail_strike.perfect).toEqual({ effect: "slowed", turns: 2 });
-    expect(ABILITIES.armor_crush.perfect).toEqual({ effect: "sundered", turns: 2 });
+    expect(ABILITIES.bash.saveOr).toEqual({ effect: "prone", turns: 1 });
+    expect(ABILITIES.flail_strike.saveOr).toEqual({ effect: "slowed", turns: 2 });
+    expect(ABILITIES.armor_crush.saveOr).toEqual({ effect: "sundered", turns: 2 });
   });
 
   it("Cleave: swings through the three hexes beside you on the side aimed at, however far off the aim", () => {
@@ -4818,7 +4818,7 @@ describe("Mage weapons", () => {
     expect(tacticOf("shock").vsWet).toBeGreaterThan(0);
     expect(tacticOf("lightning_strike").vsWet).toBeGreaterThan(0);
     expect(tacticOf("waterbolt").surface?.kind).toBe("water");
-    expect(ABILITIES.lightning_strike.perfect).toEqual({ effect: "stunned", turns: 1 });
+    expect(ABILITIES.lightning_strike.saveOr).toEqual({ effect: "stunned", turns: 1 });
     expect(tacticOf("mend").cost).toBe(ACTION_AP);
     expect(tacticOf("winds_blessing").cost).toBe(BONUS_AP);
   });
@@ -4876,8 +4876,8 @@ describe("Rogue weapons", () => {
     expect(tacticOf("eviscerate").cooldown).toBe(3);
     expect(tacticOf("take_aim").cost).toBe(BONUS_AP);
     expect(tacticOf("stab").edge).toBeGreaterThan(0);
-    expect(ABILITIES.tear.perfect).toEqual({ effect: "bleeding" });
-    expect(ABILITIES.snag.perfect).toEqual({ effect: "slowed", turns: 2 });
+    expect(ABILITIES.tear.saveOr).toEqual({ effect: "bleeding" });
+    expect(ABILITIES.snag.saveOr).toEqual({ effect: "slowed", turns: 2 });
   });
 
   it("Take Aim: the next roll to hit has advantage, and is spent by it", () => {
@@ -5219,7 +5219,7 @@ describe("Sage weapons", () => {
     expect(tacticOf("rust_armor").cooldown).toBe(2);
     expect(tacticOf("st_elmos_fire").cost).toBe(BONUS_AP);
     expect(abilityDiceFor(ABILITIES.starbeam)).toEqual({ n: 1, d: 6, plus: 3 });
-    expect(ABILITIES.rust_armor.perfect).toEqual({ effect: "sundered", turns: 3 });
+    expect(ABILITIES.rust_armor.saveOr).toEqual({ effect: "sundered", turns: 3 });
   });
 
   it("Starbeam: a hit lights the target with Guiding Light only if it fails its save", () => {
@@ -5321,7 +5321,7 @@ describe("Warden weapons", () => {
     expect(tacticOf("raise_guard").cooldown).toBe(2);
     expect(tacticOf("throw_pike").cooldown).toBe(3);
     for (const id of ["stand_strong", "raise_guard"]) expect(tacticOf(id).cost, id).toBe(BONUS_AP);
-    expect(ABILITIES.disarming_chop.perfect).toEqual({ effect: "glitched", turns: 1 });
+    expect(ABILITIES.disarming_chop.saveOr).toEqual({ effect: "glitched", turns: 1 });
   });
 
   it("Sturdy Blow: a shield, hit or miss, on top of any already there", () => {

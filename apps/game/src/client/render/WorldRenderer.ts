@@ -2263,7 +2263,7 @@ export class WorldRenderer {
    * on the target at once, or a bolt or arrow flies across first. `onImpact`
    * runs when it lands.
    */
-  private attack(actorId: string, targetId: string, ability: string, perfect: boolean, onImpact: () => void, landed = false, tint?: string) {
+  private attack(actorId: string, targetId: string, ability: string, crit: boolean, onImpact: () => void, landed = false, tint?: string) {
     const a = this.units.get(actorId);
     const t = this.units.get(targetId);
     if (!a || !t || a === t) return onImpact();
@@ -2287,7 +2287,7 @@ export class WorldRenderer {
       }
       if (landed) {
         t.kick.set(dir * 0.12, 0.22, 0);
-        this.dustAt(t, perfect);
+        this.dustAt(t, crit);
       }
       onImpact();
       return;
@@ -2298,9 +2298,9 @@ export class WorldRenderer {
       const from = a.goal.clone().add(new THREE.Vector3(dir * 0.5, a.size * 0.7, 0.05));
       const hurl = () =>
         this.spawnFx("rock", rock, flip, { from, to: hitAt, life: 0.4, size: [0.85, 1.0], spin: -dir * 9, fade: false, arc: 0.9, onEnd: () => {
-          this.spawnFx("burst", perfect ? "#ffd23f" : "#c9c1aa", false, { from: hitAt, to: hitAt, life: 0.22, size: [0.7, 1.6], spin: 0.5, fade: true });
+          this.spawnFx("burst", crit ? "#ffd23f" : "#c9c1aa", false, { from: hitAt, to: hitAt, life: 0.22, size: [0.7, 1.6], spin: 0.5, fade: true });
           if (landed) {
-            this.dustAt(t, perfect);
+            this.dustAt(t, crit);
             t.kick.set(dir * 0.18, 0, 0);
           }
           onImpact();
@@ -2318,7 +2318,7 @@ export class WorldRenderer {
       const from = a.goal.clone().add(new THREE.Vector3(dir * 0.5, a.size * 0.5, 0.05));
       const fly = () =>
         this.spawnFx(kind, color, flip, { from, to: hitAt, life: 0.24, size: [1.0, 1.0], spin: 0, fade: false, onEnd: () => {
-          this.spawnFx("burst", perfect ? "#ffd23f" : color, false, { from: hitAt, to: hitAt, life: 0.22, size: [0.7, 1.7], spin: 0.5, fade: true });
+          this.spawnFx("burst", crit ? "#ffd23f" : color, false, { from: hitAt, to: hitAt, life: 0.22, size: [0.7, 1.7], spin: 0.5, fade: true });
           // An arrow that lands stays in: point first, the shaft toward whoever shot it.
           if (kind === "arrow" && landed) this.stickArrow(t, dir);
           onImpact();
@@ -2343,7 +2343,7 @@ export class WorldRenderer {
           if (landed) t.kick.set(dir * 0.1, 0, 0);
         },
       };
-      signature.play(stage, { figure: a.figure, hitAt, dir, perfect, onImpact });
+      signature.play(stage, { figure: a.figure, hitAt, dir, crit, onImpact });
       return;
     }
     // Melee: the figure winds up, steps half way across its tile and strikes (a creature, with no such
@@ -2353,12 +2353,12 @@ export class WorldRenderer {
     const wait = a.figure.strike(HEAVY_SWINGS.has(ability) ? "heavy" : "light");
     const land = () => {
       // A heavy blow comes down from higher, wider, and knocks the target back with dust thrown up round its feet.
-      this.spawnFx("slash", perfect ? "#ffd23f" : (tint ?? "#dfe9ff"), flip, { from: hitAt, to: hitAt, life: heavy ? 0.3 : 0.26, size: heavy ? [1.7, 3] : [1.3, 2.3], spin: -dir * (heavy ? 1.6 : 0.9), fade: true });
+      this.spawnFx("slash", crit ? "#ffd23f" : (tint ?? "#dfe9ff"), flip, { from: hitAt, to: hitAt, life: heavy ? 0.3 : 0.26, size: heavy ? [1.7, 3] : [1.3, 2.3], spin: -dir * (heavy ? 1.6 : 0.9), fade: true });
       // An ability's blow throws a burst of its colour off the target as it lands.
       if (tint && landed) this.spawnFx("burst", tint, flip, { from: hitAt, to: hitAt, life: 0.22, size: [0.7, 1.6], spin: 0.5, fade: true });
       if (heavy && landed) {
         t.kick.set(dir * 0.35, -0.08, 0);
-        this.dustAt(t, perfect);
+        this.dustAt(t, crit);
       }
       onImpact();
     };
@@ -2370,10 +2370,10 @@ export class WorldRenderer {
   }
 
   /** Dust thrown up either side of a unit's feet: a heavy landing, a rock breaking, the ground shaking under it. */
-  private dustAt(unit: Unit, perfect = false) {
+  private dustAt(unit: Unit, crit = false) {
     const feet = unit.goal.clone().add(new THREE.Vector3(0, 0.15, 0.1));
     for (const side of [-1, 1]) {
-      this.spawnFx("dust", perfect ? "#e8d27a" : "#c9b994", side > 0, { from: feet, to: feet.clone().add(new THREE.Vector3(side * 0.55, 0.3, 0)), life: 0.4, size: [0.6, 1.1], spin: 0, fade: true });
+      this.spawnFx("dust", crit ? "#e8d27a" : "#c9b994", side > 0, { from: feet, to: feet.clone().add(new THREE.Vector3(side * 0.55, 0.3, 0)), life: 0.4, size: [0.6, 1.1], spin: 0, fade: true });
     }
   }
 

@@ -43,8 +43,8 @@ export interface MoveCtx {
   hitAt: THREE.Vector3;
   /** Which way the target is from the attacker as the viewer sees it: 1 right, -1 left. */
   dir: 1 | -1;
-  /** A perfect hit: what lands is drawn gold, as any perfect blow is. */
-  perfect: boolean;
+  /** A critical hit: what lands is drawn gold, as any critical blow is. */
+  crit: boolean;
   /** When the blow is told: the damage and what it leaves show then. */
   onImpact(): void;
 }
@@ -57,19 +57,29 @@ export interface SignatureMove {
   play(stage: MoveStage, ctx: MoveCtx): void;
 }
 
+const CHEAP_SHOT_RED = "#e0313f";
+
 /**
  * Two flat side slashes, one each way: a forehand across the front from the right, carried straight on into a
- * backhand from the left (figures.ts SLICES). The sword leaves a red trail as it goes (figures.ts SWOOSH_TINT); the
- * target is jolted by each cut, and the blow is told when the second lands.
+ * backhand from the left (figures.ts SLICES), the sword leaving a red trail as it goes (figures.ts SWOOSH_TINT).
+ * Each cut leaves a red swipe lying flat across the target, the second a little below the first and swept the
+ * other way, and jolts it. The blow is told when the second lands.
  */
-function cheapShot(stage: MoveStage, { figure, onImpact }: MoveCtx) {
+function cheapShot(stage: MoveStage, { figure, hitAt, dir, perfect, onImpact }: MoveCtx) {
+  const cut = (second: boolean) => {
+    // The swipe is drawn as a quarter circle bowed up and to one side; turned an eighth, it lies flat, an arch.
+    const flip = second ? dir > 0 : dir < 0;
+    const at = hitAt.clone().setY(hitAt.y + (second ? -0.1 : 0.12));
+    stage.spawnFx("slash", perfect ? "#ffd23f" : CHEAP_SHOT_RED, flip, { from: at, to: at, life: 0.24, size: [1.4, 2.3], turn: flip ? -Math.PI / 4 : Math.PI / 4, spin: (flip ? 1 : -1) * 0.5, fade: true });
+    stage.jolt();
+  };
   const first = figure.strike("slices");
   // A creature has no swing of its own: it springs at the target, and the two cuts land as it does.
   if (first <= 0) stage.lunge();
-  stage.later(() => stage.jolt(), first);
+  stage.later(() => cut(false), first);
   stage.later(() => {
     stage.sound();
-    stage.jolt();
+    cut(true);
     onImpact();
   }, first + (first > 0 ? SLICES_APART : 0.2));
 }
@@ -84,8 +94,8 @@ const LUNGE_SNAP = 0.1;
  * them: two white arches, the upper and the lower, snapping together. The target is jolted and dust is thrown up
  * at its feet as it is borne down. The blow is told when the jaws meet.
  */
-function wolfLunge(stage: MoveStage, { hitAt, dir, perfect, onImpact }: MoveCtx) {
-  const color = perfect ? "#ffd23f" : LUNGE_TEETH;
+function wolfLunge(stage: MoveStage, { hitAt, dir, crit, onImpact }: MoveCtx) {
+  const color = crit ? "#ffd23f" : LUNGE_TEETH;
   // The swipe is drawn as a quarter circle; turned an eighth it lies flat as an arch, and half a turn more turns it over.
   const flat = dir < 0 ? -Math.PI / 4 : Math.PI / 4;
   stage.lunge();
@@ -110,6 +120,6 @@ function wolfLunge(stage: MoveStage, { hitAt, dir, perfect, onImpact }: MoveCtx)
 }
 
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
-  "Cheap Shot": { who: "bandit", blurb: "Two quick side slashes, a forehand then a backhand, the sword leaving a red trail.", play: cheapShot },
+  "Cheap Shot": { who: "bandit", blurb: "Two quick side slashes, a forehand then a backhand: the sword leaves a red trail, and each cut a flat red swipe across the target.", play: cheapShot },
   Lunge: { who: "wolf", blurb: "A spring driven right in, jaws snapping shut on the target as two white arches, and dust thrown up at its feet.", play: wolfLunge },
 };

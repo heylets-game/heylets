@@ -144,7 +144,7 @@ export interface AbilityDef {
   /** Applied to the user when the ability lands. */
   selfEffect?: Inflict;
   /** Applied to a target it gets through to, unless the target makes its save (where the ability allows one). */
-  perfect?: Inflict;
+  saveOr?: Inflict;
   /** Applied to each target it gets through to, with no save. */
   targetEffect?: Inflict;
   /** Heals the user this share of the damage it deals. */
@@ -155,38 +155,38 @@ export interface AbilityDef {
 export const ABILITIES: Record<string, AbilityDef> = {
   // Bare hands: what a hero has with no weapon. Weak on purpose, and never on a weapon.
   // A lit torch swung in the main hand (zones only): the weapon is put away while it is held.
-  torch_swing: { id: "torch_swing", name: "Torch Swing", stat: "str", target: "enemy", damage: 6, perfect: { effect: "burning" }, blurb: "A swing of a lit torch. Whoever it hits may catch fire." },
+  torch_swing: { id: "torch_swing", name: "Torch Swing", stat: "str", target: "enemy", damage: 6, saveOr: { effect: "burning" }, blurb: "A swing of a lit torch. Whoever it hits may catch fire." },
   // Paladin weapons. Mace: Bash and Recover. Greatsword: Cleave and Block. Flail: Strike and Armor Crush.
-  bash: { id: "bash", name: "Bash", stat: "str", target: "enemy", damage: 8, perfect: { effect: "prone", turns: 1 }, blurb: "A heavy blow with the mace. On a hit, the target must save or be knocked Prone." },
+  bash: { id: "bash", name: "Bash", stat: "str", target: "enemy", damage: 8, saveOr: { effect: "prone", turns: 1 }, blurb: "A heavy blow with the mace. On a hit, the target must save or be knocked Prone." },
   recover: { id: "recover", name: "Recover", stat: "vit", target: "self", heal: 7, blurb: "Catch your breath and heal yourself a fair amount." },
   block: { id: "block", name: "Block", stat: "vit", target: "self", blurb: "Set the flat of the blade before you, for a shield of 8 plus your level that takes the damage of blows before HP does, through your next turn." },
-  flail_strike: { id: "flail_strike", name: "Strike", stat: "str", target: "enemy", damage: 8, perfect: { effect: "slowed", turns: 2 }, blurb: "A swing of the flail. On a hit, the target must save or be Slowed." },
-  armor_crush: { id: "armor_crush", name: "Armor Crush", stat: "str", target: "enemy", damage: 4, perfect: { effect: "sundered", turns: 2 }, blurb: "A quick blow at the joints of its armor. On a hit, the target must save or be Sundered, with 2 less Defence for 2 turns." },
+  flail_strike: { id: "flail_strike", name: "Strike", stat: "str", target: "enemy", damage: 8, saveOr: { effect: "slowed", turns: 2 }, blurb: "A swing of the flail. On a hit, the target must save or be Slowed." },
+  armor_crush: { id: "armor_crush", name: "Armor Crush", stat: "str", target: "enemy", damage: 4, saveOr: { effect: "sundered", turns: 2 }, blurb: "A quick blow at the joints of its armor. On a hit, the target must save or be Sundered, with 2 less Defence for 2 turns." },
   // Mage weapons. Staff: Shock and Mend. Logbook: Slicing Wind and Wind's Blessing. Rod: Waterbolt and Lightning Strike.
   shock: { id: "shock", name: "Shock", stat: "int_stat", target: "enemy", damage: 7, blurb: "A bolt of lightning. Hits 3 harder on anything Wet." },
   mend: { id: "mend", name: "Mend", stat: "int_stat", target: "ally", heal: 10, blurb: "Heal an ally (or yourself) a good amount." },
   slicing_wind: { id: "slicing_wind", name: "Slicing Wind", stat: "int_stat", target: "enemy", damage: 7, blurb: "A blade of wind at an enemy, and the gust carries you: 1 more movement for each AP for the rest of this turn." },
   winds_blessing: { id: "winds_blessing", name: "Wind's Blessing", stat: "int_stat", target: "ally", heal: 4, blurb: "Heal an ally (or yourself) a little, and put the wind at their back: 1 more movement for each AP, this turn if they are taking it, else their next." },
   waterbolt: { id: "waterbolt", name: "Waterbolt", stat: "int_stat", target: "enemy", damage: 7, blurb: "A bolt of seawater. On a hit, it leaves water under the target, soaking it Wet." },
-  lightning_strike: { id: "lightning_strike", name: "Lightning Strike", stat: "int_stat", target: "enemy", damage: 12, perfect: { effect: "stunned", turns: 1 }, blurb: "Lightning out of the sky: a heavy blow, 3 harder on anything Wet. On a hit, the target must save or be Stunned." },
+  lightning_strike: { id: "lightning_strike", name: "Lightning Strike", stat: "int_stat", target: "enemy", damage: 12, saveOr: { effect: "stunned", turns: 1 }, blurb: "Lightning out of the sky: a heavy blow, 3 harder on anything Wet. On a hit, the target must save or be Stunned." },
   // Rogue weapons. Knives: Stab and Eviscerate. Shortbow: Shot and Take Aim. Gaff Hook: Tear and Snag.
   stab: { id: "stab", name: "Stab", stat: "dex", target: "enemy", damage: 8, blurb: "A quick stab with the knives. Made with advantage, it finds a gap: 3 more damage." },
-  eviscerate: { id: "eviscerate", name: "Eviscerate", stat: "dex", target: "enemy", damage: 14, perfect: { effect: "bleeding" }, blurb: "Open them up with both knives: a heavy blow, and on a hit the target must save or start Bleeding." },
+  eviscerate: { id: "eviscerate", name: "Eviscerate", stat: "dex", target: "enemy", damage: 14, saveOr: { effect: "bleeding" }, blurb: "Open them up with both knives: a heavy blow, and on a hit the target must save or start Bleeding." },
   bow_shot: { id: "bow_shot", name: "Shot", stat: "dex", target: "enemy", damage: 7, blurb: "An arrow from the shortbow." },
   take_aim: { id: "take_aim", name: "Take Aim", stat: "dex", target: "self", blurb: "Steady your hand. Your next roll to hit has advantage." },
   // Ship's guns, for anyone. Pistol: Pistol Shot and Pistol Whip. Blunderbuss: Scattershot and Butt Stroke. Harpoon gun: Harpoon and Barbed Line.
   pistol_shot: { id: "pistol_shot", name: "Pistol Shot", stat: "dex", target: "enemy", damage: 8, blurb: "A shot from the pistol, reaching 6 hexes." },
   pistol_whip: { id: "pistol_whip", name: "Pistol Whip", stat: "str", target: "enemy", damage: 5, blurb: "Crack the butt across an enemy beside you." },
   scattershot: { id: "scattershot", name: "Scattershot", stat: "dex", target: "enemy", damage: 10, blurb: "A blast of shot in a cone, 3 hexes long, that catches every enemy in it." },
-  butt_stroke: { id: "butt_stroke", name: "Bludgeon", stat: "str", target: "enemy", damage: 7, perfect: { effect: "prone", turns: 1 }, blurb: "Swing the stock at an enemy beside you. On a hit, the target must save or be knocked Prone." },
+  butt_stroke: { id: "butt_stroke", name: "Bludgeon", stat: "str", target: "enemy", damage: 7, saveOr: { effect: "prone", turns: 1 }, blurb: "Swing the stock at an enemy beside you. On a hit, the target must save or be knocked Prone." },
   harpoon_shot: { id: "harpoon_shot", name: "Harpoon", stat: "dex", target: "enemy", damage: 8, blurb: "Fire the harpoon up to 6 hexes. On a hit, the line hauls the target 2 hexes toward you." },
-  barbed_line: { id: "barbed_line", name: "Barbed Line", stat: "dex", target: "enemy", damage: 7, perfect: { effect: "slowed", turns: 2 }, blurb: "A barb on a short line, 3 hexes. On a hit, the target must save or be Slowed." },
-  tear: { id: "tear", name: "Tear", stat: "dex", target: "enemy", damage: 8, perfect: { effect: "bleeding" }, blurb: "A tearing swing of the hook. On a hit, the target must save or start Bleeding." },
-  snag: { id: "snag", name: "Snag", stat: "dex", target: "enemy", damage: 8, perfect: { effect: "slowed", turns: 2 }, blurb: "Throw the hook at an enemy up to 3 hexes off. On a hit, the target must save or be Slowed." },
+  barbed_line: { id: "barbed_line", name: "Barbed Line", stat: "dex", target: "enemy", damage: 7, saveOr: { effect: "slowed", turns: 2 }, blurb: "A barb on a short line, 3 hexes. On a hit, the target must save or be Slowed." },
+  tear: { id: "tear", name: "Tear", stat: "dex", target: "enemy", damage: 8, saveOr: { effect: "bleeding" }, blurb: "A tearing swing of the hook. On a hit, the target must save or start Bleeding." },
+  snag: { id: "snag", name: "Snag", stat: "dex", target: "enemy", damage: 8, saveOr: { effect: "slowed", turns: 2 }, blurb: "Throw the hook at an enemy up to 3 hexes off. On a hit, the target must save or be Slowed." },
   // Druid weapons. Driftwood Staff: Thornlash and Rejuvenate. Sickle: Sea Slash and Binding Kelp. Coral Staff: Coral Burst and Restore.
   sea_slash: { id: "sea_slash", name: "Sea Slash", stat: "int_stat", target: "enemy", damage: 8, blurb: "A slash of the sickle with the sea behind it. On a hit, water pools under the target and under you." },
   binding_kelp: { id: "binding_kelp", name: "Binding Kelp", stat: "int_stat", target: "enemy", blurb: "Kelp lashes round an enemy up to 4 hexes off, no roll to hit. It must save or be Slowed for 1 turn. Standing in water, it must instead save against being Stunned for 1 turn." },
-  coral_burst: { id: "coral_burst", name: "Coral Burst", stat: "int_stat", target: "all_enemies", damage: 6, perfect: { effect: "bleeding" }, blurb: "Coral bursts out in a cone 3 hexes long: 1 hex, then 2, then 3. Every enemy in it takes a little damage (half if they brace), and those that fail to brace are cut and start Bleeding." },
+  coral_burst: { id: "coral_burst", name: "Coral Burst", stat: "int_stat", target: "all_enemies", damage: 6, saveOr: { effect: "bleeding" }, blurb: "Coral bursts out in a cone 3 hexes long: 1 hex, then 2, then 3. Every enemy in it takes a little damage (half if they brace), and those that fail to brace are cut and start Bleeding." },
   restore: { id: "restore", name: "Restore", stat: "int_stat", target: "ally", heal: 4, blurb: "Heal an ally (or yourself) a little and lift every harmful condition off them." },
   // Bard weapons. Lute: Dissonance and Second Wind. Bosun's Pipe: Blasting Tone and Soothing Tone. Squeeze Box: Bellows Blast and Hornpipe. Ship's Bell: Peal and Clarion Call.
   dissonance: { id: "dissonance", name: "Dissonance", stat: "int_stat", target: "enemy", damage: 7, targetEffect: { effect: "glitched", turns: 1 }, blurb: "A note nobody can think through. On a hit, the target's next roll to hit is made with disadvantage. No save." },
@@ -201,14 +201,14 @@ export const ABILITIES: Record<string, AbilityDef> = {
   starbeam: { id: "starbeam", name: "Starbeam", stat: "int_stat", target: "enemy", damage: 12, blurb: "A beam of raw starlight. On a hit, the target must save or be lit with Guiding Light for 3 turns: every attack on it has advantage." },
   st_elmos_fire: { id: "st_elmos_fire", name: "St. Elmo's Fire", stat: "int_stat", target: "ally", blurb: "Fire dances over an ally (or yourself) up to 4 hexes off for 3 turns. Every blow they land sets its target Burning, one stack more if it would have anyway." },
   water_burst: { id: "water_burst", name: "Water Burst", stat: "int_stat", target: "enemy", damage: 7, blurb: "A burst of seawater at an enemy up to 5 hexes off. On a hit, every other enemy beside the target is drenched for a little damage too." },
-  rust_armor: { id: "rust_armor", name: "Rust Armor", stat: "int_stat", target: "all_enemies", damage: 7, perfect: { effect: "sundered", turns: 3 }, blurb: "Rust spreads over 3 hexes up to 5 off. Every enemy in it takes damage (half if they brace), and those that fail to brace are Sundered: 2 less Defence for 3 turns." },
+  rust_armor: { id: "rust_armor", name: "Rust Armor", stat: "int_stat", target: "all_enemies", damage: 7, saveOr: { effect: "sundered", turns: 3 }, blurb: "Rust spreads over 3 hexes up to 5 off. Every enemy in it takes damage (half if they brace), and those that fail to brace are Sundered: 2 less Defence for 3 turns." },
   // Astrolabe: Moonlight and Focus Light.
   moonlight: { id: "moonlight", name: "Moonlight", stat: "int_stat", target: "all_enemies", damage: 7, blurb: "Moonlight pours over 3 hexes up to 7 off. Every enemy in it takes damage (half if they brace), and those that fail to brace are lit with Guiding Light for 3 turns: every attack on them has advantage." },
   focus_light: { id: "focus_light", name: "Focus Light", stat: "int_stat", target: "enemy", damage: 4, blurb: "A thin focused beam at an enemy up to 5 hexes off. If it is lit by Guiding Light, a hit also sets it Burning." },
   // Warden weapons. Bell-Buoy Maul: Sturdy Blow and Stand Strong. Foghorn Axe: Disarming Chop and Guard. Boarding Pike: Goading Strike and Throw Pike.
   sturdy_blow: { id: "sturdy_blow", name: "Sturdy Blow", stat: "str", target: "enemy", damage: 8, blurb: "A heavy, careful blow with the maul. Hit or miss, you gain a shield of 3 plus your level on top of any you have, through your next turn." },
   stand_strong: { id: "stand_strong", name: "Stand Strong", stat: "vit", target: "self", blurb: "Plant your feet. A shield of 3 plus your level, and 3 more for each enemy beside you, on top of any you have, through your next turn." },
-  disarming_chop: { id: "disarming_chop", name: "Disarming Chop", stat: "str", target: "enemy", damage: 8, perfect: { effect: "glitched", turns: 1 }, blurb: "A chop at the weapon arm. On a hit, the target must save or its next attack is rolled with disadvantage." },
+  disarming_chop: { id: "disarming_chop", name: "Disarming Chop", stat: "str", target: "enemy", damage: 8, saveOr: { effect: "glitched", turns: 1 }, blurb: "A chop at the weapon arm. On a hit, the target must save or its next attack is rolled with disadvantage." },
   raise_guard: { id: "raise_guard", name: "Against the Waves", stat: "vit", target: "self", blurb: "Set yourself behind the axe as the sea breaks on you: a shield of 4 plus your level until your next turn, 4 more if you stand in water. 1 turn to wait." },
   goading_strike: { id: "goading_strike", name: "Goading Strike", stat: "str", target: "enemy", damage: 8, blurb: "A jab with the pike to get its attention. On a hit, the target must save or be Taunted for 2 turns: it must come at you if it can." },
   throw_pike: { id: "throw_pike", name: "Throw Pike", stat: "str", target: "enemy", damage: 7, blurb: "Hurl the pike at an enemy up to 3 hexes off. On a hit, it is dragged straight toward you, as far as beside you. 2 turns to wait." },
@@ -219,9 +219,9 @@ export const ABILITIES: Record<string, AbilityDef> = {
   drink_deeply: { id: "drink_deeply", name: "Drink Deeply", stat: "int_stat", target: "self", heal: 14, blurb: "Drink deep from the chalice. Heal yourself a great deal, but you are Poisoned for 2 turns: your attacks are rolled with disadvantage. 2 turns to wait." },
   punch: { id: "punch", name: "Punch", stat: "str", target: "enemy", damage: 4, blurb: "Bare knuckles. All you have without a weapon in hand." },
   cleave: { id: "cleave", name: "Cleave", stat: "str", target: "all_enemies", damage: 7, blurb: "A wide swing through three hexes beside you, an attack on each enemy in them." },
-  thornlash: { id: "thornlash", name: "Thornlash", stat: "int_stat", target: "enemy", damage: 7, perfect: { effect: "slowed", turns: 2 }, blurb: "Thorns that dig in. On a hit, the target must save or be Slowed." },
+  thornlash: { id: "thornlash", name: "Thornlash", stat: "int_stat", target: "enemy", damage: 7, saveOr: { effect: "slowed", turns: 2 }, blurb: "Thorns that dig in. On a hit, the target must save or be Slowed." },
   rejuvenate: { id: "rejuvenate", name: "Rejuvenate", stat: "int_stat", target: "ally", heal: 7, blurb: "Heal an ally (or yourself) now, and the same again at the start of their next turn." },
-  hex: { id: "hex", name: "Hex", stat: "int_stat", target: "enemy", damage: 7, perfect: { effect: "glitched", turns: 1 }, blurb: "A slow curse on the target. On a hit, it must save or be Fumbling: its next attack is rolled with disadvantage." },
+  hex: { id: "hex", name: "Hex", stat: "int_stat", target: "enemy", damage: 7, saveOr: { effect: "glitched", turns: 1 }, blurb: "A slow curse on the target. On a hit, it must save or be Fumbling: its next attack is rolled with disadvantage." },
   soul_drain: { id: "soul_drain", name: "Soul Drain", stat: "int_stat", target: "enemy", damage: 11, drain: 0.5, blurb: "Takes some of their life for yours: heals you half the damage dealt. 2 turns to wait." },
   // Class abilities: chosen for a hero's slots from their class's pool (classabilities.ts), not given by a weapon.
   // Paladin. The two auras are conditions on the Paladin in a fight (zone/kit.ts AURAS).
@@ -230,7 +230,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   branding_strike: { id: "branding_strike", name: "Branding Strike", stat: "str", target: "enemy", damage: 11, targetEffect: { effect: "burning" }, blurb: "A searing blow that hits harder than most, and sets the target Burning." },
   soothing_rain: { id: "soothing_rain", name: "Soothing Rain", stat: "int_stat", target: "ally", blurb: "A rain cloud over 3 hexes for 3 turns. It lays water under itself, and heals your side a little as it comes, as each of you starts a turn in it, and the first time on a turn each of you walks into it." },
   chain_lightning: { id: "chain_lightning", name: "Chain Lightning", stat: "int_stat", target: "enemy", damage: 9, blurb: "Lightning strikes an enemy, then leaps to the nearest enemy within 2 hexes it has not struck yet, and on, as long as there is one. +3 against anything Wet." },
-  roar_of_thunder: { id: "roar_of_thunder", name: "Roar of Thunder", stat: "int_stat", target: "enemy", perfect: { effect: "stunned", turns: 1 }, blurb: "A thunderclap that never misses: the enemy is thrown a hex back from you, and must save or be Stunned." },
+  roar_of_thunder: { id: "roar_of_thunder", name: "Roar of Thunder", stat: "int_stat", target: "enemy", saveOr: { effect: "stunned", turns: 1 }, blurb: "A thunderclap that never misses: the enemy is thrown a hex back from you, and must save or be Stunned." },
   trade_winds: { id: "trade_winds", name: "Trade Winds", stat: "int_stat", target: "ally", blurb: "Winds over 19 hexes for 3 turns: your side moves twice as far in them, and the enemy is Slowed." },
   tidal_wave: { id: "tidal_wave", name: "Tidal Wave", stat: "int_stat", target: "all_enemies", damage: 9, blurb: "A wave rolls out 5 hexes in a line, striking every enemy in it. Those that fail to brace are swept to the end of it, and the line is left under water." },
   bolster: { id: "bolster", name: "Bolster", stat: "vit", target: "self", blurb: "You raise a great ward: you and every ally within 2 hexes get a shield of 10 plus your level, which takes the damage of blows before HP does, for 3 turns." },

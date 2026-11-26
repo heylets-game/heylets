@@ -755,7 +755,7 @@ export interface EnemyStrike {
   harmless: boolean;
   /** Its potency at this level, with edge: added to its roll to hit, and the DC of saves against it is 8 + this. */
   potency: number;
-  perfect?: EnemyAbilityDef["perfect"];
+  saveOr?: EnemyAbilityDef["saveOr"];
   weight: number;
   /** Which behaviour weighs it up (behaviours.ts BEHAVIOURS). */
   behaviour: BehaviourId;
@@ -794,7 +794,7 @@ export function abilityStrikes(ids: readonly string[], level: number, more = 0):
         dice: diceFor(scaled(a.damage, a.scales?.damage ?? DEFAULT_SCALE, level) + edge),
         harmless: a.damage <= 0,
         potency: a.potency + Math.floor((Math.max(1, level) - 1) / 4) + edge,
-        perfect: a.perfect,
+        saveOr: a.saveOr,
         weight: a.weight,
         behaviour: (a.behaviour ?? (burst ? "burst" : "strike")) as BehaviourId,
         cost: a.cost ?? ACTION_AP,
