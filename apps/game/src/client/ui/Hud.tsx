@@ -4,19 +4,19 @@
 //
 //                 where you stand .... what to do here
 //        o o o          points          o o o o
-//   +---------------------------------------------------------+
-//   | [ hand ][ hand ] | [= health =] (Lv 7) [= energy =] | [ bag ] |
-//   | [        ]       | ========= experience =========== | [     ] |
-//   |     rest         | [ ][ ][ ][ ][ ][ ][ ][ ][ ][ ]   |  L  *   |
-//   |                  | [ ][ ][ ][ ][ ][ ][ ][ ][ ][ ]   |         |
-//   +---------------------------------------------------------+
+//   +------------------------------------------------------------+
+//   |                  |           (Lv 7)                 |           |
+//   | [ hand ][ hand ] | [= health =]      [= energy =]   | [ bag ] L |
+//   | [      ][      ] | ========= experience =========== | [     ] ^ |
+//   |                  | [ ][ ][ ][ ][ ][ ][ ][ ][ ][ ]   | [     ] * |
+//   |                  | [ ][ ][ ][ ][ ][ ][ ][ ][ ][ ]   |           |
+//   +------------------------------------------------------------+
 //
-// Left: what is in each hand, and under them a small tab to rest (or, in a
-// fight, the emote wheel). In the middle: health, a plaque
+// Left: what is in each hand. In the middle: health, a plaque
 // with the hero's level (it opens the logbook) and energy (gathering outings
 // left today), the experience bar under them, and the slots under that.
-// Right: the bag (I or B opens it too), and under it small tabs for the
-// logbook and the menu. A view
+// Right: the bag (I or B opens it too), and beside it a column of small tabs:
+// the logbook, rest (or, in a fight, the emote wheel) and the menu. A view
 // may hand the bar a turn (`turn`: the plaque is then its clock, pressed to
 // end it) and points to show as pips over it (`pips`); none does now, a fight
 // on the tiles having a turn bar of its own (zone/TurnBar.tsx). Nothing on the
@@ -358,24 +358,12 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
       </div>
 
       <div className="hud-rack" ref={board} onPointerLeave={() => setTip(null)}>
-        {/* Left: weapon and shield, and under them rest (or, in a fight, the emote wheel). */}
+        {/* Left: weapon and shield. */}
         <span className="hud-side">
           {/* Each with the card it has in the bag. On a map either hand can take a lit torch instead. */}
           <span className="hud-hands">
             {handSlot("main")}
             {handSlot("off")}
-          </span>
-          <span className="hud-tabs">
-            {rest && (
-              <button className="hud-tab" aria-label="Rest" disabled={rest.disabled} onClick={rest.run} {...hover(<Tip name="Rest" line={rest.hint} />)}>
-                <PixelIcon rows={FIRE} size={11} />
-              </button>
-            )}
-            {!rest && emote && (
-              <span className="hud-tab emote" {...hover(<Tip name="Emotes" line="Wave, cheer, bow, dab, floss, dance, do the running man, breakdance or sit down. It costs nothing and takes no turn." keys="G" />)}>
-                {emote}
-              </span>
-            )}
           </span>
         </span>
 
@@ -420,8 +408,8 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
           {slots && <span className="hud-slots" style={{ "--cols": BAR_ROW } as CSSProperties}>{shown.slice(0, BAR_ROW * 2).map(slotButton)}</span>}
         </span>
 
-        {/* Right: the bag, and under it the tabs for the logbook and the menu. */}
-        <span className="hud-side">
+        {/* Right: the bag, and beside it the tabs for the logbook, rest (or, in a fight, the emote wheel) and the menu. */}
+        <span className="hud-side end">
           <button
             className="hud-slot bag"
             aria-label="Sea bag"
@@ -434,6 +422,16 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
           </button>
           <span className="hud-tabs">
             <button className={`hud-tab ${news ? "news" : ""}`} aria-label="Logbook" disabled={!onBook} onClick={onBook} {...hover(<Tip name="Logbook" line={news ? "Something to spend or pick" : "Your hero, stats and skills"} keys="L" />)}>L</button>
+            {rest && (
+              <button className="hud-tab" aria-label="Rest" disabled={rest.disabled} onClick={rest.run} {...hover(<Tip name="Rest" line={rest.hint} />)}>
+                <PixelIcon rows={FIRE} size={11} />
+              </button>
+            )}
+            {!rest && emote && (
+              <span className="hud-tab emote" {...hover(<Tip name="Emotes" line="Wave, cheer, bow, dab, floss, dance, do the running man, breakdance or sit down. It costs nothing and takes no turn." keys="G" />)}>
+                {emote}
+              </span>
+            )}
             <span className="hud-tab cog" {...hover(<Tip name="Menu" line="Settings, your account and the way out" keys="Esc" />)}>{menu}</span>
           </span>
         </span>
