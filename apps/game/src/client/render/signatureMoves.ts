@@ -495,7 +495,95 @@ function seatSlam(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alone
   }, lands + waveReaches(far, radius, life));
 }
 
+const FIRE = "#ff7a2a";
+const FLAME = "#ffb347";
+const FIRE_DEEP = "#d9381e";
+const FIRE_FLASH = "#fff1c9";
+const SMOKE = "#5a5048";
+/** An Immolate's fireball: how long it is in the air, how high it goes over the straight line, and how far its fire spreads. */
+export const IMMOLATE = { flight: 0.55, arc: 1.6, spread: 2.0 };
+
+/**
+ * A Cultist's Immolate: sparks of fire swirl up round its staff hand as it winds up (the cast), and as it points a
+ * fireball leaves the hand with a flare and goes up in a high arc, spinning, embers and wisps of smoke falling off it
+ * the whole way. Where it comes down the ground goes up: a white flash and a burst of fire, a ring of flame rolling out
+ * over the hexes round it with a deeper red one behind, tongues of flame licking up all over, embers flung out in arcs,
+ * and smoke rising after. `hitAt` is over the hex it is thrown at; the blow (on all it catches) is told as it lands.
+ */
+function immolate(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const hand = () => {
+    const held = figure.hands()?.[0];
+    if (held) return held.getWorldPosition(new THREE.Vector3());
+    const at = figure.root.getWorldPosition(new THREE.Vector3());
+    return at.setY(at.y + 1.1);
+  };
+  const ground = hitAt.clone().setY(hitAt.y - 0.45);
+  const wait = Math.max(0, figure.cast());
+  // Winding up: sparks of fire swirling in and up round the hand.
+  for (let s = 0; s < wait; s += 0.045) {
+    stage.later(() => {
+      const at = hand();
+      const a = Math.random() * Math.PI * 2;
+      const from = offset(at, Math.cos(a) * 0.4, -0.25 + Math.random() * 0.2, Math.sin(a) * 0.4);
+      stage.spawnFx("spark", Math.random() < 0.5 ? FIRE : FLAME, Math.cos(a) < 0, { from, to: offset(at, Math.cos(a) * 0.1, 0.35, Math.sin(a) * 0.1), life: 0.28, size: [0.55, 0.2], spin: 3, fade: true });
+    }, s);
+  }
+  stage.later(() => {
+    const from = hand();
+    const { flight, arc, spread } = IMMOLATE;
+    stage.spawnFx("burst", FLAME, false, { from, to: from, life: 0.16, size: [0.4, 1], spin: 0.4, fade: true });
+    stage.spawnFx("bolt", crit ? GOLD : FIRE, dir < 0, { from, to: ground, life: flight, size: [1.3, 1.5], spin: dir * 7, fade: false, arc, onEnd: () => blast() });
+    // Embers and smoke falling off it all the way, along the same arc (WorldRenderer's fx: up by arc·4k(1−k)).
+    for (let s = 0.03; s < flight; s += 0.035) {
+      stage.later(() => {
+        const k = s / flight;
+        const at = from.clone().lerp(ground, k);
+        at.y += arc * 4 * k * (1 - k);
+        stage.spawnFx("fleck", Math.random() < 0.5 ? FIRE : FLAME, Math.random() < 0.5, { from: at, to: offset(at, (Math.random() - 0.5) * 0.35, -0.3, (Math.random() - 0.5) * 0.2), life: 0.32, size: [0.35, 0.2], spin: 0, fade: true });
+        if (Math.random() < 0.4) stage.spawnFx("dust", SMOKE, Math.random() < 0.5, { from: at, to: offset(at, 0, 0.25, 0), life: 0.45, size: [0.4, 0.8], spin: 0, fade: true });
+      }, s);
+    }
+    const blast = () => {
+      stage.spawnFx("burst", crit ? GOLD : FIRE_FLASH, false, { from: ground, to: ground, life: 0.2, size: [1.2, 3.4], spin: 0.6, fade: true });
+      stage.spawnFx("burst", FIRE, true, { from: ground, to: ground.clone().setY(ground.y + 0.3), life: 0.38, size: [1, 2.8], spin: -0.5, fade: true });
+      // A ring of flame rolling out over the hexes round it, a deeper red one just behind.
+      const floor = ground.clone().setY(ground.y + 0.05);
+      stage.wave({ at: floor, radius: spread, life: 0.45, color: FLAME, width: 0.14 });
+      stage.later(() => stage.wave({ at: floor, radius: spread * 0.85, life: 0.55, color: FIRE_DEEP, width: 0.32 }), 0.05);
+      // Shock lines out from where it struck.
+      for (const side of [false, true]) for (const turn of [-0.6, -0.2, 0.2, 0.6]) stage.spawnFx("streak", FLAME, side, { from: ground, to: ground, life: 0.2, size: [0.7, 2], turn: side ? -turn : turn, spin: 0, fade: true });
+      // Tongues of flame licking up all over, one after another.
+      for (let i = 0; i < 12; i++) {
+        stage.later(() => {
+          const a = Math.random() * Math.PI * 2;
+          const far = Math.sqrt(Math.random()) * spread * 0.6;
+          const at = offset(ground, Math.cos(a) * far, 0.05, Math.sin(a) * far * 0.7);
+          stage.spawnFx("streak", Math.random() < 0.5 ? FIRE : FLAME, Math.random() < 0.5, { from: at, to: offset(at, 0, 0.6 + Math.random() * 0.5, 0), life: 0.3 + Math.random() * 0.15, size: [0.9, 0.5], turn: Math.PI / 2, spin: 0, fade: true });
+          stage.spawnFx("burst", FIRE, Math.random() < 0.5, { from: at, to: offset(at, 0, 0.35, 0), life: 0.3, size: [0.3, 0.9], spin: 0.5, fade: true });
+        }, i * 0.03);
+      }
+      // Embers flung out every way in arcs.
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2 + Math.random() * 0.4;
+        const far = 0.7 + Math.random() * 0.9;
+        stage.spawnFx("fleck", i % 2 ? FIRE : FLAME, Math.cos(a) < 0, { from: ground, to: offset(ground, Math.cos(a) * far, 0, Math.sin(a) * far * 0.6), life: 0.45 + Math.random() * 0.2, size: [0.4, 0.25], spin: 0, fade: true, arc: 0.5 + Math.random() * 0.5 });
+      }
+      // And smoke rising after it, slow.
+      stage.later(() => {
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2 + Math.random() * 0.5;
+          const at = offset(ground, Math.cos(a) * 0.6, 0.2, Math.sin(a) * 0.4);
+          stage.spawnFx("dust", SMOKE, Math.cos(a) < 0, { from: at, to: offset(at, Math.cos(a) * 0.3, 1.1, 0), life: 1.1, size: [1, 2.4], spin: 0, fade: true });
+        }
+      }, 0.15);
+      stage.jolt();
+      onImpact();
+    };
+  }, wait);
+}
+
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
+  Immolate: { who: "cultist", blurb: "Sparks swirl round its staff as it winds up, then a fireball goes up in a high arc trailing embers and bursts where it lands: a ring of flame rolling out over the hexes round it, flames licking up, embers flung out and smoke rising.", play: immolate },
   Slam: { who: "ogre", blurb: "Crouches, springs up into the air and lands on its backside: a wave pulses out over the ground from its feet, clouds of dust rolling out after it, and each hero is jolted as it reaches them.", play: seatSlam },
   "Club Smash": { who: "ogre", blurb: "Heaves its club right up over its head and brings it straight down: the ground bursts where it lands, a pulse rolling out to the hexes round it, dust thrown out all round and chunks of rock flung every way.", play: clubSmash },
   Maul: { who: "bear", only: BEARS, blurb: "Rears right up on its hind legs and tears into the target with both forepaws by turns, white swooshes behind its claws, every blow tearing three black claw marks across it with white slashes flung off all round.", play: bearMaul },

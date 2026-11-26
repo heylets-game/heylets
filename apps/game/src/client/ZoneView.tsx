@@ -979,6 +979,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
             });
           } else if (look.kind === "rain" && aim) {
             cast(ev.id, ev.name, aim.x, aim.z, () => fxs.gather(aim, look.color));
+          } else if (look.kind === "lob" && aim && view?.ownsMove(ev.id, ev.name)) {
+            // One with a throw of its own (a Cultist's Immolate) plays it at the spot; what it does waits till it lands.
+            view.moveAt(ev.id, ev.name, aim, landing());
           } else if (look.kind === "lob" && aim) {
             cast(ev.id, ev.name, aim.x, aim.z, () => {
               const down = landing();

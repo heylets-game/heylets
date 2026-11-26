@@ -2284,6 +2284,29 @@ export class WorldRenderer {
     this.sparkle(id, color);
   }
 
+  /** Whether this unit plays `ability` as a move of its own (signatureMoves.ts), not as the usual cast or blow. */
+  ownsMove(actorId: string, ability: string): boolean {
+    const unit = this.units.get(actorId);
+    const move = SIGNATURE_MOVES[ability];
+    return !!unit && !!move && !unit.lying && playsFor(move, unit);
+  }
+
+  /**
+   * A unit's own move thrown at a spot on the ground, not at anyone (a Cultist's Immolate, thrown at a hex): it turns
+   * to the spot and plays it there, and `then` runs as it lands. Whoever it catches flinches as their hit is told.
+   */
+  moveAt(actorId: string, ability: string, ground: THREE.Vector3, then: () => void) {
+    const unit = this.units.get(actorId);
+    const move = SIGNATURE_MOVES[ability];
+    if (!unit || !move || unit.lying) return then();
+    this.face(unit, ground.x, ground.z);
+    const dir = ground.clone().project(this.camera).x >= unit.goal.clone().project(this.camera).x ? 1 : -1;
+    sounds.attack(ability, attackStyle(ability), this.fighter(actorId), this.spot(actorId));
+    // Nobody is jolted by it here: the stage's target is the thrower, and it has not landed on them.
+    const stage = this.moveStage(actorId, actorId, ability, unit, dir, false);
+    move.play(stage, { figure: unit.figure, hitAt: ground.clone().setY(ground.y + 0.45), dir, crit: false, onImpact: then });
+  }
+
   /** Where a unit's feet are this frame (the hop left out), or null if it is not on the map. */
   unitFeet(id: string): THREE.Vector3 | null {
     return this.units.get(id)?.feet.clone() ?? null;
