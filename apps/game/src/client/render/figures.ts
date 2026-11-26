@@ -1580,7 +1580,7 @@ const GET_UP_HIPS = -1;
  * `n` counts the figure's actions, so two flinches in a row need not be the same.
  */
 interface Act {
-  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "slam" | "drop" | "pound" | "channel" | "claw" | "flurry" | "howl" | "rake" | "roar" | "grasp" | "wail" | "dive" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
+  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "slam" | "drop" | "pound" | "channel" | "spook" | "claw" | "flurry" | "howl" | "rake" | "roar" | "grasp" | "wail" | "dive" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
   t: number;
   n: number;
   /** A jump's seconds off the ground (see JUMP), or how long a dive is held (see DIVE). */
@@ -1725,6 +1725,27 @@ const CHANNEL = {
   lift: [[0, 0], [0.35, 0.7], [1.0, 0.85], [1.12, 1.1], [1.5, 0.8], [1.9, 0]] as Keys,
   shiver: [[0, 0], [0.3, 0], [0.5, 0.6], [1.0, 1], [1.08, 0], [1.9, 0]] as Keys,
   jolt: [[0, 0], [1.05, 0], [1.11, 1], [1.3, 0.2], [1.5, 0]] as Keys,
+};
+
+/**
+ * Spooking (a Skeleton's Memento Mori): the head tipped slowly over to one side and held there, and the whole body
+ * twitching in sharp, uneven jerks, a little at first and worse as it goes on: the skull snapping this way and that,
+ * the shoulders and arms flicking, a shudder through the hips. Not a tremble but a stutter, each jerk held a moment
+ * (`rate` a second, at random). It is at its worst from `hit`, as what it puts off goes out, and settles by `over`.
+ * Keys by seconds in: `tilt` the head over, `jerk` how hard it twitches.
+ */
+const SPOOK = {
+  hit: 0.6,
+  over: 1.9,
+  rate: 14,
+  tilt: [[0, 0], [0.45, 1], [1.5, 1.05], [1.9, 0]] as Keys,
+  jerk: [[0, 0], [0.2, 0.35], [0.55, 0.6], [0.65, 1], [1.4, 0.85], [1.75, 0.2], [1.9, 0]] as Keys,
+};
+
+/** A steady random number in -1..1 for each whole `i` and `salt`: the same every frame, so a jerk holds until the next. */
+const twitch = (i: number, salt: number) => {
+  const x = Math.sin(i * 127.1 + salt * 311.7) * 43758.5453;
+  return (x - Math.floor(x)) * 2 - 1;
 };
 
 const SEAT_DROP = {
@@ -2492,7 +2513,7 @@ const RECORDER_LENGTH = 6.4;
 const HAMMER = { hit: 0.4, over: 0.86, up: [[0, 0.25], [0.3, 1], [0.4, 0], [0.48, 0.18], [0.86, 0.25]] as Keys };
 const STIR = { over: 30, turns: 25 };
 /** How long each kind of action lasts. */
-const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, slam: SLAM.over, drop: SEAT_DROP.over, pound: POUND.over, channel: CHANNEL.over, claw: CLAW.over, flurry: FLURRY.over, howl: HOWL.over, rake: RAKE.over, roar: ROAR.over, grasp: GRASP.over, wail: WAIL.over, dive: DIVE.into + DIVE.flare + DIVE.settle, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
+const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, slam: SLAM.over, drop: SEAT_DROP.over, pound: POUND.over, channel: CHANNEL.over, spook: SPOOK.over, claw: CLAW.over, flurry: FLURRY.over, howl: HOWL.over, rake: RAKE.over, roar: ROAR.over, grasp: GRASP.over, wail: WAIL.over, dive: DIVE.into + DIVE.flare + DIVE.settle, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
 /** When each kind of blow lands. */
 const ACT_HIT = { strike: SWING.hit, stab: THRUST.hit, slices: SLICES.hit, slam: SLAM.hit, pounce: POUNCE.hit, heavy: SWEEP.hit, twin: TWIN.hit };
 /**
@@ -2947,6 +2968,32 @@ function biped(top: THREE.Group, parts: Part[], drawnElbow = ELBOW) {
       // Feet set apart and planted: a little down into the knees.
       knees(0.18 * open);
       top.position.y -= 0.25 * jolt;
+      return;
+    }
+    if (act.kind === "spook") {
+      const k = SPOOK;
+      const tilt = along(k.tilt, t);
+      const jerk = along(k.jerk, t);
+      // Which jerk it is on: each held until the next, and the next comes a little early or late.
+      const i = Math.floor(t * k.rate + 0.4 * twitch(Math.floor(t * k.rate), 9));
+      const j = (salt: number) => twitch(i, salt) * jerk;
+      // The head tipped over to one side (the same side each time for one figure, turn about between goes), and
+      // snapping about on top of that.
+      const side = act.n % 2 ? 1 : -1;
+      head.joint.rotation.z += side * 0.6 * tilt + 0.28 * j(1);
+      head.joint.rotation.y += 0.35 * j(2);
+      head.joint.rotation.x += 0.15 * j(3) - 0.12 * tilt;
+      // A shudder through the body, and the shoulders and arms flicking.
+      bow(0.12 * j(4), 0.25 * j(5));
+      top.rotation.z += 0.05 * j(6) - side * 0.04 * tilt;
+      top.position.x += 0.12 * j(7);
+      armL.joint.rotation.z += 0.18 + 0.3 * j(8);
+      armR.joint.rotation.z -= 0.18 + 0.3 * j(9);
+      armL.joint.rotation.x += 0.25 * j(10);
+      armR.joint.rotation.x += 0.25 * j(11);
+      foreL.joint.rotation.x -= 0.35 * Math.abs(j(12));
+      foreR.joint.rotation.x -= 0.35 * Math.abs(j(13));
+      knees(0.1 * tilt + 0.06 * Math.abs(j(14)));
       return;
     }
     if (act.kind === "pound") {
@@ -10622,12 +10669,12 @@ export interface Figure {
    * beast rearing right up and bellowing, head thrown back (see ROAR), and returns the seconds until the roar; anything
    * else does nothing and returns 0. "grasp" is a ghost surging in with its arms stretched out to lay its hands on the
    * target (see GRASP); for anything else it is "light". "wail" is a ghost flinging itself up and back to scream (see
-   * WAIL), and returns the seconds until the scream; anything else does nothing and returns 0. "pound" is both fists heaved up overhead and driven down into the ground before
+   * WAIL), and returns the seconds until the scream; anything else does nothing and returns 0. "spook" is the head tipped over to one side and the whole body twitching in jerks (see SPOOK), for anything with poses of its own, and returns the seconds until it is at its worst; anything else does nothing and returns 0. "pound" is both fists heaved up overhead and driven down into the ground before
    * its feet (see POUND), for a person or a giant; a creature does nothing and it returns 0. A person, a giant or a skeleton (or a bear clawing) winds up and steps in first, and this
    * returns the seconds until the blow lands, for whatever it hits to wait; a creature lunges at once, as it always
    * did, and this returns 0.
    */
-  strike(how?: "light" | "stab" | "heavy" | "slices" | "slam" | "drop" | "pound" | "channel" | "claw" | "flurry" | "rake" | "roar" | "grasp" | "wail"): number;
+  strike(how?: "light" | "stab" | "heavy" | "slices" | "slam" | "drop" | "pound" | "channel" | "spook" | "claw" | "flurry" | "rake" | "roar" | "grasp" | "wail"): number;
   /**
    * How bright what glows on it is (eyes, gems, lamps), as a share of its own: 1 as made, more to flare it up (a
    * Guardian channelling). Greyed when down all the same.
@@ -11015,10 +11062,10 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
         asked = "pound";
         return POUND.hit;
       }
-      if (how === "channel") {
+      if (how === "channel" || how === "spook") {
         if (!rig.acts) return 0;
-        asked = "channel";
-        return CHANNEL.hit;
+        asked = how;
+        return how === "channel" ? CHANNEL.hit : SPOOK.hit;
       }
       if (how === "claw" || how === "flurry" || how === "rake") how = "light";
       const kind = how === "heavy" ? (rig.twin ? "twin" : "heavy") : how === "stab" || how === "slices" || how === "slam" ? how : (rig.light ?? "strike");

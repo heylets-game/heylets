@@ -37,6 +37,8 @@ export type SynthCombat =
   | "channel"
   // A Shade's Wail, a ghost's scream; and its Chill Touch, a cold breath and a frost settling.
   | "wail" | "chill"
+  // A Skeleton's Memento Mori: bones clattering as it twitches, over a low, sour drone, and a dark rush as it goes out.
+  | "rattle"
   // Words typed out in a conversation, a short soft note a letter.
   | "blip";
 
@@ -84,6 +86,7 @@ const COMBAT_LENGTH: Record<SynthCombat, number> = {
   channel: 2.3,
   wail: 1.6,
   chill: 0.8,
+  rattle: 2.1,
   blip: 0.09,
 };
 
@@ -326,6 +329,24 @@ function combat(r: Render, sound: SynthCombat) {
         toneAt(r, go + 0.74, { type: "sine", freq: 960 * p * k, freqTo: 260 * p * k, attack: 0.03, decay: 0.5, gain: v * gain * 0.9 });
       }
       noiseAt(r, go, { filter: "highpass", freq: 2200 * p, attack: 0.1, decay: 1.0, gain: v * 0.08 });
+      break;
+    }
+    case "rattle": {
+      // Bones clattering as it twitches: dry clicks, now one, now a few together, coming quicker and harder as it goes
+      // on, each a woody knock with a snap of noise. Under them, two low notes a little apart beating sourly against
+      // each other, swelling and dying away; and as its waves go out, a dark rush of air sinking low.
+      for (let at = 0.05; at < 1.75; ) {
+        const k = Math.min(1, at / 0.7);
+        const clicks = 1 + Math.floor(r.rnd() * (1 + 2 * k));
+        for (let c = 0; c < clicks; c++) {
+          const when = t + at + c * (0.012 + r.rnd() * 0.02);
+          noiseAt(r, when, { filter: "bandpass", freq: (2400 + r.rnd() * 1800) * p, q: 6, decay: 0.018, gain: v * (0.12 + 0.18 * k) });
+          toneAt(r, when, { type: "triangle", freq: (700 + r.rnd() * 500) * p, freqTo: 380 * p, decay: 0.03, gain: v * (0.07 + 0.1 * k) });
+        }
+        at += (0.13 - 0.07 * k) * (0.6 + r.rnd() * 0.8);
+      }
+      for (const f of [73.4, 77.8]) toneAt(r, t + 0.05, { type: "sawtooth", freq: f * p, freqTo: f * p * 0.94, attack: 0.55, decay: 1.4, gain: v * 0.16, cut: 420 });
+      noiseAt(r, t + 0.55, { filter: "lowpass", freq: 900 * p, freqTo: 140 * p, q: 0.8, attack: 0.08, decay: 1.0, gain: v * 0.32 });
       break;
     }
     case "chill":

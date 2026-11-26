@@ -1589,11 +1589,12 @@ const MORI_BLACK = "#0b0810";
 const MORI_SHADE = "#2b1d3a";
 const MORI_PALE = "#c4b5fd";
 /** Memento Mori's dark rings: as far as they roll (past every hero beside it, its reach of 1), how long each takes, the seconds between them, and how many. */
-export const MEMENTO_MORI = { radius: 2.2, life: 1.05, apart: 0.16, rings: 5 };
+export const MEMENTO_MORI = { radius: 2.2, life: 1.05, apart: 0.2, rings: 5 };
 
 /**
- * A Skeleton's Memento Mori: it throws its arms out wide and lifts its skull (figures.ts CHANNEL), and shadow gathers
- * into it from all round in black motes as its hollow eyes glint pale violet. As it lets go: a black burst at its chest
+ * A Skeleton's Memento Mori: its skull tips slowly over to one side and it starts to twitch, jerking this way and
+ * that worse and worse (figures.ts SPOOK), shadow gathering into it from all round in black motes as its hollow eyes
+ * glint pale violet. At its worst, still twitching: a black burst at its chest
  * with deep violet behind it, slow black rings rolling out over the ground one hex all round, one after another, each
  * thinner and more violet than the last, a dark ring through the air at its middle, and dark wisps creeping out low
  * over the ground. Each hero the first ring reaches is caught by it: black wisps circle their head with a pale flicker,
@@ -1607,7 +1608,7 @@ function mementoMori(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, al
   const shade = crit ? GOLD : MORI_SHADE;
   const pale = crit ? GOLD : MORI_PALE;
   // Only the first plays the gathering: by the time the others are told, it has already gone out.
-  const peak = echo ? 0 : Math.max(0.35, figure.strike("channel") || figure.cast());
+  const peak = echo ? 0 : Math.max(0.35, figure.strike("spook") || figure.cast());
   if (!echo) {
     // Shadow gathering into it from all round, low and wide, as its arms open.
     for (let s = 0; s < peak; s += 0.04) {
@@ -1665,7 +1666,7 @@ function mementoMori(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, al
 }
 
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
-  "Memento Mori": { who: "skeleton", blurb: "Throws its arms out wide and lifts its skull as black shadow gathers into it from all round and its hollow eyes glint pale violet; then lets go: a black burst at its chest, slow black rings rolling out over the ground one hex all round, then deep violet ones, a dark ring through the air and dark wisps creeping out low; each hero beside it gets black wisps circling their head and a shiver.", play: mementoMori },
+  "Memento Mori": { who: "skeleton", blurb: "Tips its skull slowly over to one side and starts to twitch, jerking this way and that worse and worse, as black shadow gathers into it from all round and its hollow eyes glint pale violet; at its worst, still twitching: a black burst at its chest, slow black rings rolling out over the ground one hex all round, then deep violet ones, a dark ring through the air and dark wisps creeping out low; each hero beside it gets black wisps circling their head and a shiver.", play: mementoMori },
   "Bite@bat": { who: "bat", blurb: "Flicks up and back, then darts in: its needle fangs snap shut once, quick as a sting, with a small pale flash and violet sparks spitting out either side.", play: batBite },
   "Fell Swoop": { who: "bat", blurb: "Its wings snap back in a burst of violet and it dives in a straight line, nose-down and low, wings swept back along its sides, dark speed lines streaming off it: each hero it passes through is raked with three red claw lines, a white slash and a flash, and where it comes to rest it throws its wings out wide to brake, and hovers again.", play: fellSwoop },
   "Chill Touch": { who: "shade", blurb: "Draws up and back, then surges in with its arms stretching out long, wisps streaming off it: a cold flash where its hands land, three pale finger marks drawn down the target, frost glinting and drifting down, a ring of frost at their feet, and wisps of their warmth curling back to it.", play: chillTouch },
