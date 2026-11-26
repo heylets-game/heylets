@@ -392,7 +392,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   },
   brute: {
     kind: "brute", name: "Brute", hp: 26, defence: 11, move: 2, save: 2, init: -1, xp: 18,
-    abilities: ["maul", "brute_shove", "shove"],
+    abilities: ["beatdown", "battering_ram", "great_cleave"],
   },
   archer: {
     kind: "archer", name: "Archer", hp: 13, defence: 12, move: 2, save: 0, init: 1, xp: 13,

@@ -9,7 +9,7 @@
 // What the ability then does when used is the rules' business (combat.ts enemyAct), not the behaviour's.
 
 import { hexDistance, posKey, type HexPos } from "@gantt-quest/core";
-import { leaps, leavesReach, lungeLanding, shiftInto, shoveDest } from "./combat";
+import { leaps, leavesReach, lungeLanding, shiftInto, shoveDest, sweepHexes } from "./combat";
 import { has } from "./engine";
 import { HIGH_REACH, inFight, reachFrom, seesFor, strikes } from "./geometry";
 import { ENEMY_BURST, SPLASH_SHARE, type EnemyStrike, type Mind } from "./kit";
@@ -86,7 +86,13 @@ const strike: Behaviour = {
       const beside = attack.kit.splash ? targets.filter((h) => h !== hero && hexDistance(h.pos, hero.pos) === 1).length : 0;
       // One thrown onto a clump of hexes is worth what a burst is to each hero on them: about half save for half.
       const area = attack.kit.area ? clusterHexes(look.state, from, hero.pos, attack.kit.area) : null;
-      const share = area ? 0.75 * targets.filter((h) => area.some((p) => hexDistance(p, h.pos) === 0)).length : 1 + beside * SPLASH_SHARE;
+      // A sweep is worth a whole blow to every hero in its rows.
+      const swept = attack.kit.sweep ? sweepHexes(look.state, from, hero.pos, attack.kit.sweep) : null;
+      const share = area
+        ? 0.75 * targets.filter((h) => area.some((p) => hexDistance(p, h.pos) === 0)).length
+        : swept
+          ? targets.filter((h) => swept.some((p) => hexDistance(p, h.pos) === 0)).length
+          : 1 + beside * SPLASH_SHARE;
       let worth = average * share * (look.whim?.(attack, hero) ?? 1);
       if (leaps(attack)) worth *= leapRisk(look.state, look.enemy, from, lungeLanding(look.state, look.enemy, from, attack, hero)!);
       if (has(hero, "taunting")) worth *= 3;

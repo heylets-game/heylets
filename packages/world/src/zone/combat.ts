@@ -486,6 +486,22 @@ export function arcHexes(state: ZoneState, from: HexPos, toward: HexPos): HexPos
   return hexNeighbors(from, state.map.grid).filter((p) => hexDistance(p, middle) <= 1);
 }
 
+/**
+ * A sweep's hexes: `rows` arcs of three, one behind the other, swung from `from` toward `toward`. The first is the
+ * arc beside it (arcHexes); each next is the three hexes one further out round the hex straight ahead, as far as it
+ * can see.
+ */
+export function sweepHexes(state: ZoneState, from: HexPos, toward: HexPos, rows: number): HexPos[] {
+  const dir = directionToward(from, toward);
+  const out = arcHexes(state, from, toward);
+  for (let k = 2; k <= rows; k++) {
+    const middle = { q: from.q + dir.q * k, r: from.r + dir.r * k };
+    const row = [middle, ...hexNeighbors(middle, state.map.grid)].filter((p) => hexDistance(p, from) === k && tileAt(state.map, p) && sees(state.map, from, p));
+    out.push(...row);
+  }
+  return out;
+}
+
 /** Why `unit` cannot use this ability on this aim, in words, or null if it can. */
 export function checkAbility(state: ZoneState, unit: Unit, ability: string, aim: Aim): string | null {
   const def = ABILITIES[ability];
@@ -1085,6 +1101,23 @@ export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Uni
     if (attack.kit.surface) placeSurface(ctx, hexes, attack.kit.surface.kind, attack.kit.surface.rounds, enemy.id);
     return;
   }
+  // A sweep: one great swing through rows of hexes, an attack roll for every hero in it.
+  if (attack.kit.sweep) {
+    const hexes = sweepHexes(state, enemy.pos, target.pos, attack.kit.sweep);
+    for (const victim of state.units.filter((u) => u.side !== enemy.side && !u.down && !unseen(u) && inFight(state, u.id) && hexes.some((p) => sameHex(p, u.pos)))) {
+      const roll = attackRoll(ctx, enemy, victim, { label: attack.name, bonus: attack.potency, melee: true });
+      if (!roll.ok) {
+        ctx.events.push({ t: "miss", actor: enemy.id, target: victim.id, what: attack.name });
+        continue;
+      }
+      const rolled = rollShown(ctx.rng, attack.dice, 0, roll.crit);
+      damage(ctx, victim, rolled.total, { actor: enemy.id, what: attack.name, crit: roll.crit, dice: rolled });
+      if (hexDistance(victim.pos, enemy.pos) === 1) thorns(ctx, enemy, victim);
+      if (enemy.down) return;
+      leave(victim, true);
+    }
+    return;
+  }
   // A leap: through the air to beside them first, then a blow by hand.
   const leap = leaps(attack);
   if (leap && !lungeAt(ctx, enemy, attack, target)) return;
@@ -1113,7 +1146,8 @@ export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Uni
   leave(target, true);
   if (attack.kit.surface) placeSurface(ctx, [target.pos], attack.kit.surface.kind, attack.kit.surface.rounds, enemy.id);
   if (attack.kit.chills) chill(ctx, target.pos, enemy.id);
-  if (attack.kit.push && !target.down) push(ctx, enemy.pos, target, enemy.id);
+  const hexes = attack.kit.push === true ? 1 : attack.kit.push || 0;
+  for (let k = 0; k < hexes && !target.down; k++) if (push(ctx, enemy.pos, target, enemy.id) !== "moved") break;
 }
 
 // ---------- common actions ----------
