@@ -6,7 +6,7 @@ import { hexDistance, posKey, type StatKey } from "@gantt-quest/core";
 import { tileAt } from "../map";
 import type { Rng } from "../rng";
 import { elevOf, gap, gapTo, inFight, meet, nearOf, perkOf, span } from "./geometry";
-import { ABILITIES, EFFECT_TICK, STACK_TURNS, SUNDERED_DEFENCE, isSpent, isStacking, type Inflict, type StackingEffect } from "../content";
+import { ABILITIES, EFFECT_TICK, STACK_TURNS, SUNDERED_DEFENCE, isSpent, isStacking, type Inflict, type SpentEffect, type StackingEffect } from "../content";
 import { AQUEOUS, AURAS, CONDITION_INFO, CORAL_ARMOR, ENEMY_KIT, FORTIFY, SHIELD_SET_ASIDE, enemyDefence, enemySave, healDice } from "./kit";
 import { inDark } from "./light";
 import { d20, heroDefence, mod, netAdvantage, rollShown, statOf } from "./rules";
@@ -180,7 +180,7 @@ export function giveAway(ctx: Ctx, unit: Unit): void {
 }
 
 /** The conditions that count as wounds, for abilities that grow with them. */
-export const DEBUFFS: readonly Condition[] = ["bleeding", "burning", "stunned", "slowed", "fumbling", "exposed", "poisoned", "prone", "sundered", "reeling"];
+export const DEBUFFS: readonly Condition[] = ["bleeding", "burning", "stunned", "slowed", "fumbling", "exposed", "poisoned", "prone", "sundered", "reeling", "memento_mori"];
 
 /** Fortify: one of the side that raised a wall, standing beside it, is the steadier for it. */
 export const wallDefence = (state: Pick<ZoneState, "weather">, unit: Unit): number =>
@@ -228,7 +228,29 @@ const undying = (ctx: Ctx, unit: Unit): boolean => !!ctx.state.undying && unit.s
 function wound(ctx: Ctx, unit: Unit, dealt: number): number {
   const counts = undying(ctx, unit) ? dealt : Math.min(dealt, unit.hp);
   unit.hp = Math.max(0, unit.hp - counts);
+  if (counts > 0) hurtBy(ctx, unit);
   return counts;
+}
+
+/**
+ * Conditions that leave something more on their bearer each time they lose HP, by any means (a blow, a burn, the
+ * ground): `gives` stacks of a spent effect (content.ts SPENT), as long as they have fewer than `upTo` of it. A new one
+ * of the kind is a new entry here.
+ * - Memento Mori: a stack of Fumbling, unless they are Fumbling already.
+ */
+export const ON_HURT: Partial<Record<Condition, { gives: SpentEffect; upTo: number }>> = {
+  memento_mori: { gives: "fumbling", upTo: 1 },
+};
+
+/** A unit lost HP: what its conditions leave on it for that (ON_HURT). */
+function hurtBy(ctx: Ctx, unit: Unit): void {
+  for (const c of [...unit.conditions]) {
+    const hurt = ON_HURT[c.kind];
+    if (!hurt) continue;
+    const held = unit.conditions.find((h) => h.kind === hurt.gives);
+    const have = held ? usesLeft(held) : 0;
+    if (have < hurt.upTo) addUses(ctx, unit, hurt.gives, Math.min(1, hurt.upTo - have));
+  }
 }
 
 function fall(ctx: Ctx, unit: Unit): void {

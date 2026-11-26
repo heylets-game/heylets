@@ -74,6 +74,8 @@ export const AUDIO: AudioManifest = {
     "attack.howl": { files: "sfx/combat/howl_*", fallback: built("howl"), pitch: [-1, 1], reverb: -4 },
     // A Guardian's Slowing Field: a hum built up through it, and let go as the field goes out.
     "attack.slowing_field": { files: "sfx/combat/slowing_field_*", fallback: built("channel"), pitch: [-1, 1], reverb: -4 },
+    // A Skeleton's Memento Mori: a deep, low hum of shadow gathering and let go.
+    "attack.memento_mori": { files: "sfx/combat/memento_mori_*", fallback: built("channel"), pitch: [-6, -4], reverb: -3 },
     // A Shade's Wail, a ghost's scream heard all round it; and its Chill Touch, a cold breath and a frost.
     "attack.wail": { files: "sfx/combat/wail_*", fallback: built("wail"), pitch: [-1, 1], reverb: -4 },
     "attack.chill_touch": { files: "sfx/combat/chill_touch_*", fallback: built("chill"), pitch: [-1, 1], reverb: -8 },
@@ -284,7 +286,7 @@ function bladeImpacts(): Record<string, SoundEvent> {
 function effectTells(): Record<string, SoundEvent> {
   const tell = (e: EffectKind) => (e === "bleeding" ? "bleed" : e === "burning" ? "burn" : e === "stunned" ? "stun" : e === "guarded" || e === "taunting" || e === "hasted" ? "buff" : "debuff");
   const out: Record<string, SoundEvent> = { effect: { files: "sfx/combat/effect_*", fallback: built("debuff"), gainDb: -4 } };
-  const all: EffectKind[] = ["bleeding", "burning", "stunned", "guarded", "taunting", "slowed", "hasted", "fumbling", "exposed", "prone", "sundered", "reeling"];
+  const all: EffectKind[] = ["bleeding", "burning", "stunned", "guarded", "taunting", "slowed", "hasted", "fumbling", "exposed", "prone", "sundered", "reeling", "memento_mori"];
   for (const e of all) out[`effect.${e}`] = { files: `sfx/combat/effect_${e}_*`, fallback: built(tell(e)), gainDb: -4 };
   return out;
 }

@@ -1193,10 +1193,16 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
     return;
   }
   if (attack.burst) {
+    // A fight's blows are for those in it: a hero standing near who is not (their player away) is passed over.
+    const caught = state.units.filter((u) => u.side !== enemy.side && !u.down && !unseen(u) && inFight(state, u.id) && gap(enemy, u) <= attack.range && seesFor(state, enemy.side, ...meet(enemy, u)));
+    // One that does no harm (Memento Mori) is only what it leaves: each saves against that, not for half.
+    if (attack.harmless) {
+      for (const victim of caught) leave(victim, true);
+      return;
+    }
     const dice = rollShown(ctx.rng, attack.dice);
     const rolled = dice.total;
-    // A fight's blows are for those in it: a hero standing near who is not (their player away) is passed over.
-    for (const victim of state.units.filter((u) => u.side !== enemy.side && !u.down && !unseen(u) && inFight(state, u.id) && gap(enemy, u) <= ENEMY_BURST && seesFor(state, enemy.side, ...meet(enemy, u)))) {
+    for (const victim of caught) {
       const saved = saveRoll(ctx, victim, "agi", dc, attack.name).ok;
       damage(ctx, victim, saved ? Math.floor(rolled / 2) : rolled, { actor: enemy.id, what: attack.name, dice, halved: saved });
       if (!saved) leave(victim, false);

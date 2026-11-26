@@ -4,7 +4,7 @@
 import type { StatKey } from "@gantt-quest/core";
 
 /** What an ability or an enemy's attack can leave on whoever it lands on. A fight on the tiles has more conditions of its own (zone/types.ts). */
-export type EffectKind = "bleeding" | "burning" | "stunned" | "guarded" | "taunting" | "slowed" | "hasted" | "fumbling" | "exposed" | "prone" | "sundered" | "reeling";
+export type EffectKind = "bleeding" | "burning" | "stunned" | "guarded" | "taunting" | "slowed" | "hasted" | "fumbling" | "exposed" | "prone" | "sundered" | "reeling" | "memento_mori";
 
 export const EFFECT_INFO: Record<EffectKind, { name: string; blurb: string; color: string }> = {
   bleeding: { name: "Bleeding", blurb: "Loses 2 HP at the start of each turn.", color: "#f87171" },
@@ -18,6 +18,7 @@ export const EFFECT_INFO: Record<EffectKind, { name: string; blurb: string; colo
   exposed: { name: "Exposed", blurb: "Takes 3 more damage from every direct hit, for 2 of its turns.", color: "#facc15" },
   prone: { name: "Prone", blurb: "Knocked flat: standing up costs 1 AP.", color: "#cbd5e1" },
   sundered: { name: "Sundered", blurb: "Its armor is dented: 2 less Defence.", color: "#b0a48a" },
+  memento_mori: { name: "Memento Mori", blurb: "Each time it takes damage it starts Fumbling, unless it is Fumbling already.", color: "#c4b5fd" },
   reeling: { name: "Reeling", blurb: "Shaken by a heavy blow: as much less AP on its next turn as its number says.", color: "#c084fc" },
 };
 
@@ -444,7 +445,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   // The smugglers' dead, still guarding their camp: slow and steady, and hard to put down.
   skeleton: {
     kind: "skeleton", name: "Skeleton", hp: 22, defence: 11, move: 2, save: 0, init: 0, xp: 14,
-    abilities: ["rusted_cutlass", "bone_rattle", "shove"],
+    abilities: ["rusted_cutlass", "memento_mori", "shove"],
   },
   // A cave slime: very slow and very tough, and its acid leaves its prey exposed (taking more from every hit). The acid
   // burns and is spent: it leaves no poison lying about (enemyabilities.ts).

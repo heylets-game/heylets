@@ -29,9 +29,12 @@ export interface EnemyAbilityDef {
    * leaves are made against (8 + it, combat.ts enemyAct).
    */
   potency: number;
-  /** `single`: one hero, in reach (`range`). `burst`: every hero round the enemy (ENEMY_BURST), each saving for half. */
+  /**
+   * `single`: one hero, in reach (`range`). `burst`: every hero round the enemy, within `range` (ENEMY_BURST when not
+   * said), each saving for half; one that does no harm (`damage` 0) has them save against its `saveOr` instead.
+   */
   shape?: "single" | "burst";
-  /** Hexes it reaches: 1 (the default) is a blow by hand; more is a shot, and needs a clear line. */
+  /** Hexes it reaches: 1 (the default) is a blow by hand; more is a shot, and needs a clear line. For a burst, how far round it reaches. */
   range?: number;
   /**
    * A leap: `range` is how far it springs, not a shot. A hero beyond arm's reach (but in range, and in sight) it
@@ -173,7 +176,9 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   // comes to rest beyond. Whoever twists aside takes half and is not cut.
   fell_swoop: { id: "fell_swoop", name: "Fell Swoop", damage: 4, potency: 3, range: 4, dash: true, saveOr: { effect: "bleeding" }, cooldown: 2, weight: 3.5 },
   rusted_cutlass: { id: "rusted_cutlass", name: "Rusted Cutlass", damage: 7, potency: 4, weight: 2 },
-  bone_rattle: { id: "bone_rattle", name: "Bone Rattle", damage: 4, potency: 3, saveOr: { effect: "stunned", turns: 1 }, weight: 1 },
+  // A skeleton's reminder that all must die, to everyone beside it: whoever it gets to is shaken by every wound after
+  // (Memento Mori, engine.ts ON_HURT). No harm of its own: those beside it save against the condition, not for half.
+  memento_mori: { id: "memento_mori", name: "Memento Mori", damage: 0, potency: 3, shape: "burst", range: 1, saveOr: { effect: "memento_mori", turns: 4 }, cooldown: 4, weight: 3 },
   engulf: { id: "engulf", name: "Engulf", damage: 6, potency: 3, saveOr: { effect: "slowed", turns: 2 }, weight: 2 },
   // Acid eats into whoever it hits and is spent: it leaves no pool behind (that is poison's way).
   acid_splash: { id: "acid_splash", name: "Acid Splash", damage: 4, potency: 3, range: 3, saveOr: { effect: "exposed", turns: 2 }, weight: 2 },
