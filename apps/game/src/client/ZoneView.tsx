@@ -149,6 +149,7 @@ import { sounds } from "./audio/gameSounds";
 import { OptionsMenu } from "./OptionsMenu";
 import * as THREE from "three";
 import { SpellFx, WAVE_PACE } from "./render/SpellFx";
+import { SLOWING_FIELD } from "./render/signatureMoves";
 import { TacticsLayer, type Overlay } from "./render/TacticsLayer";
 import { spriteDataUrl } from "./render/sprites";
 import { WorldRenderer, hexToWorld, tileTop, type RenderState } from "./render/WorldRenderer";
@@ -995,6 +996,14 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           // Its second part (an Earthquake's heave) goes off from the middle of where its user stood when it was first
           // used: from the ground it cracked, not from wherever it is now.
           const centre = ev.again && ev.at && user ? span(user, ev.at).map((p) => point(p)).reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(span(user, ev.at).length) : undefined;
+          // A field raised round it (a Guardian's Slowing Field): once it has gone out, it stays round its user, following
+          // it, for as long as the picture shows it carrying the field.
+          const field = Object.values(ENEMY_ABILITIES).find((a) => a.name === ev.name)?.field;
+          if (field && !ev.again) {
+            const holder = ev.id;
+            const holding = () => !!shownNow.current?.units.find((u) => u.id === holder && u.hp > 0)?.conditions.some((c) => c.kind === "slowing_field");
+            timers.current.push(setTimeout(() => spells.current?.aura({ key: `field:${holder}`, follow: () => renderer.current?.unitFeet(holder) ?? null, holding }, CONDITION_INFO.slowing_field.color, SLOWING_FIELD.reach), 900));
+          }
           if (own === "burst" && view) return void view.burst(ev.id, ev.name, false, thenOn(() => {}), !!ev.again, centre);
           if (own === "at" && view && aim) return view.moveAt(ev.id, ev.name, aim, landing());
           if (own === "blow") return;
@@ -2163,6 +2172,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       const song = shantyOf(u);
       if (song) out.push({ hexes: zoneBlast(state.map, u.pos, shantyRadius(song)), color: CONDITION_INFO[song.kind].color, line: 0.6, dashed: true });
       for (const kind of ["beacon", "mending"] as const) if (u.conditions.some((c) => c.kind === kind)) out.push({ hexes: zoneBlast(state.map, u.pos, AURAS.range), color: CONDITION_INFO[kind].color, line: 0.6, dashed: true });
+      // A Slowing Field: as far as it reaches from any of its bearer's hexes.
+      const field = u.conditions.find((c) => c.kind === "slowing_field")?.amount;
+      if (field) out.push({ hexes: state.map.tiles.filter((t) => gapTo(u, t) <= field), color: CONDITION_INFO.slowing_field.color, line: 0.6, dashed: true });
     }
     if (!pick && courseOnly.length > 0) out.push({ hexes: courseOnly, color: "#ff4d4d", fill: 0.12, line: 0.7, dashed: true });
     // What there is still to search (for you): a gold ring round each, once no fight is on.

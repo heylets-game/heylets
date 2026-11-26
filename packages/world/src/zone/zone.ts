@@ -28,7 +28,7 @@ import { addStats, maxHpFor } from "../progression";
 import { makeRng, seedFromString } from "../rng";
 import { enemyTurn } from "./ai";
 import { pickBellGoer, placeBell } from "./bell";
-import { abilityArea, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, doCommon, drinkItem, enemyAct, isBlink, moveLeft, resolveAbility, throwItem, walk } from "./combat";
+import { abilityArea, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, doCommon, drinkItem, enemyAct, fieldSlows, isBlink, moveLeft, resolveAbility, throwItem, walk } from "./combat";
 import { checkStrike } from "./strikes";
 import { UNTIMED_KEEPS, countDown, dropShield, has, heal, regrow, removeCondition, tick, tickStacks, unseen, usesLeft, type Ctx } from "./engine";
 import { ALERT_RANGE, JOIN_RANGE, freeHexNear, generateZone } from "./gen";
@@ -510,6 +510,8 @@ function noticedBy(state: ZoneState, unit: Unit): string[] {
 
 /** After each step: has this unit walked into a fight, or brought one to somebody? True stops it where it is. */
 function onStep(ctx: Ctx, unit: Unit, flush: () => void): boolean {
+  // Into a Slowing Field: the rest of the way is slower.
+  fieldSlows(ctx, unit);
   if (unit.side !== "hero") {
     // An enemy closing in draws nearby heroes into the fight; it carries on.
     pullIn(ctx);
@@ -563,6 +565,8 @@ function beginTurn(ctx: Ctx, enc: Encounter, unit: Unit): boolean {
     ctx.events.push({ t: "skip", id: unit.id, kind: "stunned" });
     return false;
   }
+  // Its turn starting in a Slowing Field of the other side's: Slowed for it.
+  fieldSlows(ctx, unit);
   // What 1 AP of movement buys it.
   const base = strideOf(ctx.state, unit);
   // A Wind-god's Shanty: further, and no Slowing.

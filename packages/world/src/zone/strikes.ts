@@ -17,7 +17,7 @@ import type { Unit, ZoneState } from "./types";
 export type StrikeAim = "self" | "hex" | "unit";
 
 export const strikeAim = (attack: EnemyStrike): StrikeAim =>
-  attack.burst || attack.kit.rally || attack.kit.aftershock ? "self" : attack.kit.area || attack.kit.sweep ? "hex" : "unit";
+  attack.burst || attack.kit.rally || attack.kit.aftershock || attack.kit.field ? "self" : attack.kit.area || attack.kit.sweep ? "hex" : "unit";
 
 /** Why `enemy` cannot use `attack` on this aim from where it stands, in words, or null if it can. `anywhere`: range and line of sight are not asked. */
 export function checkStrike(state: ZoneState, enemy: Unit, attack: EnemyStrike, aim: { target?: Unit; at?: HexPos }, anywhere = false): string | null {
@@ -39,6 +39,7 @@ export function strikeHexes(state: ZoneState, enemy: Unit, attack: EnemyStrike, 
   if (attack.kit.rally) return alliesReached(state, enemy, enemy.pos, attack).map((u) => u.pos);
   // An Earthquake shakes the ground round all of a big one; a burst reaches out from any of its hexes.
   if (attack.kit.aftershock) return quakeHexes(state, span(enemy), ENEMY_BURST);
+  if (attack.kit.field) return quakeHexes(state, span(enemy), attack.kit.field.radius);
   if (strikeAim(attack) === "self") {
     const all = new Map(span(enemy).flatMap((p) => blast(state.map, p, ENEMY_BURST)).map((p) => [`${p.q},${p.r}`, p]));
     return [...all.values()].filter((p) => !covers(enemy, p));

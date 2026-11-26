@@ -224,7 +224,26 @@ const rally: Behaviour = {
   },
 };
 
-export const BEHAVIOURS = { strike, burst, shove, rally } satisfies Record<string, Behaviour>;
+/** What a Slowing Field is worth for each hero it would reach (behaviour `field`): about a blow, for keeping them close. */
+export const FIELD_WORTH = 6;
+
+/**
+ * A field round its user (a Slowing Field): worth FIELD_WORTH for each hero, in the fight and not Slowed already, within
+ * its reach of where it would be raised, so the more it would hold near it the likelier it is; nothing with none near.
+ * Heroes it would reach are worth walking toward.
+ */
+const fielded = (look: Look, from: HexPos, attack: EnemyStrike, targets: readonly Unit[]): Unit[] =>
+  targets.filter((h) => !has(h, "slowed") && gap(look.enemy, h, from) <= (attack.kit.field?.radius ?? 0));
+
+const field: Behaviour = {
+  reaches: (look, from, attack, targets) => fielded(look, from, attack, targets).length > 0,
+  value(look, from, attack, targets) {
+    const caught = fielded(look, from, attack, targets).length;
+    return caught > 0 ? { attack, target: null, worth: caught * FIELD_WORTH * (look.whim?.(attack, null) ?? 1) } : null;
+  },
+};
+
+export const BEHAVIOURS = { strike, burst, shove, rally, field } satisfies Record<string, Behaviour>;
 
 export type BehaviourId = keyof typeof BEHAVIOURS;
 

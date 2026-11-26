@@ -531,6 +531,7 @@ export const SAVE_STAT: Record<Condition, StatKey> = {
   tailwind: "agi",
   lucky: "dex",
   frenzied: "int_stat",
+  slowing_field: "vit",
 };
 
 const info = (kind: EffectKind, blurb: string) => ({ name: EFFECT_INFO[kind].name, color: EFFECT_INFO[kind].color, blurb });
@@ -567,6 +568,7 @@ export const CONDITION_INFO: Record<Condition, { name: string; blurb: string; co
   // Its stacks are the lucky rolls left: they do not run down with the turns, only with the rolls.
   lucky: { name: "Lucky", blurb: "A coin in the town well: each of its next rolls to hit, one for each coin, has advantage.", color: "#f6d365" },
   // Its stacks are the attacks it has left: they do not run down with the turns, only with the attacks (engine.ts SPURS).
+  slowing_field: { name: "Slowing Field", blurb: "Every foe within 2 hexes of it is Slowed: as their turn starts in it, or as they step into it.", color: "#7fe3ff" },
   frenzied: { name: "Frenzied", blurb: "Driven on by a howl: each of its next attacks, one for each stack, has advantage, and every one that draws blood leaves a stack of Bleeding.", color: "#e0322b" },
   guiding_light: { name: "Guiding Light", blurb: "Lit up by a star: every attack against it has advantage.", color: "#fff3a8" },
   north_star: { name: "North Star", blurb: "Every blow it lands sets the target Burning, one stack more if the blow would have set it Burning anyway.", color: "#ffd166" },
@@ -695,7 +697,7 @@ export function commonCostFor(unit: Pick<Unit, "kind" | "perks">, what: CommonAc
 // ---------- enemies ----------
 
 /** What an enemy's ability does besides its damage, when it lands. */
-export type EnemyAttackKit = Pick<EnemyAbilityDef, "surface" | "push" | "chills" | "splash" | "drain" | "area" | "sweep" | "onSave" | "rally"> & {
+export type EnemyAttackKit = Pick<EnemyAbilityDef, "surface" | "push" | "chills" | "splash" | "drain" | "area" | "sweep" | "onSave" | "rally" | "field"> & {
   /** Its second shaking (EnemyAbilityDef `aftershock`), its damage grown with level as the first's is. */
   aftershock?: { dice: Dice; saveOr?: Inflict };
 };
@@ -829,7 +831,7 @@ export function abilityStrikes(ids: readonly string[], level: number, more = 0):
         cost: a.cost ?? ACTION_AP,
         cooldown: a.cooldown ?? 0,
         kit: {
-          surface: a.surface, push: a.push, chills: a.chills, splash: a.splash, drain: a.drain, area: a.area, sweep: a.sweep, onSave: a.onSave, rally: a.rally,
+          surface: a.surface, push: a.push, chills: a.chills, splash: a.splash, drain: a.drain, area: a.area, sweep: a.sweep, onSave: a.onSave, rally: a.rally, field: a.field,
           ...(a.aftershock ? { aftershock: { dice: diceFor(scaled(a.aftershock.damage, a.scales?.damage ?? DEFAULT_SCALE, level) + edge), saveOr: a.aftershock.saveOr } } : {}),
         },
       },

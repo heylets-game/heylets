@@ -51,6 +51,12 @@ export interface EnemyAbilityDef {
    * itself) within `range` hexes of it is Frenzied for this many attacks. It does no harm, and is aimed at nobody.
    */
   rally?: { attacks: number };
+  /**
+   * A field round its user, not an attack (a Guardian's Slowing Field): for `rounds` of its turns, every one of the other
+   * side within `radius` hexes of it (of any of its hexes, for a big one) is Slowed, as their turn starts there or as
+   * they step in (combat.ts fieldSlows). It goes with its user. It does no harm, and is aimed at nobody.
+   */
+  field?: { rounds: number; radius: number };
   /** Left under the target when it lands. */
   surface?: { kind: SurfaceKind; rounds: number };
   /** Knocks the target back when it lands: `true` for a hex, or a number of hexes (it stops early at anything in the way). */
@@ -149,6 +155,9 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   // then on its next turn the whole of it heaves, throwing whoever is still on it off their feet. Most of its turn,
   // and it needs a few to gather itself for another.
   earthquake: { id: "earthquake", name: "Earthquake", damage: 7, potency: 3, shape: "burst", cost: 4, cooldown: 4, aftershock: { damage: 15, saveOr: { effect: "prone", turns: 1 } }, weight: 2 },
+  // A guardian's hum: the air round it thickens, and whoever comes near wades through it, too slow to get away from
+  // what it does next. It moves with it.
+  slowing_field: { id: "slowing_field", name: "Slowing Field", damage: 0, potency: 0, cost: 2, cooldown: 4, field: { rounds: 3, radius: 2 }, behaviour: "field", weight: 2 },
   chill_touch: { id: "chill_touch", name: "Chill Touch", damage: 5, potency: 3, saveOr: { effect: "slowed", turns: 2 }, chills: true, weight: 2 },
   wail: { id: "wail", name: "Wail", damage: 3, potency: 3, shape: "burst", weight: 1 },
   bat_bite: { id: "bat_bite", name: "Bite", damage: 4, potency: 4, saveOr: { effect: "bleeding" }, weight: 2 },

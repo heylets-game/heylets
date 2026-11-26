@@ -417,7 +417,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   // A guardian boss: slow and alone, but each blow lands like a wall, and the ground it stands on shakes itself apart.
   guardian: {
     kind: "guardian", name: "Guardian", hp: 51, defence: 12, move: 2, save: 3, init: -1, xp: 44, boss: true, size: 3,
-    abilities: ["stone_fist", "earthquake"],
+    abilities: ["stone_fist", "earthquake", "slowing_field"],
   },
   // The Haunted Caverns' dead. A shade is quick and weak, and its touch chills (slows) whoever it lays a hand on.
   shade: {
