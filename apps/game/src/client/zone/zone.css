@@ -66,6 +66,8 @@
 }
 .zone-cond { margin-right: 8px; font-weight: bold; }
 .zone-cond-time { font-size: 0.8em; font-weight: normal; opacity: 0.85; }
+/* Another unit on the same hex: set apart from the one above it. */
+.zone-tip-also { margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(255, 255, 255, 0.12); }
 .zone-cond-hint { font-size: 0.8em; white-space: nowrap; }
 /* No keys to hold on a phone or tablet. */
 @media (hover: none) { .zone-cond-hint { display: none; } }

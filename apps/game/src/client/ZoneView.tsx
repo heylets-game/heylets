@@ -3213,7 +3213,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
                 </div>
               ))}
               {under.side === "enemy" && <div className="muted">{under.abilities.map((id) => ENEMY_ABILITIES[id]?.name ?? id).join(", ")}</div>}
-              {alsoHere.map((u) => <div key={u.id}><span className="muted">Sharing the hex:</span> <strong>{u.name}</strong> <span className="muted">· {u.hp}/{u.maxHp} HP{u.down ? " · down" : ""}</span></div>)}
+              {alsoHere.map((u) => <div key={u.id} className="zone-tip-also"><span className="muted">Sharing the hex:</span> <strong>{u.name}</strong> <span className="muted">· {u.hp}/{u.maxHp} HP{u.down ? " · down" : ""}</span></div>)}
               {/* Where a shove would send them: over an edge, into a pit, or only back a hex. */}
               {/* One that stands on more than one hex: nothing moves it. */}
               {span(under).length > 1 && (shoveInto || shoveBlocked) && <div className="muted">Too heavy to shove, pull or knock back.</div>}
