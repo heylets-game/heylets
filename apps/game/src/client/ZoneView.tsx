@@ -100,6 +100,9 @@ import {
   FORCE_DC,
   unitAt,
   covers,
+  gapTo,
+  nearOf,
+  span,
   unopened,
   unlooted,
   lootIn,
@@ -2072,7 +2075,13 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   /** The hexes something of this range reaches from where you stand: further from above, when `high` (a shot or a spell). */
   const within = (range: number, sight: boolean, high = false) => (state && act ? state.map.tiles.filter((t) => hexDistance(t, act.pos) <= (high ? reachFrom(state.map, act.pos, t, range) : range) && hexDistance(t, act.pos) > 0 && (!sight || sees(state.map, act.pos, t))) : []);
   /** The hexes a hand reaches: beside you (and your own, for a friend who shares it: an enemy never does), where no cliff is between. */
-  const inArm = () => (state && act ? state.map.tiles.filter((t) => hexDistance(t, act.pos) <= 1 && strikes(state.map, act.pos, t) && (hexDistance(t, act.pos) > 0 || state.units.some((u) => u.id !== act.id && !u.down && sameHex(u.pos, t)))) : []);
+  const inArm = () => {
+    if (!state || !act) return [];
+    const near = state.map.tiles.filter((t) => hexDistance(t, act.pos) <= 1 && strikes(state.map, act.pos, t) && (hexDistance(t, act.pos) > 0 || state.units.some((u) => u.id !== act.id && !u.down && sameHex(u.pos, t))));
+    // Anyone big within reach is in it whole: all of its hexes are lit, not only the one beside you.
+    const more = state.units.filter((u) => !u.down && span(u).length > 1 && near.some((t) => covers(u, t))).flatMap((u) => span(u));
+    return [...near, ...more.filter((p) => !near.some((t) => sameHex(t, p)))];
+  };
   /**
    * Whoever a click on a hex is meant for, when more than one may be standing there. Aimed at an enemy (`foe`: one
    * still standing) or a friend: only one of that sort, the figure clicked (`clicked`) if it is one, else one standing
@@ -2088,6 +2097,11 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     const found = there.find((u) => !u.down && suits(u)) ?? there.find(suits);
     return found ?? (want === "any" ? unitOn(pos) : undefined);
   };
+  /** The hexes of whoever a click at `pos` would aim at (unitFor): all of one that stands on more than one, else just `pos`. */
+  const bodyOn = (pos: HexPos, want: "foe" | "friend" | "any"): HexPos[] => {
+    const u = unitFor(pos, want);
+    return u ? span(u) : [pos];
+  };
   /** What there is to search on a hex (a body, an open chest, the spoils), if anything. */
   const lootOn = (pos: HexPos | null): LootSpot | undefined => (pos && state ? state.loot?.find((s) => sameHex(s.pos, pos)) : undefined);
 
@@ -2100,7 +2114,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       if (state.groups[group].alerted) continue;
       const members = state.units.filter((u) => u.group === group && !u.down);
       if (members.length === 0) continue;
-      const seen = state.map.tiles.filter((t) => members.some((m) => hexDistance(m.pos, t) <= ALERT_RANGE && sees(state.map, m.pos, t)));
+      const seen = state.map.tiles.filter((t) => members.some((m) => gapTo(m, t) <= ALERT_RANGE && sees(state.map, nearOf(m, t), t)));
       out.push({ hexes: seen, color: "#ff3b3b", line: 0.7, march: true });
     }
     // A fight under way that the hero being played is out of: how near it they can come before it draws them in, in the
@@ -2111,20 +2125,22 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       const fled = !!fight.fled?.includes(act.id);
       const fighters = state.units.filter((u) => fight.order.includes(u.id) && !u.down && (!fled || u.side !== act.side));
       const range = fled ? FLEE_RANGE : JOIN_RANGE;
-      const near = state.map.tiles.filter((t) => fighters.some((f) => hexDistance(f.pos, t) <= range));
+      const near = state.map.tiles.filter((t) => fighters.some((f) => gapTo(f, t) <= range));
       if (near.length > 0) out.push({ hexes: near, color: "#ff3b3b", line: 0.7, march: true });
     }
     if (dev.tool?.tool === "paint" && hover) out.push({ hexes: dev.tool.wide ? zoneBlast(state.map, hover, 1) : [hover], color: dev.tool.surface ? SURFACE_INFO[dev.tool.surface].color : "#ffffff", fill: 0.35, line: 0.9 });
     if (dev.tool?.tool === "spawn" && hover) out.push({ hexes: [hover], color: "#ff3b3b", fill: 0.35, line: 0.9 });
     // The enemy the sandbox has the dev playing: ringed.
     const picked = foe;
-    if (picked) out.push({ hexes: [picked.pos], color: "#ffd84a", line: 1, march: true });
+    if (picked) out.push({ hexes: span(picked), color: "#ffd84a", line: 1, march: true });
     // The sandbox's enemy ability, armed: where it would land from here, orange if it can be used so, grey if not.
     const aiming = dev.tool?.tool === "strike" && picked ? unitStrike(z, picked, dev.tool.ability) : undefined;
     if (aiming && picked && hover) {
       const target = unitsAt(z, hover).find((u) => u.side !== picked.side && !u.down && !u.lost);
       const ok = !checkStrike(z, picked, aiming, { target, at: hover }, dev.anywhere);
-      out.push({ hexes: strikeHexes(z, picked, aiming, strikeAim(aiming) === "unit" ? target?.pos : hover), color: ok ? "#ff8a2a" : "#9a9a9a", fill: 0.3, line: 0.9 });
+      // At one of the other side: all of them, however many hexes they stand on.
+      const hexes = strikeAim(aiming) === "unit" ? (target ? span(target) : []) : strikeHexes(z, picked, aiming, hover);
+      out.push({ hexes, color: ok ? "#ff8a2a" : "#9a9a9a", fill: 0.3, line: 0.9 });
     }
     // How far each aura reaches (a shanty, a Paladin's Beacon or Healing Aura): a dashed outline of its colour round its
     // bearer (what is being aimed is drawn solid), and nothing over the ground inside, so allies can see where to stand to have it and where they would lose it.
@@ -2140,6 +2156,10 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       const left = (state.loot ?? []).filter((s) => (lootIn(s, selfId)?.length ?? 1) > 0);
       if (left.length > 0) out.push({ hexes: left.map((s) => s.pos), color: "#ffd23f", fill: 0.06, line: 0.75, dashed: true });
     }
+    // One big enough to stand on more than one hex (a Guardian), under the pointer: outlined whole, so it is plain that
+    // any of its hexes is it.
+    const hovered = hover ? unitFor(hover, "any") : undefined;
+    if (!pick && hovered && !hovered.down && span(hovered).length > 1) out.push({ hexes: span(hovered), color: hovered.side === act.side ? "#7dff9a" : "#ff6b6b", line: 0.9 });
     if (!pick) return out;
     if (pick.kind === "ability" && tacticOf(pick.id).blink) {
       // A blink: first who (an ally to take along, or the enemy to strike), then where to.
@@ -2148,13 +2168,13 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       const first = pick.first ? state.units.find((u) => u.id === pick.first) : undefined;
       if (!self && !first) {
         out.push({ hexes: inArm(), color: "#ffd23f", fill: 0.1, line: 0.8 });
-        if (hover && unitFor(hover, "foe")) out.push({ hexes: [hover], color: "#ff6b6b", fill: 0.3, line: 0.9 });
+        if (hover && unitFor(hover, "foe")) out.push({ hexes: bodyOn(hover, "foe"), color: "#ff6b6b", fill: 0.3, line: 0.9 });
         return out;
       }
       const aim = (at: HexPos) => ({ at, ...(first ? { target: first.id } : {}) });
       out.push({ hexes: within(tactic.blink!.range, false).filter((t) => !checkAbility(z, act, pick.id, aim(t))), color: "#a78bfa", fill: 0.14, line: 0.8 });
       if (self && !first) out.push({ hexes: state.units.filter((u) => u.side === "hero" && u.id !== act.id && hexDistance(u.pos, act.pos) === 1).map((u) => u.pos), color: "#7dff9a", fill: 0.22, line: 0.9 });
-      if (first) out.push({ hexes: [first.pos], color: self ? "#7dff9a" : "#ff6b6b", fill: 0.35, line: 0.9 });
+      if (first) out.push({ hexes: span(first), color: self ? "#7dff9a" : "#ff6b6b", fill: 0.35, line: 0.9 });
       if (hover && !checkAbility(z, act, pick.id, aim(hover))) {
         out.push({ hexes: [hover], color: "#a78bfa", fill: 0.4, line: 0.9 });
         const spot = self && first ? carrySpot(z, act, first, hover) : null;
@@ -2176,7 +2196,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       if (area.length > 0) out.push({ hexes: area, color: "#ff6b6b", fill: 0.3, line: 0.9 });
       // The hex under the pointer lights only when a click there would aim at someone (or a crate) it can be used on,
       // found as the click finds them (unitFor): never for a body, or for a friend under a blow.
-      else if (hover && (unitFor(hover, tactic.shape === "ally" ? "friend" : "foe") || (crateOn(hover) && (tactic.shape === "single" || tactic.shape === "chain")))) out.push({ hexes: [hover], color: tactic.shape === "ally" ? "#7dff9a" : "#ff6b6b", fill: 0.3, line: 0.9 });
+      else if (hover && (unitFor(hover, tactic.shape === "ally" ? "friend" : "foe") || (crateOn(hover) && (tactic.shape === "single" || tactic.shape === "chain")))) out.push({ hexes: bodyOn(hover, tactic.shape === "ally" ? "friend" : "foe"), color: tactic.shape === "ally" ? "#7dff9a" : "#ff6b6b", fill: 0.3, line: 0.9 });
     } else if (pick.kind === "item") {
       const def = THROWABLES[pick.item];
       const tint = def.surface ? SURFACE_INFO[def.surface.kind].color : "#7dff9a";
@@ -2203,6 +2223,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       if (hover) out.push({ hexes: [hover], color: blinks.some((t) => t.q === hover.q && t.r === hover.r) ? PHASE_COLOR : "#8fd3ff", fill: 0.35, line: 0.9 });
     } else {
       out.push({ hexes: inArm(), color: pick.what === "help" ? "#7dff9a" : "#ffd23f", fill: 0.12, line: 0.8 });
+      // Whoever a shove (or a hand up) would go to, under the pointer and in reach: all of them.
+      const to = hover ? unitFor(hover, pick.what === "help" ? "friend" : "foe") : undefined;
+      if (to && to.id !== act.id && inArm().some((t) => covers(to, t))) out.push({ hexes: span(to), color: pick.what === "help" ? "#7dff9a" : "#ff6b6b", fill: 0.3, line: 0.9 });
     }
     return out;
   }, [state, z, act, pick, hover, dev.tool, foe, dev.anywhere, courseOnly, fighting]);
