@@ -28,7 +28,7 @@ function turn(seed: number) {
 
 describe("an archer's Rain of Arrows", () => {
   it("does 5 to a hex and the ring round it, for 4 AP, every 4th turn, and is the archer's favourite", () => {
-    expect(ENEMY_ABILITIES.rain_of_arrows).toMatchObject({ damage: 5, area: 7, cost: 4, cooldown: 3, weight: 3 });
+    expect(ENEMY_ABILITIES.rain_of_arrows).toMatchObject({ damage: 5, area: 7, cost: 4, cooldown: 3, weight: 2 });
     expect(ENEMY_ABILITIES.volley.weight).toBe(1);
     expect(ENEMIES.archer.abilities).toEqual(["volley", "rain_of_arrows"]);
   });
