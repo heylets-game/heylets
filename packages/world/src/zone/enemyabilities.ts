@@ -159,7 +159,8 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   // what it does next. It moves with it.
   slowing_field: { id: "slowing_field", name: "Slowing Field", damage: 0, potency: 0, cost: 2, cooldown: 4, field: { rounds: 3, radius: 2 }, behaviour: "field", weight: 2 },
   chill_touch: { id: "chill_touch", name: "Chill Touch", damage: 5, potency: 3, saveOr: { effect: "slowed", turns: 2 }, chills: true, weight: 2 },
-  wail: { id: "wail", name: "Wail", damage: 3, potency: 3, shape: "burst", weight: 1 },
+  // A scream all round it: anyone it gets through to fumbles their next attack.
+  wail: { id: "wail", name: "Wail", damage: 3, potency: 3, shape: "burst", saveOr: { effect: "glitched", turns: 1 }, cooldown: 3, weight: 3 },
   bat_bite: { id: "bat_bite", name: "Bite", damage: 4, potency: 4, saveOr: { effect: "bleeding" }, weight: 2 },
   screech: { id: "screech", name: "Screech", damage: 2, potency: 3, shape: "burst", weight: 1 },
   rusted_cutlass: { id: "rusted_cutlass", name: "Rusted Cutlass", damage: 7, potency: 4, weight: 2 },

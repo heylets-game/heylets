@@ -419,7 +419,8 @@ export const ENEMIES: Record<string, EnemyDef> = {
     kind: "guardian", name: "Guardian", hp: 92, defence: 12, move: 2, save: 3, init: -1, xp: 44, boss: true, size: 3,
     abilities: ["stone_fist", "earthquake", "slowing_field"],
   },
-  // The Haunted Caverns' dead. A shade is quick and weak, and its touch chills (slows) whoever it lays a hand on.
+  // The Haunted Caverns' dead. A shade is quick and weak, its touch chills (slows) whoever it lays a hand on, and its
+  // wail leaves everyone round it fumbling their next attack.
   shade: {
     kind: "shade", name: "Shade", hp: 14, defence: 12, move: 3, save: 0, init: 1, xp: 12,
     abilities: ["chill_touch", "wail"],

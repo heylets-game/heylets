@@ -1316,7 +1316,172 @@ function slowingField(stage: MoveStage, { figure, crit, onImpact, alone, hitAt }
   stage.later(onImpact, wait + waveReaches(far, reach, life));
 }
 
+/** A ghost's cold: the pale blue of its frost, the near white of its wisps, and the deep blue under them. */
+const CHILL = "#9fd8ff";
+const WISP = "#e8f4ff";
+const CHILL_DEEP = "#4f7fbf";
+/** What Fumbling looks like (content.ts EFFECT_INFO): a Wail's rings behind the first, and what it leaves on a hero. */
+const FUMBLING = "#e879f9";
+/** A ghost's pale violet: the colour of its scream. */
+const WAIL_PALE = "#d9d0ff";
+
+/** Where a figure's middle and its head are, as it stands now: `share` of the way up it. */
+function upFigure(figure: Figure, share: number): THREE.Vector3 {
+  const box = new THREE.Box3().setFromObject(figure.root);
+  return figure.root.getWorldPosition(new THREE.Vector3()).setY(box.min.y + (box.max.y - box.min.y) * share);
+}
+
+/**
+ * Wisps curling out of `from` along a bent path, in two legs (the second turned `curl` off the first), so they swirl
+ * rather than fly straight: each leg a mote fading as it goes.
+ */
+function wisp(stage: MoveStage, from: THREE.Vector3, to: THREE.Vector3, curl: number, color: string, life: number, size: [number, number]) {
+  const mid = from.clone().lerp(to, 0.5);
+  const run = to.clone().sub(from);
+  // Bent off the straight line, across it and a little up.
+  mid.add(new THREE.Vector3(-run.z, 0, run.x).multiplyScalar(curl)).setY(mid.y + Math.abs(curl) * 0.6);
+  stage.spawnFx("mote", color, run.x < 0, { from, to: mid, life: life / 2, size, spin: 0, fade: false, onEnd: () => stage.spawnFx("mote", color, run.x < 0, { from: mid, to, life: life / 2, size: [size[1], size[1] * 0.4], spin: 0, fade: true }) });
+}
+
+/**
+ * A Shade's Chill Touch: it draws up and back, then surges in at the target, leaning in with its arms stretching out
+ * long to lay its cold hands on them (figures.ts GRASP). Pale wisps stream off it as it comes. Where its hands land:
+ * a cold flash with a deeper blue swelling behind it, three pale finger marks drawn down across the target, frost
+ * glinting off them and drifting down, a ring of frost spreading at their feet, and the warmth drawn out of them in
+ * wisps that curl back to the Shade. The target is jolted, and the blow is told as its hands land.
+ */
+function chillTouch(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const wait = figure.strike("grasp");
+  // Anything that does not float springs at the target, and its hands land as it does.
+  if (wait <= 0) stage.lunge();
+  const lands = Math.max(0, wait);
+  const flip = dir < 0;
+  const cold = crit ? GOLD : CHILL;
+  const pale = crit ? GOLD : WISP;
+  // Wisps streaming off it as it surges in, toward the target.
+  for (let s = 0; s < lands; s += 0.035) {
+    stage.later(() => {
+      const from = upFigure(figure, 0.45 + Math.random() * 0.3);
+      const to = from.clone().lerp(hitAt, 0.35 + Math.random() * 0.25).setY(from.y + (Math.random() - 0.3) * 0.5);
+      stage.spawnFx("mote", Math.random() < 0.5 ? pale : cold, flip, { from, to, life: 0.28, size: [0.35, 0.12], spin: 0, fade: true });
+    }, s);
+  }
+  stage.later(() => {
+    stage.spawnFx("burst", pale, false, { from: hitAt, to: hitAt, life: 0.22, size: [0.8, 2.4], spin: 0.4, fade: true });
+    stage.later(() => stage.spawnFx("burst", crit ? GOLD : CHILL_DEEP, true, { from: hitAt, to: hitAt, life: 0.4, size: [0.9, 2.6], spin: -0.4, fade: true }), 0.05);
+    // Three pale finger marks drawn down across them, one after another.
+    [-1, 0, 1].forEach((i, n) =>
+      stage.later(() => {
+        const top = offset(hitAt, i * 0.16 * dir, 0.32 - Math.abs(i) * 0.05, 0.02);
+        stage.spawnFx("streak", n === 1 ? pale : cold, flip, { from: top, to: offset(top, i * 0.04 * dir, -0.5, 0), life: 0.32, size: [0.25, 1.2], turn: Math.PI / 2 + i * 0.12, spin: 0, fade: true });
+      }, n * 0.03),
+    );
+    // Frost glinting off them, then drifting slowly down.
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2 + Math.random() * 0.4;
+      const to = offset(hitAt, Math.cos(a) * (0.4 + Math.random() * 0.3), Math.sin(a) * 0.4 - 0.25, 0.05);
+      stage.spawnFx("spark", i % 2 ? pale : cold, Math.cos(a) < 0, { from: hitAt, to, life: 0.55 + Math.random() * 0.25, size: [0.4, 0.15], spin: 2, fade: true });
+    }
+    // A ring of frost spreading over the ground at their feet.
+    const feet = figure.root.getWorldPosition(new THREE.Vector3());
+    const floor = hitAt.clone().setY(feet.y + 0.06);
+    stage.wave({ at: floor, radius: 1.3, life: 0.5, color: cold, width: 0.14 });
+    // The warmth drawn out of them, curling back to the Shade.
+    for (let k = 0; k < 6; k++) {
+      stage.later(() => {
+        const from = offset(hitAt, (Math.random() - 0.5) * 0.4, (Math.random() - 0.3) * 0.4, 0);
+        wisp(stage, from, upFigure(figure, 0.6), (k % 2 ? 1 : -1) * (0.15 + Math.random() * 0.15), k % 2 ? pale : cold, 0.6, [0.4, 0.2]);
+      }, 0.08 + k * 0.05);
+    }
+    stage.jolt();
+    stage.later(() => stage.jolt(), 0.09);
+    onImpact();
+  }, lands);
+}
+
+/** A Wail's rings: as far as they roll (past every hero two hexes off, ENEMY_BURST), how long each takes, and the seconds between them. */
+export const SHADE_WAIL = { radius: 3.9, life: 0.85, apart: 0.12, rings: 4 };
+
+/**
+ * A Shade's Wail: it sinks and huddles in on itself, drawing breath in wisps from all round, then flings itself up and
+ * back and screams, arms flung wide, swelling and trembling (figures.ts WAIL). A dark flash at its head; rings of the
+ * scream roll out over the ground one after another, pale then Fumbling's violet, and a wavering ring goes out level
+ * through the air at its middle too; sound lines burst from its head, three times, each a little turned; wisps swirl
+ * out all round it, curling as they go. Each hero is jolted as the first ring reaches them, a violet flash at their
+ * head and wisps circling it, and the blow on them is told then.
+ */
+function shadeWail(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alone }: MoveCtx) {
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const ground = feet.clone().setY(feet.y + 0.08);
+  const { radius, life, apart, rings } = SHADE_WAIL;
+  const pale = crit ? GOLD : WAIL_PALE;
+  const violet = crit ? GOLD : FUMBLING;
+  // Only the first plays the wail: by the time the others are told, it has already gone out.
+  const peak = echo ? 0 : Math.max(0, figure.strike("wail"));
+  if (!echo) {
+    // Drawing breath: wisps drawn in to it from all round as it huddles.
+    for (let s = 0; s < peak; s += 0.04) {
+      stage.later(() => {
+        const to = upFigure(figure, 0.7);
+        const a = Math.random() * Math.PI * 2;
+        const from = offset(to, Math.cos(a) * 1.8, -0.8 + Math.random() * 1.2, Math.sin(a) * 1.8);
+        stage.spawnFx("mote", Math.random() < 0.5 ? WISP : pale, Math.cos(a) < 0, { from, to, life: 0.3, size: [0.15, 0.35], spin: 0, fade: false });
+      }, s);
+    }
+    stage.later(() => {
+      const head = upFigure(figure, 0.82);
+      const middle = upFigure(figure, 0.45);
+      stage.spawnFx("burst", crit ? GOLD : "#2a1f3d", false, { from: head, to: head, life: 0.35, size: [0.8, 2.6], spin: 0.3, fade: true });
+      stage.spawnFx("burst", pale, true, { from: head, to: head, life: 0.3, size: [0.5, 1.8], spin: -0.5, fade: true });
+      for (let n = 0; n < rings; n++) {
+        stage.later(() => stage.wave({ at: ground, radius: radius * (1 - n * 0.06), life, color: n ? violet : pale, width: n ? 0.05 : 0.09 }), n * apart);
+      }
+      // A ring going out level through the air at its middle, and a fainter one after it a little higher.
+      stage.wave({ at: middle, radius: radius * 0.9, life: life * 1.1, color: pale, width: 0.04 });
+      stage.later(() => stage.wave({ at: offset(middle, 0, 0.35, 0), radius: radius * 0.8, life: life * 1.2, color: violet, width: 0.03 }), apart * 1.5);
+      // Sound lines bursting from its head every way, three times, each turned a little from the last.
+      for (const [n, again] of [0, 0.14, 0.28].entries()) {
+        stage.later(() => {
+          const at = upFigure(figure, 0.82);
+          for (let i = 0; i < 10; i++) {
+            const a = (i / 10) * Math.PI * 2 + n * 0.3;
+            const to = offset(at, Math.cos(a) * 1.5, Math.sin(a) * 1.0, 0);
+            stage.spawnFx("streak", i % 2 ? violet : pale, Math.cos(a) < 0, { from: at, to, life: 0.32, size: [0.6, 1.7], turn: a, spin: 0, fade: true });
+          }
+        }, again);
+      }
+      // Wisps swirling out all round it, curling as they go.
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2 + Math.random() * 0.3;
+        const far = radius * (0.45 + Math.random() * 0.3);
+        const from = offset(middle, Math.cos(a) * 0.4, Math.random() * 0.6, Math.sin(a) * 0.4);
+        const to = offset(ground, Math.cos(a) * far, 0.5 + Math.random() * 0.9, Math.sin(a) * far);
+        stage.later(() => wisp(stage, from, to, 0.25, i % 3 ? WISP : violet, 0.75 + Math.random() * 0.2, [0.45, 0.25]), Math.random() * 0.15);
+      }
+      stage.shake?.(0.04, 0.6);
+    }, peak);
+  }
+  if (alone) return stage.later(onImpact, peak);
+  // Whoever it reaches is caught as the first ring passes under them: a violet flash at their head and wisps round it.
+  const far = Math.hypot(hitAt.x - feet.x, hitAt.z - feet.z);
+  stage.later(() => {
+    const at = offset(hitAt, 0, 0.3, 0);
+    stage.spawnFx("burst", violet, false, { from: at, to: at, life: 0.3, size: [0.5, 1.6], spin: 0.5, fade: true });
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * Math.PI * 2;
+      const from = offset(at, Math.cos(a) * 0.4, 0.1, Math.sin(a) * 0.25);
+      const to = offset(at, Math.cos(a + Math.PI * 0.8) * 0.4, 0.25, Math.sin(a + Math.PI * 0.8) * 0.25);
+      wisp(stage, from, to, 0.5, k % 2 ? violet : WISP, 0.6, [0.35, 0.2]);
+    }
+    stage.jolt();
+    stage.later(() => stage.jolt(), 0.08);
+    onImpact();
+  }, peak + waveReaches(far, radius, life));
+}
+
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
+  "Chill Touch": { who: "shade", blurb: "Draws up and back, then surges in with its arms stretching out long, wisps streaming off it: a cold flash where its hands land, three pale finger marks drawn down the target, frost glinting and drifting down, a ring of frost at their feet, and wisps of their warmth curling back to it.", play: chillTouch },
+  Wail: { who: "shade", blurb: "Huddles in, drawing breath in wisps, then flings itself up and back and screams, arms wide, swelling and trembling: rings roll out over the ground two hexes all round, pale then violet, a ring goes out through the air, sound lines burst from its head and wisps swirl out every way; each hero is jolted as the first ring reaches them, with violet wisps circling their head.", play: shadeWail },
   "Slowing Field": { who: "guardian", blurb: "Opens its arms out wide, chest out and head lifted, and holds there trembling as its eyes and chest gem burn brighter and pulse, a halo pulsing bigger round the gem and little rays of light shooting off it, and motes of cyan light are drawn in to it; then lets go: a last burst of long rays, the glow flashes, three slow cyan rings roll out over the ground two hexes past it, and motes drift lazily up all over the field.", play: slowingField },
   "Stone Fist": { who: "guardian", blurb: "Heaves its fist up overhead and brings it straight down: a pale stone flash and a cyan glint, a pulse at the target's feet, shock lines and chips of stone driven on past them, and the view jolted.", play: stoneFist },
   Earthquake: {

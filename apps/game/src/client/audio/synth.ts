@@ -35,6 +35,8 @@ export type SynthCombat =
   | "howl"
   // A Guardian channelling its Slowing Field: a hum building up through it, and let go.
   | "channel"
+  // A Shade's Wail, a ghost's scream; and its Chill Touch, a cold breath and a frost settling.
+  | "wail" | "chill"
   // Words typed out in a conversation, a short soft note a letter.
   | "blip";
 
@@ -80,6 +82,8 @@ const COMBAT_LENGTH: Record<SynthCombat, number> = {
   alarm: 4.8,
   howl: 1.9,
   channel: 2.3,
+  wail: 1.6,
+  chill: 0.8,
   blip: 0.09,
 };
 
@@ -311,6 +315,25 @@ function combat(r: Render, sound: SynthCombat) {
       toneAt(r, t + go + 0.02, { type: "sine", freq: 784 * p, freqTo: 770 * p, decay: 1.1, gain: v * 0.08 });
       break;
     }
+    case "wail": {
+      // A ghost's scream: a breath drawn in, then a thin voice leaping up high and wavering there, a second a little
+      // out of tune with it so the two beat against each other, and both sliding down and away, under a cold hiss.
+      noiseAt(r, t, { filter: "bandpass", freq: 600 * p, freqTo: 1800 * p, q: 2, attack: 0.3, decay: 0.05, gain: v * 0.12 });
+      const go = t + 0.36;
+      for (const [k, gain] of [[1, 0.3], [1.06, 0.18], [0.5, 0.12]] as const) {
+        toneAt(r, go, { type: "sine", freq: 520 * p * k, freqTo: 980 * p * k, attack: 0.08, decay: 0.12, gain: v * gain });
+        for (let i = 0; i < 7; i++) toneAt(r, go + 0.18 + i * 0.08, { type: "triangle", freq: (980 + (i % 2 ? -45 : 45)) * p * k, attack: 0.03, decay: 0.09, gain: v * gain * 0.8, cut: 2600 });
+        toneAt(r, go + 0.74, { type: "sine", freq: 960 * p * k, freqTo: 260 * p * k, attack: 0.03, decay: 0.5, gain: v * gain * 0.9 });
+      }
+      noiseAt(r, go, { filter: "highpass", freq: 2200 * p, attack: 0.1, decay: 1.0, gain: v * 0.08 });
+      break;
+    }
+    case "chill":
+      // A cold breath rushing in, and a frost settling: a glassy shimmer of high notes falling away.
+      noiseAt(r, t, { filter: "bandpass", freq: 800 * p, freqTo: 2600 * p, q: 1.2, attack: 0.25, decay: 0.2, gain: v * 0.3 });
+      toneAt(r, t + 0.3, { type: "sine", freq: 340 * p, freqTo: 180 * p, decay: 0.3, gain: v * 0.3 });
+      for (const [i, f] of [1760, 2349, 1976, 2637].entries()) toneAt(r, t + 0.32 + i * 0.05, { type: "sine", freq: f * p * wobble(r, 0.01), decay: 0.35, gain: v * 0.06 });
+      break;
     case "boss_down":
       noiseAt(r, t, { filter: "lowpass", freq: 1800, freqTo: 120, q: 0.7, attack: 0.02, decay: 0.7, gain: v * 0.7 });
       toneAt(r, t, { type: "sawtooth", freq: 180, freqTo: 40, attack: 0.02, decay: 0.8, gain: v * 0.45, cut: 600 });

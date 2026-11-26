@@ -1580,7 +1580,7 @@ const GET_UP_HIPS = -1;
  * `n` counts the figure's actions, so two flinches in a row need not be the same.
  */
 interface Act {
-  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "slam" | "drop" | "pound" | "channel" | "claw" | "flurry" | "howl" | "rake" | "roar" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
+  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "slam" | "drop" | "pound" | "channel" | "claw" | "flurry" | "howl" | "rake" | "roar" | "grasp" | "wail" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
   t: number;
   n: number;
   /** A jump's seconds off the ground (see JUMP). */
@@ -1818,6 +1818,39 @@ export const ROAR = {
   head: [[0, 0], [0.26, -0.45], [0.32, -0.55], [0.8, -0.45], [1.05, 0]] as Keys,
   step: [[0, 0], [1.05, 0]] as Keys,
 };
+/**
+ * A ghost's grasp, for one that floats (Rig.spectral): it draws up and back, then surges in at the target, leaning
+ * into it, its arms reaching out level and stretching long (`stretch`, how much longer they are drawn) to lay its
+ * hands on them at `hit`; it hangs there a moment and drifts back to where it was by `over`. `step` is how far in it
+ * surges, in strides. A Shade's Chill Touch (signatureMoves.ts).
+ */
+export const GRASP = {
+  hit: 0.34,
+  over: 0.8,
+  step: [[0, 0], [0.18, -0.35], [0.34, 1.1], [0.48, 1.05], [0.8, 0]] as Keys,
+  rise: [[0, 0], [0.18, 1.3], [0.34, 0.4], [0.48, 0.5], [0.8, 0]] as Keys,
+  lean: [[0, 0], [0.18, -0.2], [0.34, 0.4], [0.48, 0.36], [0.8, 0]] as Keys,
+  arms: [[0, -0.25], [0.18, -0.75], [0.34, 0.12], [0.48, 0.1], [0.8, -0.25]] as Keys,
+  stretch: [[0, 1], [0.18, 0.85], [0.34, 1.6], [0.48, 1.55], [0.8, 1]] as Keys,
+};
+/**
+ * A ghost's wail, for one that floats (Rig.spectral): it sinks and huddles in on itself, arms drawn across its front,
+ * then flings itself up and back at `peak`, head thrown back and arms flung up and wide, swelling as it screams and
+ * trembling as it holds it (`shake`), and settles back by `over`. A Shade's Wail (signatureMoves.ts).
+ */
+export const WAIL = {
+  peak: 0.38,
+  over: 1.35,
+  rise: [[0, 0], [0.28, -0.8], [0.38, 2.6], [1.0, 2.3], [1.35, 0]] as Keys,
+  lean: [[0, 0], [0.28, 0.28], [0.38, -0.5], [1.0, -0.42], [1.35, 0]] as Keys,
+  lift: [[0, -0.25], [0.28, 0.25], [0.38, -1.25], [1.0, -1.15], [1.35, -0.25]] as Keys,
+  wide: [[0, 0], [0.28, -0.7], [0.38, 0.85], [1.0, 0.8], [1.35, 0]] as Keys,
+  swell: [[0, 1], [0.28, 0.92], [0.38, 1.1], [1.0, 1.06], [1.35, 1]] as Keys,
+  shake: [[0, 0], [0.36, 0], [0.42, 1], [0.95, 1], [1.1, 0]] as Keys,
+};
+/** The moves a ghost (Rig.spectral) plays as animations of its own. */
+const SPECTRAL_ACTS = new Set<Act["kind"]>(["grasp", "wail"]);
+
 /** The blows a beast with claws (Rig.claws) plays as animations of its own. */
 const CLAW_ACTS = new Set<Act["kind"]>(["claw", "flurry", "rake", "roar"]);
 
@@ -2437,7 +2470,7 @@ const RECORDER_LENGTH = 6.4;
 const HAMMER = { hit: 0.4, over: 0.86, up: [[0, 0.25], [0.3, 1], [0.4, 0], [0.48, 0.18], [0.86, 0.25]] as Keys };
 const STIR = { over: 30, turns: 25 };
 /** How long each kind of action lasts. */
-const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, slam: SLAM.over, drop: SEAT_DROP.over, pound: POUND.over, channel: CHANNEL.over, claw: CLAW.over, flurry: FLURRY.over, howl: HOWL.over, rake: RAKE.over, roar: ROAR.over, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
+const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, slam: SLAM.over, drop: SEAT_DROP.over, pound: POUND.over, channel: CHANNEL.over, claw: CLAW.over, flurry: FLURRY.over, howl: HOWL.over, rake: RAKE.over, roar: ROAR.over, grasp: GRASP.over, wail: WAIL.over, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
 /** When each kind of blow lands. */
 const ACT_HIT = { strike: SWING.hit, stab: THRUST.hit, slices: SLICES.hit, slam: SLAM.hit, pounce: POUNCE.hit, heavy: SWEEP.hit, twin: TWIN.hit };
 /**
@@ -2473,6 +2506,8 @@ interface Rig {
   claws?: boolean;
   /** A beast that howls (see HOWL, Figure.howl): it plays that as an animation of its own. */
   howls?: boolean;
+  /** A ghost: it plays its grasp and its wail (see GRASP, WAIL) as animations of its own, and is leant into the rest. */
+  spectral?: boolean;
   /** Its ordinary strike, where what it carries does not cut (see LIGHT): a leaping stab, or a straight thrust. */
   light?: "pounce" | "stab";
   /** It carries an instrument, and plays it (see Figure.play). */
@@ -9629,16 +9664,47 @@ function ghost(top: THREE.Group, pale = "#dfe8f2", shade = "#a7b6cc", eye = "#24
     return arm;
   });
   const animate = (a: Anim) => {
+    // A wail swells it and a grasp stretches its arms: back to size, unless one is under way.
+    body.joint.scale.setScalar(1);
+    for (const arm of arms) arm.joint.scale.set(1, 1, 1);
     if (a.lying) {
       top.rotation.set(-HALF_PI, 0, 0);
       top.position.set(0, 4.2, 10);
       return;
     }
+    const hover = Math.sin(a.t * 1.8) * 0.7 + 0.7;
+    const drift = (i: number) => Math.sin(a.t * 1.3 + i * 2) * 0.15;
+    if (a.act?.kind === "grasp") {
+      // Drawn up and back, then surged in at the target, leaning into it with its arms out level, stretched long.
+      const t = a.act.t;
+      top.rotation.set(along(GRASP.lean, t), 0, 0);
+      top.position.set(0, hover + along(GRASP.rise, t), along(GRASP.step, t) * STRIDE * 0.5 * a.scale);
+      const stretch = along(GRASP.stretch, t);
+      arms.forEach((arm, i) => {
+        arm.joint.rotation.set(along(GRASP.arms, t) + drift(i) * 0.3, 0, 0);
+        arm.joint.scale.set(1, 1, stretch);
+      });
+      return;
+    }
+    if (a.act?.kind === "wail") {
+      // Huddled in, then flung up and back, arms up and wide, swelling and trembling as it screams.
+      const t = a.act.t;
+      const shake = along(WAIL.shake, t);
+      const tremble = (k: number) => shake * Math.sin(t * 61 + k) * 0.05;
+      top.rotation.set(along(WAIL.lean, t) + tremble(0), 0, tremble(1.7));
+      top.position.set(tremble(3) * 6, hover + along(WAIL.rise, t), 0);
+      body.joint.scale.setScalar(along(WAIL.swell, t));
+      arms.forEach((arm, i) => {
+        const s = i === 0 ? -1 : 1;
+        arm.joint.rotation.set(along(WAIL.lift, t) + tremble(i * 2.3) * 2, s * along(WAIL.wide, t), 0);
+      });
+      return;
+    }
     top.rotation.set(a.strike * 0.35, 0, 0);
-    top.position.set(0, Math.sin(a.t * 1.8) * 0.7 + 0.7, 0);
-    arms.forEach((arm, i) => arm.joint.rotation.set(-0.25 + Math.sin(a.t * 1.3 + i * 2) * 0.15 - a.strike * 0.6, 0, 0));
+    top.position.set(0, hover, 0);
+    arms.forEach((arm, i) => arm.joint.rotation.set(-0.25 + drift(i) - a.strike * 0.6, 0, 0));
   };
-  return { parts, animate, clean: true };
+  return { parts, animate, clean: true, spectral: true };
 }
 
 /** A cave bat, wings spread, hanging in the air: small, dark and red-eyed. */
@@ -10524,12 +10590,14 @@ export interface Figure {
    * FLURRY), the first blow landing when this says and the rest at FLURRY_BLOWS. "rake" is such a beast sweeping a
    * forepaw wide and flat across everything before it (see RAKE); for anything else it is "light". "roar" is such a
    * beast rearing right up and bellowing, head thrown back (see ROAR), and returns the seconds until the roar; anything
-   * else does nothing and returns 0. "pound" is both fists heaved up overhead and driven down into the ground before
+   * else does nothing and returns 0. "grasp" is a ghost surging in with its arms stretched out to lay its hands on the
+   * target (see GRASP); for anything else it is "light". "wail" is a ghost flinging itself up and back to scream (see
+   * WAIL), and returns the seconds until the scream; anything else does nothing and returns 0. "pound" is both fists heaved up overhead and driven down into the ground before
    * its feet (see POUND), for a person or a giant; a creature does nothing and it returns 0. A person, a giant or a skeleton (or a bear clawing) winds up and steps in first, and this
    * returns the seconds until the blow lands, for whatever it hits to wait; a creature lunges at once, as it always
    * did, and this returns 0.
    */
-  strike(how?: "light" | "stab" | "heavy" | "slices" | "slam" | "drop" | "pound" | "channel" | "claw" | "flurry" | "rake" | "roar"): number;
+  strike(how?: "light" | "stab" | "heavy" | "slices" | "slam" | "drop" | "pound" | "channel" | "claw" | "flurry" | "rake" | "roar" | "grasp" | "wail"): number;
   /**
    * How bright what glows on it is (eyes, gems, lamps), as a share of its own: 1 as made, more to flare it up (a
    * Guardian channelling). Greyed when down all the same.
@@ -10773,7 +10841,7 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
     const want = p.walking ? Math.sin(p.stride * 3.6) : 0;
     swing += (want - swing) * Math.min(1, dt * 20);
     const rowing = p.rowing !== undefined && !!rig.hands && !p.lying;
-    const anim: Anim = { t: p.time, swing, breath: Math.sin(p.time * 2.2 + beat), strike: Math.min(1, Math.abs(p.lean) * 2), act: action && (rig.acts || (rig.claws && CLAW_ACTS.has(action.kind)) || (rig.howls && action.kind === "howl")) ? { kind: action.kind, t: action.kind === "cast" ? since / pace : since, n: action.n, air: action.air } : null, scale: 1 / scaler.scale.x, lying: p.lying, sitting: rowing ? 1 : typeof p.sitting === "number" ? Math.max(0, Math.min(1, p.sitting)) : p.sitting ? 1 : 0, floor: rowing || p.lying ? 0 : Math.max(0, Math.min(1, p.floor ?? 0)), oars: rowing ? Math.max(0, Math.min(1, p.rowing!)) : -1, getUp: null };
+    const anim: Anim = { t: p.time, swing, breath: Math.sin(p.time * 2.2 + beat), strike: Math.min(1, Math.abs(p.lean) * 2), act: action && (rig.acts || (rig.claws && CLAW_ACTS.has(action.kind)) || (rig.howls && action.kind === "howl") || (rig.spectral && SPECTRAL_ACTS.has(action.kind))) ? { kind: action.kind, t: action.kind === "cast" ? since / pace : since, n: action.n, air: action.air } : null, scale: 1 / scaler.scale.x, lying: p.lying, sitting: rowing ? 1 : typeof p.sitting === "number" ? Math.max(0, Math.min(1, p.sitting)) : p.sitting ? 1 : 0, floor: rowing || p.lying ? 0 : Math.max(0, Math.min(1, p.floor ?? 0)), oars: rowing ? Math.max(0, Math.min(1, p.rowing!)) : -1, getUp: null };
     // A rig with no animations of its own is leant into a blow, and a little into a hit, easing off as it always has.
     if (action && !rig.acts && !anim.act) anim.strike = Math.max(anim.strike, Math.min(1, (action.kind === "hit" ? 0.5 : 1.8) * Math.exp(-8 * since)));
     if (sling) stow(sling, p.walking, Math.max(anim.strike, anim.act && anim.act.kind !== "hit" ? 1 : 0), dt);
@@ -10896,6 +10964,12 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
       }
       // Nothing to rear up and roar with: it does nothing.
       if (how === "roar") return 0;
+      if ((how === "grasp" || how === "wail") && rig.spectral) {
+        asked = how;
+        return how === "grasp" ? GRASP.hit : WAIL.peak;
+      }
+      if (how === "wail") return 0;
+      if (how === "grasp") how = "light";
       if (how === "drop") {
         if (!rig.acts) return 0;
         asked = "drop";
