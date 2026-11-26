@@ -57,32 +57,23 @@ export interface SignatureMove {
   play(stage: MoveStage, ctx: MoveCtx): void;
 }
 
-const CHEAP_SHOT_RED = "#e0313f";
-
 /**
  * Two flat side slashes, one each way: a forehand across the front from the right, carried straight on into a
- * backhand from the left (figures.ts SLICES). Each leaves a red swipe lying flat across the target, the second a
- * little below the first and swept the other way. The blow is told when the second lands.
+ * backhand from the left (figures.ts SLICES). The sword leaves a red trail as it goes (figures.ts SWOOSH_TINT); the
+ * target is jolted by each cut, and the blow is told when the second lands.
  */
-function cheapShot(stage: MoveStage, { figure, hitAt, dir, perfect, onImpact }: MoveCtx) {
-  const cut = (second: boolean) => {
-    // The swipe is drawn as a quarter circle bowed up and to one side; turned an eighth, it lies flat, an arch.
-    const flip = second ? dir > 0 : dir < 0;
-    const at = hitAt.clone().setY(hitAt.y + (second ? -0.1 : 0.12));
-    stage.spawnFx("slash", perfect ? "#ffd23f" : CHEAP_SHOT_RED, flip, { from: at, to: at, life: 0.24, size: [1.4, 2.3], turn: flip ? -Math.PI / 4 : Math.PI / 4, spin: (flip ? 1 : -1) * 0.5, fade: true });
-    stage.jolt();
-  };
+function cheapShot(stage: MoveStage, { figure, onImpact }: MoveCtx) {
   const first = figure.strike("slices");
   // A creature has no swing of its own: it springs at the target, and the two cuts land as it does.
   if (first <= 0) stage.lunge();
-  stage.later(() => cut(false), first);
+  stage.later(() => stage.jolt(), first);
   stage.later(() => {
     stage.sound();
-    cut(true);
+    stage.jolt();
     onImpact();
   }, first + (first > 0 ? SLICES_APART : 0.2));
 }
 
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
-  "Cheap Shot": { who: "bandit", blurb: "Two quick side slashes, a forehand then a backhand, each leaving a flat red swipe across the target.", play: cheapShot },
+  "Cheap Shot": { who: "bandit", blurb: "Two quick side slashes, a forehand then a backhand, the sword leaving a red trail.", play: cheapShot },
 };

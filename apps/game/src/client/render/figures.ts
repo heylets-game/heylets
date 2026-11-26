@@ -2011,7 +2011,12 @@ function makeSmoke(big: number) {
  * The swoosh behind a swung weapon: how long it lingers, how fast the weapon's tip must be going (in the figure's
  * own units a second) to leave one at all and to leave it at full strength, and the most of it kept.
  */
-const SWOOSH = { life: 0.13, slow: 45, fast: 110, most: 64, bright: 0.55, inner: 0.5, arc: 0.12 };
+const SWOOSH = { life: 0.13, slow: 45, fast: 110, most: 64, bright: 0.55, inner: 0.5, arc: 0.12, color: "#f4f8ff" };
+/**
+ * Blows whose swoosh is a colour of its own, not the usual pale light, and how strong it is at its brightest (the
+ * usual is SWOOSH.bright): a Bandit's Cheap Shot (SLICES) leaves a thick red one.
+ */
+const SWOOSH_TINT: Partial<Record<Act["kind"], { color: string; bright: number }>> = { slices: { color: "#e0313f", bright: 0.85 } };
 
 /**
  * A swoosh: a ribbon of light left in the air where a swung weapon has just been, between where its tip was and
@@ -2030,7 +2035,7 @@ function makeSwoosh() {
   const index: number[] = [];
   for (let i = 0; i < n - 1; i++) index.push(2 * i, 2 * i + 1, 2 * i + 2, 2 * i + 1, 2 * i + 3, 2 * i + 2);
   geometry.setIndex(index);
-  const material = new THREE.MeshBasicMaterial({ color: "#f4f8ff", vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  const material = new THREE.MeshBasicMaterial({ color: SWOOSH.color, vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.frustumCulled = false;
   mesh.visible = false;
@@ -2039,8 +2044,14 @@ function makeSwoosh() {
   const was = { hand: new THREE.Vector3(), tip: new THREE.Vector3(), a: 0 };
   const arm = { from: new THREE.Vector3(), to: new THREE.Vector3(), at: new THREE.Vector3(), hand: new THREE.Vector3() };
   let seen = -Infinity;
+  let bright = SWOOSH.bright;
   return {
     mesh,
+    /** The colour it is drawn in from now on, and how strong at its brightest. */
+    tint(color: string, strong: number) {
+      material.color.set(color);
+      bright = strong;
+    },
     hide() {
       trail.length = 0;
       mesh.visible = false;
@@ -2078,7 +2089,7 @@ function makeSwoosh() {
       trail.forEach((s, i) => {
         s.tip.toArray(positions, i * 6);
         s.mid.toArray(positions, i * 6 + 3);
-        colors[i * 8 + 3] = SWOOSH.bright * s.a * (1 - (t - s.t) / SWOOSH.life);
+        colors[i * 8 + 3] = bright * s.a * (1 - (t - s.t) / SWOOSH.life);
         colors[i * 8 + 7] = 0;
       });
       geometry.setDrawRange(0, (trail.length - 1) * 6);
@@ -2512,7 +2523,10 @@ function biped(top: THREE.Group, parts: Part[], drawnElbow = ELBOW) {
         swung.push({ hold: held.joint, tipAt: new THREE.Vector3(0, far, 0), handAt: new THREE.Vector3(), tip: new THREE.Vector3(), hand: new THREE.Vector3(), swoosh });
       }
     }
+    // Each blow leaves its own colour, kept as it fades after the blow is done.
+    const tint = striking ? (SWOOSH_TINT[a.act!.kind] ?? { color: SWOOSH.color, bright: SWOOSH.bright }) : null;
     for (const s of swung) {
+      if (tint) s.swoosh.tint(tint.color, tint.bright);
       if (a.lying || !top.parent) s.swoosh.hide();
       else s.swoosh.track(a.t, placeOf(s.hold, s.handAt, s.hand, top.parent), placeOf(s.hold, s.tipAt, s.tip, top.parent), striking);
     }
