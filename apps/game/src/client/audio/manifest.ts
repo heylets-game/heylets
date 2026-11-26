@@ -79,6 +79,10 @@ export const AUDIO: AudioManifest = {
     // A Shade's Wail, a ghost's scream heard all round it; and its Chill Touch, a cold breath and a frost.
     "attack.wail": { files: "sfx/combat/wail_*", fallback: built("wail"), pitch: [-1, 1], reverb: -4 },
     "attack.chill_touch": { files: "sfx/combat/chill_touch_*", fallback: built("chill"), pitch: [-1, 1], reverb: -8 },
+    // A Haunt's Grave Grasp (a deeper cold breath), its Ice Spear (ice forming), and its Ghastly Fetter (a chain's clatter).
+    "attack.grave_grasp": { files: "sfx/combat/grave_grasp_*", fallback: built("chill"), pitch: [-3, -2], reverb: -6 },
+    "attack.ice_spear": { files: "sfx/combat/ice_spear_*", fallback: built("ice"), pitch: [-1, 1], reverb: -8 },
+    "attack.ghastly_fetter": { files: "sfx/combat/ghastly_fetter_*", fallback: built("rattle"), pitch: [1, 2], reverb: -6 },
     // A blow landing: a blunt thump by hand, unless it cuts or bites (blade abilities, below).
     impact: { files: "sfx/combat/hit_*", fallback: built("blunt"), pitch: [-2, 2], volume: [-2, 0], reverb: -8 },
     "impact.ranged": { files: "sfx/combat/arrow_hit_*", fallback: built("arrow_hit"), pitch: [-2, 2], reverb: -8 },

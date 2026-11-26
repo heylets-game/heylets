@@ -139,7 +139,8 @@ describe("the kit", () => {
       expect(ENEMY_KIT[kind], kind).toBeDefined();
       expect(ENEMIES[kind].abilities.length, kind).toBeGreaterThan(0);
       for (const id of ENEMIES[kind].abilities) expect(ENEMY_ABILITIES[id], `${kind}: ${id}`).toBeDefined();
-      expect(enemyStrikes(kind, 1).length).toBe(ENEMIES[kind].abilities.length);
+      // All but the passive ones (an aura), which are had, never used.
+      expect(enemyStrikes(kind, 1).length).toBe(ENEMIES[kind].abilities.filter((id) => !ENEMY_ABILITIES[id].aura).length);
     }
   });
 
@@ -171,6 +172,11 @@ describe("the kit", () => {
     for (const [id, a] of Object.entries(ENEMY_ABILITIES)) {
       expect(a.id, id).toBe(id);
       expect(a.name.length, id).toBeGreaterThan(0);
+      // A passive one (an aura) is never used: there is nothing to strike with.
+      if (a.aura) {
+        expect(abilityStrikes([id], 1)).toHaveLength(0);
+        continue;
+      }
       expect(abilityStrikes([id], 1)).toHaveLength(1);
       // Judged by a behaviour there is.
       expect(BEHAVIOURS[abilityStrikes([id], 1)[0].behaviour], id).toBeDefined();
@@ -1341,13 +1347,15 @@ describe("the enemy's turn", () => {
     expect(unit(state, foe).conditions.some((c) => c.kind === "prone")).toBe(false);
   });
 
-  it("starts a Reeling unit's next turn with 2 less AP, says so, and then it is spent", () => {
+  it("starts a Reeling unit's next turn with 2 less AP, says so, and it runs down with the turn", () => {
     const apNext = (reeling: boolean) => {
       let { state } = duel("dummy", "qa_paladin", at(5, 6), at(9, 6));
+      // Two turns of it, this one (ending now) and the next.
       if (reeling) unit(state, "ann").conditions.push({ kind: "reeling", rounds: 2 });
       const events: ZoneEvent[] = [];
       state = nextTurn(state, events);
-      expect(unit(state, "ann").conditions.some((c) => c.kind === "reeling")).toBe(false);
+      // Its last turn: it goes as this turn ends, as any condition does.
+      expect(unit(state, "ann").conditions.find((c) => c.kind === "reeling")?.rounds ?? 0).toBe(reeling ? 1 : 0);
       expect(events.filter((e) => e.t === "reeled")).toEqual(reeling ? [{ t: "reeled", id: "ann", ap: REELING_AP }] : []);
       return state.encounter!.budgets.ann.ap;
     };

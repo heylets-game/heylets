@@ -7,6 +7,7 @@ import { tileAt } from "../map";
 import type { Rng } from "../rng";
 import { elevOf, gap, gapTo, inFight, meet, nearOf, perkOf, span } from "./geometry";
 import { ABILITIES, EFFECT_TICK, STACK_TURNS, SUNDERED_DEFENCE, isSpent, isStacking, type Inflict, type SpentEffect, type StackingEffect } from "../content";
+import { ENEMY_ABILITIES } from "./enemyabilities";
 import { AQUEOUS, AURAS, CONDITION_INFO, CORAL_ARMOR, ENEMY_KIT, FORTIFY, SHIELD_SET_ASIDE, enemyDefence, enemySave, healDice } from "./kit";
 import { inDark } from "./light";
 import { d20, heroDefence, mod, netAdvantage, rollShown, statOf } from "./rules";
@@ -184,8 +185,23 @@ export function giveAway(ctx: Ctx, unit: Unit): void {
   ctx.events.push({ t: "seen", id: unit.id });
 }
 
+/**
+ * The name of a passive aura (EnemyAbilityDef `aura`) that gives `unit` disadvantage on its saves where it stands (a
+ * Haunt's Terror Aura): one had by any of the other side in the fight, standing, within its radius. Null: none reaches it.
+ */
+export function dreadOver(state: ZoneState, unit: Unit): string | null {
+  for (const u of state.units) {
+    if (u.side === unit.side || u.down || !inFight(state, u.id)) continue;
+    for (const id of u.abilities) {
+      const def = ENEMY_ABILITIES[id];
+      if (def?.aura?.saves === "disadvantage" && gap(u, unit) <= def.aura.radius) return def.name;
+    }
+  }
+  return null;
+}
+
 /** The conditions that count as wounds, for abilities that grow with them. */
-export const DEBUFFS: readonly Condition[] = ["bleeding", "burning", "stunned", "slowed", "fumbling", "exposed", "poisoned", "prone", "sundered", "reeling", "memento_mori"];
+export const DEBUFFS: readonly Condition[] = ["bleeding", "burning", "stunned", "slowed", "fumbling", "exposed", "poisoned", "prone", "sundered", "reeling", "memento_mori", "fettered"];
 
 /** Fortify: one of the side that raised a wall, standing beside it, is the steadier for it. */
 export const wallDefence = (state: Pick<ZoneState, "weather">, unit: Unit): number =>
@@ -517,7 +533,9 @@ export const UNTIMED: ReadonlySet<string> = new Set(["lucky", "bolstered", "fren
 
 /** Roll a save against a difficulty and say so. */
 export function saveRoll(ctx: Ctx, unit: Unit, stat: StatKey, vs: number, label: string, disadvantage = false): Roll {
-  const roll = d20(ctx.rng, { kind: "save", id: unit.id, label, bonus: saveBonus(unit, stat), vs, adv: disadvantage ? -1 : 0 });
+  // Within a Terror Aura of the other side's, every save is made with disadvantage.
+  const worse = disadvantage || !!dreadOver(ctx.state, unit);
+  const roll = d20(ctx.rng, { kind: "save", id: unit.id, label, bonus: saveBonus(unit, stat), vs, adv: worse ? -1 : 0 });
   ctx.events.push({ t: "roll", roll });
   return roll;
 }

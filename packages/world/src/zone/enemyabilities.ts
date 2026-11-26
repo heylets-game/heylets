@@ -82,6 +82,30 @@ export interface EnemyAbilityDef {
    */
   sweep?: number;
   /**
+   * A cone this many rows long, reaching out from its user toward the hex it is aimed at (combat.ts coneHexes: one hex,
+   * then two beyond it, then three): no roll to hit, but everyone in it makes an Agility save, taking half on a success
+   * and suffering `saveOr` on a failure.
+   */
+  cone?: number;
+  /**
+   * A straight line this many hexes long, from its user toward the hex it is aimed at (geometry.ts lineFrom: it stops at
+   * rock and the map's edge, and goes on through whoever is on it): no roll to hit, but everyone on it makes an Agility
+   * save, taking half on a success and suffering `saveOr` on a failure.
+   */
+  line?: number;
+  /**
+   * Not something it does but something it is (a Haunt's Terror Aura): every one of the other side within `radius` hexes
+   * of it, while it stands in a fight, makes every save with disadvantage (engine.ts saveRoll). It is never used, takes no
+   * turn and no AP, and nothing else of the ability counts.
+   */
+  aura?: { radius: number; saves: "disadvantage" };
+  /**
+   * Fetters whoever fails to save against it (a Haunt's Ghastly Fetter): for `turns` of their turns they cannot go further
+   * than `reach` hexes, by their own doing, from where they stood when it first took hold of them (geometry.ts
+   * fetterBars). Fettered again while it holds, the old spot holds and it lasts the longer.
+   */
+  tether?: { reach: number; turns: number };
+  /**
    * A dash: its user throws itself straight at the hex it is aimed at, up to `range` hexes (combat.ts dashWay), on
    * through whoever is in the way, and comes to rest on the furthest hex of that line it can stand on. Nobody is
    * singled out, so there is no roll to hit: every one of the other side it passes through makes an Agility save,
@@ -182,8 +206,17 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   engulf: { id: "engulf", name: "Engulf", damage: 6, potency: 3, saveOr: { effect: "slowed", turns: 2 }, weight: 2 },
   // Acid eats into whoever it hits and is spent: it leaves no pool behind (that is poison's way).
   acid_splash: { id: "acid_splash", name: "Acid Splash", damage: 4, potency: 3, range: 3, saveOr: { effect: "exposed", turns: 2 }, weight: 2 },
-  grave_grasp: { id: "grave_grasp", name: "Grave Grasp", damage: 9, potency: 5, saveOr: { effect: "stunned", turns: 1 }, weight: 2 },
-  keening: { id: "keening", name: "Keening", damage: 5, potency: 3, shape: "burst", saveOr: { effect: "slowed", turns: 2 }, weight: 2 },
+  // A Haunt's everyday blow: an icy hand reaches out of it across the three rows in front of it and drags at everyone
+  // there. Nobody is singled out: each makes an Agility save, taking half and keeping their pace on a success.
+  grave_grasp: { id: "grave_grasp", name: "Grave Grasp", damage: 10, potency: 5, cone: 3, saveOr: { effect: "slowed", turns: 2 }, weight: 2 },
+  // A Haunt's spear of ice, flung straight through five hexes and everyone on them, each saving for half. It has to
+  // freeze another before it can throw again.
+  ice_spear: { id: "ice_spear", name: "Ice Spear", damage: 13, potency: 4, line: 5, cooldown: 2, weight: 2 },
+  // A Haunt's chain of grave-iron, flung at one hero from afar: whoever fails to shake it off is left reeling (an AP short
+  // on each of their next three turns) and held within a hex of where it caught them while it holds. Quick to throw.
+  ghastly_fetter: { id: "ghastly_fetter", name: "Ghastly Fetter", damage: 5, potency: 4, range: 5, cost: 1, cooldown: 3, saveOr: { effect: "reeling", turns: 3, amount: 1 }, tether: { reach: 1, turns: 3 }, weight: 2 },
+  // The dread round a Haunt: every hero within 2 hexes of it makes every save with disadvantage. Always on, never used.
+  terror_aura: { id: "terror_aura", name: "Terror Aura", damage: 0, potency: 0, aura: { radius: 2, saves: "disadvantage" }, weight: 0 },
   venomous_bite: { id: "venomous_bite", name: "Venomous Bite", damage: 5, potency: 4, surface: { kind: "poison", rounds: 2 }, weight: 2 },
   spider_web_spit: { id: "spider_web_spit", name: "Web Spit", damage: 3, potency: 3, range: 4, saveOr: { effect: "slowed", turns: 2 }, surface: { kind: "slime", rounds: 2 }, weight: 2 },
   impaling_fang: { id: "impaling_fang", name: "Impaling Fang", damage: 11, potency: 5, saveOr: { effect: "bleeding" }, weight: 2 },

@@ -10,12 +10,11 @@
 
 import { hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/core";
 import { tileAt } from "../map";
-import { alliesReached, dashWay, leaps, leavesReach, lungeLanding, shiftInto, shoveDest, sweepHexes } from "./combat";
+import { alliesReached, dashWay, leaps, leavesReach, lungeLanding, shiftInto, shoveDest, spreadHexes } from "./combat";
 import { has } from "./engine";
 import { HIGH_REACH, blast, covers, gap, inFight, meet, nearOf, reachFrom, reaches, sameHex, seesFor, span, strikes } from "./geometry";
 import { SPLASH_SHARE, type EnemyStrike, type Mind } from "./kit";
 import { diceAverage } from "./rules";
-import { clusterHexes } from "./weather";
 import { HARMFUL } from "./surfaces";
 import type { Unit, ZoneState } from "./types";
 
@@ -73,14 +72,14 @@ interface Aim {
 }
 
 /**
- * Where an ability that lands on more than one hex (`area`, `sweep`) could be aimed from `from`, and who each aim
+ * Where an ability that lands on more than one hex (`area`, `sweep`, `cone`, `line`, `dash`) could be aimed from `from`, and who each aim
  * catches: any hex it reaches, not only one a hero stands on, so it can come down between two heroes and catch both.
  * Aims that catch nobody are left out. Null for an ability aimed at one hero.
  */
 function spreadAims(look: Look, from: HexPos, attack: EnemyStrike, targets: readonly Unit[]): Aim[] | null {
   const { state, enemy } = look;
-  const { area, sweep, dash } = attack.kit;
-  if (!area && !sweep && !dash) return null;
+  const { area, sweep, cone, line, dash } = attack.kit;
+  if (!area && !sweep && !cone && !line && !dash) return null;
   if (dash) {
     // A dash goes as straight as hexes lie toward its aim: aimed at each hex of the ring as far out as it reaches, it
     // goes every way it can. It catches whoever is on the hexes it passes through, not where it comes to rest.
@@ -106,13 +105,18 @@ function spreadAims(look: Look, from: HexPos, attack: EnemyStrike, targets: read
         if (tileAt(state.map, p) && aimReaches(state, enemy, from, attack, p)) aims.push(p);
       }
     }
-  } else {
+  } else if (sweep) {
     // A sweep is swung toward a hex beside it.
     aims = hexNeighbors(from, state.map.grid).filter((p) => tileAt(state.map, p) && strikes(state.map, from, p));
+  } else {
+    // A cone or a line points whichever way it is aimed: aimed at each hex of the ring as far out as it reaches, it
+    // points every way it can.
+    const far = (cone ?? line)!;
+    aims = blast(state.map, from, far).filter((p) => hexDistance(from, p) === far);
   }
   const out: Aim[] = [];
   for (const at of aims) {
-    const hexes = area ? clusterHexes(state, from, at, area) : sweepHexes(state, from, at, sweep!);
+    const hexes = spreadHexes(state, attack.kit, from, at) ?? [];
     const caught = targets.filter((h) => hexes.some((p) => covers(h, p)));
     if (caught.length > 0) out.push({ at, caught });
   }

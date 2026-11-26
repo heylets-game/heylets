@@ -40,6 +40,10 @@ export type EruptStyle = "thorn" | "kelp" | "coral" | "stone" | "water" | "shine
  * shows comes up in the fight's playback a beat or two after the cast that put it on.
  */
 const GRACE = 2.5;
+/** Seconds a Terror Aura's ring takes to be drawn in from its edge to its bearer's feet (SpellFx.dread). */
+const DREAD_PULL = 2.4;
+/** How many links a fetter's chain is drawn with, however long it is (SpellFx.fetter). */
+const FETTER_LINKS = 12;
 
 /** How a song moves its notes: a lively shanty's bob up, a dour one's rise slowly and sink back, the wind-god's swirl. */
 export type SongMood = "lively" | "dour" | "wind";
@@ -2121,6 +2125,150 @@ export class SpellFx {
           const a = Math.random() * Math.PI * 2;
           const d = Math.sqrt(Math.random()) * radius * 0.9;
           this.fling(feet.clone().add(new THREE.Vector3(Math.cos(a) * d, 0.1, Math.sin(a) * d)), color, 1, { out: 0.1, up: 0.9, fall: -0.4, life: 1 });
+        }
+      }
+      if (k <= 0 && gone >= 0 && this.bound.get(bind.key) === release) this.bound.delete(bind.key);
+      return gone < 0 || k > 0;
+    });
+  }
+
+  /** Whether an effect bound to `key` (a Binding's) is still going. */
+  holds(key: string): boolean {
+    return this.bound.has(key);
+  }
+
+  /**
+   * The dread round one with a Terror Aura (a Haunt), for as long as `bind.holding()` says it stands, following it:
+   * a dark ring on the ground at the edge of its reach (`radius`), breathing; a dark haze over the ground inside it;
+   * rings drawn in from the edge to its feet one after another, as if the dread were pulling everything in to it; and
+   * dark wisps rising off the ground all over it and drifting in toward it. Unlike a spell's aura it has no end of its
+   * own: it is what the bearer is.
+   */
+  dread(bind: Binding, color: string, deep: string, radius: number) {
+    let released = false;
+    const release = () => {
+      released = true;
+    };
+    this.bound.get(bind.key)?.();
+    this.bound.set(bind.key, release);
+    const dark = (c: string, map: THREE.Texture) => {
+      const m = this.add(new THREE.Mesh(plane, new THREE.MeshBasicMaterial({ color: c, map, transparent: true, opacity: 0, depthWrite: false })));
+      m.rotation.x = -Math.PI / 2;
+      m.renderOrder = 3;
+      return m;
+    };
+    const haze = dark(deep, softTex());
+    const edge = dark(color, ringTex());
+    const pulls = [0, 1].map(() => dark(color, ringTex()));
+    const opacity = (m: THREE.Mesh, o: number) => ((m.material as THREE.MeshBasicMaterial).opacity = o);
+    let next = 0.3;
+    let gone = -1;
+    this.run([haze, edge, ...pulls], (age) => {
+      const feet = bind.follow();
+      if (gone < 0 && (released || !feet || (age > GRACE && !bind.holding()))) gone = age;
+      const k = gone < 0 ? Math.min(1, age / 0.8) : Math.max(0, 1 - (age - gone) / 0.6);
+      if (feet) {
+        const breathe = 1 + Math.sin(age * 1.6) * 0.025;
+        for (const m of [haze, edge, ...pulls]) m.position.copy(feet).setY(feet.y + 0.06);
+        haze.scale.setScalar(radius * 2.3 * breathe);
+        opacity(haze, 0.32 * k);
+        edge.scale.setScalar(radius * 2 * breathe);
+        opacity(edge, 0.6 * k * (0.8 + 0.2 * Math.sin(age * 1.6)));
+        // Two rings drawn in from the edge, half a beat apart, each over DREAD_PULL seconds: faint as they set off,
+        // darkest part way in, and gone at its feet.
+        pulls.forEach((m, i) => {
+          const t = ((age + i * DREAD_PULL * 0.5) % DREAD_PULL) / DREAD_PULL;
+          m.scale.setScalar(Math.max(0.05, radius * 2 * (1 - t * t)));
+          opacity(m, 0.45 * k * Math.sin(Math.PI * t));
+        });
+        if (gone < 0 && age >= next) {
+          next = age + rand(0.12, 0.26);
+          // A wisp rising off the ground somewhere in it and drifting in toward it.
+          const a = Math.random() * Math.PI * 2;
+          const d = radius * (0.35 + 0.6 * Math.sqrt(Math.random()));
+          const from = feet.clone().add(new THREE.Vector3(Math.cos(a) * d, 0.1, Math.sin(a) * d));
+          const to = feet.clone().add(new THREE.Vector3(Math.cos(a) * d * 0.45, 0.9 + Math.random() * 0.6, Math.sin(a) * d * 0.45));
+          const mote = this.speck("mote", Math.random() < 0.65 ? deep : color, from, 0.5);
+          mote.material.opacity = 0;
+          const life = rand(1.1, 1.6);
+          this.run([mote], (m) => {
+            const u = Math.min(1, m / life);
+            mote.position.lerpVectors(from, to, u * (2 - u));
+            mote.scale.setScalar(0.5 * (1 - u * 0.5));
+            mote.material.opacity = Math.sin(Math.PI * u) * 0.85;
+            return u < 1;
+          });
+        }
+      }
+      if (k <= 0 && gone >= 0 && this.bound.get(bind.key) === release) this.bound.delete(bind.key);
+      return gone < 0 || k > 0;
+    });
+  }
+
+  /**
+   * A chain holding someone to a spot (Fettered, a Haunt's Ghastly Fetter), for as long as `bind.holding()` says, from
+   * a stake of grave-iron driven into the ground at `anchor` to their feet, following them: links of iron sagging
+   * between the two and swaying a little, a pale glow round the stake's foot, and the odd cold mote off the chain. It
+   * drops slack and fades when they are free.
+   */
+  fetter(bind: Binding, anchor: THREE.Vector3, iron: string, glow: string) {
+    let released = false;
+    const release = () => {
+      released = true;
+    };
+    this.bound.get(bind.key)?.();
+    this.bound.set(bind.key, release);
+    const metal = new THREE.MeshLambertMaterial({ color: iron, transparent: true, opacity: 0 });
+    const stake = this.add(new THREE.Group());
+    const spike = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.75, 6), metal);
+    spike.rotation.x = Math.PI;
+    spike.position.y = 0.12;
+    const head = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.04, 6, 12), metal);
+    head.rotation.x = Math.PI / 2;
+    head.position.y = 0.5;
+    stake.add(spike, head);
+    stake.position.copy(anchor);
+    for (const m of [spike, head]) m.userData.ownGeometry = true;
+    const foot = this.sheet(anchor.clone().setY(anchor.y + 0.05), glow, softTex(), 0);
+    foot.scale.setScalar(1.1);
+    const link = new THREE.TorusGeometry(0.085, 0.024, 5, 10);
+    const links = Array.from({ length: FETTER_LINKS }, () => this.add(new THREE.Mesh(link, metal)));
+    // The links share one shape: it goes with the first.
+    links[0].userData.ownGeometry = true;
+    const a = new THREE.Vector3();
+    const b = new THREE.Vector3();
+    const along = new THREE.Vector3();
+    let next = 0.5;
+    let gone = -1;
+    this.run([stake, foot, ...links], (age) => {
+      const feet = bind.follow();
+      if (gone < 0 && (released || !feet || (age > GRACE && !bind.holding()))) gone = age;
+      const k = gone < 0 ? Math.min(1, age / 0.3) : Math.max(0, 1 - (age - gone) / 0.5);
+      metal.opacity = k;
+      (foot.material as THREE.MeshBasicMaterial).opacity = 0.5 * k * (0.75 + 0.25 * Math.sin(age * 3));
+      if (feet) {
+        // From the stake's head to about their knee, sagging most in the middle (and more, slack, as it goes).
+        a.copy(anchor).setY(anchor.y + 0.5);
+        b.copy(feet).setY(feet.y + 0.35);
+        const span = a.distanceTo(b);
+        const sag = (0.15 + span * 0.12) * (gone < 0 ? 1 : 1 + (age - gone) * 2);
+        const sway = Math.sin(age * 1.7) * 0.05;
+        along.subVectors(b, a);
+        links.forEach((m, i) => {
+          const t = (i + 0.5) / FETTER_LINKS;
+          m.position.copy(a).addScaledVector(along, t);
+          m.position.y -= sag * 4 * t * (1 - t);
+          m.position.x += sway * Math.sin(Math.PI * t);
+          // Each lying along the chain, and turned across the one before.
+          m.lookAt(m.position.x + along.x, m.position.y, m.position.z + along.z);
+          m.rotateY(Math.PI / 2);
+          if (i % 2) m.rotateX(Math.PI / 2);
+          m.visible = span > 0.05;
+        });
+        if (gone < 0 && age >= next) {
+          next = age + rand(0.5, 1.1);
+          const at = links[Math.floor(Math.random() * FETTER_LINKS)].position.clone();
+          this.fling(at, glow, 1, { out: 0.15, up: 0.5, fall: -0.2, life: 0.9, size: 0.3 });
         }
       }
       if (k <= 0 && gone >= 0 && this.bound.get(bind.key) === release) this.bound.delete(bind.key);

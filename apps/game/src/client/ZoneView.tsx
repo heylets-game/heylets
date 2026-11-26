@@ -152,7 +152,7 @@ import { sounds } from "./audio/gameSounds";
 import { OptionsMenu } from "./OptionsMenu";
 import * as THREE from "three";
 import { SpellFx, WAVE_PACE } from "./render/SpellFx";
-import { SLOWING_FIELD } from "./render/signatureMoves";
+import { DREAD, FETTER, SLOWING_FIELD } from "./render/signatureMoves";
 import { TacticsLayer, type Overlay } from "./render/TacticsLayer";
 import { spriteDataUrl } from "./render/sprites";
 import { WorldRenderer, hexToWorld, tileTop, type RenderState } from "./render/WorldRenderer";
@@ -2103,6 +2103,38 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     renderer.current?.setHoldToTap(fighting && holdOn);
   }, [fighting, holdOn]);
 
+  // What lasts as long as something on the map does, drawn whenever it is shown and nothing draws it yet (so too after
+  // a reload, for a latecomer, or once it comes back into view): the dread round one with a Terror Aura (an `aura`
+  // ability, for as long as it stands), and the chain holding one Fettered to their spot.
+  useEffect(() => {
+    const keep = () => {
+      const fxs = spells.current;
+      const shown = shownNow.current;
+      if (!fxs || !shown) return;
+      const standing = (id: string) => shown.units.find((u) => u.id === id && u.hp > 0 && !u.down);
+      for (const u of shown.units) {
+        if (u.down || u.hp <= 0) continue;
+        const id = u.id;
+        const follow = () => renderer.current?.unitFeet(id) ?? null;
+        for (const ability of u.side === "enemy" ? u.abilities : []) {
+          const aura = ENEMY_ABILITIES[ability]?.aura;
+          const key = `dread:${id}:${ability}`;
+          if (!aura || fxs.holds(key) || !follow()) continue;
+          fxs.dread({ key, follow, holding: () => !!standing(id) }, DREAD.color, DREAD.deep, (aura.radius + 0.5) * Math.sqrt(3));
+        }
+        const fetter = u.conditions.find((c) => c.kind === "fettered" && c.at);
+        const key = `fetter:${id}`;
+        if (fetter?.at && !fxs.holds(key) && follow()) {
+          const holding = () => !!standing(id)?.conditions.some((c) => c.kind === "fettered");
+          fxs.fetter({ key, follow, holding }, point(fetter.at), FETTER.iron, FETTER.glow);
+        }
+      }
+    };
+    keep();
+    const every = setInterval(keep, 700);
+    return () => clearInterval(every);
+  }, [picture]);
+
   // ---------- what a pick reaches, and what it would cover ----------
 
   const z = state ? asState(state) : null;
@@ -2198,6 +2230,11 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       // A Slowing Field: as far as it reaches from any of its bearer's hexes.
       const field = u.conditions.find((c) => c.kind === "slowing_field")?.amount;
       if (field) out.push({ hexes: state.map.tiles.filter((t) => gapTo(u, t) <= field), color: CONDITION_INFO.slowing_field.color, line: 0.6, dashed: true });
+      // A Terror Aura (an enemy's passive `aura`), in a fight: as far as it reaches.
+      for (const ability of fighting && u.side === "enemy" ? u.abilities : []) {
+        const aura = ENEMY_ABILITIES[ability]?.aura;
+        if (aura) out.push({ hexes: state.map.tiles.filter((t) => gapTo(u, t) <= aura.radius), color: DREAD.color, line: 0.6, dashed: true });
+      }
     }
     if (!pick && courseOnly.length > 0) out.push({ hexes: courseOnly, color: "#ff4d4d", fill: 0.12, line: 0.7, dashed: true });
     // What there is still to search (for you): a gold ring round each, once no fight is on.

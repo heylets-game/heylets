@@ -1580,7 +1580,7 @@ const GET_UP_HIPS = -1;
  * `n` counts the figure's actions, so two flinches in a row need not be the same.
  */
 interface Act {
-  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "slam" | "drop" | "pound" | "channel" | "spook" | "claw" | "flurry" | "howl" | "rake" | "roar" | "grasp" | "wail" | "dive" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
+  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "slam" | "drop" | "pound" | "channel" | "spook" | "claw" | "flurry" | "howl" | "rake" | "roar" | "grasp" | "wail" | "hurl" | "dive" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
   t: number;
   n: number;
   /** A jump's seconds off the ground (see JUMP), or how long a dive is held (see DIVE). */
@@ -1869,8 +1869,23 @@ export const WAIL = {
   swell: [[0, 1], [0.28, 0.92], [0.38, 1.1], [1.0, 1.06], [1.35, 1]] as Keys,
   shake: [[0, 0], [0.36, 0], [0.42, 1], [0.95, 1], [1.1, 0]] as Keys,
 };
+/**
+ * A ghost's hurl, for one that floats (Rig.spectral): it rises and leans back, both arms raised high overhead and drawn
+ * together (`wide` below 0), gathering what it throws between its hands; then at `hit` it flings it forward, leaning
+ * in, arms swept down level at the mark, and settles back by `over`. `step` is how far in it lurches, in strides. A
+ * Haunt's Ice Spear and Ghastly Fetter (signatureMoves.ts).
+ */
+export const HURL = {
+  hit: 0.46,
+  over: 1,
+  rise: [[0, 0], [0.32, 1.1], [0.46, 0.3], [0.62, 0.4], [1, 0]] as Keys,
+  lean: [[0, 0], [0.32, -0.38], [0.46, 0.45], [0.62, 0.32], [1, 0]] as Keys,
+  arms: [[0, -0.25], [0.32, -1.7], [0.46, 0.2], [0.62, 0.12], [1, -0.25]] as Keys,
+  wide: [[0, 0], [0.32, -0.38], [0.46, 0.05], [1, 0]] as Keys,
+  step: [[0, 0], [0.32, -0.3], [0.46, 0.5], [0.62, 0.45], [1, 0]] as Keys,
+};
 /** The moves a ghost (Rig.spectral) plays as animations of its own. */
-const SPECTRAL_ACTS = new Set<Act["kind"]>(["grasp", "wail"]);
+const SPECTRAL_ACTS = new Set<Act["kind"]>(["grasp", "wail", "hurl"]);
 
 /** The blows a beast with claws (Rig.claws) plays as animations of its own. */
 const CLAW_ACTS = new Set<Act["kind"]>(["claw", "flurry", "rake", "roar"]);
@@ -2513,7 +2528,7 @@ const RECORDER_LENGTH = 6.4;
 const HAMMER = { hit: 0.4, over: 0.86, up: [[0, 0.25], [0.3, 1], [0.4, 0], [0.48, 0.18], [0.86, 0.25]] as Keys };
 const STIR = { over: 30, turns: 25 };
 /** How long each kind of action lasts. */
-const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, slam: SLAM.over, drop: SEAT_DROP.over, pound: POUND.over, channel: CHANNEL.over, spook: SPOOK.over, claw: CLAW.over, flurry: FLURRY.over, howl: HOWL.over, rake: RAKE.over, roar: ROAR.over, grasp: GRASP.over, wail: WAIL.over, dive: DIVE.into + DIVE.flare + DIVE.settle, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
+const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, slam: SLAM.over, drop: SEAT_DROP.over, pound: POUND.over, channel: CHANNEL.over, spook: SPOOK.over, claw: CLAW.over, flurry: FLURRY.over, howl: HOWL.over, rake: RAKE.over, roar: ROAR.over, grasp: GRASP.over, wail: WAIL.over, hurl: HURL.over, dive: DIVE.into + DIVE.flare + DIVE.settle, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
 /** When each kind of blow lands. */
 const ACT_HIT = { strike: SWING.hit, stab: THRUST.hit, slices: SLICES.hit, slam: SLAM.hit, pounce: POUNCE.hit, heavy: SWEEP.hit, twin: TWIN.hit };
 /**
@@ -9793,6 +9808,14 @@ function ghost(top: THREE.Group, pale = "#dfe8f2", shade = "#a7b6cc", eye = "#24
       });
       return;
     }
+    if (a.act?.kind === "hurl") {
+      // Risen and leaning back, arms high overhead and drawn together, then flung forward and down level at the mark.
+      const t = a.act.t;
+      top.rotation.set(along(HURL.lean, t), 0, 0);
+      top.position.set(0, hover + along(HURL.rise, t), along(HURL.step, t) * STRIDE * 0.5 * a.scale);
+      arms.forEach((arm, i) => arm.joint.rotation.set(along(HURL.arms, t) + drift(i) * 0.3, (i === 0 ? -1 : 1) * along(HURL.wide, t), 0));
+      return;
+    }
     if (a.act?.kind === "wail") {
       // Huddled in, then flung up and back, arms up and wide, swelling and trembling as it screams.
       const t = a.act.t;
@@ -10710,7 +10733,7 @@ export interface Figure {
    * returns the seconds until the blow lands, for whatever it hits to wait; a creature lunges at once, as it always
    * did, and this returns 0.
    */
-  strike(how?: "light" | "stab" | "heavy" | "slices" | "slam" | "drop" | "pound" | "channel" | "spook" | "claw" | "flurry" | "rake" | "roar" | "grasp" | "wail"): number;
+  strike(how?: "light" | "stab" | "heavy" | "slices" | "slam" | "drop" | "pound" | "channel" | "spook" | "claw" | "flurry" | "rake" | "roar" | "grasp" | "wail" | "hurl"): number;
   /**
    * How bright what glows on it is (eyes, gems, lamps), as a share of its own: 1 as made, more to flare it up (a
    * Guardian channelling). Greyed when down all the same.
@@ -11082,12 +11105,12 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
       }
       // Nothing to rear up and roar with: it does nothing.
       if (how === "roar") return 0;
-      if ((how === "grasp" || how === "wail") && rig.spectral) {
+      if ((how === "grasp" || how === "wail" || how === "hurl") && rig.spectral) {
         asked = how;
-        return how === "grasp" ? GRASP.hit : WAIL.peak;
+        return how === "grasp" ? GRASP.hit : how === "hurl" ? HURL.hit : WAIL.peak;
       }
       if (how === "wail") return 0;
-      if (how === "grasp") how = "light";
+      if (how === "grasp" || how === "hurl") how = "light";
       if (how === "drop") {
         if (!rig.acts) return 0;
         asked = "drop";
