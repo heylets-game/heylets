@@ -139,6 +139,18 @@ export function MapsTab() {
       {dev.open && send && (
         <>
           <p><strong>Map <span className="selectable code">{dev.open.code}</span></strong> <span className="muted">is on screen.</span></p>
+          <div className="dev-kit-hero">
+            <p><strong>Combat sandbox</strong> <span className="muted">A fight goes by your hand: no enemy takes its turn, no turn ends of itself, nothing is timed, and there is no battle music. Turns come round when you move them on.</span></p>
+            <div className="dev-row">
+              <label><input type="checkbox" checked={dev.flags.sandbox} onChange={(e) => send({ op: "sandbox", on: e.target.checked })} /> Sandbox</label>
+              {dev.flags.sandbox && (
+                <>
+                  <button className="small" onClick={() => send({ op: "next_turn" })}>Next turn</button>
+                  <button className="small" onClick={() => send({ op: "next_turn", round: true })}>Next round</button>
+                </>
+              )}
+            </div>
+          </div>
           <div className="dev-row">
             <button className="small" onClick={() => send({ op: "heal" })}>Heal and restock everyone</button>
             <button className="small" onClick={() => send({ op: "start_fight" })}>Start a fight here</button>
