@@ -29,7 +29,7 @@ import { makeRng, seedFromString } from "../rng";
 import { enemyTurn } from "./ai";
 import { pickBellGoer, placeBell } from "./bell";
 import { abilityArea, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, doCommon, drinkItem, isBlink, moveLeft, resolveAbility, throwItem, walk } from "./combat";
-import { countDown, dropShield, has, heal, regrow, removeCondition, tick, tickStacks, unseen, type Ctx } from "./engine";
+import { UNTIMED_KEEPS, countDown, dropShield, has, heal, regrow, removeCondition, tick, tickStacks, unseen, usesLeft, type Ctx } from "./engine";
 import { ALERT_RANGE, JOIN_RANGE, freeHexNear, generateZone } from "./gen";
 import { generateDelve } from "./delve";
 import { checkLoot, checkOpen, leaveBody, look, lootFor, openChest, payBounty, take } from "./loot";
@@ -214,7 +214,7 @@ function heroUnit(hero: ZoneHero, pos: HexPos, controller?: string): Unit {
     outfit: hero.outfit,
     ...(hero.lantern ? { lantern: true } : {}),
     ...(hero.perks ? { perks: hero.perks } : {}),
-    conditions: hero.luck && hero.luck > 0 ? [{ kind: "lucky", rounds: hero.luck }] : [],
+    conditions: hero.luck && hero.luck > 0 ? [{ kind: "lucky", rounds: UNTIMED_KEEPS, amount: hero.luck }] : [],
     down: false,
     cooldowns: {},
     items: { ...(hero.items ?? STARTING_ITEMS) },
@@ -950,8 +950,8 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
       // Luck brought back from the well is added to whatever they still had.
       if (hero.luck && hero.luck > 0 && !here.down) {
         const held = here.conditions.find((c) => c.kind === "lucky");
-        if (held) held.rounds += hero.luck;
-        else here.conditions.push({ kind: "lucky", rounds: hero.luck });
+        if (held) Object.assign(held, { rounds: UNTIMED_KEEPS, amount: usesLeft(held) + hero.luck });
+        else here.conditions.push({ kind: "lucky", rounds: UNTIMED_KEEPS, amount: hero.luck });
       }
       // Back again, perhaps with different gear: the sheet is refreshed, and where they stand and how hurt they are is kept.
       // Not in a fight, though: that is fought in the gear it was started in. Nor a hero given a dev kit.

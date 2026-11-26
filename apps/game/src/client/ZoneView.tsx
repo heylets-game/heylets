@@ -32,6 +32,8 @@ import {
   ABILITIES,
   ALERT_RANGE,
   REELING_AP,
+  UNTIMED,
+  usesLeft,
   AURAS,
   COMMON_ACTIONS,
   CONDITION_INFO,
@@ -333,13 +335,22 @@ function dwell(ev: ZoneEvent, many: boolean, next: ZoneEvent | undefined, carrie
 }
 /** Conditions that come in stacks (the condition's `amount`), shown with how many. */
 const STACKED = new Set(["bleeding", "burning", "drowning"]);
-const stacksOf = (c: { kind: string; amount?: number }): number => (STACKED.has(c.kind) ? (c.amount ?? 1) : 0);
+/**
+ * Whether a condition keeps whatever the turns do, until it is used up (UNTIMED: Lucky's rolls, a Frenzy's attacks):
+ * what it has left is shown as stacks (usesLeft), and never a count of turns.
+ */
+const untimed = (kind: string): boolean => UNTIMED.has(kind);
+const stacksOf = (c: { kind: string; rounds?: number; amount?: number }): number =>
+  STACKED.has(c.kind) ? (c.amount ?? 1) : untimed(c.kind) ? usesLeft({ rounds: c.rounds ?? 0, amount: c.amount }) : 0;
 /** Conditions shown with a number of their own (the condition's `amount`): their stacks, or the AP a Reeling takes. And what it is when not said. */
 const COUNTED: Record<string, number> = { bleeding: 1, burning: 1, drowning: 1, reeling: REELING_AP };
-const countOf = (c: { kind: string; amount?: number }): number | undefined => (c.kind in COUNTED ? (c.amount ?? COUNTED[c.kind]) : undefined);
+const countOf = (c: { kind: string; rounds: number; amount?: number }): number | undefined =>
+  c.kind in COUNTED ? (c.amount ?? COUNTED[c.kind]) : untimed(c.kind) ? usesLeft(c) : undefined;
+/** The turns a condition has left, as shown: none for one that keeps whatever the turns do (untimed). */
+const turnsOf = (c: { kind: string; rounds: number }): number => (untimed(c.kind) ? 0 : c.rounds);
 
-/** The conditions on a unit, as badges over its head: in CONDITION_INFO's colours, with rounds left, and its number (stacks, or a Reeling's AP) where it has one. */
-const badgesOf = (u: Unit) => shownConditions(u).map((c) => ({ kind: c.kind, color: CONDITION_INFO[c.kind].color, rounds: c.rounds, ...(countOf(c) !== undefined ? { stacks: countOf(c) } : {}) }));
+/** The conditions on a unit, as badges over its head: in CONDITION_INFO's colours, with turns left (turnsOf), and its number (stacks, or a Reeling's AP) where it has one. */
+const badgesOf = (u: Unit) => shownConditions(u).map((c) => ({ kind: c.kind, color: CONDITION_INFO[c.kind].color, rounds: turnsOf(c), ...(countOf(c) !== undefined ? { stacks: countOf(c) } : {}) }));
 /**
  * The conditions on a unit that are shown as such (a badge, a line in its card). Not a shield (Bolstered): that is
  * shown where the HP is, on every bar and in the card, and nowhere as a condition of its own.
@@ -1494,7 +1505,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           later(() => sounds.effect(ev.kind, view?.whereIs(ev.target)));
           say(`${name(ev.target)} has a shield of ${ev.amount ?? 0}.`);
         } else {
-          const stacks = stacksOf({ kind: ev.kind, amount: ev.amount }) > 1 ? ` ×${ev.amount}` : "";
+          const count = stacksOf({ kind: ev.kind, rounds: ev.rounds, amount: ev.amount });
+          const stacks = count > 1 ? ` ×${count}` : "";
           later(() => {
             sounds.effect(ev.kind, view?.whereIs(ev.target));
             view?.floatOver(ev.target, `${CONDITION_INFO[ev.kind].name}${stacks}`, CONDITION_INFO[ev.kind].color);
@@ -3029,7 +3041,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           {under ? (
             <>
               <strong>{under.name}</strong> <span className="muted">· {under.hp}/{under.maxHp} HP{shieldOf(under) > 0 ? ` + ${shieldOf(under)} shield` : ""} · Defence {defenceOf(under, state)}{under.down ? " · down" : ""}</span>
-              {shownConditions(under).length > 0 && <div>{shownConditions(under).map((c) => <span key={c.kind} className="zone-cond" style={{ color: CONDITION_INFO[c.kind].color }} title={CONDITION_INFO[c.kind].blurb}>{CONDITION_INFO[c.kind].name}{countOf(c) !== undefined ? ` ${countOf(c)}` : ""} <span className="zone-cond-time">⌛{c.rounds}</span></span>)}</div>}
+              {shownConditions(under).length > 0 && <div>{shownConditions(under).map((c) => <span key={c.kind} className="zone-cond" style={{ color: CONDITION_INFO[c.kind].color }} title={CONDITION_INFO[c.kind].blurb}>{CONDITION_INFO[c.kind].name}{countOf(c) !== undefined ? ` ${countOf(c)}` : ""}{turnsOf(c) > 0 && <> <span className="zone-cond-time">⌛{c.rounds}</span></>}</span>)}</div>}
               {under.side === "enemy" && <div className="muted">{under.abilities.map((id) => ENEMY_ABILITIES[id]?.name ?? id).join(", ")}</div>}
               {alsoHere.map((u) => <div key={u.id}><span className="muted">Sharing the hex:</span> <strong>{u.name}</strong> <span className="muted">· {u.hp}/{u.maxHp} HP{u.down ? " · down" : ""}</span></div>)}
               {/* Where a shove would send them: over an edge, into a pit, or only back a hex. */}
@@ -3093,7 +3105,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
             </>
           )}
           {weather.map((w, i) => <div key={i} style={{ color: WEATHER_INFO[w.kind].color }}>{WEATHER_INFO[w.kind].name} <span className="muted">· {w.rounds} round{w.rounds === 1 ? "" : "s"} · {WEATHER_INFO[w.kind].blurb}</span></div>)}
-          {surface && <div style={{ color: SURFACE_INFO[surface.kind].color }}>{SURFACE_INFO[surface.kind].name} <span className="muted">· {surface.rounds} round{surface.rounds === 1 ? "" : "s"} · {SURFACE_INFO[surface.kind].blurb}</span></div>}
+          {surface && <div style={{ color: SURFACE_INFO[surface.kind].color }}>{SURFACE_INFO[surface.kind].name} <span className="muted">{surface.lasting ? "" : ` · ${surface.rounds} round${surface.rounds === 1 ? "" : "s"}`} · {SURFACE_INFO[surface.kind].blurb}</span></div>}
         </div>
       )}
 

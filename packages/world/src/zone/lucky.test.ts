@@ -8,7 +8,7 @@ import { zoneHero } from "./zone";
 import type { ZoneAction, ZoneState } from "./types";
 
 const board = (): ZoneState => flatBoard({ rng: 4242, start: at(1, 1), options: { party: 1 }, flags: { aiOff: true } });
-const luckOf = (state: ZoneState, id = "ann") => unit(state, id).conditions.find((c) => c.kind === "lucky")?.rounds ?? 0;
+const luckOf = (state: ZoneState, id = "ann") => unit(state, id).conditions.find((c) => c.kind === "lucky")?.amount ?? 0;
 const sheet = { id: "ann", name: "Ann", classId: "qa_paladin", level: 1, base: { str: 9, int_stat: 4, vit: 9, agi: 4, dex: 4 }, bonus: {}, weapon: "mace", weaponPower: 1, armor: 2 };
 
 describe("Lucky", () => {
@@ -23,7 +23,7 @@ describe("Lucky", () => {
     let state = board();
     standHero(state, "ann", at(4, 4), { classId: "qa_paladin", level: 1, armor: 2, power: 1, abilities: ["bash"], items: {} });
     const foe = standEnemy(state, "bandit", at(5, 4), "g1", { hp: 500, maxHp: 500 });
-    unit(state, "ann").conditions.push({ kind: "lucky", rounds: 2 });
+    unit(state, "ann").conditions.push({ kind: "lucky", rounds: 1, amount: 2 });
     state = must(state, { type: "dev", by: "ann", dev: { op: "start_fight" } });
     for (let i = 0; i < 40 && state.encounter && state.encounter.acting[0] !== "ann"; i++) state = must(state, { type: "timeout" });
     expect(attackContext(state, unit(state, "ann"), unit(state, foe.id), { melee: true }).notes).toContain("Advantage: you are Lucky");

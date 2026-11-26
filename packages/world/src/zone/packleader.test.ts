@@ -40,6 +40,7 @@ function act(state: ZoneState, by: string, attack: typeof howl, target: string |
 }
 
 const frenzy = (state: ZoneState, id: string) => unit(state, id).conditions.find((c) => c.kind === "frenzied");
+const frenzyLeft = (state: ZoneState, id: string) => frenzy(state, id)?.amount;
 const bleeding = (state: ZoneState, id: string) => unit(state, id).conditions.find((c) => c.kind === "bleeding")?.amount ?? 0;
 
 describe("a Pack Leader's Howl", () => {
@@ -53,7 +54,7 @@ describe("a Pack Leader's Howl", () => {
     const { after, events } = act(state, leader, howl, null);
     for (const wolf of pack) {
       const far = hexDistance(unit(state, wolf).pos, at(9, 6));
-      expect(frenzy(after, wolf)?.rounds, `${far} hexes off`).toBe(far <= 3 ? 2 : undefined);
+      expect(frenzyLeft(after, wolf), `${far} hexes off`).toBe(far <= 3 ? 2 : undefined);
     }
     // Some in reach and some not, or the test says nothing.
     expect(pack.filter((w) => frenzy(after, w)).length).toBeGreaterThan(0);
@@ -74,7 +75,7 @@ describe("a Pack Leader's Howl", () => {
     expect(worth(at(15, 6))).toBe(RALLY_WORTH * reached(at(15, 6)));
     expect(worth(at(15, 1))).toBe(RALLY_WORTH * reached(at(15, 1)));
     // One already Frenzied is not counted.
-    unit(state, pack[0]).conditions.push({ kind: "frenzied", rounds: 2 });
+    unit(state, pack[0]).conditions.push({ kind: "frenzied", rounds: 1, amount: 2 });
     expect(worth(at(9, 6))).toBe(RALLY_WORTH);
   });
 
@@ -83,7 +84,7 @@ describe("a Pack Leader's Howl", () => {
     let s = act(state, leader, howl, null).after;
     s.aiOff = true;
     for (let i = 0; i < 4; i++) s = must(s, { type: "timeout" });
-    expect(frenzy(s, pack[0])?.rounds).toBe(2);
+    expect(frenzyLeft(s, pack[0])).toBe(2);
   });
 });
 
@@ -104,7 +105,7 @@ describe("a Frenzied ally", () => {
         const hit = events.some((e) => e.t === "hit" && e.target === "ann" && e.amount > 0);
         expect(bleeding(after, "ann"), `seed ${seed}, attack ${n}`).toBe(bleeding(s, "ann") + (hit ? 1 : 0));
         if (hit) drew++;
-        expect(frenzy(after, pack[0])?.rounds, `seed ${seed}, attack ${n}`).toBe(n === 1 ? 1 : undefined);
+        expect(frenzyLeft(after, pack[0]), `seed ${seed}, attack ${n}`).toBe(n === 1 ? 1 : undefined);
         s = after;
       }
       // Spent: the next blow is its own again.

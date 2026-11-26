@@ -234,10 +234,11 @@ function passSpot(ctx: Ctx, from: Unit, spot: UnitCondition): void {
 }
 
 /**
- * A shield's condition (Bolstered) does not wear off with turns: it lasts until blows spend it or the fight ends
- * (UNTIMED). Its `rounds` is only kept above 0, so it is not taken for spent.
+ * What an untimed condition (UNTIMED: a shield, Lucky, Frenzied) keeps in its `rounds`: it does not wear off with
+ * turns, so that is only kept above 0, so it is not taken for spent. What it has left is its `amount` (usesLeft).
  */
-const SHIELD_KEEPS = 1;
+export const UNTIMED_KEEPS = 1;
+const SHIELD_KEEPS = UNTIMED_KEEPS;
 
 /** A shield is a thing of fights: only one in a fight can be given one. */
 const shieldable = (ctx: Ctx, unit: Unit): boolean => inFight(ctx.state, unit.id);
@@ -400,18 +401,31 @@ export function attackRoll(ctx: Ctx, attacker: Unit, target: Unit, opts: { label
   return roll;
 }
 
-/** A roll to hit was made: one lucky roll is spent (Lucky's rounds count the rolls, not the turns). */
+/**
+ * What an untimed condition has left to spend (its stacks): the rolls Lucky has, the attacks a Frenzy has. One kept
+ * from before they were held as stacks has its count in its `rounds`.
+ */
+export const usesLeft = (c: Pick<UnitCondition, "rounds" | "amount">): number => c.amount ?? c.rounds;
+
+/** Spend one use of an untimed condition (usesLeft): the last spent, it is gone. */
+export function spendUse(unit: Unit, kind: Condition): void {
+  const held = unit.conditions.find((c) => c.kind === kind);
+  if (!held) return;
+  held.amount = usesLeft(held) - 1;
+  held.rounds = UNTIMED_KEEPS;
+  if (held.amount <= 0) removeCondition(unit, kind);
+}
+
+/** A roll to hit was made: one lucky roll is spent. */
 export function spendLuck(unit: Unit): void {
-  const luck = unit.conditions.find((c) => c.kind === "lucky");
-  if (!luck) return;
-  luck.rounds -= 1;
-  if (luck.rounds <= 0) removeCondition(unit, "lucky");
+  spendUse(unit, "lucky");
 }
 
 /**
  * Conditions that keep, turn after turn, until something else uses them up: Lucky, spent a roll at a time; Frenzied,
- * spent an attack at a time (combat.ts enemyAct); and a shield (Bolstered), spent by blows. A shield and a Frenzy last
- * the fight at most and go with it (zone.ts settle, and flee for one who gets away).
+ * spent an attack at a time (combat.ts enemyAct); and a shield (Bolstered), spent by blows. What each has left is its
+ * `amount`, shown as stacks, never as turns (usesLeft). A shield and a Frenzy last the fight at most and go with it
+ * (zone.ts settle, and flee for one who gets away).
  */
 export const UNTIMED: ReadonlySet<string> = new Set(["lucky", "bolstered", "frenzied"]);
 
