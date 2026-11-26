@@ -103,7 +103,7 @@ export interface Tactic {
   cleanse?: boolean;
   /** Extra damage when the roll to hit had advantage (Stab). */
   edge?: number;
-  /** Leaves the target (the user, for a self ability) Inspired, their next roll to hit with advantage, for this many of their turns (Take Aim, Second Wind). */
+  /** Leaves the target (the user, for a self ability) this many stacks of Inspired, each a roll to hit with advantage (Take Aim, Second Wind). */
   steady?: number;
   /** Single: landed, drags the target this many hexes straight toward the user, as far as the way is open (Throw Pike). */
   pull?: number;
@@ -408,7 +408,7 @@ export const TACTICS: Record<string, Tactic> = {
   turtle_bite: melee({ wading: 4 }),
   // Bard
   dissonance: spell(5),
-  encore: mend(5, { cost: 1, steady: 2, cooldown: 1 }),
+  encore: mend(5, { cost: 1, steady: 1, cooldown: 1 }),
   blasting_tone: spell(4, { shape: "line", length: 4, foesOnly: true }),
   soothing_tone: { cost: 2, reach: "spell", range: 0, shape: "self", cooldown: 2, soothe: { range: 2 } },
   peal: spell(4, { knockback: 1, knockSave: true }),
@@ -500,7 +500,7 @@ export const SAVE_STAT: Record<Condition, StatKey> = {
   taunting: "vit",
   slowed: "str",
   hasted: "agi",
-  glitched: "int_stat",
+  fumbling: "int_stat",
   exposed: "agi",
   sundered: "str",
   reeling: "vit",
@@ -545,7 +545,8 @@ export const CONDITION_INFO: Record<Condition, { name: string; blurb: string; co
   taunting: info("taunting", "Enemies that can reach it go for it, until its next turn."),
   slowed: info("slowed", "Half movement for each AP."),
   hasted: info("hasted", "Double movement for each AP."),
-  glitched: info("glitched", "Its next attack is rolled with disadvantage."),
+  // Its stacks are the rolls to hit left to fumble: they do not run down with the turns, only with the rolls.
+  fumbling: info("fumbling", "Each of its next rolls to hit, one for each stack, is made with disadvantage. Gone when the fight ends."),
   exposed: info("exposed", "Attacks against it have advantage."),
   poisoned: { name: "Poisoned", blurb: "Its attacks are rolled with disadvantage.", color: "#a3e635" },
   prone: info("prone", "Flat on the ground: standing up costs 1 AP. Melee attacks against it have advantage, ranged attacks disadvantage."),
@@ -564,11 +565,12 @@ export const CONDITION_INFO: Record<Condition, { name: string; blurb: string; co
   lively_shanty: { name: "Lively Shanty", blurb: `Singing: allies within reach get +${SHANTY.lively.hit} to hit and a little more damage. Each who joins widens it a hex and adds +${SHANTY.lively.surge} to hit until the Bard's next turn.`, color: "#ffb020" },
   dour_shanty: { name: "Dour Shanty", blurb: `Singing: allies within reach get +${SHANTY.dour.defence} Defence. Each who joins widens it a hex and adds +${SHANTY.dour.perJoin} Defence until the Bard's next turn.`, color: "#6f8fff" },
   windgod_shanty: { name: "Wind-god's Shanty", blurb: `Singing: allies within reach move ${SHANTY.windgod.move} further for each AP of movement and cannot be Slowed. Each who joins widens it a hex and adds ${SHANTY.windgod.perJoin} more for each AP until the Bard's next turn.`, color: "#3fe0c5" },
-  inspired: { name: "Inspired", blurb: "Its next roll to hit has advantage.", color: "#ffe08a" },
+  // Its stacks are the inspired rolls left: they do not run down with the turns, only with the rolls.
+  inspired: { name: "Inspired", blurb: "Each of its next rolls to hit, one for each stack, has advantage. Gone when the fight ends.", color: "#ffe08a" },
   // Its stacks are the lucky rolls left: they do not run down with the turns, only with the rolls.
   lucky: { name: "Lucky", blurb: "A coin in the town well: each of its next rolls to hit, one for each coin, has advantage.", color: "#f6d365" },
-  // Its stacks are the attacks it has left: they do not run down with the turns, only with the attacks (engine.ts SPURS).
   slowing_field: { name: "Slowing Field", blurb: "Every foe within 2 hexes of it is Slowed: as their turn starts in it, or as they step into it.", color: "#7fe3ff" },
+  // Its stacks are the attacks it has left: they do not run down with the turns, only with the attacks (engine.ts SPURS).
   frenzied: { name: "Frenzied", blurb: "Driven on by a howl: each of its next attacks, one for each stack, has advantage, and every one that draws blood leaves a stack of Bleeding.", color: "#e0322b" },
   guiding_light: { name: "Guiding Light", blurb: "Lit up by a star: every attack against it has advantage.", color: "#fff3a8" },
   north_star: { name: "North Star", blurb: "Every blow it lands sets the target Burning, one stack more if the blow would have set it Burning anyway.", color: "#ffd166" },

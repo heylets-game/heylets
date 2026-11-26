@@ -10,5 +10,3 @@ line off once it is done.
   `packages/world/src/zone/enemyabilities.ts`, rates in `rules.ts` SCALE_RATES).
 - The Villain boss never spawns: nothing on the atlas or in delves places it (lairs pick theirs from LAIR_BEAST /
   CLIME_BEAST in `packages/world/src/atlas.ts`). Give it a home.
-- Fumbling's blurb in `EFFECT_INFO` (`packages/world/src/content.ts`) says "One roll of its next attack fails", but
-  the rules (and `CONDITION_INFO` in `zone/kit.ts`) give disadvantage on its next attack: make them agree.

@@ -30,7 +30,7 @@ function wail(seed: number) {
 describe("a Shade", () => {
   it("chills and wails", () => {
     expect(ENEMIES.shade.abilities).toEqual(["chill_touch", "wail"]);
-    expect(ENEMY_ABILITIES.wail).toMatchObject({ shape: "burst", cooldown: 3, weight: 3, saveOr: { effect: "glitched", turns: 1 } });
+    expect(ENEMY_ABILITIES.wail).toMatchObject({ shape: "burst", cooldown: 3, weight: 3, saveOr: { effect: "fumbling", stacks: 1 } });
     expect(strike("Wail")).toMatchObject({ burst: true, range: 2, cooldown: 3 });
   });
 
@@ -44,9 +44,9 @@ describe("a Shade", () => {
         const save = events.find((e): e is Extract<ZoneEvent, { t: "roll" }> => e.t === "roll" && e.roll.id === hit.target && e.roll.kind === "save")!;
         seen.add(save.roll.ok);
         expect(hit.amount).toBe(Math.max(1, save.roll.ok ? Math.floor(hit.dice!.total / 2) : hit.dice!.total));
-        expect(unit(state, hit.target).conditions.some((c) => c.kind === "glitched"), `seed ${seed}: ${hit.target}`).toBe(!save.roll.ok);
+        expect(unit(state, hit.target).conditions.some((c) => c.kind === "fumbling"), `seed ${seed}: ${hit.target}`).toBe(!save.roll.ok);
       }
-      expect(unit(state, "cal").conditions.some((c) => c.kind === "glitched")).toBe(false);
+      expect(unit(state, "cal").conditions.some((c) => c.kind === "fumbling")).toBe(false);
     }
     expect(seen.size).toBe(2);
   });

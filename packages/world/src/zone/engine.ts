@@ -6,7 +6,7 @@ import { hexDistance, posKey, type StatKey } from "@gantt-quest/core";
 import { tileAt } from "../map";
 import type { Rng } from "../rng";
 import { elevOf, gap, gapTo, inFight, meet, nearOf, perkOf, span } from "./geometry";
-import { ABILITIES, EFFECT_TICK, STACK_TURNS, SUNDERED_DEFENCE, isStacking, type Inflict, type StackingEffect } from "../content";
+import { ABILITIES, EFFECT_TICK, STACK_TURNS, SUNDERED_DEFENCE, isSpent, isStacking, type Inflict, type StackingEffect } from "../content";
 import { AQUEOUS, AURAS, CONDITION_INFO, CORAL_ARMOR, ENEMY_KIT, FORTIFY, SHIELD_SET_ASIDE, enemyDefence, enemySave, healDice } from "./kit";
 import { inDark } from "./light";
 import { d20, heroDefence, mod, netAdvantage, rollShown, statOf } from "./rules";
@@ -151,10 +151,22 @@ export function countDown(unit: Unit): void {
   unit.conditions = unit.conditions.filter((c) => c.rounds > 0);
 }
 
-/** Leave an ability's effect on a unit: a stack of a stacking one, or any other for the turns it says. */
+/** Leave an ability's effect on a unit: stacks of a stacking one or a spent one (SPENT), or any other for the turns it says. */
 export function inflict(ctx: Ctx, unit: Unit, what: Inflict): void {
-  if (isStacking(what.effect)) addStacks(ctx, unit, what.effect, "stacks" in what ? (what.stacks ?? 1) : 1);
+  const stacks = "stacks" in what ? (what.stacks ?? 1) : 1;
+  if (isStacking(what.effect)) addStacks(ctx, unit, what.effect, stacks);
+  else if (isSpent(what.effect)) addUses(ctx, unit, what.effect, stacks);
   else if ("turns" in what) addCondition(ctx, unit, what.effect, what.turns, what.amount);
+}
+
+/**
+ * Give a unit `uses` more of an untimed condition (UNTIMED) that piles up: added to whatever it has left (usesLeft),
+ * not the bigger of the two. Fumbling and Inspired.
+ */
+export function addUses(ctx: Ctx, unit: Unit, kind: Condition, uses: number): void {
+  if (uses <= 0) return;
+  const held = unit.conditions.find((c) => c.kind === kind);
+  addCondition(ctx, unit, kind, UNTIMED_KEEPS, (held ? usesLeft(held) : 0) + uses);
 }
 
 /** Whether a unit is Unseen (Sneak): no enemy can attack it, or pick it out to. */
@@ -168,7 +180,7 @@ export function giveAway(ctx: Ctx, unit: Unit): void {
 }
 
 /** The conditions that count as wounds, for abilities that grow with them. */
-export const DEBUFFS: readonly Condition[] = ["bleeding", "burning", "stunned", "slowed", "glitched", "exposed", "poisoned", "prone", "sundered", "reeling"];
+export const DEBUFFS: readonly Condition[] = ["bleeding", "burning", "stunned", "slowed", "fumbling", "exposed", "poisoned", "prone", "sundered", "reeling"];
 
 /** Fortify: one of the side that raised a wall, standing beside it, is the steadier for it. */
 export const wallDefence = (state: Pick<ZoneState, "weather">, unit: Unit): number =>
@@ -245,7 +257,7 @@ function passSpot(ctx: Ctx, from: Unit, spot: UnitCondition): void {
 }
 
 /**
- * What an untimed condition (UNTIMED: a shield, Lucky, Frenzied) keeps in its `rounds`: it does not wear off with
+ * What an untimed condition (UNTIMED: a shield, Lucky, Frenzied, Fumbling, Inspired) keeps in its `rounds`: it does not wear off with
  * turns, so that is only kept above 0, so it is not taken for spent. What it has left is its `amount` (usesLeft).
  */
 export const UNTIMED_KEEPS = 1;
@@ -264,10 +276,12 @@ export function addShield(ctx: Ctx, unit: Unit, amount: number): void {
   if (amount > 0 && shieldable(ctx, unit)) addCondition(ctx, unit, "bolstered", SHIELD_KEEPS, shieldOf(unit) + amount);
 }
 
-/** The fight is over for this unit (it ended, or they got away from it): its shield goes, and any Frenzy. */
+/** Untimed conditions (UNTIMED) that last a fight at most: a shield, a Frenzy, Fumbling and Inspired. */
+export const FIGHT_LONG: readonly Condition[] = ["bolstered", "frenzied", "fumbling", "inspired"];
+
+/** The fight is over for this unit (it ended, or they got away from it): what lasts a fight at most goes (FIGHT_LONG). */
 export function dropShield(unit: Unit): void {
-  removeCondition(unit, "bolstered");
-  removeCondition(unit, "frenzied");
+  for (const kind of FIGHT_LONG) removeCondition(unit, kind);
 }
 
 /** The points of shield a unit has left (Bolstered), 0 for none. */
@@ -360,7 +374,7 @@ export function attackContext(state: ZoneState, attacker: Unit, target: Unit, op
   if (has(target, "guiding_light") && target.side !== attacker.side) adv("the target is lit by Guiding Light");
   if (attacker.side === "enemy" && ENEMY_KIT[attacker.kind]?.pack && state.units.some((u) => u.id !== attacker.id && u.side === "enemy" && !u.down && gap(u, target) <= 1)) adv("the pack is on the target");
   if (has(attacker, "poisoned")) dis("Poisoned");
-  if (has(attacker, "glitched")) dis("Fumbling");
+  if (has(attacker, "fumbling")) dis("Fumbling");
   if (has(attacker, "black_spot")) dis("the Black Spot is on you");
   if (has(attacker, "red_sky")) dis("Red Sky at Morning");
   // The party strikes blind at what the light does not reach. The things of the caves see in the dark.
@@ -391,7 +405,7 @@ export function attackContext(state: ZoneState, attacker: Unit, target: Unit, op
   return { adv: netAdvantage(advantage, disadvantage), mods, notes };
 }
 
-/** Roll an attack and say so. A Fumbling attacker's next attack is the one that suffers: it clears here. */
+/** Roll an attack and say so. A stack each of Fumbling, Inspired and Lucky is spent on it (spendUse). */
 export function attackRoll(ctx: Ctx, attacker: Unit, target: Unit, opts: { label: string; bonus: number; melee: boolean }): Roll {
   const c = attackContext(ctx.state, attacker, target, opts);
   const roll = d20(ctx.rng, { kind: "attack", id: attacker.id, target: target.id, label: opts.label, bonus: opts.bonus + c.mods, vs: defenceOf(target, ctx.state), adv: c.adv });
@@ -404,8 +418,8 @@ export function attackRoll(ctx: Ctx, attacker: Unit, target: Unit, opts: { label
     roll.crit = false;
     roll.label = `${roll.label} (Ghostly: passes through)`;
   }
-  removeCondition(attacker, "glitched");
-  removeCondition(attacker, "inspired");
+  spendUse(ctx, attacker, "fumbling");
+  spendUse(ctx, attacker, "inspired");
   spendLuck(ctx, attacker);
   ctx.events.push({ t: "roll", roll });
   return roll;
@@ -455,12 +469,12 @@ export function spendLuck(ctx: Ctx, unit: Unit): void {
 }
 
 /**
- * Conditions that keep, turn after turn, until something else uses them up: Lucky, spent a roll at a time; Frenzied,
- * spent an attack at a time (combat.ts enemyAct); and a shield (Bolstered), spent by blows. What each has left is its
- * `amount`, shown as stacks, never as turns (usesLeft). A shield and a Frenzy last the fight at most and go with it
- * (zone.ts settle, and flee for one who gets away).
+ * Conditions that keep, turn after turn, until something else uses them up: Lucky, Fumbling and Inspired, spent a roll
+ * to hit at a time (attackRoll); Frenzied, spent an attack at a time (combat.ts enemyAct); and a shield (Bolstered),
+ * spent by blows. What each has left is its `amount`, shown as stacks, never as turns (usesLeft). All but Lucky last the
+ * fight at most and go with it (FIGHT_LONG: zone.ts settle, and flee for one who gets away).
  */
-export const UNTIMED: ReadonlySet<string> = new Set(["lucky", "bolstered", "frenzied"]);
+export const UNTIMED: ReadonlySet<string> = new Set(["lucky", "bolstered", "frenzied", "fumbling", "inspired"]);
 
 /** Roll a save against a difficulty and say so. */
 export function saveRoll(ctx: Ctx, unit: Unit, stat: StatKey, vs: number, label: string, disadvantage = false): Roll {

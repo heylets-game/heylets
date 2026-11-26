@@ -4,7 +4,7 @@
 import type { StatKey } from "@gantt-quest/core";
 
 /** What an ability or an enemy's attack can leave on whoever it lands on. A fight on the tiles has more conditions of its own (zone/types.ts). */
-export type EffectKind = "bleeding" | "burning" | "stunned" | "guarded" | "taunting" | "slowed" | "hasted" | "glitched" | "exposed" | "prone" | "sundered" | "reeling";
+export type EffectKind = "bleeding" | "burning" | "stunned" | "guarded" | "taunting" | "slowed" | "hasted" | "fumbling" | "exposed" | "prone" | "sundered" | "reeling";
 
 export const EFFECT_INFO: Record<EffectKind, { name: string; blurb: string; color: string }> = {
   bleeding: { name: "Bleeding", blurb: "Loses 2 HP at the start of each turn.", color: "#f87171" },
@@ -14,7 +14,7 @@ export const EFFECT_INFO: Record<EffectKind, { name: string; blurb: string; colo
   taunting: { name: "Taunting", blurb: "Every enemy attack aimed at one hero goes to it instead, until its next turn.", color: "#fbbf24" },
   slowed: { name: "Slowed", blurb: "Its next turns come half again later on the timeline.", color: "#4ade80" },
   hasted: { name: "Hasted", blurb: "Its next turn comes a third sooner on the timeline.", color: "#67e8f9" },
-  glitched: { name: "Fumbling", blurb: "One roll of its next attack fails, whatever happens.", color: "#e879f9" },
+  fumbling: { name: "Fumbling", blurb: "Its next roll to hit, one for each stack, is made with disadvantage.", color: "#e879f9" },
   exposed: { name: "Exposed", blurb: "Takes 3 more damage from every direct hit, for 2 of its turns.", color: "#facc15" },
   prone: { name: "Prone", blurb: "Knocked flat: standing up costs 1 AP.", color: "#cbd5e1" },
   sundered: { name: "Sundered", blurb: "Its armor is dented: 2 less Defence.", color: "#b0a48a" },
@@ -42,9 +42,20 @@ export const EFFECT_TICK: Record<StackingEffect, number> = { bleeding: 2, burnin
 export const STACK_TURNS: Record<StackingEffect, number> = { bleeding: 3, burning: 2 };
 
 /**
- * An effect an ability leaves: a stacking one (a stack of it, lasting STACK_TURNS), or any other for the turns it says.
+ * The effects held as stacks that are spent, one a use, and do not wear off with turns (Fumbling: one roll to hit
+ * each). They are untimed conditions (zone/engine.ts UNTIMED); a new one adds its stacks to what is there.
  */
-export type Inflict = { effect: StackingEffect; /** How many stacks: 1 when not said. */ stacks?: number } | { effect: Exclude<EffectKind, StackingEffect>; turns: number; /** Reeling: the AP it takes off the next turn (REELING_AP when not said). */ amount?: number };
+export type SpentEffect = "fumbling";
+export const SPENT: readonly SpentEffect[] = ["fumbling"];
+export const isSpent = (kind: string): kind is SpentEffect => (SPENT as readonly string[]).includes(kind);
+
+/**
+ * An effect an ability leaves: a stacking one (a stack of it, lasting STACK_TURNS), a spent one (stacks, used up one
+ * a use: SPENT), or any other for the turns it says.
+ */
+export type Inflict =
+  | { effect: StackingEffect | SpentEffect; /** How many stacks: 1 when not said. */ stacks?: number }
+  | { effect: Exclude<EffectKind, StackingEffect | SpentEffect>; turns: number; /** Reeling: the AP it takes off the next turn (REELING_AP when not said). */ amount?: number };
 
 // ---------- classes ----------
 
@@ -193,7 +204,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   coral_burst: { id: "coral_burst", name: "Coral Burst", stat: "int_stat", target: "all_enemies", damage: 6, saveOr: { effect: "bleeding" }, blurb: "Coral bursts out in a cone 3 hexes long: 1 hex, then 2, then 3. Every enemy in it takes a little damage (half if they brace), and those that fail to brace are cut and start Bleeding." },
   restore: { id: "restore", name: "Restore", stat: "int_stat", target: "ally", heal: 4, blurb: "Heal an ally (or yourself) a little and lift every harmful condition off them." },
   // Bard weapons. Lute: Dissonance and Second Wind. Bosun's Pipe: Blasting Tone and Soothing Tone. Squeeze Box: Bellows Blast and Hornpipe. Ship's Bell: Peal and Clarion Call.
-  dissonance: { id: "dissonance", name: "Dissonance", stat: "int_stat", target: "enemy", damage: 7, targetEffect: { effect: "glitched", turns: 1 }, blurb: "A note nobody can think through. On a hit, the target's next roll to hit is made with disadvantage. No save." },
+  dissonance: { id: "dissonance", name: "Dissonance", stat: "int_stat", target: "enemy", damage: 7, targetEffect: { effect: "fumbling", stacks: 1 }, blurb: "A note nobody can think through. On a hit, the target's next roll to hit is made with disadvantage. No save." },
   encore: { id: "encore", name: "Second Wind", stat: "int_stat", target: "ally", heal: 4, blurb: "A tune that gets an ally (or yourself) back on their feet. Heal a little, and their next roll to hit has advantage." },
   blasting_tone: { id: "blasting_tone", name: "Blasting Tone", stat: "int_stat", target: "all_enemies", damage: 6, blurb: "A blast of sound in a line 4 hexes long. Every enemy on it takes a little damage (half if they brace). Your allies on the line are spared." },
   soothing_tone: { id: "soothing_tone", name: "Soothing Tone", stat: "int_stat", target: "self", heal: 6, blurb: "A calming tone: you and every ally within 2 hexes heal a fair amount." },
@@ -212,7 +223,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   // Warden weapons. Bell-Buoy Maul: Sturdy Blow and Stand Strong. Foghorn Axe: Disarming Chop and Guard. Boarding Pike: Goading Strike and Throw Pike.
   sturdy_blow: { id: "sturdy_blow", name: "Sturdy Blow", stat: "str", target: "enemy", damage: 8, blurb: "A heavy, careful blow with the maul. Hit or miss, you gain a shield of 3 plus your level on top of any you have, until it is spent or the fight ends." },
   stand_strong: { id: "stand_strong", name: "Stand Strong", stat: "vit", target: "self", blurb: "Plant your feet. A shield of 3 plus your level, and 3 more for each enemy beside you, on top of any you have, until it is spent or the fight ends." },
-  disarming_chop: { id: "disarming_chop", name: "Disarming Chop", stat: "str", target: "enemy", damage: 8, saveOr: { effect: "glitched", turns: 1 }, blurb: "A chop at the weapon arm. On a hit, the target must save or its next attack is rolled with disadvantage." },
+  disarming_chop: { id: "disarming_chop", name: "Disarming Chop", stat: "str", target: "enemy", damage: 8, saveOr: { effect: "fumbling", stacks: 1 }, blurb: "A chop at the weapon arm. On a hit, the target must save or its next attack is rolled with disadvantage." },
   raise_guard: { id: "raise_guard", name: "Against the Waves", stat: "vit", target: "self", blurb: "Set yourself behind the axe as the sea breaks on you: a shield of 4 plus your level, 4 more if you stand in water, until it is spent or the fight ends. 1 turn to wait." },
   goading_strike: { id: "goading_strike", name: "Goading Strike", stat: "str", target: "enemy", damage: 8, blurb: "A jab with the pike to get its attention. On a hit, the target must save or be Taunted for 2 turns: it attacks no one but you, and comes at you if it cannot reach you yet." },
   throw_pike: { id: "throw_pike", name: "Throw Pike", stat: "str", target: "enemy", damage: 7, blurb: "Hurl the pike at an enemy up to 3 hexes off. On a hit, it is dragged straight toward you, as far as beside you. 2 turns to wait." },
@@ -225,7 +236,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   cleave: { id: "cleave", name: "Cleave", stat: "str", target: "all_enemies", damage: 7, blurb: "A wide swing through three hexes beside you, an attack on each enemy in them." },
   thornlash: { id: "thornlash", name: "Thornlash", stat: "int_stat", target: "enemy", damage: 7, saveOr: { effect: "slowed", turns: 2 }, blurb: "Thorns that dig in. On a hit, the target must save or be Slowed." },
   rejuvenate: { id: "rejuvenate", name: "Rejuvenate", stat: "int_stat", target: "ally", heal: 7, blurb: "Heal an ally (or yourself) now, and the same again at the start of their next turn." },
-  hex: { id: "hex", name: "Hex", stat: "int_stat", target: "enemy", damage: 7, saveOr: { effect: "glitched", turns: 1 }, blurb: "A slow curse on the target. On a hit, it must save or be Fumbling: its next attack is rolled with disadvantage." },
+  hex: { id: "hex", name: "Hex", stat: "int_stat", target: "enemy", damage: 7, saveOr: { effect: "fumbling", stacks: 1 }, blurb: "A slow curse on the target. On a hit, it must save or be Fumbling: its next attack is rolled with disadvantage." },
   soul_drain: { id: "soul_drain", name: "Soul Drain", stat: "int_stat", target: "enemy", damage: 11, drain: 0.5, blurb: "Takes some of their life for yours: heals you half the damage dealt. 2 turns to wait." },
   // Class abilities: chosen for a hero's slots from their class's pool (classabilities.ts), not given by a weapon.
   // Paladin. The two auras are conditions on the Paladin in a fight (zone/kit.ts AURAS).

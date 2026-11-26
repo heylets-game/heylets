@@ -5226,7 +5226,7 @@ describe("Bard weapons", () => {
     const { state, foe } = duel("dummy", "frontend_bard", at(5, 6), at(9, 6));
     unit(state, "ann").abilities = ["dissonance"];
     const after = untilHit(state, { type: "use", by: "ann", unit: "ann", ability: "dissonance", target: foe }, foe);
-    expect(unit(after.state, foe).conditions.some((c) => c.kind === "glitched")).toBe(true);
+    expect(unit(after.state, foe).conditions.some((c) => c.kind === "fumbling")).toBe(true);
     expect(unit(after.state, foe).conditions.some((c) => c.kind === "stunned")).toBe(false);
     expect(after.events.some((e) => e.t === "roll" && e.roll.kind === "save")).toBe(false);
     expect(attackContext(after.state, unit(after.state, foe), unit(after.state, "ann"), { melee: false }).adv).toBe(-1);
@@ -5496,7 +5496,7 @@ describe("Warden weapons", () => {
     expect(tacticOf("raise_guard").cooldown).toBe(2);
     expect(tacticOf("throw_pike").cooldown).toBe(3);
     for (const id of ["stand_strong", "raise_guard"]) expect(tacticOf(id).cost, id).toBe(BONUS_AP);
-    expect(ABILITIES.disarming_chop.saveOr).toEqual({ effect: "glitched", turns: 1 });
+    expect(ABILITIES.disarming_chop.saveOr).toEqual({ effect: "fumbling", stacks: 1 });
   });
 
   it("Sturdy Blow: a shield, hit or miss, on top of any already there", () => {
@@ -5530,7 +5530,7 @@ describe("Warden weapons", () => {
   it("Disarming Chop: a hit leaves the target Fumbling unless it saves", () => {
     const { state, foe } = duel("dummy", "sre_warden", at(5, 6), at(7, 6));
     unit(state, "ann").abilities = ["disarming_chop"];
-    const fumbling = (s: ZoneState) => unit(s, foe).conditions.some((c) => c.kind === "glitched");
+    const fumbling = (s: ZoneState) => unit(s, foe).conditions.some((c) => c.kind === "fumbling");
     expect(fumbling(untilHit(state, { type: "use", by: "ann", unit: "ann", ability: "disarming_chop", target: foe }, foe, failedSave).state)).toBe(true);
     expect(fumbling(untilHit(state, { type: "use", by: "ann", unit: "ann", ability: "disarming_chop", target: foe }, foe, savedAll).state)).toBe(false);
   });

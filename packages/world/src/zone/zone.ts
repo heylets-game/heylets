@@ -49,7 +49,7 @@ import { drown, drowningAtStart, drowningOwed, holdBreath } from "./drowning";
 import { shantyOf, songMove, windward } from "./song";
 import { courseMarks } from "./stars";
 import { modsOf } from "./mods";
-import type { Budget, DevOp, Encounter, Throwable, Unit, ZoneAction, ZoneEffect, ZoneEvent, ZoneHero, ZoneOptions, ZoneState, ZoneStep, ZoneView } from "./types";
+import type { Budget, Condition, DevOp, Encounter, Throwable, Unit, ZoneAction, ZoneEffect, ZoneEvent, ZoneHero, ZoneOptions, ZoneState, ZoneStep, ZoneView } from "./types";
 
 /** Rounds a surface painted from the dev toolbox lasts. */
 const PAINT_ROUNDS = 6;
@@ -180,8 +180,17 @@ export function ensureEnemyAbilities(state: ZoneState): ZoneState {
   return state;
 }
 
-/** A saved zone, brought up to date as it is loaded: a way out of a cave (ensureMouth), enemies' abilities (ensureEnemyAbilities), and room for the big ones (makeRoom). */
-export const loadZone = (state: ZoneState): ZoneState => makeRoom(ensureEnemyAbilities(ensureMouth(state)));
+/** Conditions saved under a name they no longer go by, and the one they go by now. */
+const RENAMED: Record<string, Condition> = { glitched: "fumbling" };
+
+/** A zone saved with conditions under an old name (RENAMED) has them under the new one. */
+function renameConditions(state: ZoneState): ZoneState {
+  for (const u of state.units) for (const c of u.conditions) c.kind = RENAMED[c.kind] ?? c.kind;
+  return state;
+}
+
+/** A saved zone, brought up to date as it is loaded: conditions under their new names (renameConditions), a way out of a cave (ensureMouth), enemies' abilities (ensureEnemyAbilities), and room for the big ones (makeRoom). */
+export const loadZone = (state: ZoneState): ZoneState => makeRoom(ensureEnemyAbilities(ensureMouth(renameConditions(state))));
 
 export function createZone(code: string, seed: string, options: ZoneOptions): ZoneState {
   const plan = options.delve ? generateDelve(seed, options) : generateZone(seed, options);

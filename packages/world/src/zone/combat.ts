@@ -8,7 +8,7 @@
 import { hexDistance, hexNeighbors, hexSegment, posKey, type HexPos } from "@gantt-quest/core";
 import { ABILITIES, BARD_AURA, ENEMIES, type AbilityDef, type EffectKind } from "../content";
 import { tileAt, type Poi } from "../map";
-import { DEBUFFS, UNTIMED_KEEPS, attackMade, addCondition, addShield, addStacks, inflict, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, removeCondition, saveBonus, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
+import { DEBUFFS, UNTIMED_KEEPS, attackMade, addCondition, addUses, addShield, addStacks, inflict, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, removeCondition, saveBonus, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
 import { cratesOn, crateById, hurtCrate, isCrateId } from "./crates";
 import { ENEMY_ABILITIES } from "./enemyabilities";
 import { bearing, big, caught, close, blast, blockerAt, courseShare, covers, directionToward, gap, gapTo, meet, nearOf, reaches, ringToward, elevOf, flies, heldAgainst, inFight, lineFrom, pathIn, perkOf, pitAt, reachFrom, roomAt, roomFor, sameHex, sees, seesFor, solid, span, stepCost, strikes, unitById, zoneReach, type Course, type Pit } from "./geometry";
@@ -429,12 +429,12 @@ function blinkTo(ctx: Ctx, unit: Unit, to: HexPos, phase = false): void {
   if (!enterSurface(ctx, unit) && !unit.down) enterWeather(ctx, unit);
 }
 
-/** Lead by Example: the user's ally nearest the target (not the user) is Inspired, with advantage on their next roll to hit. */
+/** Lead by Example: the user's ally nearest the target (not the user) gets a stack of Inspired: advantage on a roll to hit. */
 function inspireNearest(ctx: Ctx, unit: Unit, target: Unit): void {
   const ally = ctx.state.units
     .filter((u) => u.side === unit.side && u.id !== unit.id && !u.down)
     .sort((a, b) => hexDistance(a.pos, target.pos) - hexDistance(b.pos, target.pos) || a.id.localeCompare(b.id))[0];
-  if (ally) addCondition(ctx, ally, "inspired", 2);
+  if (ally) addUses(ctx, ally, "inspired", 1);
 }
 
 /** Pickpocket: gold equal to the user's level, from an enemy whose pockets are not picked yet. A stand-in shows it but banks none. */
@@ -992,7 +992,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
     }
     if (def.targetEffect) inflict(ctx, target, def.targetEffect);
     if (tactic.aura) addCondition(ctx, unit, tactic.aura.kind, tactic.aura.rounds);
-    if (tactic.steady) addCondition(ctx, target, "inspired", tactic.steady);
+    if (tactic.steady) addUses(ctx, target, "inspired", tactic.steady);
     // Wind's Blessing: more movement for each AP, now for one in the middle of their turn, else on their next.
     if (tactic.tailwind && !moveMore(state, target, tactic.tailwind)) {
       addCondition(ctx, target, "tailwind", 1, tactic.tailwind);
@@ -1405,7 +1405,7 @@ function joinSong(ctx: Ctx, unit: Unit, aim: Aim, budget: Budget | null): void {
     // Everyone in it gets a little more of what it gives, until the Bard's next turn.
     song.surge = (song.surge ?? 0) + 1;
   }
-  if (song.kind === "lively_shanty") addCondition(ctx, unit, "inspired", 2);
+  if (song.kind === "lively_shanty") addUses(ctx, unit, "inspired", 1);
   else if (song.kind === "dour_shanty") addCondition(ctx, unit, "guarded", 1);
   // Wind-god's: away on the wind, drawing no blows for the rest of the turn. That is this fight's Disengage, and there is only one.
   else if (budget) {
