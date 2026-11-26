@@ -23,6 +23,8 @@
 // Gold and items are changed on the server (server/dev.ts), which refuses
 // outside a development deployment. They are your own hero's alone.
 //
+// T opens it in full (from shut or minimized), and shuts it when it is open.
+//
 // Open or shut, minimized or not, and the tab it was on, it stays that way
 // from view to view and across a reload.
 
@@ -145,6 +147,21 @@ export function DevToolbox({ me, refresh }: { me: Me; refresh(): Promise<void> }
     remember(FOLDED_KEY, on ? "1" : null);
     setFolded(on);
   };
+  // T: open in full, from shut or minimized; open, shut. Not while typing, or with a modifier held.
+  const shown = open && !folded;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== "t" || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+      const at = e.target as HTMLElement | null;
+      if (at?.closest?.("input, textarea, select, [contenteditable]")) return;
+      e.preventDefault();
+      if (shown) return show(false);
+      fold(false);
+      show(true);
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, [shown]);
   const show = (on: boolean) => {
     remember(OPEN_KEY, on ? "1" : null);
     setOpen(on);
@@ -154,7 +171,7 @@ export function DevToolbox({ me, refresh }: { me: Me; refresh(): Promise<void> }
     setTab(id);
   };
   const spanner = (
-    <button type="button" className={`dev-corner ${column ? "in-column" : ""} ${open ? "selected" : ""}`} title="Dev toolbox" aria-label="Dev toolbox" aria-pressed={open} onClick={() => show(!open)}>
+    <button type="button" className={`dev-corner ${column ? "in-column" : ""} ${open ? "selected" : ""}`} title="Dev toolbox (T)" aria-label="Dev toolbox" aria-keyshortcuts="T" aria-pressed={open} onClick={() => show(!open)}>
       <PixelIcon rows={WRENCH} size={column ? 18 : 14} />
     </button>
   );
