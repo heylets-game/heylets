@@ -910,6 +910,10 @@ function dev(ctx: Ctx, by: string, op: DevOp): string | null {
       }
       state.units.push(enemy);
     });
+    // Put down where it can see a hero (by the rule a hero's step is noticed by): it is on them at once, starting a
+    // fight if none is on, as if they had walked into its sight.
+    const spotted = standing(state, "hero").find((h) => noticedBy(state, h).includes(group));
+    if (spotted) engage(ctx, [group], spotted);
     // Put down near enough to a fight to hear it: it is in it at once, as it would be at the end of the round.
     reinforce(ctx, [group]);
   } else if (op.op === "paint") {

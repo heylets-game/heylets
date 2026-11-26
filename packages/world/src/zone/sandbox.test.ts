@@ -92,6 +92,29 @@ describe("placing enemies", () => {
   it("leaves one put down out of earshot out of it", () => {
     expect(place(at(14, 6))).toBe(false);
   });
+
+  // With no fight on: one put down where it can see a hero starts one, as if the hero had walked into its sight.
+  const fresh = (at0: { q: number; r: number }) => {
+    let state = dev(board(), { op: "sandbox", on: true });
+    const before = new Set(state.units.map((u) => u.id));
+    const events: ZoneEvent[] = [];
+    state = dev(state, { op: "spawn", kinds: ["wolf"], at: at0 }, events);
+    const placed = state.units.find((u) => !before.has(u.id))!;
+    return { state, placed, events };
+  };
+
+  it("starts a fight when put down in sight of a hero", () => {
+    const { state, placed, events } = fresh(at(8, 6));
+    expect(state.encounter!.order).toEqual(expect.arrayContaining([placed.id, "ann"]));
+    expect(events).toContainEqual(expect.objectContaining({ t: "alert", group: placed.group, by: "ann" }));
+    expect(events.some((e) => e.t === "fight_start")).toBe(true);
+  });
+
+  it("starts nothing when put down out of sight", () => {
+    const { state, events } = fresh(at(14, 6));
+    expect(state.encounter).toBeFalsy();
+    expect(events.some((e) => e.t === "fight_start")).toBe(false);
+  });
 });
 
 describe("acting in the combat sandbox", () => {
