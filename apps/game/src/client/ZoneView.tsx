@@ -38,6 +38,7 @@ import {
   AURAS,
   COMMON_ACTIONS,
   CONDITION_INFO,
+  conditionText,
   CRATE_HP,
   ENEMIES,
   ENEMY_ABILITIES,
@@ -176,6 +177,7 @@ import "./zone/fight.css";
 import { LootPanel } from "./zone/LootPanel";
 import type { BackdropKind } from "./render/backdrop";
 import { joinOk } from "./joinWarning";
+import { altName, useHeldKey } from "./heldKey";
 
 /** What is waiting for a click on the map. */
 /** `first`: for an ability aimed in two clicks (a blink: Smuggler's Route, Tactical Retreat), who was clicked first. */
@@ -363,6 +365,11 @@ const countOf = (c: { kind: string; rounds: number; amount?: number }): number |
 /** The turns a condition has left, as shown: none for one that keeps whatever the turns do (untimed). */
 const turnsOf = (c: { kind: string; rounds: number }): number => (untimed(c.kind) ? 0 : c.rounds);
 
+/** A condition's name as shown in a unit's card: with its number (stacks, or a Reeling's AP) and its turns left, where it has them. */
+const condLabel = (c: Unit["conditions"][number]) => (
+  <>{CONDITION_INFO[c.kind].name}{countOf(c) !== undefined ? ` ${countOf(c)}` : ""}{turnsOf(c) > 0 && <> <span className="zone-cond-time">⌛{c.rounds}</span></>}</>
+);
+
 /** The conditions on a unit, as badges over its head: in CONDITION_INFO's colours, with turns left (turnsOf), and its number (stacks, or a Reeling's AP) where it has one. */
 const badgesOf = (u: Unit) => shownConditions(u).map((c) => ({ kind: c.kind, color: CONDITION_INFO[c.kind].color, rounds: turnsOf(c), ...(countOf(c) !== undefined ? { stacks: countOf(c) } : {}) }));
 /**
@@ -510,6 +517,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const [chartAsk, setChartAsk] = useState(false);
   const [pick, setPick] = useState<Pick | null>(null);
   const [hover, setHover] = useState<HexPos | null>(null);
+  // Alt (Option) held: the card for whoever is under the pointer says what each effect on them does, in full.
+  const closer = useHeldKey("Alt");
   // Whoever of the party was selected before coming onto the map is played first (party.ts).
   const [playAs, setPlayAs] = useState<string | null>(actingHero);
   /** More of your own selected to walk with the one being played, out of a fight: shift-click on the roster, or P for everyone. */
@@ -3184,7 +3193,22 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           {under ? (
             <>
               <strong>{under.name}</strong> <span className="muted">{under.side === "enemy" ? ` · Level ${under.level}` : ""} · {under.hp}/{under.maxHp} HP{shieldOf(under) > 0 ? ` + ${shieldOf(under)} shield` : ""} · Defence {defenceOf(under, state)}{under.down ? " · down" : ""}</span>
-              {shownConditions(under).length > 0 && <div>{shownConditions(under).map((c) => <span key={c.kind} className="zone-cond" style={{ color: CONDITION_INFO[c.kind].color }} title={CONDITION_INFO[c.kind].blurb}>{CONDITION_INFO[c.kind].name}{countOf(c) !== undefined ? ` ${countOf(c)}` : ""}{turnsOf(c) > 0 && <> <span className="zone-cond-time">⌛{c.rounds}</span></>}</span>)}</div>}
+              {shownConditions(under).length > 0 && (closer ? (
+                // Held Alt: each effect on its own line, with what it does to them, in their numbers.
+                <div className="zone-conds-full">
+                  {shownConditions(under).map((c) => (
+                    <div key={c.kind} className="zone-cond-full">
+                      <span className="zone-cond" style={{ color: CONDITION_INFO[c.kind].color }}>{condLabel(c)}</span>
+                      <span className="muted">{conditionText(c, (id) => names.current.get(id))}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div>
+                  {shownConditions(under).map((c) => <span key={c.kind} className="zone-cond" style={{ color: CONDITION_INFO[c.kind].color }} title={conditionText(c, (id) => names.current.get(id))}>{condLabel(c)}</span>)}
+                  <span className="zone-cond-hint muted">hold {altName} for more</span>
+                </div>
+              ))}
               {under.side === "enemy" && <div className="muted">{under.abilities.map((id) => ENEMY_ABILITIES[id]?.name ?? id).join(", ")}</div>}
               {alsoHere.map((u) => <div key={u.id}><span className="muted">Sharing the hex:</span> <strong>{u.name}</strong> <span className="muted">· {u.hp}/{u.maxHp} HP{u.down ? " · down" : ""}</span></div>)}
               {/* Where a shove would send them: over an edge, into a pit, or only back a hex. */}

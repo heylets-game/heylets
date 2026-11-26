@@ -11,7 +11,7 @@ import { ENEMY_ABILITIES, type EnemyAbilityDef } from "./enemyabilities";
 import { BLINK_AP } from "../gear";
 import { modsOf } from "./mods";
 import { DEFAULT_SCALE, diceFor, scaled, type Dice } from "./rules";
-import type { CommonAction, Condition, ShantyKind, SurfaceKind, Throwable, Unit, WeatherKind, ZoneState } from "./types";
+import type { CommonAction, Condition, ShantyKind, SurfaceKind, Throwable, Unit, UnitCondition, WeatherKind, ZoneState } from "./types";
 
 /**
  * - `single`: one enemy, an attack roll.
@@ -541,20 +541,20 @@ const info = (kind: EffectKind, blurb: string) => ({ name: EFFECT_INFO[kind].nam
 export const CONDITION_INFO: Record<Condition, { name: string; blurb: string; color: string }> = {
   bleeding: info("bleeding", `Loses ${EFFECT_TICK.bleeding} HP for each stack at the start of each of its turns. Lasts ${STACK_TURNS.bleeding} turns; a new stack starts them all over. Any healing closes one stack.`),
   burning: info("burning", `Loses ${EFFECT_TICK.burning} HP for each stack at the start of each of its turns. Each stack burns out ${STACK_TURNS.burning} turns after it caught. Water puts it all out.`),
-  stunned: info("stunned", "Loses its next turn. Attacks against it have advantage."),
+  stunned: info("stunned", "Loses its next turn, and cannot strike at anyone passing it until then. Attacks against it have advantage."),
   guarded: info("guarded", "Takes half damage until its next turn."),
-  taunting: info("taunting", "Enemies that can reach it go for it, until its next turn."),
+  taunting: info("taunting", "Draws the enemy: they would far sooner attack it than anyone else, until its next turn."),
   slowed: info("slowed", "Half movement for each AP."),
   hasted: info("hasted", "Double movement for each AP."),
   // Its stacks are the rolls to hit left to fumble: they do not run down with the turns, only with the rolls.
   fumbling: info("fumbling", "Each of its next rolls to hit, one for each stack, is made with disadvantage. Gone when the fight ends."),
   exposed: info("exposed", "Attacks against it have advantage."),
   poisoned: { name: "Poisoned", blurb: "Its attacks are rolled with disadvantage.", color: "#a3e635" },
-  prone: info("prone", "Flat on the ground: standing up costs 1 AP. Melee attacks against it have advantage, ranged attacks disadvantage."),
+  prone: info("prone", "Flat on the ground: getting up takes 1 AP of its next turn, and it cannot strike at anyone passing it until then. Melee attacks against it have advantage, ranged attacks disadvantage."),
   sundered: info("sundered", `Its armor is dented: ${SUNDERED_DEFENCE} less Defence.`),
   memento_mori: info("memento_mori", "Each time it takes damage it starts Fumbling, unless it is Fumbling already."),
   reeling: info("reeling", `Shaken by a heavy blow: as much less AP on its next turn as its number says (${REELING_AP} unless said).`),
-  wet: { name: "Wet", blurb: "Soaked through: lightning hits harder, and it cannot burn.", color: "#7dd3fc" },
+  wet: { name: "Wet", blurb: "Soaked through: lightning hits it harder, and it cannot catch fire.", color: "#7dd3fc" },
   beacon: { name: "Beacon", blurb: `Gives light, and it and allies within 2 hexes get +${AURAS.beaconHit} to hit.`, color: "#fff7d6" },
   mending: { name: "Healing Aura", blurb: "At the start of each of its turns, it and every ally within 2 hexes heal a little.", color: "#5dffa0" },
   bolstered: { name: "Bolstered", blurb: "A shield takes the damage of blows before its HP does, until it is spent or the fight ends.", color: "#9ec9ff" },
@@ -584,6 +584,50 @@ export const CONDITION_INFO: Record<Condition, { name: string; blurb: string; co
   tailwind: { name: "Tailwind", blurb: "The wind at its back: more movement for each AP on its next turn.", color: "#bfe8ff" },
   red_sky: { name: "Red Sky at Morning", blurb: "A bad omen: its attacks are rolled with disadvantage.", color: "#e2483d" },
 };
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+/** The next `n` of something: "its next roll to hit", "each of its next 3 rolls to hit". */
+const nextOf = (n: number, one: string, many: string) => (n === 1 ? `its next ${one}` : `each of its next ${n} ${many}`);
+
+/**
+ * What one condition does, told with the numbers it has on the unit that bears it (its stacks, its AP, its reach),
+ * for the closer look at a unit (holding Alt over it). `by` is the name of whoever laid it (Taunted, the Black Spot).
+ * A condition with no numbers of its own is not here: CONDITION_INFO's blurb says all it does.
+ */
+const CONDITION_DETAIL: Partial<Record<Condition, (c: UnitCondition, by?: string) => string>> = {
+  bleeding: (c) => {
+    const n = c.amount ?? 1;
+    return `Loses ${EFFECT_TICK.bleeding * n} HP at the start of each of its turns (${EFFECT_TICK.bleeding} for each of its ${plural(n, "stack")}), for ${plural(c.rounds, "more turn")}. A new stack starts them all over. Any healing closes one stack.`;
+  },
+  burning: (c) => {
+    const turns = (c.stacks ?? [{ rounds: c.rounds }]).map((s) => s.rounds).sort((a, b) => b - a);
+    const n = turns.length;
+    const left = n === 1 ? `It burns out in ${plural(turns[0], "turn")}` : `Each stack burns out on its own: in ${turns.join(", ")} turns`;
+    return `Loses ${EFFECT_TICK.burning * n} HP at the start of each of its turns (${EFFECT_TICK.burning} for each of its ${plural(n, "stack")}). ${left}. Water puts it all out.`;
+  },
+  reeling: (c) => `Shaken by a heavy blow: ${c.amount ?? REELING_AP} AP less to spend on its next turn.`,
+  fumbling: (c) => `${nextOf(c.amount ?? c.rounds, "roll to hit is", "rolls to hit is")} made with disadvantage. Gone when the fight ends.`.replace(/^./, (x) => x.toUpperCase()),
+  inspired: (c) => `${nextOf(c.amount ?? c.rounds, "roll to hit has", "rolls to hit has")} advantage. Gone when the fight ends.`.replace(/^./, (x) => x.toUpperCase()),
+  lucky: (c) => `A coin in the town well: ${nextOf(c.amount ?? c.rounds, "roll to hit has", "rolls to hit, one for each coin, has")} advantage.`,
+  frenzied: (c) => `Driven on by a howl: ${nextOf(c.amount ?? c.rounds, "attack has", "attacks has")} advantage, and every one that draws blood leaves a stack of Bleeding.`,
+  drowning: (c) => {
+    const n = c.amount ?? 1;
+    return `Loses ${DROWNING.tick * n} HP at the start of each of its turns (${DROWNING.tick} for each of its ${plural(n, "stack")}), then must hold its breath (a save of ${DROWNING.dc + DROWNING.perStack * n} or better) or lose ${ACTION_AP} AP. A new stack keeps them all going ${DROWNING.rounds} more turns.`;
+  },
+  tailwind: (c) => `The wind at its back: ${c.amount ?? 1} more movement for each AP on its next turn.`,
+  slowing_field: (c) => `Every foe within ${plural(c.amount ?? 2, "hex", "hexes")} of it is Slowed: as their turn starts in it, or as they step into it.`,
+  contraband: (c) => `${plural(c.amount ?? 1, "smuggled fire bomb")} in the pack, to throw before they are found out.`,
+  taunted: (_c, by) => `Goaded${by ? ` by ${by}` : ""}: it attacks no one but ${by ?? "the one who taunted it"}, and comes at them if it cannot reach them yet.`,
+  black_spot: (_c, by) => `${CONDITION_INFO.black_spot.blurb}${by ? ` Laid by ${by}.` : ""}`,
+  drowning_curse: (_c, by) => `${CONDITION_INFO.drowning_curse.blurb}${by ? ` Laid by ${by}.` : ""}`,
+  lively_shanty: (c) => `Singing, to every ally within ${plural(SHANTY.radius + (c.joined?.length ?? 0), "hex", "hexes")}: +${SHANTY.lively.hit + (c.surge ?? 0) * SHANTY.lively.surge} to hit and a little more damage. Each who joins widens it a hex and adds +${SHANTY.lively.surge} to hit until the Bard's next turn.`,
+  dour_shanty: (c) => `Singing, to every ally within ${plural(SHANTY.radius + (c.joined?.length ?? 0), "hex", "hexes")}: +${SHANTY.dour.defence + (c.surge ?? 0) * SHANTY.dour.perJoin} Defence. Each who joins widens it a hex and adds +${SHANTY.dour.perJoin} Defence until the Bard's next turn.`,
+  windgod_shanty: (c) => `Singing, to every ally within ${plural(SHANTY.radius + (c.joined?.length ?? 0), "hex", "hexes")}: ${SHANTY.windgod.move + (c.surge ?? 0) * SHANTY.windgod.perJoin} more movement for each AP, and none of them can be Slowed. Each who joins widens it a hex and adds ${SHANTY.windgod.perJoin} more until the Bard's next turn.`,
+};
+
+/** What a condition on a unit does, in full, with its own numbers (CONDITION_DETAIL), or what CONDITION_INFO says of its kind. */
+export const conditionText = (c: UnitCondition, nameOf?: (id: string) => string | undefined): string =>
+  CONDITION_DETAIL[c.kind]?.(c, c.by ? nameOf?.(c.by) : undefined) ?? CONDITION_INFO[c.kind].blurb;
 
 // ---------- common actions ----------
 
