@@ -751,14 +751,14 @@ function greatCleave(stage: MoveStage, ctx: MoveCtx) {
   stage.later(() => cleaveHit(stage, ctx), lands);
 }
 
-/** A Battering Ram's charge: the least it gathers itself for, in seconds, how many hexes of dust it drives up after, and the seconds between puffs. */
-export const BATTERING_RAM = { gather: 0.18, trail: 3, every: 0.07 };
+/** A Battering Ram's charge: the least it gathers itself for, in seconds. */
+export const BATTERING_RAM = { gather: 0.18 };
 
 /**
  * A Brute's Battering Ram: it drops its shoulder and drives in at the target (figures.ts THRUST, then a spring at
  * them), dust kicked back off its heels and speed lines streaming off it. It hits like a door caving in: a big flash and a shock pulsing out over the ground,
- * shock lines bursting out ahead, and the target jolted hard; then dust is driven up along the ground for the three
- * hexes the target is shoved back, one puff after another.
+ * shock lines bursting out ahead, and the target jolted hard. (Shoved back, it leaves a trail of dust of its own:
+ * WorldRenderer.trailDust.)
  */
 function batteringRam(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
   const flip = dir < 0;
@@ -797,17 +797,8 @@ function batteringRam(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: 
     stage.jolt();
     stage.later(() => stage.jolt(), 0.06);
     stage.later(() => stage.jolt(), 0.12);
+    // The dust they throw up as they are driven back is theirs, not the blow's (WorldRenderer.trailDust).
     onImpact();
-    const ground = hitAt.clone().setY(feet.y + 0.12);
-    for (let i = 0; i < BATTERING_RAM.trail * 2; i++) {
-      stage.later(() => {
-        const at = ground.clone().addScaledVector(on, (HEX * (i + 1)) / 2);
-        for (const side of [-1, 1]) {
-          const out = new THREE.Vector3(-on.z * side, 0, on.x * side);
-          stage.spawnFx("dust", DUST, side > 0, { from: at, to: at.clone().addScaledVector(out, 0.5).setY(at.y + 0.35), life: 0.45, size: [0.6, 1.3], spin: 0, fade: true });
-        }
-      }, BATTERING_RAM.every * (i + 1));
-    }
   }, lands);
 }
 
@@ -1037,7 +1028,7 @@ const GUARDIAN_GLOW = "#7fe3ff";
  * A Guardian's Stone Fist: it heaves its fist right up overhead and brings it straight down on the target (figures.ts
  * SLAM). Where it lands: a pale stone flash with a duller one swelling behind it, a pulse over the ground at their feet,
  * shock lines driven on the way the blow goes, chips of stone flung on past them, a glint of the Guardian's cyan, and
- * the view jolted. Then dust driven up along the ground for the hex they are knocked back.
+ * the view jolted. (Knocked back, they leave a trail of dust of their own: WorldRenderer.trailDust.)
  */
 function stoneFist(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
   const flip = dir < 0;
@@ -1063,18 +1054,8 @@ function stoneFist(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Mov
     stage.shake?.(0.1, 0.3);
     stage.jolt();
     stage.later(() => stage.jolt(), 0.07);
+    // The dust they throw up as they are knocked back is theirs, not the blow's (WorldRenderer.trailDust).
     onImpact();
-    // Dust driven up along the ground as they go back a hex.
-    const ground = hitAt.clone().setY(feet.y + 0.12);
-    for (let i = 0; i < 2; i++) {
-      stage.later(() => {
-        const at = ground.clone().addScaledVector(on, (HEX * (i + 1)) / 2);
-        for (const side of [-1, 1]) {
-          const out = new THREE.Vector3(-on.z * side, 0, on.x * side);
-          stage.spawnFx("dust", DUST, side > 0, { from: at, to: at.clone().addScaledVector(out, 0.5).setY(at.y + 0.35), life: 0.45, size: [0.6, 1.3], spin: 0, fade: true });
-        }
-      }, 0.06 * (i + 1));
-    }
   }, Math.max(0, wait));
 }
 
@@ -1234,7 +1215,7 @@ function earthquakeHeave(stage: MoveStage, { figure, hitAt, crit, onImpact, echo
 }
 
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
-  "Stone Fist": { who: "guardian", blurb: "Heaves its fist up overhead and brings it straight down: a pale stone flash and a cyan glint, a pulse at the target's feet, shock lines and chips of stone driven on past them, the view jolted, and dust driven up along the hex they are knocked back.", play: stoneFist },
+  "Stone Fist": { who: "guardian", blurb: "Heaves its fist up overhead and brings it straight down: a pale stone flash and a cyan glint, a pulse at the target's feet, shock lines and chips of stone driven on past them, and the view jolted.", play: stoneFist },
   Earthquake: {
     who: "guardian",
     blurb: "Heaves both fists overhead and drives them into the ground: thin cracks run out over the ground two hexes all round, small ripples of dust follow each other out, little puffs of dust and hopping pebbles all over, and the view trembles.",
@@ -1242,7 +1223,7 @@ export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
     again: { blurb: "Its next turn, as the cracked ground heaves on its own, out of the middle of it (the Guardian does nothing): the view shakes hard, wide cracks tear out all round, a bright flash and a heavy wave with rolling dust behind, columns of dust and chunks of rock thrown up all over it, and a second jolt.", play: earthquakeHeave },
   },
   "Great Cleave": { who: "brute", sweeps: true, blurb: "A great two-handed sweep from side to side: a wide white swoosh runs across both rows of hexes in front of it, dust kicked up under it and grit flung past the far edge, and everyone caught takes a heavy slash with a red burst.", play: greatCleave },
-  "Battering Ram": { who: "brute", blurb: "Drops its shoulder and charges in, dust kicked off its heels and speed lines streaming off it: a big flash, a shock pulsing over the ground, grit and shock lines bursting out ahead as it hits, then dust driven up along the ground for the three hexes the target is shoved back.", play: batteringRam },
+  "Battering Ram": { who: "brute", blurb: "Drops its shoulder and charges in, dust kicked off its heels and speed lines streaming off it: a big flash, a shock pulsing over the ground, grit and shock lines bursting out ahead as it hits.", play: batteringRam },
   "Rain of Arrows": { who: "archer", blurb: "Draws and looses a sheaf of arrows straight up, then they come down slanting on the hex and all round it, one after another, each landing with a puff of dust and standing in the ground a moment, a pale ring pulsing out as the first hit.", play: rainOfArrows },
   "Rending Cleave": { who: "great_bear", blurb: "Rears a little and sweeps a forepaw flat across its whole front, a red swoosh behind its claws: one great red slash is cut into the ground through the three hexes before it, dust kicked up along it and red flecks thrown off its far end.", play: rendingCleave },
   "Thunderous Roar": { who: "great_bear", blurb: "Rears right up, throws its head back and bellows: rings roll out over the ground from its feet, pale then purple, sound lines burst from its mouth every way and dust is blown out all round; each hero is jolted as the first ring reaches them.", play: thunderousRoar },

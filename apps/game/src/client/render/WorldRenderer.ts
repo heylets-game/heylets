@@ -573,6 +573,9 @@ const noise = (q: number, r: number, salt: number) => {
   return n - Math.floor(n);
 };
 
+/** The dust a unit moved by force leaves behind it (WorldRenderer.trailDust): a puff each `every` seconds, each lasting `life`. */
+const DUST_TRAIL = { every: 0.045, life: 0.45, color: "#c9b994" };
+
 /** How many hexes an enemy of this kind stands on (ENEMIES `size`): it is drawn in the middle of them all. */
 const hexesOf = (kind: string): number => ENEMIES[kind.split("|")[0]]?.size ?? 1;
 
@@ -585,6 +588,8 @@ interface Unit {
   pace?: number;
   /** Knocked across the ground (a shove): moved this many times faster than a walk, without steps, until it arrives. */
   rush?: number;
+  /** While knocked across the ground: when (render clock) it next throws up a puff of its dust trail (trailDust). */
+  dustAt?: number;
   /** Going into a pit (see sink): until the render clock passes this, nothing else lays it out or clears it away. */
   sinkUntil?: number;
   /** Knocked off its feet: drawn lying until the render clock passes this. */
@@ -2579,6 +2584,25 @@ export class WorldRenderer {
         if (landed) t.kick.set(dir * 0.1, 0, 0);
       },
     };
+  }
+
+  /**
+   * A unit moved by force (shoved, knocked back, swept along, hauled in) throws up dust behind it as it goes, every
+   * DUST_TRAIL.every seconds of its slide from `from` to `to` this frame: puffs at its feet, kicked back the way it came
+   * and out to either side. None as it drops straight down off a ledge, and none for one that did not move: a shove
+   * that only knocks someone flat leaves no trail.
+   */
+  private trailDust(unit: Unit, from: THREE.Vector3, to: THREE.Vector3) {
+    const way = new THREE.Vector3(to.x - from.x, 0, to.z - from.z);
+    if (way.lengthSq() < 1e-6 || this.clock < (unit.dustAt ?? 0)) return;
+    unit.dustAt = this.clock + DUST_TRAIL.every;
+    way.normalize();
+    const feet = to.clone().setY(to.y - unit.bob + 0.12);
+    for (const side of [-1, 1]) {
+      const out = new THREE.Vector3(-way.z * side, 0, way.x * side);
+      const end = feet.clone().addScaledVector(way, -0.35).addScaledVector(out, 0.35 + Math.random() * 0.2).setY(feet.y + 0.25 + Math.random() * 0.15);
+      this.spawnFx("dust", DUST_TRAIL.color, side > 0, { from: feet.clone(), to: end, life: DUST_TRAIL.life, size: [0.45, 1.1], spin: 0, fade: true });
+    }
   }
 
   /** Dust thrown up either side of a unit's feet: a heavy landing, a rock breaking, the ground shaking under it. */
@@ -6027,6 +6051,8 @@ export class WorldRenderer {
           // They turn to face the way they are walking.
           if (Math.hypot(next.x - p.x, next.z - p.z) > 1e-4) unit.turnGoal = Math.atan2(next.x - p.x, next.z - p.z);
         }
+        // Knocked across the ground, it is followed by the dust it throws up (see trailDust).
+        const slid = unit.rush && !leap ? p.clone() : null;
         if (leap) {
           // Carried by the jump, above.
         } else if (p.distanceTo(next) <= step) {
@@ -6036,6 +6062,7 @@ export class WorldRenderer {
         } else {
           p.add(next.sub(p).setLength(step));
         }
+        if (slid) this.trailDust(unit, slid, p);
         // Two steps per hex, with a little bounce in each, landing as each hex is reached.
         if (!unit.rush && !leap) unit.bob = Math.abs(Math.sin(unit.stride * 3.6)) * 0.07;
       } else {
