@@ -4,6 +4,10 @@ The game is **The Harbor of Heylets** in `apps/game`, with its rules in `package
 
 **[`TODO.md`](TODO.md) lists work still to be done.** Read it before you start, and add a line to it whenever you notice something that needs doing but is not part of your task.
 
+## Build things to be reused
+
+When you design a system or a mechanic, or change one, write it so it can be used again: general, driven by data, not tied to the one case in front of you. Expect that it will be. A new enemy ability, for instance, should be a shape or an effect any ability can take, not code for that enemy alone. Write a one-off only when there is a clear reason to and a clear gain from it, and say what that is in a comment.
+
 ## Release notes for the notice board
 
 Players read what changed in each release on the Harbor's notice board, and a tab left open on an older build lists the same notes under "What's in this release?" when a newer one is out. **Nobody writes those notes at release time. They are read out of git when the game is built**, so they are only as good as the commits on `main`. Writing them is part of every PR that changes the game, and checking them is part of every release.
