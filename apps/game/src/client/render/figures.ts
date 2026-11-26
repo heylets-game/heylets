@@ -9756,13 +9756,14 @@ function ghost(top: THREE.Group, pale = "#dfe8f2", shade = "#a7b6cc", eye = "#24
   body.ball(eye, 1, 0, 10.2, 3.42, 1, [1.15, 0.8, 0.5]);
   if (glare) for (const s of [-1, 1]) body.glowBall(glare, 0.55, s * 1.5, 13, 3.72);
   if (mantle) {
-    // The cloak: all the way round, from the shoulders (where the collar stands) to past the top of the hem,
-    // drawn in at the middle and flaring out at the bottom.
-    body.loft(mantle, [[3.9, 5.45, 5.3], [5.2, 5.05, 4.9], [7, 4.5, 4.38], [9.4, 3.92, 3.82], [11.2, 3.92, 3.82], [12.5, 4.08, 3.98]], 10);
+    // The cape: from the shoulders to the hem, widening as it falls, over the back only (half a turn about y puts a
+    // front loft behind). Its top is closed to its middle, so it stops below the head, inside the shoulders.
+    body.frontLoft(mantle, [[4.4, 4.85, 4.75, 0.05], [7, 4.5, 4.4, 0.05], [10, 3.98, 3.88, 0.12], [12.4, 3.98, 3.88, 0.1]], [1.25, 1.2, 1.15, 1.25], 10, [0, Math.PI, 0]);
     // The collar: thin panels standing round the back of the neck and flaring out, each rising to a point, so
     // it is open above and the head shows through (a loft would be closed over the top of the head).
     for (let i = 0; i < 7; i++) {
-      const a = Math.PI + (i - 3) * 0.42;
+      // As wide round as the cape's top (1.25 either side of straight back), so the two meet edge to edge.
+      const a = Math.PI + (i - 3) * 0.33;
       const at = (r: number, y: number, turn = 0): Pt => [Math.sin(a + turn) * r, y, Math.cos(a + turn) * r];
       const panel = (out: number): Pt[] => [at(3.95 + out, 12.3, -0.26), at(3.95 + out, 12.3, 0.26), at(4.85 + out, 15.9, -0.3), at(4.85 + out, 15.9, 0.3), at(5.05 + out, 16.9 - Math.abs(i - 3) * 0.2)];
       body.shape(mantle, [...panel(0), ...panel(0.3)]);
