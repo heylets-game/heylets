@@ -2,7 +2,7 @@
 // it, and, while one is on screen, set up whatever is being tested: put an
 // enemy group down, paint the ground, add a stand-in crewmate, heal up,
 // end the fight, take every enemy off the map, stop the enemy taking turns,
-// keep heroes from going down, take the time limit off turns, show how far each group sees,
+// keep heroes from going down, take the time limit off turns,
 // and make any hero of yours on it (you, or a stand-in) any class, level and
 // weapon with any of the class's abilities. That last holds on that map,
 // through a reload, and leaves your own character as it is.
@@ -148,7 +148,6 @@ export function MapsTab() {
             <label><input type="checkbox" checked={dev.flags.aiOff} onChange={(e) => send({ op: "ai", off: e.target.checked })} /> Enemy takes no turns</label>
             <label><input type="checkbox" checked={dev.flags.undying} onChange={(e) => send({ op: "undying", on: e.target.checked })} /> Heroes cannot die</label>
             <label><input type="checkbox" checked={dev.flags.timerOff} onChange={(e) => send({ op: "timer", off: e.target.checked })} /> No turn timer</label>
-            <label><input type="checkbox" checked={dev.showAlert} onChange={(e) => setZoneDev({ showAlert: e.target.checked })} /> Show where each group can see</label>
           </div>
           <div className="dev-row">
             <label>

@@ -14,8 +14,6 @@ export interface ZoneDevState {
   /** The zone on screen, if there is one. */
   open: { code: string; seed?: string; send(op: DevOp): void } | null;
   tool: ZoneDevTool | null;
-  /** Draw each group's alert radius on the map. */
-  showAlert: boolean;
   /** The heroes on the map that are yours to play (yourself, and stand-ins), for the Maps tab to change. */
   heroes: KitHero[];
   /** The map's dev switches as they stand, for the Maps tab's checkboxes. */
@@ -40,7 +38,7 @@ export interface KitHero {
   abilities: string[];
 }
 
-let state: ZoneDevState = { open: null, tool: null, showAlert: false, heroes: [], flags: NO_FLAGS };
+let state: ZoneDevState = { open: null, tool: null, heroes: [], flags: NO_FLAGS };
 const listeners = new Set<() => void>();
 
 export function setZoneDev(next: Partial<ZoneDevState>): void {

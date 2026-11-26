@@ -2049,13 +2049,13 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     const out: Overlay[] = [];
     if (!state || !z || !act) return out;
     // Where each band that has noticed nobody can see: a thin red outline, its dashes crawling round, so the way past
-    // it can be told. Walk into it in plain sight and the band turns on you. The dev toolbox fills it in as well.
+    // it can be told. Walk into it in plain sight and the band turns on you.
     for (const group of Object.keys(state.groups)) {
       if (state.groups[group].alerted) continue;
       const members = state.units.filter((u) => u.group === group && !u.down);
       if (members.length === 0) continue;
       const seen = state.map.tiles.filter((t) => members.some((m) => hexDistance(m.pos, t) <= ALERT_RANGE && sees(state.map, m.pos, t)));
-      out.push({ hexes: seen, color: "#ff3b3b", line: 0.7, march: true, ...(dev.showAlert ? { fill: 0.08 } : {}) });
+      out.push({ hexes: seen, color: "#ff3b3b", line: 0.7, march: true });
     }
     // A fight under way that the hero being played is out of: how near it they can come before it draws them in, in the
     // same red as a band's sight. Within JOIN_RANGE of anyone standing in it; for one who fled it, only an enemy in it
@@ -2149,7 +2149,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       out.push({ hexes: inArm(), color: pick.what === "help" ? "#7dff9a" : "#ffd23f", fill: 0.12, line: 0.8 });
     }
     return out;
-  }, [state, z, act, pick, hover, dev.showAlert, dev.tool, courseOnly, fighting]);
+  }, [state, z, act, pick, hover, dev.tool, courseOnly, fighting]);
   useEffect(() => layer.current?.setOverlays(overlays), [overlays]);
 
   // ---------- what a move would cost, at the pointer ----------
