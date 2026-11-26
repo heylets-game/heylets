@@ -776,6 +776,8 @@ describe("surfaces", () => {
   it("sets poison off as a burst that hurts whoever stands in it", () => {
     let state = board();
     const ann = hero(state, "ann", "qa_paladin", at(6, 6));
+    // In a fight: out of one the ground does no harm (engine.ts inPlay).
+    inAFight(state, "ann", enemy(state, "dummy", at(12, 2)).id);
     state = paint(state, "poison", [at(6, 6), at(7, 6)]);
     const hp = unit(state, "ann").hp;
     const events: ZoneEvent[] = [];

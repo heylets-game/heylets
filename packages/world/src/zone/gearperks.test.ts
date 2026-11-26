@@ -9,6 +9,7 @@ import { BLINK_AP, type Perks } from "../gear";
 import type { Tile } from "../map";
 import { makeRng } from "../rng";
 import { addCondition, attackRoll, type Ctx } from "./engine";
+import { standInSurface } from "./surfaces";
 import { stepCost } from "./geometry";
 import { AP_TURN, COMMON_ACTIONS, JUMP_RANGE, enemyStrikes } from "./kit";
 import { enemyAct } from "./combat";
@@ -56,7 +57,10 @@ describe("Cloudstep Boots (hover)", () => {
     const state = board();
     ann(state, at(4, 6), { hover: 1 });
     lay(state, "fire", [at(5, 6)]);
+    // Out of a fight the ground does no harm (engine.ts inPlay); in one, the flames reach up to them.
     const after = must(state, move(at(5, 6)));
+    expect(unit(after, "ann").hp).toBe(unit(after, "ann").maxHp);
+    standInSurface(ctxOf(inAFight(after, "ann")), unit(after, "ann"));
     expect(unit(after, "ann").hp).toBeLessThan(unit(after, "ann").maxHp);
   });
 

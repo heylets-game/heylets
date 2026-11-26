@@ -9,7 +9,7 @@
 import { hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/core";
 import { tileAt } from "../map";
 import { cratesOn, hurtCrate } from "./crates";
-import { addCondition, addStacks, saveRoll, tick, type Ctx } from "./engine";
+import { addCondition, addStacks, inPlay, saveRoll, tick, type Ctx } from "./engine";
 import { flies, hovers, perkOf, solid, span } from "./geometry";
 import type { GroundSurface, SurfaceKind, Unit } from "./types";
 import { TORCH_HELD_ROUNDS } from "./kit";
@@ -42,7 +42,8 @@ const d = (ctx: Ctx, sides: number) => ctx.rng.int(1, sides);
  * starts there. Returns true if it must stop where it is (it slipped on ice).
  */
 function act(ctx: Ctx, unit: Unit, kind: SurfaceKind, moving: boolean): boolean {
-  if (unit.down || flies(unit)) return false;
+  // Out of a fight the ground does nobody any harm (inPlay).
+  if (unit.down || flies(unit) || !inPlay(ctx, unit)) return false;
   // Cloudstep Boots float over all of it but the flames.
   if (hovers(unit) && kind !== "fire") return false;
   const sure = perkOf(unit, "sure_footed") > 0;
@@ -173,7 +174,7 @@ export function placeSurface(ctx: Ctx, hexes: HexPos[], kind: SurfaceKind, round
   for (const unit of ctx.state.units) {
     // A big one is caught once, however many of its hexes it is caught on.
     const keys = span(unit).map(posKey);
-    if (keys.some((key) => burst.has(key)) && !unit.down && !flies(unit)) tick(ctx, unit, "fire", d(ctx, 6));
+    if (keys.some((key) => burst.has(key)) && !unit.down && !flies(unit) && inPlay(ctx, unit)) tick(ctx, unit, "fire", d(ctx, 6));
     const now = keys.map((key) => changed.get(key)).find((c) => c?.kind);
     if (now?.kind) act(ctx, unit, now.kind, false);
   }
