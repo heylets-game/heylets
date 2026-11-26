@@ -220,7 +220,7 @@ export default function FightUiLab({ me, refresh }: { me?: Me; refresh?: () => P
     const dice = rolled(4, 2, 2);
     add({ k: "heal", id: nid(), actor: "Brann", target: "Mira Tidewright", what: "Mend", amount: dice.total, dice });
   };
-  const fall = () => add({ k: "hit", id: nid(), side: "none", target: "Bandit Cutter", what: "Burning", amount: 3 }, { k: "note", id: nid(), text: "Cave Bat falls.", tone: "bad" }, { k: "note", id: nid(), text: "Sela slips out of sight.", tone: "dim" }, { k: "note", id: nid(), text: "Mira Tidewright is Bolstered: a shield of 6.", tone: "good" });
+  const fall = () => add({ k: "hit", id: nid(), side: "none", target: "Bandit Cutter", what: "Burning", amount: 3 }, { k: "note", id: nid(), text: "Cave Bat falls.", tone: "bad" }, { k: "note", id: nid(), text: "Sela slips out of sight.", tone: "dim" }, { k: "note", id: nid(), text: "Mira Tidewright has a shield of 6.", tone: "good" });
   const fill = () => {
     const out: LogEntry[] = [];
     for (let i = 0; i < 20; i++) {

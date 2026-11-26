@@ -305,11 +305,12 @@ const STACKED = new Set(["burning", "drowning"]);
 const stacksOf = (c: { kind: string; amount?: number }): number => (STACKED.has(c.kind) ? (c.amount ?? 1) : 0);
 
 /** The conditions on a unit, as badges over its head: in CONDITION_INFO's colours, with rounds left, and stacks where there are more than one. */
-const badgesOf = (u: Unit) => u.conditions.map((c) => ({ kind: c.kind, color: CONDITION_INFO[c.kind].color, rounds: roundsShown(c), ...(stacksOf(c) > 1 ? { stacks: stacksOf(c) } : {}) }));
-/** The rounds a condition has left, as shown: none for a shield, which lasts until it is spent or the fight ends. */
-function roundsShown(c: { kind: string; rounds: number }): number {
-  return c.kind === "bolstered" ? 0 : c.rounds;
-}
+const badgesOf = (u: Unit) => shownConditions(u).map((c) => ({ kind: c.kind, color: CONDITION_INFO[c.kind].color, rounds: c.rounds, ...(stacksOf(c) > 1 ? { stacks: stacksOf(c) } : {}) }));
+/**
+ * The conditions on a unit that are shown as such (a badge, a line in its card). Not a shield (Bolstered): that is
+ * shown where the HP is, on every bar and in the card, and nowhere as a condition of its own.
+ */
+const shownConditions = (u: { conditions: Unit["conditions"] }) => u.conditions.filter((c) => c.kind !== "bolstered");
 
 /** How a lit torch is drawn in a hand (figures.ts drawTorch). */
 const TORCH_IN_HAND = { icon: "torch", ref: "torch", rarity: "common" as const };
@@ -1413,12 +1414,18 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         if (u && !held) u.conditions.push({ kind: ev.kind, rounds: ev.rounds, ...(ev.amount !== undefined ? { amount: ev.amount } : {}) });
         if (held) held.rounds = Math.max(held.rounds, ev.rounds);
         if (held && ev.amount !== undefined) held.amount = ev.amount;
-        const stacks = stacksOf({ kind: ev.kind, amount: ev.amount }) > 1 ? ` ×${ev.amount}` : "";
-        later(() => {
-          sounds.effect(ev.kind, view?.whereIs(ev.target));
-          view?.floatOver(ev.target, `${CONDITION_INFO[ev.kind].name}${stacks}`, CONDITION_INFO[ev.kind].color);
-        });
-        say(`${name(ev.target)} is ${CONDITION_INFO[ev.kind].name}${stacks}.`);
+        // A shield is no condition to be named: it goes up on the HP bars (and the ward's own effect plays), and the log says how big.
+        if (ev.kind === "bolstered") {
+          later(() => sounds.effect(ev.kind, view?.whereIs(ev.target)));
+          say(`${name(ev.target)} has a shield of ${ev.amount ?? 0}.`);
+        } else {
+          const stacks = stacksOf({ kind: ev.kind, amount: ev.amount }) > 1 ? ` ×${ev.amount}` : "";
+          later(() => {
+            sounds.effect(ev.kind, view?.whereIs(ev.target));
+            view?.floatOver(ev.target, `${CONDITION_INFO[ev.kind].name}${stacks}`, CONDITION_INFO[ev.kind].color);
+          });
+          say(`${name(ev.target)} is ${CONDITION_INFO[ev.kind].name}${stacks}.`);
+        }
       } else if (ev.t === "down" || ev.t === "up") {
         const u = find(ev.id);
         if (u) u.down = ev.t === "down";
@@ -2851,8 +2858,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         <div className="zone-tip panel">
           {under ? (
             <>
-              <strong>{under.name}</strong> <span className="muted">· {under.hp}/{under.maxHp} HP · Defence {defenceOf(under, state)}{under.down ? " · down" : ""}</span>
-              {under.conditions.length > 0 && <div>{under.conditions.map((c) => <span key={c.kind} className="zone-cond" style={{ color: CONDITION_INFO[c.kind].color }} title={CONDITION_INFO[c.kind].blurb}>{CONDITION_INFO[c.kind].name}{stacksOf(c) > 1 ? ` ×${c.amount}` : ""}{roundsShown(c) > 0 ? ` ${roundsShown(c)}` : ""}</span>)}</div>}
+              <strong>{under.name}</strong> <span className="muted">· {under.hp}/{under.maxHp} HP{shieldOf(under) > 0 ? ` + ${shieldOf(under)} shield` : ""} · Defence {defenceOf(under, state)}{under.down ? " · down" : ""}</span>
+              {shownConditions(under).length > 0 && <div>{shownConditions(under).map((c) => <span key={c.kind} className="zone-cond" style={{ color: CONDITION_INFO[c.kind].color }} title={CONDITION_INFO[c.kind].blurb}>{CONDITION_INFO[c.kind].name}{stacksOf(c) > 1 ? ` ×${c.amount}` : ""} {c.rounds}</span>)}</div>}
               {under.side === "enemy" && <div className="muted">{under.abilities.map((id) => ENEMY_ABILITIES[id]?.name ?? id).join(", ")}</div>}
               {alsoHere.map((u) => <div key={u.id}><span className="muted">Sharing the hex:</span> <strong>{u.name}</strong> <span className="muted">· {u.hp}/{u.maxHp} HP{u.down ? " · down" : ""}</span></div>)}
               {/* Where a shove would send them: over an edge, into a pit, or only back a hex. */}
