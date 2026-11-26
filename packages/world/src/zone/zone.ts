@@ -890,6 +890,9 @@ function dev(ctx: Ctx, by: string, op: DevOp): string | null {
     for (const g of Object.keys(state.groups)) if (!state.units.some((u) => u.group === g)) delete state.groups[g];
   } else if (op.op === "clear_surfaces") {
     clearSurfaces(ctx, Object.keys(state.surfaces).map((key) => ({ q: Number(key.split(",")[0]), r: Number(key.split(",")[1]) })));
+    // And everything there is to loot: the bodies of the fallen, open chests' contents, the spoils. (One who falls in a
+    // fight still on lies where they fell until it is over, and is a body then.)
+    delete state.loot;
   }
   return null;
 }

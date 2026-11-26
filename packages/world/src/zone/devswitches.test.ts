@@ -22,6 +22,15 @@ const hurt = (state: ReturnType<typeof board>, amount: number) => {
 };
 
 describe("dev switches", () => {
+  it("clearing the ground takes the bodies and everything left to loot too", () => {
+    let state = board();
+    state = must(state, { type: "dev", by: "ann", dev: { op: "end_fight" } });
+    expect(state.loot?.some((s) => s.kind === "body")).toBe(true);
+    state.loot!.push({ id: "spoils", kind: "spoils", name: "The spoils", pos: at(3, 6), loot: {} });
+    const after = must(state, { type: "dev", by: "ann", dev: { op: "clear_surfaces" } });
+    expect(after.loot ?? []).toEqual([]);
+  });
+
   it("a hero goes down at 0 HP as ever with the switch off", () => {
     const ctx = hurt(board(), 999);
     expect(unit(ctx.state, "ann").down).toBe(true);
