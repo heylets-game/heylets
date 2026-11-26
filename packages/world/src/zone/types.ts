@@ -425,6 +425,7 @@ export type DevOp =
   | { op: "timer"; off: boolean }
   /** Take every enemy off the map, standing or not (bodies already left stay): a fight with them ends. */
   | { op: "clear_enemies" }
+  /** Clear every surface off the ground, and every body and anything else left to loot. */
   | { op: "clear_surfaces" }
   /**
    * A dev kit (the Maps tab): make one of your own heroes (yourself, or a stand-in you play) a hero of this class and level, with
