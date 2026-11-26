@@ -424,7 +424,12 @@ export interface ZoneHero {
 export type CommonAction = "disengage" | "help" | "shove" | "jump" | "flee" | "join";
 
 export type DevOp =
-  | { op: "spawn"; kinds: string[]; at: HexPos }
+  /** `level`: what level they come at (the map's, left out). */
+  | { op: "spawn"; kinds: string[]; at: HexPos; level?: number }
+  /** In the combat sandbox: an enemy in the fight at another level, as hurt as it was (as a share of its health). */
+  | { op: "set_level"; unit: string; level: number }
+  /** Every hero on the map at this level (a dev kit, as "kit"): class, weapon and abilities as they are, and whole. */
+  | { op: "hero_levels"; level: number }
   | { op: "paint"; kind: SurfaceKind | null; hexes: HexPos[] }
   | { op: "standin"; classId: string }
   | { op: "heal" }

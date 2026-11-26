@@ -56,14 +56,15 @@ const PAINT_ROUNDS = 6;
 
 // ---------- making a zone ----------
 
-function enemyUnit(state: ZoneState, kind: string, pos: HexPos, group: string): Unit {
-  const hp = Math.round(enemyHp(kind, state.options.level) * modsOf(state.options).hp);
+/** An enemy of this kind standing at `pos` in `group`, at the map's level or at `level`. */
+function enemyUnit(state: ZoneState, kind: string, pos: HexPos, group: string, level = state.options.level): Unit {
+  const hp = enemyMaxHp(state, kind, level);
   return {
     id: `e${++state.seq}`,
     side: "enemy",
     name: ENEMIES[kind].name,
     kind,
-    level: state.options.level,
+    level,
     pos,
     hp,
     maxHp: hp,
@@ -876,6 +877,13 @@ function spend(budget: Budget | null, cost: number): string | null {
   return null;
 }
 
+/** An enemy's HP at full health, for its kind at this level on this map. */
+const enemyMaxHp = (state: ZoneState, kind: string, level: number): number => Math.round(enemyHp(kind, level) * modsOf(state.options).hp);
+
+/** The highest level the dev tools put an enemy at (DevOp "spawn", "set_level"). */
+export const ENEMY_DEV_MAX_LEVEL = 60;
+const devLevel = (n: unknown, max = ENEMY_DEV_MAX_LEVEL): number => Math.max(1, Math.min(max, Math.floor(Number(n)) || 1));
+
 /** The highest level a dev kit (DevOp "kit") will make a hero. */
 export const KIT_MAX_LEVEL = 20;
 
@@ -893,7 +901,7 @@ function dev(ctx: Ctx, by: string, op: DevOp): string | null {
     kinds.forEach((kind, i) => {
       const pos = (i === 0 && first) || free(op.at);
       if (!pos) return;
-      const enemy = enemyUnit(state, kind, pos, group);
+      const enemy = enemyUnit(state, kind, pos, group, op.level === undefined ? undefined : devLevel(op.level));
       // A big one goes where all of it has room, as near as there is.
       if (big(enemy)) {
         const room = placeFor(state, enemy, pos);
@@ -988,6 +996,25 @@ function dev(ctx: Ctx, by: string, op: DevOp): string | null {
     const from = u.pos;
     u.pos = { q: op.at.q, r: op.at.r };
     ctx.events.push({ t: "blinked", id: u.id, from, to: u.pos });
+  } else if (op.op === "set_level") {
+    const u = unitById(state, op.unit);
+    if (!u || u.side !== "enemy" || u.summon || !sandboxing(state, u)) return "Pick an enemy in the fight, in the sandbox.";
+    // As hurt as it was, as a share of its health: what it can do is worked out from its level as it is used (kit.ts).
+    const level = devLevel(op.level);
+    const maxHp = enemyMaxHp(state, u.kind, level);
+    if (!u.down) u.hp = Math.max(1, Math.min(maxHp, Math.round((u.hp / Math.max(1, u.maxHp)) * maxHp)));
+    Object.assign(u, { level, maxHp });
+  } else if (op.op === "hero_levels") {
+    // Every hero on the map at this level, their class, weapon and abilities as they are; whole. As a dev kit, it holds
+    // through a reload and leaves the characters themselves as they are.
+    const level = devLevel(op.level, KIT_MAX_LEVEL);
+    for (const u of state.units) {
+      if (u.side !== "hero" || u.summon) continue;
+      const sheet = standInHero(u.kind, u.id, level);
+      if (!sheet) continue;
+      Object.assign(u, { level, stats: sheet.stats, maxHp: sheet.maxHp, devKit: true });
+      if (!u.down) u.hp = sheet.maxHp;
+    }
   } else if (op.op === "set_turn") {
     const enc = state.encounter;
     const u = unitById(state, op.unit);

@@ -166,7 +166,7 @@ import { BAR_SLOTS, assignSlot, barChoices, loadBar, moveSlot, saveBar } from ".
 import { believe, foreseeWalk, giveUp, settle, standing, type Ahead } from "./zone/ahead";
 import { playback, type Playback } from "./zone/playback";
 import { NO_FLAGS, setZoneDev, useZoneDev } from "./zone/zoneDev";
-import { SandboxEnemy, sandboxFoe, sandboxSlots } from "./zone/SandboxEnemy";
+import { SandboxEnemy, SandboxLevel, sandboxFoe, sandboxSlots } from "./zone/SandboxEnemy";
 import "./zone/zone.css";
 import { CombatLog, RollToast, type LogEntry } from "./zone/CombatLog";
 import { TimedTurnBar, type SongCall } from "./zone/TurnBar";
@@ -1951,6 +1951,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   // The enemy the combat sandbox has the dev playing, if any (zone/SandboxEnemy.tsx): it is who walks, and whose way is shown.
   const foe = sandboxFoe(state ? asState(state) : null, dev);
   const mover = foe ?? act;
+  // The sandbox's enemy's level, open to change (its level plaque on the bar).
+  const [levelOf, setLevelOf] = useState<string | null>(null);
   const moverBudget = foe ? enc?.budgets[foe.id] : budget;
   // Whether the one who walks may walk now: the enemy being played always may.
   const moverTurn = foe ? true : myTurn;
@@ -2526,7 +2528,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       }
     }
     const there = unitFor(pos, want, clicked);
-    if (dev.tool?.tool === "spawn") return dev.open?.send({ op: "spawn", kinds: dev.tool.kinds, at: pos });
+    if (dev.tool?.tool === "spawn") return dev.open?.send({ op: "spawn", kinds: dev.tool.kinds, at: pos, ...(dev.tool.level ? { level: dev.tool.level } : {}) });
     if (dev.tool?.tool === "paint") return dev.open?.send({ op: "paint", kind: dev.tool.surface, hexes: dev.tool.wide ? zoneBlast(state.map, pos, 1) : [pos] });
     if (dev.tool?.tool === "place") return dev.open?.send({ op: "place", unit: foe?.id ?? act.id, at: pos });
     if (!pick) {
@@ -3312,6 +3314,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         />
       )}
 
+      {foe && levelOf === foe.id && <SandboxLevel key={foe.id} foe={foe} onClose={() => setLevelOf(null)} />}
+
       {barMenu !== null && (
         <div className="zone-barmenu panel" role="dialog" aria-label="Choose what goes in this slot">
           <div className="zone-barmenu-head">
@@ -3366,6 +3370,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         slots={slots}
         // The combat sandbox's enemy being played: who it is, in the bottom row (its abilities are the top).
         slotsBelow={foe ? <SandboxEnemy foe={foe} /> : undefined}
+        plaque={foe ? { level: foe.level, name: `${foe.name}, level ${foe.level}`, line: "Click to change its level", onClick: () => setLevelOf((open) => (open === foe.id ? null : foe.id)) } : undefined}
         onSlotMove={foe ? undefined : (from, to) => arrange(moveSlot(bar, from, to))}
         onSlotMenu={foe ? undefined : (index) => setBarMenu((open) => (open === index ? null : index))}
         // Either hand takes a lit torch: put one there to light it. In the main hand it is swung as a weapon.

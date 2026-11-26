@@ -234,3 +234,42 @@ describe("why a walk cannot be made", () => {
     expect(!step.ok && step.error).toMatch(/no way through wide enough/);
   });
 });
+
+describe("levels by hand", () => {
+  it("puts enemies down at the level asked for, or the map's", () => {
+    let state = board();
+    const before = new Set(state.units.map((u) => u.id));
+    state = dev(state, { op: "spawn", kinds: ["wolf"], at: at(12, 2), level: 7 });
+    state = dev(state, { op: "spawn", kinds: ["wolf"], at: at(14, 9) });
+    const placed = state.units.filter((u) => !before.has(u.id));
+    expect(placed.map((u) => u.level)).toEqual([7, state.options.level]);
+    expect(placed[0].maxHp).toBeGreaterThan(placed[1].maxHp);
+  });
+
+  it("sets an enemy's level in the sandbox, as hurt as it was", () => {
+    let state = dev(dev(board(), { op: "sandbox", on: true }), { op: "start_fight" });
+    const wolf = state.units.find((u) => u.kind === "wolf")!;
+    unit(state, wolf.id).hp = Math.floor(wolf.maxHp / 2);
+    state = dev(state, { op: "set_level", unit: wolf.id, level: 10 });
+    const after = unit(state, wolf.id);
+    expect(after.level).toBe(10);
+    expect(after.maxHp).toBeGreaterThan(wolf.maxHp);
+    expect(Math.abs(after.hp / after.maxHp - 0.5)).toBeLessThan(0.08);
+  });
+
+  it("only in the sandbox", () => {
+    const state = dev(board(), { op: "start_fight" });
+    const wolf = state.units.find((u) => u.kind === "wolf")!.id;
+    expect(stepZone(state, { type: "dev", by: "ann", dev: { op: "set_level", unit: wolf, level: 10 } }).ok).toBe(false);
+  });
+
+  it("sets every hero on the map to one level, whole", () => {
+    let state = board();
+    Object.assign(standHero(state, "cat", at(4, 6), { ...kit, controller: "someone_else" }), { hp: 3 });
+    state = dev(state, { op: "hero_levels", level: 8 });
+    for (const id of ["ann", "cat"]) {
+      expect(unit(state, id).level).toBe(8);
+      expect(unit(state, id).hp).toBe(unit(state, id).maxHp);
+    }
+  });
+});

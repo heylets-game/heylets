@@ -85,7 +85,9 @@ export function zoneActionFrom(raw: unknown, by: string, dev: boolean): ZoneActi
   if (a.type === "dev") {
     const d = (a.dev && typeof a.dev === "object" ? a.dev : {}) as Record<string, unknown>;
     if (!dev) return null;
-    if (d.op === "spawn" && Array.isArray(d.kinds) && isHex(d.at)) return { type: "dev", by, dev: { op: "spawn", kinds: d.kinds.filter(text).slice(0, 6), at: hex(d.at)! } };
+    if (d.op === "spawn" && Array.isArray(d.kinds) && isHex(d.at)) return { type: "dev", by, dev: { op: "spawn", kinds: d.kinds.filter(text).slice(0, 6), at: hex(d.at)!, ...(Number.isFinite(d.level) ? { level: Number(d.level) } : {}) } };
+    if (d.op === "set_level" && text(d.unit) && Number.isFinite(d.level)) return { type: "dev", by, dev: { op: "set_level", unit: d.unit, level: Number(d.level) } };
+    if (d.op === "hero_levels" && Number.isFinite(d.level)) return { type: "dev", by, dev: { op: "hero_levels", level: Number(d.level) } };
     if (d.op === "paint" && Array.isArray(d.hexes) && (d.kind === null || SURFACES.includes(d.kind as string))) {
       return { type: "dev", by, dev: { op: "paint", kind: d.kind as never, hexes: d.hexes.filter(isHex).slice(0, 60).map((p) => hex(p)!) } };
     }

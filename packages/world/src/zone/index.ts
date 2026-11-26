@@ -111,7 +111,7 @@ export { carriesLantern, isDark, litHexes, inDark, seenByHeroes, lightSources, h
 export { MAX_CATCHUP_ROUNDS, nextTick } from "./clock";
 export { CHEST_PAY, SPOILS_ID, bountyPay, checkOpen, checkLoot, lootIn, sharedLoot, unopened, unlooted, zoneCleared } from "./loot";
 export { ENEMY_FAMILY, FAMILY_LOOT, BOSS_LOOT, rollBody, rollChest, rollSpoils, type Family } from "./spoils";
-export { HEAR_RANGE } from "./zone";
+export { HEAR_RANGE, ENEMY_DEV_MAX_LEVEL, KIT_MAX_LEVEL } from "./zone";
 export { FORCE_DC, NOISE_RANGE, checkUnlock, doorAt } from "./doors";
 export { GLOWCAP_LIGHT, GLOWCAP_MUSHROOMS, checkForage } from "./forage";
 export { CRATE_HP, CRATE_PAY, crateAt, crateById, crateHp, isCrateId } from "./crates";

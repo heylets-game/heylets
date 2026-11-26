@@ -129,6 +129,8 @@ interface Props {
   torch?: { rounds: number | null; hand: "main" | "off"; carried: number; light?(hand: "main" | "off"): void; stow?(): void; why?: string };
   /** The turn: seconds left on it (null with no clock), and ending it when it is yours. */
   turn?: { seconds: number | null; onEnd?(): void; waitingFor?: string };
+  /** In place of the hero's level on the crest (the combat sandbox's enemy): its level, what it is, and what a press does. */
+  plaque?: { level: number; name: string; line: string; onClick(): void };
   /** Resting, where it can be done. */
   rest?: { run(): void; hint: string; disabled?: boolean };
   /** The emote wheel's button (EmoteWheel), in the lower tab off the left end: only where there is no resting (on a map, in a fight). */
@@ -156,7 +158,7 @@ function Tip({ name, line, more, keys }: { name: string; line?: string; more?: s
   );
 }
 
-export function HudBar({ me, place, children, hp, meter: given, pips = [], chips, slots, slotsBelow, onSlotMove, onSlotMenu, torch, turn, rest, emote, onBag, bagBlocked, onBook, menu }: Props) {
+export function HudBar({ me, place, children, hp, meter: given, pips = [], chips, slots, slotsBelow, plaque, onSlotMove, onSlotMenu, torch, turn, rest, emote, onBag, bagBlocked, onBook, menu }: Props) {
   const c = me.character;
   // The pack is read out of its stored form (each row's JSON) when it changes, not every time the bar is drawn.
   const items = useMemo(() => me.inventory.map(toOwned), [me.inventory]);
@@ -401,6 +403,11 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
               >
                 <PixelIcon rows={HOURGLASS} size={12} />
                 {turn.seconds !== null ? <span>{turn.seconds}</span> : <span>{turn.onEnd ? "End" : "…"}</span>}
+              </button>
+            ) : plaque ? (
+              <button className="hud-plaque" aria-label={`${plaque.name}: ${plaque.line}`} onClick={plaque.onClick} {...hover(<Tip name={plaque.name} line={plaque.line} />)}>
+                <small>Lv</small>
+                <span>{plaque.level}</span>
               </button>
             ) : (
               <button className={`hud-plaque ${news ? "news" : ""}`} aria-label="Logbook" disabled={!onBook} onClick={onBook} {...hover(<Tip name={`${c.name}, level ${c.level}`} line={news ? "Something to spend or pick in the logbook" : "Open the logbook"} keys="L" />)}>

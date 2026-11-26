@@ -13,7 +13,7 @@
 // server refuses outside a development deployment.
 
 import { useEffect, useState } from "react";
-import { ABILITIES, MAX_PARTY, CLIMES, DEFAULT_ZONE_OPTIONS, ENEMIES, HERO_CLASSES, SITES, SITE_IDS, SURFACE_INFO, WEAPONS, poolFor, type SurfaceKind, type ZoneBiome, type ZoneSize } from "@gantt-quest/world";
+import { ABILITIES, ENEMY_DEV_MAX_LEVEL, KIT_MAX_LEVEL, MAX_PARTY, CLIMES, DEFAULT_ZONE_OPTIONS, ENEMIES, HERO_CLASSES, SITES, SITE_IDS, SURFACE_INFO, WEAPONS, poolFor, type SurfaceKind, type ZoneBiome, type ZoneSize } from "@gantt-quest/world";
 import { api, PROFILE } from "../api";
 import { DevSection } from "../DevSection";
 import { setZoneDev, useZoneDev, type KitHero } from "./zoneDev";
@@ -39,7 +39,9 @@ export function MapsTab() {
   const [options, setOptions] = useState(() => ({ ...DEFAULT_ZONE_OPTIONS, lead: "", seed: "", site: "", clime: "", tier: 0, stone: 0, ...recall() }));
   const [said, setSaid] = useState<{ text: string; bad?: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [spawn, setSpawn] = useState({ kind: "wolf", count: 1 });
+  // `level` empty: the map's.
+  const [spawn, setSpawn] = useState({ kind: "wolf", count: 1, level: "" });
+  const [heroLevel, setHeroLevel] = useState("5");
   const [paint, setPaint] = useState<{ surface: SurfaceKind | "clear"; wide: boolean }>({ surface: "poison", wide: true });
   const [standIn, setStandIn] = useState(HERO_CLASSES[0].id);
   const set = (change: Partial<typeof options>) => {
@@ -183,7 +185,11 @@ export function MapsTab() {
               How many
               <input type="number" min={1} max={6} value={spawn.count} onChange={(e) => setSpawn({ ...spawn, count: Math.max(1, Math.min(6, Number(e.target.value) || 1)) })} />
             </label>
-            <button className={`small ${tool?.tool === "spawn" ? "selected" : ""}`} onClick={() => setZoneDev({ tool: tool?.tool === "spawn" ? null : { tool: "spawn", kinds: Array.from({ length: spawn.count }, () => spawn.kind) } })}>
+            <label>
+              Level
+              <input type="number" min={1} max={ENEMY_DEV_MAX_LEVEL} value={spawn.level} placeholder="the map's" onChange={(e) => setSpawn({ ...spawn, level: e.target.value })} />
+            </label>
+            <button className={`small ${tool?.tool === "spawn" ? "selected" : ""}`} onClick={() => setZoneDev({ tool: tool?.tool === "spawn" ? null : { tool: "spawn", kinds: Array.from({ length: spawn.count }, () => spawn.kind), ...(Number(spawn.level) >= 1 ? { level: Math.min(ENEMY_DEV_MAX_LEVEL, Math.floor(Number(spawn.level))) } : {}) } })}>
               {tool?.tool === "spawn" ? "Done placing" : "Place a group: click the map"}
             </button>
           </div>
@@ -208,6 +214,13 @@ export function MapsTab() {
               <select value={standIn} onChange={(e) => setStandIn(e.target.value)}>{HERO_CLASSES.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
             </label>
             <button className="small" onClick={() => send({ op: "standin", classId: standIn })}>Add one beside you</button>
+          </div>
+          <div className="dev-row">
+            <label>
+              Every hero on the map at level
+              <input type="number" min={1} max={KIT_MAX_LEVEL} value={heroLevel} onChange={(e) => setHeroLevel(e.target.value)} />
+            </label>
+            <button className="small" onClick={() => send({ op: "hero_levels", level: Math.max(1, Math.min(KIT_MAX_LEVEL, Math.floor(Number(heroLevel)) || 1)) })}>Set them all</button>
           </div>
           {dev.heroes.map((h) => <HeroKit key={h.id} hero={h} send={send} />)}
           <p className="muted">A second player: open <a href={link} target="_blank" rel="noreferrer">this link</a> in another window. Stand-ins are yours to play on their turns.</p>

@@ -11,7 +11,7 @@ import type { DevOp, SurfaceKind } from "@gantt-quest/world";
  * A tool that takes clicks on the map until it is put down. `place`: each click puts the one being played straight on that hex (the enemy
  * picked, in the sandbox, if there is one). `strike`: the combat sandbox's enemy ability, armed: the next click aims it.
  */
-export type ZoneDevTool = { tool: "spawn"; kinds: string[] } | { tool: "paint"; surface: SurfaceKind | null; wide: boolean } | { tool: "place" } | { tool: "strike"; unit: string; ability: string };
+export type ZoneDevTool = { tool: "spawn"; kinds: string[]; level?: number } | { tool: "paint"; surface: SurfaceKind | null; wide: boolean } | { tool: "place" } | { tool: "strike"; unit: string; ability: string };
 
 export interface ZoneDevState {
   /** The zone on screen, if there is one. */

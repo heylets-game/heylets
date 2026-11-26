@@ -4,7 +4,8 @@
 // aims it (ZoneView). A click on open ground walks it there instead. In the bar's bottom row, a strip says who is being played.
 // What it does is what its own turn would do (world: strikes.ts, enemyAct).
 
-import { diceText, strikeAim, unitStrike, type EnemyStrike, type Unit, type ZoneState } from "@gantt-quest/world";
+import { useState } from "react";
+import { ENEMY_DEV_MAX_LEVEL, diceText, strikeAim, unitStrike, type EnemyStrike, type Unit, type ZoneState } from "@gantt-quest/world";
 import type { HudSlot } from "../ui/Hud";
 import { abilityIcon } from "./actionIcons";
 import { setZoneDev, useZoneDev, type ZoneDevState } from "./zoneDev";
@@ -49,6 +50,33 @@ const aimHint = (s: EnemyStrike): string => {
   const aim = strikeAim(s);
   return aim === "self" ? "Used at once, where it stands." : aim === "hex" ? "Then click the hex to aim it at." : "Then click who to use it on.";
 };
+
+/** The enemy being played's level, to set (from the bar's level plaque): over the bar, where the slot menu opens. */
+export function SandboxLevel({ foe, onClose }: { foe: Unit; onClose(): void }) {
+  const dev = useZoneDev();
+  const [level, setLevel] = useState(String(foe.level));
+  const n = Math.max(1, Math.min(ENEMY_DEV_MAX_LEVEL, Math.floor(Number(level)) || 1));
+  const set = (to: number) => {
+    dev.open?.send({ op: "set_level", unit: foe.id, level: to });
+    setLevel(String(to));
+  };
+  return (
+    <div className="zone-barmenu panel zone-sandbox-level" role="dialog" aria-label={`${foe.name}'s level`}>
+      <div className="zone-barmenu-head">
+        <strong>{foe.name}</strong>
+        <span className="muted">level {foe.level} · {foe.hp}/{foe.maxHp} HP</span>
+        <button className="link" onClick={onClose}>Close</button>
+      </div>
+      <div className="dev-row">
+        <button className="small" disabled={foe.level <= 1} onClick={() => set(foe.level - 1)}>−1</button>
+        <input type="number" min={1} max={ENEMY_DEV_MAX_LEVEL} value={level} aria-label="Level" onChange={(e) => setLevel(e.target.value)} onKeyDown={(e) => e.key === "Enter" && set(n)} />
+        <button className="small" disabled={foe.level >= ENEMY_DEV_MAX_LEVEL} onClick={() => set(foe.level + 1)}>+1</button>
+        <button className="small primary" onClick={() => set(n)}>Set level {n}</button>
+      </div>
+      <p className="muted">Its health keeps the share it had; its abilities hit as that level's do.</p>
+    </div>
+  );
+}
 
 /** The enemy picked on the map, if it is one the sandbox lets the dev play: standing, and in the fight. */
 export function sandboxFoe(state: ZoneState | null, dev: ZoneDevState): Unit | undefined {
