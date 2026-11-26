@@ -114,9 +114,9 @@
 .hud.slim .hud-core { width: calc(var(--u) * 300); }
 .hud.full .hud-core { justify-content: flex-start; }
 /* Health and energy end to end: each as tall as the room beside the crest at its outer end, sloping down near the
-   middle to a thin channel where the two meet under the crest. Each fills from its outer end (energy is drawn
+   middle to a thin channel where the two meet, a hair apart, under the crest. Each fills from its outer end (energy is drawn
    mirrored). The rim is the meter's own box, brass fading to dark; the channel is cut the same shape inside it. */
-.hud-gauges { display: flex; align-items: flex-end; gap: 0; }
+.hud-gauges { display: flex; align-items: flex-end; gap: max(2px, calc(var(--u) * 4)); }
 .hud { --m-h: calc(var(--u) * 22); --m-thin: max(5px, calc(var(--u) * 8)); --m-slope: calc(var(--u) * 60); }
 .hud.slim { --m-h: calc(var(--u) * 30); --m-thin: max(6px, calc(var(--u) * 10)); --m-slope: calc(var(--u) * 70); }
 .hud-meter {
