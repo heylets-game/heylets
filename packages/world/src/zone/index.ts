@@ -20,6 +20,7 @@ export {
   abilityDice,
   healDice,
   CONDITION_INFO,
+  conditionText,
   COMMON_ACTIONS,
   commonCost,
   commonCostFor,
