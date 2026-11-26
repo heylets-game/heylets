@@ -644,7 +644,7 @@ export const BATTERING_RAM = { gather: 0.18, trail: 3, every: 0.07 };
 
 /**
  * A Brute's Battering Ram: it drops its shoulder and drives in at the target (figures.ts THRUST, then a spring at
- * them), dust kicked back off its heels and speed lines streaming off it. It hits like a door caving in: a big flash,
+ * them), dust kicked back off its heels and speed lines streaming off it. It hits like a door caving in: a flash,
  * shock lines bursting out ahead, and the target jolted hard; then dust is driven up along the ground for the three
  * hexes the target is shoved back, one puff after another.
  */
@@ -668,7 +668,6 @@ function batteringRam(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: 
     }, s);
   }
   stage.later(() => {
-    stage.spawnFx("bang", color, flip, { from: hitAt, to: hitAt, life: 0.24, size: [1, 2.6], spin: 0.4, fade: true });
     stage.spawnFx("burst", color, false, { from: hitAt, to: hitAt, life: 0.26, size: [1, 2.8], spin: 0.6, fade: true });
     for (const turn of [-0.5, -0.2, 0.1, 0.4]) stage.spawnFx("streak", color, flip, { from: hitAt, to: hitAt.clone().addScaledVector(on, 0.8), life: 0.22, size: [0.8, 2], turn, spin: 0, fade: true });
     stage.jolt();
