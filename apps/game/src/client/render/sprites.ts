@@ -600,7 +600,7 @@ export function bubbleTexture(text: string): { texture: THREE.CanvasTexture; wid
 
 // ---------- battle effects ----------
 
-export type FxKind = "slash" | "bolt" | "arrow" | "burst" | "spark" | "mote" | "dust" | "fleck" | "splash" | "rock" | "note" | "notes" | "bang";
+export type FxKind = "slash" | "bolt" | "arrow" | "burst" | "spark" | "mote" | "dust" | "fleck" | "splash" | "rock" | "note" | "notes" | "bang" | "streak";
 
 const fxCache = new Map<string, THREE.CanvasTexture>();
 
@@ -671,6 +671,14 @@ export function fxTexture(kind: FxKind, color: string, flip = false): THREE.Canv
     }
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(7, 7, 2, 2);
+  } else if (kind === "streak") {
+    // A speed line, for something going fast to the right: long and thin, white at its head and thinning to a
+    // broken tail behind.
+    for (let x = 1; x < 15; x++) {
+      if (x < 5 && x % 2) continue;
+      dot(x, 8, x >= 11 ? "#ffffff" : color);
+    }
+    for (let x = 8; x < 14; x++) dot(x, 7, x >= 12 ? "#ffffff" : color);
   } else if (kind === "dust") {
     // A footfall's puff: a lumpy little cloud, paler at the top, with a speck thrown off each side.
     for (const [x, y, w] of [[6, 7, 3], [5, 8, 6], [4, 9, 8], [5, 10, 6]] as const) {

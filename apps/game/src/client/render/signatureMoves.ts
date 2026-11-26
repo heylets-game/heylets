@@ -120,30 +120,83 @@ export function pounceAt(s: number, far: number): { ahead: number; up: number } 
   return { ahead: reach * (1 - ease(k)), up: 4 * POUNCE.homeHop * k * (1 - k) };
 }
 
-const LUNGE_TEETH = "#f4efe2";
-/** How long the jaws take to close: they meet as the wolf lands. */
+const TEETH = "#f4efe2";
+const GOLD = "#ffd23f";
+/** How long a lunge's jaws take to close: they meet as the wolf lands. A plain bite's are quicker. */
 const LUNGE_BITE = 0.1;
+const QUICK_BITE = 0.08;
+/** Seconds between each set of speed lines thrown off a leaping wolf. */
+const STREAK_EVERY = 0.03;
+const STREAK_PALE = "#d6e4ff";
 
 /**
- * A wolf's lunge: it gathers itself and leaps at the target, and its jaws close on them as it comes down: two white
- * arches, the upper and the lower, snapping together. The target is jolted and dust is thrown up at its feet as it
- * is borne down; the wolf holds there a moment, then hops back. The blow is told when the jaws meet.
+ * Jaws closing on the target: two white arches, the upper and the lower, `gape` apart, snapping together over `life`
+ * seconds. `onShut` runs as they meet.
  */
-function wolfLunge(stage: MoveStage, { hitAt, dir, crit, onImpact }: MoveCtx) {
-  const color = crit ? "#ffd23f" : LUNGE_TEETH;
+function jaws(stage: MoveStage, { hitAt, dir, crit }: MoveCtx, life: number, gape: number, onShut: () => void) {
+  const color = crit ? GOLD : TEETH;
   // The swipe is drawn as a quarter circle; turned an eighth it lies flat as an arch, and half a turn more turns it over.
   const flat = dir < 0 ? -Math.PI / 4 : Math.PI / 4;
+  for (const upper of [false, true]) {
+    const side = upper ? 1 : -1;
+    const from = hitAt.clone().setY(hitAt.y + side * gape);
+    const to = hitAt.clone().setY(hitAt.y + side * 0.06);
+    stage.spawnFx("slash", color, dir < 0, { from, to, life, size: [1.5, 1.2], turn: upper ? flat : flat + Math.PI, spin: 0, fade: false, onEnd: upper ? onShut : undefined });
+  }
+}
+
+/** A wolf's plain bite: a snap forward, and its jaws close on the target. */
+function wolfBite(stage: MoveStage, ctx: MoveCtx) {
+  stage.lunge();
+  jaws(stage, ctx, QUICK_BITE, 0.3, () => {
+    stage.spawnFx("burst", ctx.crit ? GOLD : TEETH, false, { from: ctx.hitAt, to: ctx.hitAt, life: 0.18, size: [0.5, 1.2], spin: 0.5, fade: true });
+    stage.jolt();
+    ctx.onImpact();
+  });
+}
+
+/**
+ * A wolf's lunge: it gathers itself and leaps at the target, kicking dust back off the ground as it goes and throwing
+ * speed lines off itself the whole way through the air. Its jaws close on the target as it comes down, with a flash
+ * and lines bursting out round it; the target is jolted and dust is thrown up at its feet. The wolf holds there a
+ * moment, then hops back. The blow is told when the jaws meet.
+ */
+function wolfLunge(stage: MoveStage, ctx: MoveCtx) {
+  const { figure, hitAt, dir, crit, onImpact } = ctx;
+  const flip = dir < 0;
+  // Where the wolf's body is just now, wherever the leap has carried it.
+  const body = () => {
+    const at = figure.root.getWorldPosition(hitAt.clone());
+    at.y += 0.5;
+    return at;
+  };
+  // Away from the target, along the ground: the way what it throws off goes.
+  const back = body().sub(hitAt).setY(0).normalize();
   const lands = stage.pounce();
+  if (lands > 0) {
+    // Off the ground: dust kicked back from its feet.
+    stage.later(() => {
+      const at = body();
+      const feet = at.setY(at.y - 0.45);
+      for (const lift of [0.15, 0.35]) stage.spawnFx("dust", "#c9b994", !flip, { from: feet, to: feet.clone().addScaledVector(back, 0.7).setY(feet.y + lift), life: 0.4, size: [0.8, 1.4], spin: 0, fade: true });
+    }, POUNCE.crouch);
+    // Through the air: speed lines streaming off behind it.
+    for (let s = POUNCE.crouch; s < lands; s += STREAK_EVERY) {
+      stage.later(() => {
+        const at = body();
+        for (let i = 0; i < 2; i++) {
+          const from = at.clone().setY(at.y - 0.3 + Math.random() * 0.65).addScaledVector(back, 0.2 + Math.random() * 0.25);
+          stage.spawnFx("streak", crit ? GOLD : STREAK_PALE, flip, { from, to: from.clone().addScaledVector(back, 0.55), life: 0.16, size: [1.1, 0.7], spin: 0, fade: true });
+        }
+      }, s);
+    }
+  }
   stage.later(() => {
-    const jaw = (upper: boolean, onEnd?: () => void) => {
-      const side = upper ? 1 : -1;
-      const from = hitAt.clone().setY(hitAt.y + side * 0.4);
-      const to = hitAt.clone().setY(hitAt.y + side * 0.06);
-      stage.spawnFx("slash", color, dir < 0, { from, to, life: LUNGE_BITE, size: [1.5, 1.2], turn: upper ? flat : flat + Math.PI, spin: 0, fade: false, onEnd });
-    };
-    jaw(false);
-    jaw(true, () => {
-      stage.spawnFx("burst", color, false, { from: hitAt, to: hitAt, life: 0.22, size: [0.7, 1.7], spin: 0.5, fade: true });
+    jaws(stage, ctx, LUNGE_BITE, 0.4, () => {
+      const color = crit ? GOLD : TEETH;
+      stage.spawnFx("burst", color, false, { from: hitAt, to: hitAt, life: 0.26, size: [0.9, 2.4], spin: 0.6, fade: true });
+      // Lines bursting out from where the jaws met, either side.
+      for (const side of [false, true]) for (const turn of [-0.55, -0.15, 0.25, 0.6]) stage.spawnFx("streak", color, side, { from: hitAt, to: hitAt, life: 0.2, size: [0.6, 1.9], turn: side ? -turn : turn, spin: 0, fade: true });
       const feet = hitAt.clone().setY(hitAt.y - 0.45);
       for (const side of [-1, 1]) stage.spawnFx("dust", "#c9b994", side > 0, { from: feet, to: feet.clone().setX(feet.x + side * 0.55).setY(feet.y + 0.3), life: 0.4, size: [0.6, 1.1], spin: 0, fade: true });
       stage.jolt();
@@ -154,6 +207,7 @@ function wolfLunge(stage: MoveStage, { hitAt, dir, crit, onImpact }: MoveCtx) {
 }
 
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
+  Bite: { who: "wolf", blurb: "A snap forward, jaws closing on the target as two white arches.", play: wolfBite },
   "Cheap Shot": { who: "bandit", blurb: "Two quick side slashes, a forehand then a backhand: the sword leaves a red trail, and each cut a flat red swipe across the target.", play: cheapShot },
-  Lunge: { who: "wolf", blurb: "A crouch and a leap through the air at the target, jaws snapping shut on it as two white arches as it lands, dust thrown up at its feet, then a hop back home.", play: wolfLunge },
+  Lunge: { who: "wolf", blurb: "A crouch and a leap through the air, dust kicked back and speed lines streaming off it, jaws snapping shut on the target with a flash as it lands, then a hop back home.", play: wolfLunge },
 };
