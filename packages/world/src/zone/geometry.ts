@@ -263,9 +263,18 @@ export const roomAt = (state: Pick<ZoneState, "units">, pos: HexPos, who?: Pick<
 export const roomFor = (state: Pick<ZoneState, "units" | "map">, who: Unit, at: HexPos): boolean =>
   span(who, at).every((p) => !solid(tileAt(state.map, p)) && roomAt(state, p, who));
 
-/** Why a unit bigger than a hex cannot stand with its anchor at `to` (not all of it has room there), in words; null if it can, or is no bigger than a hex. */
-export const noRoomThere = (state: Pick<ZoneState, "units" | "map">, unit: Unit, to: HexPos): string | null =>
-  big(unit) && !!tileAt(state.map, to) && !roomFor(state, unit, to) ? `There is no room for all of ${unit.name} there.` : null;
+/**
+ * Why `unit` cannot walk to `to` however much it had to spend, in words, or null if it could (and it is only too far):
+ * a unit bigger than a hex with no room there, or no way through wide enough for it; or no way through at all.
+ */
+export function noWayThere(state: ZoneState, unit: Unit, to: HexPos): string | null {
+  // Off the map: nothing more to say than that it cannot be got to.
+  if (!tileAt(state.map, to)) return null;
+  const huge = big(unit);
+  if (huge && !roomFor(state, unit, to)) return `There is no room for all of ${unit.name} there.`;
+  if (zoneReach(state, unit, FREE_WALK, undefined, undefined, (r) => sameHex(r.pos, to)).has(posKey(to))) return null;
+  return huge ? `You cannot get there: there is no way through wide enough for all of ${unit.name}.` : "You cannot get there: there is no way through.";
+}
 
 export const unitById = (state: ZoneState, id: string): Unit | undefined => state.units.find((u) => u.id === id);
 

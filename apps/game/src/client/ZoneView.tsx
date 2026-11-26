@@ -104,7 +104,7 @@ import {
   nearOf,
   span,
   big,
-  noRoomThere,
+  noWayThere,
   unopened,
   unlooted,
   lootIn,
@@ -2259,7 +2259,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     const near = reach.get(posKey(hover));
     const got = near ?? far?.get(posKey(hover));
     // An enemy's own hex is nowhere to walk to (a click on it walks up beside it): no walk is priced over it, and it is not called "no way" either.
-    if (!got) return state.units.some((u) => u.side !== mover.side && !u.down && covers(u, hover)) ? null : { none: true as const, why: noRoomThere(asState(state), mover, hover) };
+    if (!got) return state.units.some((u) => u.side !== mover.side && !u.down && covers(u, hover)) ? null : { none: true as const, why: noWayThere(asState(state), mover, hover) };
     if (got.cost === 0) return null;
     const from = near ? reach : far!;
     const path = pathIn(from, hover) ?? [];

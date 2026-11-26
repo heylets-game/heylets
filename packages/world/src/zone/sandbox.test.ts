@@ -222,4 +222,15 @@ describe("why a walk cannot be made", () => {
     expect(step.ok).toBe(false);
     expect(!step.ok && step.error).toMatch(/no room/);
   });
+
+  it("says a big one has no way through wide enough, when the end has room but the way does not", () => {
+    let state = board();
+    const guardian = enemy(state, "guardian", at(2, 2)).id;
+    // A gap one hex wide in a line of rock across the board: a wolf could go through, the Guardian cannot.
+    state.map.tiles = state.map.tiles.map((t) => (t.r === 5 && t.q !== 8 ? { ...t, built: true } : t));
+    state = dev(dev(state, { op: "sandbox", on: true }), { op: "start_fight" });
+    const step = stepZone(state, { type: "move", by: "ann", unit: guardian, to: at(2, 9) });
+    expect(step.ok).toBe(false);
+    expect(!step.ok && step.error).toMatch(/no way through wide enough/);
+  });
 });
