@@ -1564,6 +1564,8 @@ describe("the end of a fight", () => {
     let state = board();
     enemy(state, "wolf", at(7, 6));
     hero(state, "ann", "qa_paladin", at(4, 6));
+    // Put down in sight of ann they start a fight: kept still, so where they were put is what is looked at.
+    state.aiOff = true;
     const spawn = (kinds: string[], pos: HexPos) => (state = must(state, { type: "dev", by: "ann", dev: { op: "spawn", kinds, at: pos } }));
     const on = (pos: HexPos) => state.units.filter((u) => sameHex(u.pos, pos)).length;
     const crowd = () => Math.max(...state.units.map((u) => on(u.pos)));
