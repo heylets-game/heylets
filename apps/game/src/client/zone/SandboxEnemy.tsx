@@ -1,7 +1,7 @@
 // The combat sandbox's enemy (dev toolbox, Maps tab): an enemy in the fight, picked on the map, played by the dev.
 // Its abilities take the hero's place on the bottom bar (sandboxSlots). One that needs no aim (a burst round it, a
 // call to its own side) is used at once; any other is armed (zoneDev's "strike" tool) and the next click on the map
-// aims it (ZoneView). A click on open ground walks it there instead. Over the map, a strip says who is being played.
+// aims it (ZoneView). A click on open ground walks it there instead. In the bar's bottom row, a strip says who is being played.
 // What it does is what its own turn would do (world: strikes.ts, enemyAct).
 
 import { diceText, strikeAim, unitStrike, type EnemyStrike, type Unit, type ZoneState } from "@gantt-quest/world";
@@ -9,13 +9,13 @@ import type { HudSlot } from "../ui/Hud";
 import { abilityIcon } from "./actionIcons";
 import { setZoneDev, useZoneDev, type ZoneDevState } from "./zoneDev";
 
-/** Who is being played, the way to let them go, and whether their abilities reach anywhere. */
+/** Who is being played, the way to let them go, and whether their abilities reach anywhere: for the bar's bottom row (HudBar slotsBelow). */
 export function SandboxEnemy({ foe }: { foe: Unit }) {
   const dev = useZoneDev();
   return (
-    <div className="panel zone-sandbox-enemy" role="group" aria-label={`Playing ${foe.name}`}>
+    <div className="zone-sandbox-enemy" role="group" aria-label={`Playing ${foe.name}`}>
       <strong>Playing {foe.name}</strong>
-      <span className="muted">its abilities are on the bar · click open ground to walk it there</span>
+      <span className="muted">click open ground to walk it</span>
       <label className="muted"><input type="checkbox" checked={dev.anywhere} onChange={(e) => setZoneDev({ anywhere: e.target.checked })} /> Reach anywhere</label>
       <button className="link" onClick={() => setZoneDev({ picked: null, tool: dev.tool?.tool === "strike" ? null : dev.tool })}>Let go</button>
     </div>

@@ -114,6 +114,8 @@ interface Props {
   chips?: ReactNode;
   /** The slots, on a map: two rows of ten, null for an empty one. Left out, the bar is slim, with no slots. */
   slots?: (HudSlot | null)[];
+  /** Shown in place of the bottom row of slots, as tall as it (the combat sandbox's enemy being played): that row's slots are not drawn. */
+  slotsBelow?: ReactNode;
   /** The player dragged slot `from` onto slot `to`. */
   onSlotMove?(from: number, to: number): void;
   /** The player asked to choose what goes in a slot (a right-click, or a click on an empty one). */
@@ -154,7 +156,7 @@ function Tip({ name, line, more, keys }: { name: string; line?: string; more?: s
   );
 }
 
-export function HudBar({ me, place, children, hp, meter: given, pips = [], chips, slots, onSlotMove, onSlotMenu, torch, turn, rest, emote, onBag, bagBlocked, onBook, menu }: Props) {
+export function HudBar({ me, place, children, hp, meter: given, pips = [], chips, slots, slotsBelow, onSlotMove, onSlotMenu, torch, turn, rest, emote, onBag, bagBlocked, onBook, menu }: Props) {
   const c = me.character;
   // The pack is read out of its stored form (each row's JSON) when it changes, not every time the bar is drawn.
   const items = useMemo(() => me.inventory.map(toOwned), [me.inventory]);
@@ -428,7 +430,12 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
           </span>
 
           {/* On a map: what the hero can do, two rows of ten. */}
-          {slots && <span className="hud-slots" style={{ "--cols": BAR_ROW } as CSSProperties}>{shown.slice(0, BAR_ROW * 2).map(slotButton)}</span>}
+          {slots && (
+            <span className="hud-slots" style={{ "--cols": BAR_ROW } as CSSProperties}>
+              {shown.slice(0, BAR_ROW * (slotsBelow ? 1 : 2)).map(slotButton)}
+              {slotsBelow && <span className="hud-slots-below">{slotsBelow}</span>}
+            </span>
+          )}
         </span>
 
         {/* Right: the bag, and beside it the tabs for the logbook, rest (or, in a fight, the emote wheel) and the menu. */}

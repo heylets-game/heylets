@@ -3307,9 +3307,6 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         </div>
       )}
 
-      {/* The combat sandbox: the enemy picked, to play. */}
-      {foe && <SandboxEnemy foe={foe} />}
-
       {/* In a fight: the turn's Action Points and movement, whose turn it is, and the way to end it, over the bar. */}
       {enc && fighting && (
         <TimedTurnBar
@@ -3339,6 +3336,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         // The keys the party has found, on its one ring.
         chips={keys > 0 ? <span className="hud-chip" title="Keys to locked doors: any key opens any door">{keysText}</span> : undefined}
         slots={slots}
+        // The combat sandbox's enemy being played: who it is, in the bottom row (its abilities are the top).
+        slotsBelow={foe ? <SandboxEnemy foe={foe} /> : undefined}
         onSlotMove={foe ? undefined : (from, to) => arrange(moveSlot(bar, from, to))}
         onSlotMenu={foe ? undefined : (index) => setBarMenu((open) => (open === index ? null : index))}
         // Either hand takes a lit torch: put one there to light it. In the main hand it is swung as a weapon.
