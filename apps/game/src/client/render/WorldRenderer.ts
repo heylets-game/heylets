@@ -2377,7 +2377,10 @@ export class WorldRenderer {
     const spell = SPELL_COLOR[ability];
     // A stomp is leant well into, so it is held long enough to be seen. A spell, a shot or a throw is the
     // figure's own gesture, and a blow in the hand its own strike (see below).
-    if (QUAKES.has(ability)) a.lean = -dir * 0.9;
+    // One with an animation of its own (an Ogre's Stomp, a seat drop) is not leant: it plays that instead.
+    const ownQuake = QUAKES.has(ability) ? SIGNATURE_MOVES[ability] : undefined;
+    const playsOwn = !!ownQuake && (!ownQuake.only || ownQuake.only.includes(a.kind));
+    if (QUAKES.has(ability) && !playsOwn) a.lean = -dir * 0.9;
     if (!a.lying) a.turn = a.turnGoal = Math.atan2(t.goal.x - a.goal.x, t.goal.z - a.goal.z);
     const hitAt = t.goal.clone().add(new THREE.Vector3(0, t.size * 0.4, 0.05));
 
@@ -2387,9 +2390,8 @@ export class WorldRenderer {
       const first = this.clock - (this.quakeAt.get(actorId) ?? -Infinity) > 1;
       if (first) this.quakeAt.set(actorId, this.clock);
       // One with an animation of its own (an Ogre's Stomp) plays it for each hero caught, drawn round it only once.
-      const own = SIGNATURE_MOVES[ability];
-      if (own && (!own.only || own.only.includes(a.kind))) {
-        own.play(this.moveStage(actorId, targetId, ability, t, dir, landed), { figure: a.figure, hitAt, dir, crit, onImpact, echo: !first });
+      if (ownQuake && playsOwn) {
+        ownQuake.play(this.moveStage(actorId, targetId, ability, t, dir, landed), { figure: a.figure, hitAt, dir, crit, onImpact, echo: !first });
         return;
       }
       if (first) this.quakeRing(a);

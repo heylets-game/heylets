@@ -1571,7 +1571,7 @@ const GET_UP_HIPS = -1;
  * `n` counts the figure's actions, so two flinches in a row need not be the same.
  */
 interface Act {
-  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "slam" | "claw" | "flurry" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
+  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "slam" | "drop" | "claw" | "flurry" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
   t: number;
   n: number;
   /** A jump's seconds off the ground (see JUMP). */
@@ -1676,6 +1676,26 @@ const SLAM: Blow = {
   crouch: [[0, 0], [0.3, 0], [0.42, 0.55], [0.62, 0.45], [1.0, 0]],
   off: [[0, 0], [0.3, -2.6], [0.34, -2.65], [0.42, -1.0], [0.62, -0.9], [1.0, 0]],
   step: [[0, 0], [0.3, 0.3], [0.42, 1], [0.65, 1], [1.0, 0]],
+};
+
+/**
+ * A seat drop: a deep crouch with the arms swung back, a spring straight up off both feet with the arms thrown high,
+ * the legs swinging out ahead in the air, and down flat on its backside at `hit` (FLOOR's seat, legs out in front),
+ * the body rocking back and the legs bouncing up off the ground with the weight of it, the arms flung out wide.
+ * It sits there a moment, then heaves itself back up. `up` is how high off the ground it is, in the figure's own
+ * units; `seat` how far into the sit, 0 to 1; `coil` the crouch; `arms` -1 swung back to 1 thrown up; `jolt` the
+ * shock of landing, dying away; `rise` the crouch it gets back up through. An Ogre's Stomp (signatureMoves.ts).
+ */
+const SEAT_DROP = {
+  hit: 0.62,
+  over: 1.65,
+  up: [[0, 0], [0.24, 0], [0.42, 6.5], [0.62, 0]] as Keys,
+  seat: [[0, 0], [0.3, 0], [0.5, 0.85], [0.62, 1], [1.15, 1], [1.5, 0]] as Keys,
+  coil: [[0, 0], [0.2, 0.8], [0.26, 0.2], [0.34, 0]] as Keys,
+  arms: [[0, 0], [0.2, -0.8], [0.3, 1], [0.5, 0.8], [0.62, 0.2], [0.9, 0], [1.65, 0]] as Keys,
+  jolt: [[0, 0], [0.62, 0], [0.66, 1], [0.8, 0.25], [0.95, 0]] as Keys,
+  rise: [[0, 0], [1.15, 0], [1.3, 0.6], [1.5, 0.3], [1.65, 0]] as Keys,
+  lean: [[0, 0], [0.2, 0.35], [0.3, 0], [0.62, -0.1], [1.15, 0], [1.3, 0.4], [1.65, 0]] as Keys,
 };
 
 /**
@@ -2331,7 +2351,7 @@ const RECORDER_LENGTH = 6.4;
 const HAMMER = { hit: 0.4, over: 0.86, up: [[0, 0.25], [0.3, 1], [0.4, 0], [0.48, 0.18], [0.86, 0.25]] as Keys };
 const STIR = { over: 30, turns: 25 };
 /** How long each kind of action lasts. */
-const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, slam: SLAM.over, claw: CLAW.over, flurry: FLURRY.over, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
+const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, slam: SLAM.over, drop: SEAT_DROP.over, claw: CLAW.over, flurry: FLURRY.over, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
 /** When each kind of blow lands. */
 const ACT_HIT = { strike: SWING.hit, stab: THRUST.hit, slices: SLICES.hit, slam: SLAM.hit, pounce: POUNCE.hit, heavy: SWEEP.hit, twin: TWIN.hit };
 /**
@@ -2757,6 +2777,31 @@ function biped(top: THREE.Group, parts: Part[], drawnElbow = ELBOW) {
       armR.joint.rotation.z -= wide * right;
       heldR.joint.rotation.x -= lift * right;
       if (levels.length === 0) heldL.joint.rotation.x -= lift * left;
+      return;
+    }
+    if (act.kind === "drop") {
+      const d = SEAT_DROP;
+      const seat = along(d.seat, t);
+      const jolt = along(d.jolt, t);
+      const arms = along(d.arms, t);
+      // Crouched to spring and to get back up: the feet on the ground for both, then the legs go out ahead to sit.
+      knees(0.75 * along(d.coil, t) + along(d.rise, t));
+      bow(along(d.lean, t), 0);
+      head.joint.rotation.x -= along(d.lean, t) * 0.5;
+      floorSit(seat);
+      top.position.y += along(d.up, t);
+      // Down on its backside: rocked back, the legs bounced up off the ground, the hips squashed into it.
+      torso.joint.rotation.x -= 0.35 * jolt;
+      head.joint.rotation.x += 0.3 * jolt;
+      for (const thigh of [thighL, thighR]) thigh.joint.rotation.x -= 0.3 * jolt;
+      top.position.y -= 0.4 * jolt;
+      // The arms: swung back in the crouch, thrown up with the spring, and flung out wide as it lands.
+      const lift = arms < 0 ? -0.9 * arms : -2.6 * arms;
+      const wide = 0.3 * Math.max(0, arms) + 1.1 * jolt;
+      armL.joint.rotation.x += lift;
+      armR.joint.rotation.x += lift;
+      armL.joint.rotation.z += wide;
+      armR.joint.rotation.z -= wide;
       return;
     }
     const k = act.kind === "stab" ? THRUST : act.kind === "pounce" ? POUNCE : act.kind === "twin" ? TWIN : act.kind === "slices" ? SLICES : act.kind === "slam" ? SLAM : SWING;
@@ -10157,7 +10202,7 @@ export interface Figure {
    * returns the seconds until the blow lands, for whatever it hits to wait; a creature lunges at once, as it always
    * did, and this returns 0.
    */
-  strike(how?: "light" | "stab" | "heavy" | "slices" | "slam" | "claw" | "flurry"): number;
+  strike(how?: "light" | "stab" | "heavy" | "slices" | "slam" | "drop" | "claw" | "flurry"): number;
   /**
    * Cast a spell, or throw something: the casting hand swings round overhead and comes down to point at the mark.
    * Returns the seconds until it points, which is when what is cast should leave; 0 for a creature, which only
@@ -10506,6 +10551,11 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
       if ((how === "claw" || how === "flurry") && rig.claws) {
         asked = how;
         return how === "flurry" ? FLURRY.hit : CLAW.hit;
+      }
+      if (how === "drop") {
+        if (!rig.acts) return 0;
+        asked = "drop";
+        return SEAT_DROP.hit;
       }
       if (how === "claw" || how === "flurry") how = "light";
       const kind = how === "heavy" ? (rig.twin ? "twin" : "heavy") : how === "stab" || how === "slices" || how === "slam" ? how : (rig.light ?? "strike");
