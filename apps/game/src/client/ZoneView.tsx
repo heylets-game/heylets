@@ -32,6 +32,7 @@ import {
   ABILITIES,
   ALERT_RANGE,
   REELING_AP,
+  SPURS,
   UNTIMED,
   usesLeft,
   AURAS,
@@ -1516,7 +1517,15 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         } else {
           const count = stacksOf({ kind: ev.kind, rounds: ev.rounds, amount: ev.amount });
           const stacks = count > 1 ? ` ×${count}` : "";
+          const spurred = !!SPURS[ev.kind];
+          const target = ev.target;
           later(() => {
+            // Spurred on (a Frenzy from a Howl): a flare of its colour over them, motes thrown off it.
+            const head = spurred ? renderer.current?.unitHead(target) : null;
+            if (head) {
+              spells.current?.flash(head, CONDITION_INFO[ev.kind].color, 1.3);
+              spells.current?.burst(head, CONDITION_INFO[ev.kind].color, 9);
+            }
             sounds.effect(ev.kind, view?.whereIs(ev.target));
             view?.floatOver(ev.target, `${CONDITION_INFO[ev.kind].name}${stacks}`, CONDITION_INFO[ev.kind].color);
           });
