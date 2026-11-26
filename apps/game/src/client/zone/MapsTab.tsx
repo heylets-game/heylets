@@ -1,7 +1,8 @@
 // The dev toolbox's Maps tab: make a zone to try fights in and walk into
 // it, and, while one is on screen, set up whatever is being tested: put an
 // enemy group down, paint the ground, add a stand-in crewmate, heal up,
-// end the fight, stop the enemy taking turns, show how far each group sees,
+// end the fight, take every enemy off the map, stop the enemy taking turns,
+// keep heroes from going down, take the time limit off turns, show how far each group sees,
 // and make any hero of yours on it (you, or a stand-in) any class, level and
 // weapon with any of the class's abilities. That last holds on that map,
 // through a reload, and leaves your own character as it is.
@@ -141,9 +142,12 @@ export function MapsTab() {
             <button className="small" onClick={() => send({ op: "start_fight" })}>Start a fight here</button>
             <button className="small" onClick={() => send({ op: "end_fight" })}>End the fight</button>
             <button className="small" onClick={() => send({ op: "clear_surfaces" })}>Clear the ground</button>
+            <button className="small" onClick={() => send({ op: "clear_enemies" })}>Clear all enemies</button>
           </div>
           <div className="dev-row">
-            <label><input type="checkbox" onChange={(e) => send({ op: "ai", off: e.target.checked })} /> Enemy takes no turns</label>
+            <label><input type="checkbox" checked={dev.flags.aiOff} onChange={(e) => send({ op: "ai", off: e.target.checked })} /> Enemy takes no turns</label>
+            <label><input type="checkbox" checked={dev.flags.undying} onChange={(e) => send({ op: "undying", on: e.target.checked })} /> Heroes cannot die</label>
+            <label><input type="checkbox" checked={dev.flags.timerOff} onChange={(e) => send({ op: "timer", off: e.target.checked })} /> No turn timer</label>
             <label><input type="checkbox" checked={dev.showAlert} onChange={(e) => setZoneDev({ showAlert: e.target.checked })} /> Show where each group can see</label>
           </div>
           <div className="dev-row">

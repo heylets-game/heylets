@@ -1838,6 +1838,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   useEffect(() => {
     setZoneDev({ heroes: mine.filter((u) => !u.summon).map((u) => ({ id: u.id, name: u.name, classId: u.kind, level: u.level, weapon: u.outfit?.main_hand?.ref, abilities: u.torchHand === "main" ? (u.stowed ?? []) : u.abilities })) });
   }, [mineKey]);
+  const flags = { aiOff: !!state?.aiOff, undying: !!state?.undying, timerOff: !!state?.timerOff };
+  useEffect(() => setZoneDev({ flags }), [flags.aiOff, flags.undying, flags.timerOff]);
   const ready = (u: Unit) => !!enc && enc.acting.includes(u.id) && !enc.done.includes(u.id) && !u.down;
   const act = mine.find((u) => u.id === playAs && (!enc || !enc.order.includes(u.id) || ready(u))) ?? mine.find(ready) ?? mine.find((u) => u.id === state?.you) ?? mine[0];
   // The hero of yours being played (party.ts): `act` itself, or whose stand-in or creature it is. Their sheet, bag and
@@ -1931,7 +1933,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const send = zone.send;
   useEffect(() => {
     setZoneDev({ open: { code, send: (op) => send({ type: "dev", dev: op }) } });
-    return () => setZoneDev({ open: null, tool: null, heroes: [] });
+    return () => setZoneDev({ open: null, tool: null, heroes: [], flags: { aiOff: false, undying: false, timerOff: false } });
   }, [code, send]);
 
   /** An alarm bell rung where it stands: it swings, waves of sound pulse out of it, and its toll is heard. */

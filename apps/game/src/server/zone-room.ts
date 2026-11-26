@@ -312,6 +312,8 @@ export class ZoneRoom extends DurableObject<Env> {
         return;
       }
       const deadline = zone.encounter?.deadline ?? null;
+      // No time limit on turns (DevOp "timer"): nothing to run out.
+      if (zone.timerOff) return;
       if (deadline && Date.now() < deadline - 500) {
         await this.ctx.storage.setAlarm(deadline);
         return;
@@ -361,7 +363,8 @@ export class ZoneRoom extends DurableObject<Env> {
       return res.error;
     }
     const next = res.state;
-    if (zoneAwaiting(next) !== zoneAwaiting(prev)) await this.armTimer(next);
+    // A new turn, or the dev switch for the turn timer flipped (DevOp "timer").
+    if (zoneAwaiting(next) !== zoneAwaiting(prev) || !!next.timerOff !== !!prev.timerOff) await this.armTimer(next);
     // Out of a fight, the clock's next round.
     if (!zoneAwaiting(next)) await this.armClock(next);
     this.zone = next;
@@ -487,9 +490,9 @@ export class ZoneRoom extends DurableObject<Env> {
     }
   }
 
-  /** A new turn is being waited on (or none is): set its deadline and the alarm that ends it. */
+  /** A new turn is being waited on (or none is): set its deadline and the alarm that ends it. None while the dev switch has turns untimed. */
   private async armTimer(zone: ZoneState) {
-    const deadline = zoneAwaiting(zone) ? Date.now() + ZONE_TURN_MS : null;
+    const deadline = zoneAwaiting(zone) && !zone.timerOff ? Date.now() + ZONE_TURN_MS : null;
     if (zone.encounter) zone.encounter.deadline = deadline;
     if (deadline) await this.ctx.storage.setAlarm(deadline);
     else await this.ctx.storage.deleteAlarm();
@@ -512,7 +515,7 @@ export class ZoneRoom extends DurableObject<Env> {
     if (!zoneAwaiting(zone)) return this.armClock(zone);
     const deadline = zone.encounter?.deadline ?? null;
     const alarm = await this.ctx.storage.getAlarm();
-    if (alarm === null || !deadline || deadline < Date.now()) {
+    if (!zone.timerOff && (alarm === null || !deadline || deadline < Date.now())) {
       await this.armTimer(zone);
       await saveZoneStatement(this.env.DB, zone).run();
     }

@@ -878,6 +878,16 @@ function dev(ctx: Ctx, by: string, op: DevOp): string | null {
     else u.abilities = abilities;
   } else if (op.op === "ai") {
     state.aiOff = op.off;
+  } else if (op.op === "undying") {
+    if (op.on) state.undying = true;
+    else delete state.undying;
+  } else if (op.op === "timer") {
+    if (op.off) state.timerOff = true;
+    else delete state.timerOff;
+  } else if (op.op === "clear_enemies") {
+    // Gone, not killed: no bodies, nothing to loot, no XP. A fight they were in is won with nobody left in it (settle).
+    state.units = state.units.filter((u) => u.side !== "enemy");
+    for (const g of Object.keys(state.groups)) if (!state.units.some((u) => u.group === g)) delete state.groups[g];
   } else if (op.op === "clear_surfaces") {
     clearSurfaces(ctx, Object.keys(state.surfaces).map((key) => ({ q: Number(key.split(",")[0]), r: Number(key.split(",")[1]) })));
   }

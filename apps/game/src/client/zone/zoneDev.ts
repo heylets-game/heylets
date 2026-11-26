@@ -18,7 +18,17 @@ export interface ZoneDevState {
   showAlert: boolean;
   /** The heroes on the map that are yours to play (yourself, and stand-ins), for the Maps tab to change. */
   heroes: KitHero[];
+  /** The map's dev switches as they stand, for the Maps tab's checkboxes. */
+  flags: ZoneDevFlags;
 }
+
+export interface ZoneDevFlags {
+  aiOff: boolean;
+  undying: boolean;
+  timerOff: boolean;
+}
+
+const NO_FLAGS: ZoneDevFlags = { aiOff: false, undying: false, timerOff: false };
 
 export interface KitHero {
   id: string;
@@ -30,7 +40,7 @@ export interface KitHero {
   abilities: string[];
 }
 
-let state: ZoneDevState = { open: null, tool: null, showAlert: false, heroes: [] };
+let state: ZoneDevState = { open: null, tool: null, showAlert: false, heroes: [], flags: NO_FLAGS };
 const listeners = new Set<() => void>();
 
 export function setZoneDev(next: Partial<ZoneDevState>): void {

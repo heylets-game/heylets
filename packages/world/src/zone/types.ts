@@ -370,6 +370,10 @@ export interface ZoneState {
   seq: number;
   /** Dev switches. */
   aiOff?: boolean;
+  /** Dev switch: a hero brought to 0 HP stays on their feet, and goes on fighting at 0. */
+  undying?: boolean;
+  /** Dev switch: a turn in a fight has no time limit (the server sets no deadline). */
+  timerOff?: boolean;
   /**
    * A switch for the tests alone: heroes one after another in the order take their turns together, as fights
    * once went, so what one hero's ability does for another's can be tried within a single turn. Nothing sets
@@ -415,6 +419,12 @@ export type DevOp =
   /** Set the nearest group that has not noticed anyone on whoever asked, wherever they stand. */
   | { op: "start_fight" }
   | { op: "ai"; off: boolean }
+  /** Heroes cannot go down: 0 HP does nothing. */
+  | { op: "undying"; on: boolean }
+  /** No time limit on a turn in a fight. */
+  | { op: "timer"; off: boolean }
+  /** Take every enemy off the map, standing or not (bodies already left stay): a fight with them ends. */
+  | { op: "clear_enemies" }
   | { op: "clear_surfaces" }
   /**
    * A dev kit (the Maps tab): make one of your own heroes (yourself, or a stand-in you play) a hero of this class and level, with

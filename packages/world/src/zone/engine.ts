@@ -210,6 +210,11 @@ export function strikeDown(ctx: Ctx, unit: Unit): void {
 }
 
 function fall(ctx: Ctx, unit: Unit): void {
+  // Dev switch (DevOp "undying"): a hero stays up at 0 HP.
+  if (ctx.state.undying && unit.side === "hero" && !unit.summon) {
+    unit.hp = 0;
+    return;
+  }
   const spot = unit.conditions.find((c) => c.kind === "black_spot");
   unit.hp = 0;
   unit.down = true;
