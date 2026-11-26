@@ -91,9 +91,10 @@ export function zoneActionFrom(raw: unknown, by: string, dev: boolean): ZoneActi
     }
     if (d.op === "standin" && text(d.classId)) return { type: "dev", by, dev: { op: "standin", classId: d.classId } };
     if (d.op === "ai") return { type: "dev", by, dev: { op: "ai", off: !!d.off } };
-    if (d.op === "enemy_use" && text(d.unit) && text(d.ability)) {
-      return { type: "dev", by, dev: { op: "enemy_use", unit: d.unit, ability: d.ability, ...(text(d.target) ? { target: d.target } : {}) } };
+    if (d.op === "strike" && text(d.unit) && text(d.ability)) {
+      return { type: "dev", by, dev: { op: "strike", unit: d.unit, ability: d.ability, ...(text(d.target) ? { target: d.target } : {}), ...(isHex(d.at) ? { at: hex(d.at)! } : {}), ...(d.anywhere ? { anywhere: true } : {}) } };
     }
+    if (d.op === "place" && text(d.unit) && isHex(d.at)) return { type: "dev", by, dev: { op: "place", unit: d.unit, at: hex(d.at)! } };
     if (d.op === "sandbox") return { type: "dev", by, dev: { op: "sandbox", on: !!d.on } };
     if (d.op === "next_turn") return { type: "dev", by, dev: { op: "next_turn", ...(d.round ? { round: true } : {}) } };
     if (d.op === "undying") return { type: "dev", by, dev: { op: "undying", on: !!d.on } };

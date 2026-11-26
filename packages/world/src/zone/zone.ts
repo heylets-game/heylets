@@ -28,14 +28,15 @@ import { addStats, maxHpFor } from "../progression";
 import { makeRng, seedFromString } from "../rng";
 import { enemyTurn } from "./ai";
 import { pickBellGoer, placeBell } from "./bell";
-import { abilityArea, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, doCommon, drinkItem, isBlink, moveLeft, resolveAbility, throwItem, walk } from "./combat";
+import { abilityArea, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, doCommon, drinkItem, enemyAct, isBlink, moveLeft, resolveAbility, throwItem, walk } from "./combat";
+import { checkStrike } from "./strikes";
 import { UNTIMED_KEEPS, countDown, dropShield, has, heal, regrow, removeCondition, tick, tickStacks, unseen, usesLeft, type Ctx } from "./engine";
 import { ALERT_RANGE, JOIN_RANGE, freeHexNear, generateZone } from "./gen";
 import { generateDelve } from "./delve";
 import { checkLoot, checkOpen, leaveBody, look, lootFor, openChest, payBounty, take } from "./loot";
 import { PARTY_SIZES, siteOpen, spaced } from "./sites";
 import { FREE_WALK, big, blast, blockerAt, caught, covers, gap, inFight, isDead, meet, pathIn, perkOf, roomAt, sameHex, sees, solid, span, unitAt, unitById, zoneReach } from "./geometry";
-import { AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, ENEMY_MOVE_AP, FLEE_RANGE, ITEM_AP, STROLL_GRACE_MS, STROLL_STEP_MS, SUMMONS, STARTING_ITEMS, THROWABLES, THROWABLE_KINDS, cleanItems, commonCostFor, enemyHp, enemyMove, tacticOf } from "./kit";
+import { AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, ENEMY_MOVE_AP, FLEE_RANGE, ITEM_AP, STROLL_GRACE_MS, STROLL_STEP_MS, SUMMONS, STARTING_ITEMS, THROWABLES, THROWABLE_KINDS, cleanItems, unitStrike, commonCostFor, enemyHp, enemyMove, tacticOf } from "./kit";
 import { d20, heroMove, mod, rollDice, statOf } from "./rules";
 import { hiddenEnemies, sentToClient } from "./light";
 import { quakeAtTurn, tickWeather, weatherAtTurn } from "./weather";
@@ -563,7 +564,7 @@ function beginTurn(ctx: Ctx, enc: Encounter, unit: Unit): boolean {
     return false;
   }
   // What 1 AP of movement buys it.
-  const base = unit.summon ? (SUMMONS[unit.kind]?.move ?? 1) : unit.side === "hero" && unit.stats ? heroMove(unit.stats) : enemyMove(unit.kind, modsOf(ctx.state.options).move);
+  const base = strideOf(ctx.state, unit);
   // A Wind-god's Shanty: further, and no Slowing.
   const sung = base > 0 ? songMove(ctx.state, unit) : 0;
   // A Tailwind given since its last turn: the wind at its back.
@@ -800,7 +801,7 @@ function advance(ctx: Ctx): void {
     if (settle(ctx)) return;
     if (ready.length === 0) continue;
     // In the sandbox an enemy's turn waits on the dev, as a hero's does.
-    if (next[0].side === "enemy" && (!state.sandbox || ctx.order)) {
+    if (next[0].side === "enemy" && !state.sandbox) {
       // The bell, rung: the whole place is roused.
       if (enemyTurn(ctx, next[0], enc.budgets[next[0].id])) rouse(ctx);
       enc.done = [next[0].id];
@@ -813,18 +814,46 @@ function advance(ctx: Ctx): void {
 
 // ---------- actions ----------
 
-/** The unit a player is acting as: their own hero, or a stand-in they control. */
+/** The unit a player is acting as: their own hero, or a stand-in they control. In the combat sandbox, anyone in its fight. */
 function mine(state: ZoneState, by: string, id: string): Unit | string {
   const unit = unitById(state, id);
-  if (!unit || unit.side !== "hero" || (unit.id !== by && unit.controller !== by)) return "That is not yours to move.";
+  const sandboxed = !!unit && sandboxing(state, unit);
+  if (!unit || (!sandboxed && (unit.side !== "hero" || (unit.id !== by && unit.controller !== by)))) return "That is not yours to move.";
   if (unit.down) return `${unit.name} is down.`;
   return unit;
+}
+
+/** In the combat sandbox, and in its fight: the dev may act as this unit whenever they like, for nothing. */
+const sandboxing = (state: ZoneState, unit: Unit): boolean => !!state.sandbox && !!state.encounter?.order.includes(unit.id);
+
+/**
+ * In the combat sandbox, what everyone in the fight has to spend, every time: as much AP as a turn can hold, movement
+ * bought as it would be at the start of a turn (stride, with nothing to hold an enemy to its usual walk), and every
+ * ability ready. Put right after every action, so nothing is ever spent.
+ */
+function topUp(ctx: Ctx): void {
+  const { state } = ctx;
+  const enc = state.encounter;
+  if (!state.sandbox || !enc) return;
+  for (const u of state.units) {
+    if (!enc.order.includes(u.id) || u.down) continue;
+    const b = (enc.budgets[u.id] ??= { ap: AP_MAX, move: 0, stride: strideOf(state, u), disengaged: false });
+    b.ap = AP_MAX;
+    delete b.walk;
+    u.cooldowns = {};
+  }
+}
+
+/** What 1 AP of movement buys a unit, before anything that hastens or slows it. */
+function strideOf(state: ZoneState, unit: Unit): number {
+  return unit.summon ? (SUMMONS[unit.kind]?.move ?? 1) : unit.side === "hero" && unit.stats ? heroMove(unit.stats) : enemyMove(unit.kind, modsOf(state.options).move);
 }
 
 /** What `unit` has left this turn, if it is in a fight: an error if it is not its turn, null if it is in no fight. */
 function budgetOf(state: ZoneState, unit: Unit): Budget | null | string {
   const enc = state.encounter;
   if (!enc || !enc.order.includes(unit.id)) return null;
+  if (sandboxing(state, unit)) return enc.budgets[unit.id] ?? "It has nothing to spend.";
   if (!enc.acting.includes(unit.id) || enc.done.includes(unit.id)) return "It is not your turn.";
   return enc.budgets[unit.id] ?? "It is not your turn.";
 }
@@ -842,9 +871,6 @@ function spend(budget: Budget | null, cost: number): string | null {
   budget.ap -= cost;
   return null;
 }
-
-/** How many turns a dev order (DevOp "enemy_use") passes, at the most, waiting for the enemy's own. */
-const MAX_PASSED_TURNS = 100;
 
 /** The highest level a dev kit (DevOp "kit") will make a hero. */
 export const KIT_MAX_LEVEL = 20;
@@ -924,40 +950,40 @@ function dev(ctx: Ctx, by: string, op: DevOp): string | null {
     else u.abilities = abilities;
   } else if (op.op === "ai") {
     state.aiOff = op.off;
-  } else if (op.op === "enemy_use") {
-    const foe = unitById(state, op.unit);
-    if (!foe || foe.side !== "enemy" || foe.down || foe.summon) return "There is no such enemy standing.";
-    if (!foe.abilities.includes(op.ability)) return `${foe.name} has no such ability.`;
-    const target = op.target ? unitById(state, op.target) : undefined;
-    if (op.target && (!target || target.side !== "hero" || target.down)) return "There is no such hero standing.";
-    ctx.order = { unit: foe.id, ability: op.ability, ...(target ? { target: target.id } : {}) };
-    if (!inFight(state, foe.id)) {
-      const owner = unitById(state, by);
-      if (!owner || !foe.group) return "There is nobody to fight it.";
-      engage(ctx, [foe.group], owner);
-    }
-    if (target && !inFight(state, target.id)) return `${target.name} is not in its fight.`;
-    // Pass whoever's turn it is, again and again, until its own has come and gone (advance plays it).
-    for (let passed = 0; ctx.order && state.encounter && passed < MAX_PASSED_TURNS; passed++) {
-      state.encounter.done = [...state.encounter.acting];
-      advance(ctx);
-    }
-    const missed = !!ctx.order;
-    delete ctx.order;
-    if (missed) return `${foe.name} gets no turn (stunned, or the fight is over).`;
   } else if (op.op === "sandbox") {
     if (op.on) {
       state.sandbox = true;
       return null;
     }
     delete state.sandbox;
-    // Back to the fight's own flow: an enemy whose turn it was plays it now.
+    // Back to the fight's own flow: nobody carries the sandbox's AP on, and an enemy whose turn it was plays it now.
     const enc = state.encounter;
+    if (enc) {
+      delete enc.banked;
+      for (const [id, b] of Object.entries(enc.budgets)) if (!enc.acting.includes(id)) delete enc.budgets[id];
+    }
     const foe = enc?.acting.map((id) => unitById(state, id)).find((u) => u?.side === "enemy" && !u.down && !enc.done.includes(u.id));
     if (enc && foe && enc.budgets[foe.id]) {
       if (enemyTurn(ctx, foe, enc.budgets[foe.id])) rouse(ctx);
       enc.done.push(foe.id);
     }
+  } else if (op.op === "strike") {
+    const foe = unitById(state, op.unit);
+    if (!foe || foe.side !== "enemy" || foe.down || !sandboxing(state, foe)) return "Pick an enemy in the fight, in the sandbox.";
+    const attack = unitStrike(state, foe, op.ability);
+    if (!attack) return `${foe.name} has no such ability.`;
+    const target = op.target ? unitById(state, op.target) : undefined;
+    const why = checkStrike(state, foe, attack, { target, at: op.at }, op.anywhere);
+    if (why) return why;
+    enemyAct(ctx, foe, attack, target ?? null, op.at);
+  } else if (op.op === "place") {
+    const u = unitById(state, op.unit);
+    if (!u || u.down) return "There is nobody standing to put there.";
+    // All of a big one (geometry.ts span) has to have room.
+    if (span(u, op.at).some((p) => solid(tileAt(state.map, p)) || blockerAt(state, p) || !roomAt(state, p, u))) return "There is no room there.";
+    const from = u.pos;
+    u.pos = { q: op.at.q, r: op.at.r };
+    ctx.events.push({ t: "blinked", id: u.id, from, to: u.pos });
   } else if (op.op === "next_turn") {
     const enc = state.encounter;
     if (!enc) return "There is no fight on.";
@@ -1271,6 +1297,7 @@ export function stepZone(prev: ZoneState, action: ZoneAction): ZoneStep {
   const ctx: Ctx = { state, rng: makeRng(state.rng), events: [] as ZoneEvent[], effects: [] as ZoneEffect[] };
   ctx.onStep = (unit, flush) => onStep(ctx, unit, flush);
   const was = "unit" in action ? unitById(state, action.unit)?.pos : undefined;
+  topUp(ctx);
   const error = act(ctx, action);
   if (error) return { ok: false, error };
   pullIn(ctx);
@@ -1292,6 +1319,7 @@ export function stepZone(prev: ZoneState, action: ZoneAction): ZoneStep {
   }
   // A called creature that has fallen is gone.
   for (const u of state.units.filter((x) => x.summon && x.down)) dismiss(ctx, u);
+  topUp(ctx);
   // A band beaten that carried a key: it goes on the ring.
   dropKeys(ctx);
   sweep(state);

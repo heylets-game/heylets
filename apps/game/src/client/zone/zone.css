@@ -40,6 +40,11 @@
 .zone-barmenu-item img { flex: none; image-rendering: pixelated; }
 .zone-barmenu-item.selected { border-color: var(--gold); }
 
+/* The combat sandbox's enemy bar (zone/SandboxEnemy.tsx): where the slot menu sits, over the bottom bar. */
+.zone-sandbox-enemy { position: absolute; left: 50%; bottom: 236px; transform: translateX(-50%); z-index: 29; width: min(560px, calc(100vw - 24px)); padding: 8px 10px; display: grid; gap: 6px; font-size: 13px; }
+.zone-sandbox-enemy-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.zone-sandbox-enemy-list .selected { border-color: var(--gold); }
+
 /* What is under the pointer: who, what they have left, and (with an attack picked) the chance it lands. */
 .zone-tip { position: absolute; left: 10px; top: 150px; z-index: 11; max-width: min(420px, 60vw); padding: 6px 10px; font-size: 13px; pointer-events: none; }
 /* In the bottom bar's tarred timber (ui/hud.css), edged thin as the combat log is (zone/fight.css): near-black with a

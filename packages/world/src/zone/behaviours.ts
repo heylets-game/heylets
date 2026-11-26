@@ -54,7 +54,7 @@ export function strikeReaches(state: ZoneState, enemy: Unit, pos: HexPos, attack
  * Whether an attack of an enemy's (not a leap) reaches from `pos` to the hex `at`, whoever is on it: as strikeReaches.
  * A big enemy (geometry.ts span) anchored at `pos` reaches from any of its hexes.
  */
-function aimReaches(state: ZoneState, enemy: Unit, pos: HexPos, attack: EnemyStrike, at: HexPos): boolean {
+export function aimReaches(state: ZoneState, enemy: Unit, pos: HexPos, attack: EnemyStrike, at: HexPos): boolean {
   return span(enemy, pos).some((p) => aimReachesFrom(state, enemy, p, attack, at));
 }
 

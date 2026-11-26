@@ -2,9 +2,8 @@
 // it, and, while one is on screen, set up whatever is being tested: put an
 // enemy group down, paint the ground, add a stand-in crewmate, heal up,
 // end the fight, take every enemy off the map, stop the enemy taking turns,
-// keep heroes from going down, take the time limit off turns, have any
-// enemy use any of its abilities (the Combat section: every turn before its
-// own is passed for it),
+// keep heroes from going down, take the time limit off turns, play a fight
+// by hand (the combat sandbox: any hero or enemy in it, at any time),
 // and make any hero of yours on it (you, or a stand-in) any class, level and
 // weapon with any of the class's abilities. That last holds on that map,
 // through a reload, and leaves your own character as it is.
@@ -14,9 +13,9 @@
 // server refuses outside a development deployment.
 
 import { useEffect, useState } from "react";
-import { ABILITIES, ENEMY_ABILITIES, MAX_PARTY, CLIMES, DEFAULT_ZONE_OPTIONS, ENEMIES, HERO_CLASSES, SITES, SITE_IDS, SURFACE_INFO, WEAPONS, poolFor, type SurfaceKind, type ZoneBiome, type ZoneSize } from "@gantt-quest/world";
+import { ABILITIES, MAX_PARTY, CLIMES, DEFAULT_ZONE_OPTIONS, ENEMIES, HERO_CLASSES, SITES, SITE_IDS, SURFACE_INFO, WEAPONS, poolFor, type SurfaceKind, type ZoneBiome, type ZoneSize } from "@gantt-quest/world";
 import { api, PROFILE } from "../api";
-import { setZoneDev, useZoneDev, type KitHero, type ZoneDevState } from "./zoneDev";
+import { setZoneDev, useZoneDev, type KitHero } from "./zoneDev";
 
 const SIZES: ZoneSize[] = ["small", "medium", "large"];
 const BIOMES: ZoneBiome[] = ["meadow", "woods", "caves", "shore"];
@@ -147,9 +146,13 @@ export function MapsTab() {
                 <>
                   <button className="small" onClick={() => send({ op: "next_turn" })}>Next turn</button>
                   <button className="small" onClick={() => send({ op: "next_turn", round: true })}>Next round</button>
+                  <button className={`small ${dev.tool?.tool === "place" ? "selected" : ""}`} onClick={() => setZoneDev({ tool: dev.tool?.tool === "place" ? null : { tool: "place" } })}>
+                    {dev.tool?.tool === "place" ? "Done placing" : "Put whoever you play anywhere: click the map"}
+                  </button>
                 </>
               )}
             </div>
+            {dev.flags.sandbox && <p className="muted">Everyone in the fight is yours to play, on anyone's turn, as often as you like: AP and cooldowns are put back after everything you do. Click an enemy in it to play it: its abilities show over the map.</p>}
           </div>
           <div className="dev-row">
             <button className="small" onClick={() => send({ op: "heal" })}>Heal and restock everyone</button>
@@ -163,7 +166,6 @@ export function MapsTab() {
             <label><input type="checkbox" checked={dev.flags.undying} onChange={(e) => send({ op: "undying", on: e.target.checked })} /> Heroes cannot die</label>
             <label><input type="checkbox" checked={dev.flags.timerOff} onChange={(e) => send({ op: "timer", off: e.target.checked })} /> No turn timer</label>
           </div>
-          <Combat dev={dev} send={send} />
           <div className="dev-row">
             <label>
               Enemy
@@ -203,63 +205,6 @@ export function MapsTab() {
       )}
       <p className={`dev-said ${said?.bad ? "bad" : "muted"}`} role="status">{said?.text}</p>
     </fieldset>
-  );
-}
-
-/**
- * Combat: pick an enemy (from the list, or by clicking it on the map) and have it use one of its abilities, at a hero
- * of your choosing or whoever it likes. Every turn before its own is passed for it (DevOp "enemy_use").
- */
-function Combat({ dev, send }: { dev: ZoneDevState; send: NonNullable<ZoneDevState["open"]>["send"] }) {
-  const enemies = dev.units.filter((u) => u.side === "enemy");
-  const heroes = dev.units.filter((u) => u.side === "hero");
-  const foe = enemies.find((u) => u.id === dev.picked);
-  const [ability, setAbility] = useState("");
-  const [target, setTarget] = useState("");
-  // A new enemy picked: its first ability, unless the one chosen is one of its own too.
-  const using = foe?.abilities.includes(ability) ? ability : (foe?.abilities[0] ?? "");
-  const at = heroes.some((h) => h.id === target) ? target : "";
-  const picking = dev.tool?.tool === "pick";
-  // The same name more than once (two Dire Wolves): told apart by a number.
-  const label = (id: string, name: string) => {
-    const same = enemies.filter((u) => u.name === name);
-    return same.length > 1 ? `${name} ${same.findIndex((u) => u.id === id) + 1}` : name;
-  };
-
-  return (
-    <div className="dev-kit-hero">
-      <p><strong>Combat</strong> <span className="muted">Have an enemy use an ability. Every turn before its own is passed, and a fight is started if it is in none.</span></p>
-      <div className="dev-row">
-        <label>
-          Enemy
-          <select value={foe?.id ?? ""} onChange={(e) => setZoneDev({ picked: e.target.value || null })}>
-            <option value="">pick one</option>
-            {enemies.map((u) => <option key={u.id} value={u.id}>{label(u.id, u.name)}</option>)}
-          </select>
-        </label>
-        <button className={`small ${picking ? "selected" : ""}`} onClick={() => setZoneDev({ tool: picking ? null : { tool: "pick", side: "enemy" } })}>
-          {picking ? "Stop picking" : "Pick one: click the map"}
-        </button>
-      </div>
-      {foe && (
-        <div className="dev-row">
-          <label>
-            Ability
-            <select value={using} onChange={(e) => setAbility(e.target.value)}>
-              {foe.abilities.map((id) => <option key={id} value={id}>{ENEMY_ABILITIES[id]?.name ?? id}</option>)}
-            </select>
-          </label>
-          <label>
-            At
-            <select value={at} onChange={(e) => setTarget(e.target.value)}>
-              <option value="">whoever it likes</option>
-              {heroes.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
-            </select>
-          </label>
-          <button className="small primary" disabled={!using} onClick={() => send({ op: "enemy_use", unit: foe.id, ability: using, ...(at ? { target: at } : {}) })}>Use it</button>
-        </div>
-      )}
-    </div>
   );
 }
 

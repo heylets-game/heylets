@@ -41,6 +41,10 @@ import {
   CRATE_HP,
   ENEMIES,
   ENEMY_ABILITIES,
+  checkStrike,
+  strikeAim,
+  strikeHexes,
+  unitStrike,
   FLEE_RANGE,
   JOIN_RANGE,
   FREE_WALK,
@@ -156,6 +160,7 @@ import { BAR_SLOTS, assignSlot, barChoices, loadBar, moveSlot, saveBar } from ".
 import { believe, foreseeWalk, giveUp, settle, standing, type Ahead } from "./zone/ahead";
 import { playback, type Playback } from "./zone/playback";
 import { NO_FLAGS, setZoneDev, useZoneDev } from "./zone/zoneDev";
+import { SandboxEnemy, sandboxFoe } from "./zone/SandboxEnemy";
 import "./zone/zone.css";
 import { CombatLog, RollToast, type LogEntry } from "./zone/CombatLog";
 import { TimedTurnBar, type SongCall } from "./zone/TurnBar";
@@ -1864,19 +1869,18 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const state = useMemo(() => (zone.state ? believe(zone.state, ahead) : null), [zone.state, ahead]);
   const enc = state?.encounter ?? null;
   // Which of your own you are playing: your hero, one of your party, or a stand-in or creature whose turn it is.
-  const mine = useMemo(() => state?.units.filter((u) => u.side === "hero" && (ownHero(state, u.id) || ownHero(state, u.controller))) ?? [], [state]);
+  // In the combat sandbox (dev toolbox), every hero in the fight is yours to play too.
+  const sandboxed = (u: Unit) => !!state?.sandbox && !!state.encounter?.order.includes(u.id);
+  const mine = useMemo(() => state?.units.filter((u) => u.side === "hero" && (ownHero(state, u.id) || ownHero(state, u.controller) || sandboxed(u))) ?? [], [state]);
   // The Maps tab (dev toolbox) can change these: it is told who they are and what they have.
   const mineKey = mine.map((u) => `${u.id}:${u.kind}:${u.level}:${u.outfit?.main_hand?.ref}:${u.abilities.join(",")}`).join("|");
   useEffect(() => {
-    setZoneDev({ heroes: mine.filter((u) => !u.summon).map((u) => ({ id: u.id, name: u.name, classId: u.kind, level: u.level, weapon: u.outfit?.main_hand?.ref, abilities: u.torchHand === "main" ? (u.stowed ?? []) : u.abilities })) });
+    setZoneDev({ heroes: mine.filter((u) => !u.summon && !!state && (ownHero(state, u.id) || ownHero(state, u.controller))).map((u) => ({ id: u.id, name: u.name, classId: u.kind, level: u.level, weapon: u.outfit?.main_hand?.ref, abilities: u.torchHand === "main" ? (u.stowed ?? []) : u.abilities })) });
   }, [mineKey]);
   const flags = { aiOff: !!state?.aiOff, undying: !!state?.undying, timerOff: !!state?.timerOff, sandbox: !!state?.sandbox };
   useEffect(() => setZoneDev({ flags }), [flags.aiOff, flags.undying, flags.timerOff, flags.sandbox]);
-  // And everyone standing on it, for its Combat section.
-  const onMap = state?.units.filter((u) => !u.down && !u.lost && !u.summon && !state.dark?.includes(u.id)) ?? [];
-  const onMapKey = onMap.map((u) => `${u.id}:${u.name}:${u.abilities.join(",")}`).join("|");
-  useEffect(() => setZoneDev({ units: onMap.map((u) => ({ id: u.id, name: u.name, side: u.side, abilities: u.abilities })) }), [onMapKey]);
-  const ready = (u: Unit) => !!enc && enc.acting.includes(u.id) && !enc.done.includes(u.id) && !u.down;
+  // In the sandbox, anyone in the fight may act whenever the dev likes.
+  const ready = (u: Unit) => !!enc && !u.down && (sandboxed(u) || (enc.acting.includes(u.id) && !enc.done.includes(u.id)));
   const act = mine.find((u) => u.id === playAs && (!enc || !enc.order.includes(u.id) || ready(u))) ?? mine.find(ready) ?? mine.find((u) => u.id === state?.you) ?? mine[0];
   // The hero of yours being played (party.ts): `act` itself, or whose stand-in or creature it is. Their sheet, bag and
   // share of the loot are what the screen shows, and what they carry comes out of their own pack.
@@ -1970,7 +1974,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const send = zone.send;
   useEffect(() => {
     setZoneDev({ open: { code, send: (op) => send({ type: "dev", dev: op }) } });
-    return () => setZoneDev({ open: null, tool: null, heroes: [], flags: NO_FLAGS, units: [], picked: null });
+    return () => setZoneDev({ open: null, tool: null, heroes: [], flags: NO_FLAGS, picked: null });
   }, [code, send]);
 
   /** An alarm bell rung where it stands: it swings, waves of sound pulse out of it, and its toll is heard. */
@@ -2056,6 +2060,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   // ---------- what a pick reaches, and what it would cover ----------
 
   const z = state ? asState(state) : null;
+  // The enemy the combat sandbox has the dev playing, if any (zone/SandboxEnemy.tsx).
+  const foe = sandboxFoe(z, dev);
   /** Who is on this hex: whoever stands on it or, with nobody standing there, a dead enemy lying on it. */
   const unitOn = (pos: HexPos | null) => (pos && z ? (unitAt(z, pos) ?? z.units.find((u) => covers(u, pos))) : undefined);
   /** A crate still whole on this hex. */
@@ -2107,9 +2113,16 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     }
     if (dev.tool?.tool === "paint" && hover) out.push({ hexes: dev.tool.wide ? zoneBlast(state.map, hover, 1) : [hover], color: dev.tool.surface ? SURFACE_INFO[dev.tool.surface].color : "#ffffff", fill: 0.35, line: 0.9 });
     if (dev.tool?.tool === "spawn" && hover) out.push({ hexes: [hover], color: "#ff3b3b", fill: 0.35, line: 0.9 });
-    if (dev.tool?.tool === "pick" && hover) out.push({ hexes: [hover], color: "#ffd84a", fill: 0.2, line: 0.9 });
-    const picked = dev.picked ? state.units.find((u) => u.id === dev.picked && !u.down) : undefined;
+    // The enemy the sandbox has the dev playing: ringed.
+    const picked = foe;
     if (picked) out.push({ hexes: [picked.pos], color: "#ffd84a", line: 1, march: true });
+    // The sandbox's enemy ability, armed: where it would land from here, orange if it can be used so, grey if not.
+    const aiming = dev.tool?.tool === "strike" && picked ? unitStrike(z, picked, dev.tool.ability) : undefined;
+    if (aiming && picked && hover) {
+      const target = unitsAt(z, hover).find((u) => u.side !== picked.side && !u.down && !u.lost);
+      const ok = !checkStrike(z, picked, aiming, { target, at: hover }, dev.anywhere);
+      out.push({ hexes: strikeHexes(z, picked, aiming, strikeAim(aiming) === "unit" ? target?.pos : hover), color: ok ? "#ff8a2a" : "#9a9a9a", fill: 0.3, line: 0.9 });
+    }
     // How far each aura reaches (a shanty, a Paladin's Beacon or Healing Aura): a dashed outline of its colour round its
     // bearer (what is being aimed is drawn solid), and nothing over the ground inside, so allies can see where to stand to have it and where they would lose it.
     for (const u of state.units) {
@@ -2189,7 +2202,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       out.push({ hexes: inArm(), color: pick.what === "help" ? "#7dff9a" : "#ffd23f", fill: 0.12, line: 0.8 });
     }
     return out;
-  }, [state, z, act, pick, hover, dev.tool, dev.picked, courseOnly, fighting]);
+  }, [state, z, act, pick, hover, dev.tool, foe, dev.anywhere, courseOnly, fighting]);
   useEffect(() => layer.current?.setOverlays(overlays), [overlays]);
 
   // ---------- what a move would cost, at the pointer ----------
@@ -2417,6 +2430,29 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     lootNext.current = null;
     setWhichOne(null);
     if (!state || !act) return;
+    // The combat sandbox: any enemy in the fight is the dev's to play too (zone/SandboxEnemy.tsx). A click on one picks
+    // it; with one picked, a click aims the ability armed for it, or walks it to open ground, or (on a hero) goes back to them.
+    if (state.sandbox && !pick && z && (!dev.tool || dev.tool.tool === "strike")) {
+      const there = unitsAt(z, pos).filter((u) => !u.lost && !u.down && !state.dark?.includes(u.id));
+      if (dev.tool?.tool === "strike" && foe) {
+        const attack = unitStrike(z, foe, dev.tool.ability);
+        if (!attack) return setZoneDev({ tool: null });
+        const target = there.find((u) => u.side !== foe.side);
+        dev.open?.send({ op: "strike", unit: foe.id, ability: attack.id, ...(strikeAim(attack) === "unit" ? (target ? { target: target.id } : {}) : { at: pos }), ...(dev.anywhere ? { anywhere: true } : {}) });
+        return setZoneDev({ tool: null });
+      }
+      const enemyThere = there.find((u) => u.side === "enemy" && enc?.order.includes(u.id));
+      if (enemyThere) return setZoneDev({ picked: enemyThere.id, tool: null });
+      if (foe) {
+        const heroThere = there.find((u) => u.side === "hero" && mine.some((m) => m.id === u.id));
+        if (heroThere) {
+          setZoneDev({ picked: null });
+          return pickHero(heroThere.id);
+        }
+        zone.send({ type: "move", unit: foe.id, to: pos });
+        return;
+      }
+    }
     const want = pick?.kind === "ability" ? (tacticOf(pick.id).shape === "ally" ? "friend" : "foe") : pick?.kind === "common" ? (pick.what === "help" ? "friend" : "foe") : "any";
     // Aiming at someone on a hex where more than one could be meant: ask which, rather than guess.
     if (!chosen && z && !dev.tool) {
@@ -2440,11 +2476,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     const there = unitFor(pos, want, clicked);
     if (dev.tool?.tool === "spawn") return dev.open?.send({ op: "spawn", kinds: dev.tool.kinds, at: pos });
     if (dev.tool?.tool === "paint") return dev.open?.send({ op: "paint", kind: dev.tool.surface, hexes: dev.tool.wide ? zoneBlast(state.map, pos, 1) : [pos] });
-    if (dev.tool?.tool === "pick") {
-      const side = dev.tool.side;
-      const one = unitsAt(z ?? state, pos).find((u) => u.side === side && !u.down && !u.summon && !state.dark?.includes(u.id));
-      return one ? setZoneDev({ picked: one.id, tool: null }) : undefined;
-    }
+    if (dev.tool?.tool === "place") return dev.open?.send({ op: "place", unit: foe?.id ?? act.id, at: pos });
     if (!pick) {
       // A click on a torch burning on the ground right beside you takes it up; from further off, it is walked to.
       if (state.lights?.[posKey(pos)] && hexDistance(pos, act.pos) <= 1) return reachFor({ type: "pickup", unit: act.id, at: pos }, ITEM_AP.pickup, pos);
@@ -2799,7 +2831,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const place: ReactNode = pick
     ? <>{pick.kind === "ability" ? ABILITIES[pick.id].name : pick.kind === "item" ? THROWABLES[pick.item].name : COMMON_ACTIONS[pick.what].name} <span className="muted">· {pick.kind === "item" && THROWABLES[pick.item].drink ? "click where to throw it, or yourself to drink it" : pick.kind === "item" && THROWABLES[pick.item].light && !act?.torch ? "click where to throw it, or yourself to light it to hold" : "click a target on the map"}, or Esc to put it back</span></>
     : dev.tool
-      ? <>Dev tool <span className="muted">· {dev.tool.tool === "spawn" ? "click a hex to place the group" : dev.tool.tool === "pick" ? `click ${dev.tool.side === "enemy" ? "an enemy" : "a hero"} to pick them` : "click hexes to paint"}</span></>
+      ? <>Dev tool <span className="muted">· {dev.tool.tool === "spawn" ? "click a hex to place the group" : dev.tool.tool === "place" ? `click a hex to put ${foe?.name ?? act?.name ?? "them"} there` : dev.tool.tool === "strike" ? `click to aim ${foe?.name ?? "its"}'s ${ENEMY_ABILITIES[dev.tool.ability]?.name ?? "ability"}, or Esc` : "click hexes to paint"}</span></>
       : (!enc || !fighting) && doorBeside
         ? <>A locked door <span className="muted">· {keys > 0 ? `${keysText} on the ring: one opens it` : "no key: it can be forced, but not quietly"}</span></>
       : (!enc || !fighting) && chestBeside
@@ -3236,6 +3268,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           </div>
         </div>
       )}
+
+      {/* The combat sandbox: the enemy picked, to play. */}
+      {foe && state && <SandboxEnemy state={asState(state)} foe={foe} />}
 
       {/* In a fight: the turn's Action Points and movement, whose turn it is, and the way to end it, over the bar. */}
       {enc && fighting && (

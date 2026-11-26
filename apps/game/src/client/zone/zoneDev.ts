@@ -7,8 +7,11 @@
 import { useSyncExternalStore } from "react";
 import type { DevOp, SurfaceKind } from "@gantt-quest/world";
 
-/** A tool that takes clicks on the map until it is put down. `pick`: the next click on a unit of that side picks it (`picked`), and puts the tool down. */
-export type ZoneDevTool = { tool: "spawn"; kinds: string[] } | { tool: "paint"; surface: SurfaceKind | null; wide: boolean } | { tool: "pick"; side: "hero" | "enemy" };
+/**
+ * A tool that takes clicks on the map until it is put down. `place`: each click puts the one being played straight on that hex (the enemy
+ * picked, in the sandbox, if there is one). `strike`: the combat sandbox's enemy ability, armed: the next click aims it.
+ */
+export type ZoneDevTool = { tool: "spawn"; kinds: string[] } | { tool: "paint"; surface: SurfaceKind | null; wide: boolean } | { tool: "place" } | { tool: "strike"; unit: string; ability: string };
 
 export interface ZoneDevState {
   /** The zone on screen, if there is one. */
@@ -18,19 +21,12 @@ export interface ZoneDevState {
   heroes: KitHero[];
   /** The map's dev switches as they stand, for the Maps tab's checkboxes. */
   flags: ZoneDevFlags;
-  /** Everyone standing on the map that you can see, for the Combat section to pick from. */
-  units: DevUnit[];
-  /** The unit last picked (the `pick` tool, or from a list), by id: drawn ringed on the map. */
+  /** In the combat sandbox, the enemy being played (clicked on the map), by id: drawn ringed on the map. */
   picked: string | null;
+  /** The sandbox's enemy abilities reach anywhere: no range or line of sight asked. */
+  anywhere: boolean;
 }
 
-export interface DevUnit {
-  id: string;
-  name: string;
-  side: "hero" | "enemy";
-  /** Its abilities, by id. */
-  abilities: string[];
-}
 
 export interface ZoneDevFlags {
   aiOff: boolean;
@@ -51,7 +47,7 @@ export interface KitHero {
   abilities: string[];
 }
 
-let state: ZoneDevState = { open: null, tool: null, heroes: [], flags: NO_FLAGS, units: [], picked: null };
+let state: ZoneDevState = { open: null, tool: null, heroes: [], flags: NO_FLAGS, picked: null, anywhere: false };
 const listeners = new Set<() => void>();
 
 export function setZoneDev(next: Partial<ZoneDevState>): void {

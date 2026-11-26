@@ -23,18 +23,6 @@ export interface Ctx {
    * stop it there. `flush` writes out the steps taken so far, so what follows is told in order.
    */
   onStep?: (unit: Unit, flush: () => void) => boolean;
-  /**
-   * A dev order (DevOp "enemy_use"), for this step alone: every enemy but `unit` passes its turn, and on its own
-   * turn `unit` uses `ability` once (cooling down or not), at `target` if one is named, as it would were that all it
-   * had. Taken off as that turn starts, so whoever comes after plays as ever.
-   */
-  order?: EnemyOrder;
-}
-
-export interface EnemyOrder {
-  unit: string;
-  ability: string;
-  target?: string;
 }
 
 export const has = (unit: Unit, kind: Condition): boolean => unit.conditions.some((c) => c.kind === kind);

@@ -431,14 +431,15 @@ export type DevOp =
   /** Set the nearest group that has not noticed anyone on whoever asked, wherever they stand. */
   | { op: "start_fight" }
   | { op: "ai"; off: boolean }
-  /**
-   * Have an enemy use one of its abilities (the Maps tab's Combat section), at `target` if one is named (a hero), else
-   * at whoever it likes. Every turn before its own is passed, heroes' and enemies' alike (starting its group's fight if
-   * it is in none); on its turn it uses that ability once, cooling down or not, and the fight goes on as ever after.
-   */
-  | { op: "enemy_use"; unit: string; ability: string; target?: string }
   /** The combat sandbox (ZoneState.sandbox), on or off. Off in the middle of an enemy's turn: it plays it. */
   | { op: "sandbox"; on: boolean }
+  /**
+   * In the combat sandbox: have an enemy in the fight use one of its abilities, aimed by hand (strikes.ts): at
+   * `target` (a unit) or `at` (a hex), as the ability takes. `anywhere`: its range and line of sight are not asked.
+   */
+  | { op: "strike"; unit: string; ability: string; target?: string; at?: HexPos; anywhere?: boolean }
+  /** Put anyone standing straight on a hex (one they would have room on), with no walk to it. */
+  | { op: "place"; unit: string; at: HexPos }
   /** In a fight: end whoever's turn it is and start the next one's (`round`: every turn to the end of the round). */
   | { op: "next_turn"; round?: boolean }
   /** Heroes cannot go down: 0 HP does nothing. */
