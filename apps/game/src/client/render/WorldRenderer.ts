@@ -649,6 +649,8 @@ interface Unit {
   ring: THREE.Mesh | null;
   /** The hex it stands on (see key), so plates on one hex can be stacked. */
   hex?: string;
+  /** Every hex it stands on, for one on more than one (ENEMIES `size`): pointing at any of them shows its plate. */
+  hexes?: string[];
   /**
    * How high the top of its model is over its feet, standing, measured once for each size it is drawn at
    * (`topSize`): a beast on four legs stands well under its frame's height, and its plate should sit on it.
@@ -754,6 +756,8 @@ interface Want {
   pos: THREE.Vector3;
   /** The hex it stands on (see key). */
   hex: string;
+  /** Every hex it stands on, for one on more than one (ENEMIES `size`): pointing at any of them shows its plate. */
+  hexes?: string[];
   size: number;
   label?: string;
   /** HP and any shield, and for a hero their level, drawn with the name. */
@@ -4768,7 +4772,7 @@ export class WorldRenderer {
       }
       // With its HP to show (in a fight, or hurt), an enemy's plate has a red bar of it under the name.
       const plate: PlateStats | undefined = u.hp !== undefined && !u.down ? { hp: u.hp } : undefined;
-      want.set(u.id, { kind: u.kind, pos, hex: key(u.pos), faceKey: u.id, size: enemySize(u.kind), label: u.name ?? (plate ? "" : undefined), plate, tone: "foe", ring: u.hostile && !u.down ? ENEMY_RED : undefined, through: u.hostile ? ENEMY_RED : undefined, pulse: !!u.active, hp: u.hp, down: u.down, falls: true, nameless: true, prone: u.prone, effects: u.effects, stack: slot });
+      want.set(u.id, { kind: u.kind, pos, hex: key(u.pos), ...(big ? { hexes: spanAt(u.pos, hexesOf(u.kind)).map(key) } : {}), faceKey: u.id, size: enemySize(u.kind), label: u.name ?? (plate ? "" : undefined), plate, tone: "foe", ring: u.hostile && !u.down ? ENEMY_RED : undefined, through: u.hostile ? ENEMY_RED : undefined, pulse: !!u.active, hp: u.hp, down: u.down, falls: true, nameless: true, prone: u.prone, effects: u.effects, stack: slot });
     }
 
     const turned = new Map<string, number>();
@@ -4876,6 +4880,7 @@ export class WorldRenderer {
 
       unit.nameless = !!w.nameless;
       unit.hex = w.hex;
+      unit.hexes = w.hexes;
       unit.labelWant = { label: w.label, plate: w.plate, tone: w.tone, size: w.size, asleep: w.asleep, stack: w.stack };
       this.applyLabel(unit);
 
@@ -4943,7 +4948,7 @@ export class WorldRenderer {
     const pointed = this.hovered ? key(this.hovered) : null;
     const byHex = new Map<string, Unit[]>();
     for (const [id, unit] of this.units) {
-      unit.plateShown = !fighting || this.pulsing.has(id) || (pointed !== null && unit.hex === pointed);
+      unit.plateShown = !fighting || this.pulsing.has(id) || (pointed !== null && (unit.hexes?.includes(pointed) ?? unit.hex === pointed));
       if (!unit.label || !unit.plateShown || !unit.root.visible || this.quiet.has(id)) continue;
       const hex = unit.hex ?? id;
       const on = byHex.get(hex);
