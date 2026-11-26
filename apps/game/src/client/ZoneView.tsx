@@ -2938,6 +2938,37 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const under = unitOn(hover);
   // Whoever else is on the same hex (two of a side can share one; the two sides never do).
   const alsoHere = hover && z && under ? unitsAt(z, hover).filter((u) => !u.lost && u.id !== under.id) : [];
+  // The "hold Alt" hint goes on the first card with effects only, not on each.
+  const hintFor = under ? [under, ...alsoHere].find((u) => shownConditions(u).length > 0)?.id : undefined;
+  // One creature's part of the hover card: name and numbers, its effects (each in full while Alt is held),
+  // an enemy's moves and its passive. Used for the one under the pointer and for anyone sharing its hex.
+  const unitCard = (u: NonNullable<typeof under>) => (
+    <>
+      <strong>{u.name}</strong> <span className="muted">{u.side === "enemy" ? ` · Level ${u.level}` : ""} · {u.hp}/{u.maxHp} HP{shieldOf(u) > 0 ? ` + ${shieldOf(u)} shield` : ""} · Defence {defenceOf(u, state)}{u.down ? " · down" : ""}</span>
+      {shownConditions(u).length > 0 && (closer ? (
+        // Held Alt: each effect on its own line, with what it does to them, in their numbers.
+        <div className="zone-conds-full">
+          {shownConditions(u).map((c) => (
+            <div key={c.kind} className="zone-cond-full">
+              <span className="zone-cond" style={{ color: CONDITION_INFO[c.kind].color }}>{condLabel(c)}</span>
+              <span className="muted">{conditionText(c, (id) => names.current.get(id))}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div>
+          {shownConditions(u).map((c) => <span key={c.kind} className="zone-cond" style={{ color: CONDITION_INFO[c.kind].color }} title={conditionText(c, (id) => names.current.get(id))}>{condLabel(c)}</span>)}
+          {u.id === hintFor && <span className="zone-cond-hint muted">hold {altName} for more</span>}
+        </div>
+      ))}
+      {u.side === "enemy" && <div className="muted">{u.abilities.map((id) => ENEMY_ABILITIES[id]?.name ?? id).join(", ")}</div>}
+      {/* Its passive that bites back (EnemyDef retort), with what it hurts for at its level. */}
+      {u.side === "enemy" && ENEMIES[u.kind]?.retort && (() => {
+        const retort = ENEMIES[u.kind]!.retort!;
+        return <div className="muted"><strong>{retort.name}</strong>: {retort.blurb} ({diceText(retortDice(retort, u.level, modsOf(asState(state).options).edge))})</div>;
+      })()}
+    </>
+  );
   const ground = hover ? tileAt(state.map, hover) : undefined;
   // What a shove would do to whoever is under the pointer, while Shove is picked and they are in arm's length.
   const shoving = pick?.kind === "common" && pick.what === "shove" && under && under.side !== act.side && !under.down && strikes(state.map, act.pos, under.pos);
@@ -3204,30 +3235,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           <span className="zone-tip-glass" aria-hidden><PixelIcon rows={MAGNIFIER} size={13} /></span>
           {under ? (
             <>
-              <strong>{under.name}</strong> <span className="muted">{under.side === "enemy" ? ` · Level ${under.level}` : ""} · {under.hp}/{under.maxHp} HP{shieldOf(under) > 0 ? ` + ${shieldOf(under)} shield` : ""} · Defence {defenceOf(under, state)}{under.down ? " · down" : ""}</span>
-              {shownConditions(under).length > 0 && (closer ? (
-                // Held Alt: each effect on its own line, with what it does to them, in their numbers.
-                <div className="zone-conds-full">
-                  {shownConditions(under).map((c) => (
-                    <div key={c.kind} className="zone-cond-full">
-                      <span className="zone-cond" style={{ color: CONDITION_INFO[c.kind].color }}>{condLabel(c)}</span>
-                      <span className="muted">{conditionText(c, (id) => names.current.get(id))}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div>
-                  {shownConditions(under).map((c) => <span key={c.kind} className="zone-cond" style={{ color: CONDITION_INFO[c.kind].color }} title={conditionText(c, (id) => names.current.get(id))}>{condLabel(c)}</span>)}
-                  <span className="zone-cond-hint muted">hold {altName} for more</span>
-                </div>
-              ))}
-              {under.side === "enemy" && <div className="muted">{under.abilities.map((id) => ENEMY_ABILITIES[id]?.name ?? id).join(", ")}</div>}
-              {/* Its passive that bites back (EnemyDef retort), with what it hurts for at its level. */}
-              {under.side === "enemy" && ENEMIES[under.kind]?.retort && (() => {
-                const retort = ENEMIES[under.kind]!.retort!;
-                return <div className="muted"><strong>{retort.name}</strong>: {retort.blurb} ({diceText(retortDice(retort, under.level, modsOf(asState(state).options).edge))})</div>;
-              })()}
-              {alsoHere.map((u) => <div key={u.id} className="zone-tip-also"><span className="muted">Sharing the hex:</span> <strong>{u.name}</strong> <span className="muted">· {u.hp}/{u.maxHp} HP{u.down ? " · down" : ""}</span></div>)}
+              {unitCard(under)}
+              {/* Everyone else on the hex gets the same card: stats, effects (in full on Alt), moves and passive. */}
+              {alsoHere.map((u) => <div key={u.id} className="zone-tip-also"><span className="muted">Sharing the hex:</span> {unitCard(u)}</div>)}
               {/* Where a shove would send them: over an edge, into a pit, or only back a hex. */}
               {/* One that stands on more than one hex: nothing moves it. */}
               {span(under).length > 1 && (shoveInto || shoveBlocked) && <div className="muted">Too heavy to shove, pull or knock back.</div>}
