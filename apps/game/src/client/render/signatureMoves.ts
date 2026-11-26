@@ -370,8 +370,11 @@ function savageBite(stage: MoveStage, ctx: MoveCtx) {
   }, SAVAGE_RED);
 }
 
-/** A Howl's sound waves: how far out each spreads over the ground, how long it takes, and how many there are, how far apart. */
-const HOWL_WAVES = { radius: 4.6, life: 0.85, count: 5, every: 0.17 };
+/**
+ * A Howl's sound waves: how far out each spreads over the ground (just past every ally 3 hexes off, its reach, at a
+ * hex's width of √3 apiece), how long it takes, and how many there are, how far apart.
+ */
+const HOWL_WAVES = { radius: 5.6, life: 0.95, count: 5, every: 0.17 };
 
 /**
  * A Pack Leader's Howl: it sits back on its haunches and throws its head up at the sky (figures.ts HOWL). As the howl

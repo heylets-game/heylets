@@ -48,7 +48,7 @@ export interface EnemyAbilityDef {
   onSave?: Inflict;
   /**
    * A call to its own side, not an attack on the other (a Pack Leader's Howl): every ally of its user in the fight (not
-   * itself) is Frenzied for this many attacks. It does no harm, and is aimed at nobody.
+   * itself) within `range` hexes of it is Frenzied for this many attacks. It does no harm, and is aimed at nobody.
    */
   rally?: { attacks: number };
   /** Left under the target when it lands. */
@@ -127,9 +127,9 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   savage_bite: { id: "savage_bite", name: "Savage Bite", damage: 9, potency: 5, saveOr: { effect: "bleeding", stacks: 2 }, onSave: { effect: "bleeding" }, weight: 2 },
   // A Pack Leader's leap: a Dire Wolf's Lunge with more weight behind it, that leaves whoever it lands on stunned.
   great_lunge: { id: "great_lunge", name: "Great Lunge", damage: 8, potency: 4, range: 3, leap: true, saveOr: { effect: "stunned", turns: 1 }, cooldown: 2, weight: 2 },
-  // A Pack Leader's favourite, quick to give: it howls its pack on. Every ally in the fight is Frenzied for two attacks
+  // A Pack Leader's favourite, quick to give: it howls its pack on. Every ally within 3 hexes is Frenzied for two attacks
   // (advantage, and each that draws blood leaves Bleeding). It does no harm itself, and has to get its wind back after.
-  howl: { id: "howl", name: "Howl", damage: 0, potency: 0, cost: 1, cooldown: 3, rally: { attacks: 2 }, behaviour: "rally", weight: 3 },
+  howl: { id: "howl", name: "Howl", damage: 0, potency: 0, range: 3, cost: 1, cooldown: 3, rally: { attacks: 2 }, behaviour: "rally", weight: 3 },
   // A Great Bear's everyday blow: one great rake of a forepaw across the three hexes in front of it. Nobody is singled
   // out, so there is no roll to hit: everyone in its path makes an Agility save, taking half and no wound on a success.
   rending_cleave: { id: "rending_cleave", name: "Rending Cleave", damage: 10, potency: 5, sweep: 1, saveOr: { effect: "bleeding" }, weight: 2 },

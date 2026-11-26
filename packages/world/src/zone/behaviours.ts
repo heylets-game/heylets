@@ -10,7 +10,7 @@
 
 import { hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/core";
 import { tileAt } from "../map";
-import { leaps, leavesReach, lungeLanding, shiftInto, shoveDest, sweepHexes } from "./combat";
+import { alliesReached, leaps, leavesReach, lungeLanding, shiftInto, shoveDest, sweepHexes } from "./combat";
 import { has } from "./engine";
 import { HIGH_REACH, inFight, reachFrom, sameHex, seesFor, strikes } from "./geometry";
 import { ENEMY_BURST, SPLASH_SHARE, type EnemyStrike, type Mind } from "./kit";
@@ -197,18 +197,19 @@ const shove: Behaviour = {
  */
 export const RALLY_WORTH = 5;
 
-/** Its allies in the fight a call would stir: standing, and not already stirred. */
-export const rallied = (state: ZoneState, enemy: Unit): Unit[] =>
-  state.units.filter((u) => u.side === enemy.side && u.id !== enemy.id && !u.down && inFight(state, u.id) && !has(u, "frenzied"));
+/** The allies a call from `pos` would stir (combat.ts alliesReached): those it reaches who are not stirred already. */
+export const rallied = (state: ZoneState, enemy: Unit, pos: HexPos, attack: EnemyStrike): Unit[] =>
+  alliesReached(state, enemy, pos, attack).filter((u) => !has(u, "frenzied"));
 
 /**
- * A call to its own side: worth RALLY_WORTH for each ally it would stir, wherever it stands, and nothing with none to
- * stir. It reaches none of the other side, so it is nothing to walk toward.
+ * An ability for its own side: worth RALLY_WORTH for each ally it would stir from where it would be used, so the more
+ * of them it would reach, the likelier it is to be used (and it may step in among them first); nothing with none in
+ * reach. It reaches none of the other side, so it is nothing to walk toward by itself.
  */
 const rally: Behaviour = {
   reaches: () => false,
-  value(look, _from, attack) {
-    const allies = rallied(look.state, look.enemy).length;
+  value(look, from, attack) {
+    const allies = rallied(look.state, look.enemy, from, attack).length;
     return allies > 0 ? { attack, target: null, worth: allies * RALLY_WORTH * (look.whim?.(attack, null) ?? 1) } : null;
   },
 };

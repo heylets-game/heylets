@@ -1080,12 +1080,17 @@ export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Uni
   if (frenzy && --frenzy.rounds <= 0) removeCondition(enemy, "frenzied");
 }
 
-/** A call to its own side (a Pack Leader's Howl): every ally in the fight, bar itself, is Frenzied for so many attacks. */
+/**
+ * Who an ability for its own side (a Pack Leader's Howl) reaches, used from `pos`: every ally of its user in the
+ * fight, standing, bar itself, within its `range`. It is heard round corners: no line is needed.
+ */
+export const alliesReached = (state: ZoneState, enemy: Unit, pos: HexPos, attack: EnemyStrike): Unit[] =>
+  state.units.filter((u) => u.side === enemy.side && u.id !== enemy.id && !u.down && inFight(state, u.id) && hexDistance(u.pos, pos) <= attack.range);
+
+/** A call to its own side (a Pack Leader's Howl): every ally it reaches (alliesReached) is Frenzied for so many attacks. */
 function howl(ctx: Ctx, enemy: Unit, attack: EnemyStrike): void {
   ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name });
-  for (const ally of ctx.state.units.filter((u) => u.side === enemy.side && u.id !== enemy.id && !u.down && inFight(ctx.state, u.id))) {
-    addCondition(ctx, ally, "frenzied", attack.kit.rally!.attacks);
-  }
+  for (const ally of alliesReached(ctx.state, enemy, enemy.pos, attack)) addCondition(ctx, ally, "frenzied", attack.kit.rally!.attacks);
 }
 
 function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | null, at?: HexPos): void {
