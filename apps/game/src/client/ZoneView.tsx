@@ -3237,7 +3237,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
             <>
               {unitCard(under)}
               {/* Everyone else on the hex gets the same card: stats, effects (in full on Alt), moves and passive. */}
-              {alsoHere.map((u) => <div key={u.id} className="zone-tip-also"><span className="muted">Sharing the hex:</span> {unitCard(u)}</div>)}
+              {alsoHere.map((u) => <div key={u.id} className="zone-tip-also">{unitCard(u)}</div>)}
               {/* Where a shove would send them: over an edge, into a pit, or only back a hex. */}
               {/* One that stands on more than one hex: nothing moves it. */}
               {span(under).length > 1 && (shoveInto || shoveBlocked) && <div className="muted">Too heavy to shove, pull or knock back.</div>}
