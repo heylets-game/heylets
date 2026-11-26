@@ -353,8 +353,7 @@ const SAVAGE_DEEP = "#8f1414";
 
 /**
  * A Pack Leader's Savage Bite: a snap forward, wide red jaws closing hard on the target. As they meet, a red flash
- * with a deeper one swelling after it, red lines bursting out either side, blood sprayed off in arcs, and the target
- * jolted twice.
+ * with a deeper one swelling after it, red lines bursting out either side, and the target jolted twice.
  */
 function savageBite(stage: MoveStage, ctx: MoveCtx) {
   const { hitAt, crit, onImpact } = ctx;
@@ -365,12 +364,6 @@ function savageBite(stage: MoveStage, ctx: MoveCtx) {
     stage.spawnFx("burst", red, false, { from: hitAt, to: hitAt, life: 0.24, size: [0.8, 2.3], spin: 0.6, fade: true });
     stage.later(() => stage.spawnFx("burst", deep, true, { from: hitAt, to: hitAt, life: 0.32, size: [1, 2.8], spin: -0.4, fade: true }), 0.06);
     for (const side of [false, true]) for (const [n, turn] of [-0.5, -0.1, 0.3].entries()) stage.spawnFx("streak", n === 1 ? TEETH : red, side, { from: hitAt, to: hitAt, life: 0.2, size: [0.6, 1.9], turn: side ? -turn : turn, spin: 0, fade: true });
-    // Blood sprayed off in arcs, falling.
-    for (let i = 0; i < 9; i++) {
-      const a = (i / 9) * Math.PI * 2 + Math.random() * 0.4;
-      const far = 0.5 + Math.random() * 0.5;
-      stage.spawnFx("fleck", i % 3 ? red : deep, Math.cos(a) < 0, { from: hitAt, to: offset(hitAt, Math.cos(a) * far, -0.35 - Math.random() * 0.2, Math.sin(a) * far * 0.5), life: 0.4 + Math.random() * 0.15, size: [0.45, 0.3], spin: 0, fade: true, arc: 0.35 });
-    }
     stage.jolt();
     stage.later(() => stage.jolt(), 0.07);
     onImpact();
@@ -1037,7 +1030,7 @@ export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
   Bite: { who: "wolf", blurb: "A snap forward, jaws closing on the target as two white arches.", play: wolfBite },
   "Cheap Shot": { who: "bandit", blurb: "Two quick side slashes, a forehand then a backhand: the sword leaves a red trail, and each cut a flat red swipe across the target.", play: cheapShot },
   Howl: { who: "alpha", blurb: "Sits back on its haunches and throws its head up at the sky: red sound waves pulse out one after another, rings spreading over the ground round it and arcs of sound rolling off its muzzle either side.", play: howlMove },
-  "Savage Bite": { who: "alpha", blurb: "A snap forward, wide red jaws closing hard on the target: a red flash and a deeper one after it, red lines bursting out, blood sprayed off in arcs, and the target jolted twice.", play: savageBite },
+  "Savage Bite": { who: "alpha", blurb: "A snap forward, wide red jaws closing hard on the target: a red flash and a deeper one after it, red lines bursting out, and the target jolted twice.", play: savageBite },
   "Great Lunge": { who: "alpha", blurb: "A Lunge with more weight behind it: thicker speed lines, red among them, and where it lands a shock rolling over the ground, dust and grit thrown up all round, and a second, bigger red flash.", play: greatLunge },
   Lunge: { who: "wolf", blurb: "A crouch and a leap through the air (from up to 3 hexes off, taking the hex beside its target), dust kicked back and speed lines streaming off it the whole way, jaws snapping shut on the target with a flash as it lands.", play: wolfLunge },
 };
