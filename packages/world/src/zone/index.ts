@@ -80,6 +80,7 @@ export {
   abilityStrikes,
   enemyStrikes,
   unitStrikes,
+  unitStrike,
   mindOf,
   DEFAULT_MIND,
   type Mind,
@@ -116,6 +117,7 @@ export { GLOWCAP_LIGHT, GLOWCAP_MUSHROOMS, checkForage } from "./forage";
 export { CRATE_HP, CRATE_PAY, crateAt, crateById, crateHp, isCrateId } from "./crates";
 export { ENEMY_ABILITIES, type AbilityScales, type EnemyAbilityDef } from "./enemyabilities";
 export { TURN_STEPS, type Turn, type TurnStep } from "./ai";
+export { checkStrike, strikeAim, strikeHexes, type StrikeAim } from "./strikes";
 export { BEHAVIOURS, behaviourOf, type Behaviour, type BehaviourId, type Look, type Use } from "./behaviours";
 export { BELL_AP, BELL_CHANCE, BELL_RUSH, liveBell } from "./bell";
 export { DELVE_GRID, DELVE_CRATES, generateDelve } from "./delve";

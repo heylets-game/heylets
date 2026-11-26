@@ -129,3 +129,51 @@ describe("acting in the combat sandbox", () => {
     expect(stepZone(state, { type: "move", by: "ann", unit: "cat", to: at(3, 6) }).ok).toBe(false);
   });
 });
+
+describe("an enemy's ability, aimed by hand in the combat sandbox", () => {
+  const fight = (extra?: (s: ZoneState) => void) => {
+    const state = board();
+    extra?.(state);
+    return dev(dev(state, { op: "sandbox", on: true }), { op: "start_fight" });
+  };
+  const strike = (state: ZoneState, op: Omit<Extract<Parameters<typeof dev>[1], { op: "strike" }>, "op">) => {
+    const events: ZoneEvent[] = [];
+    const step = stepZone(state, { type: "dev", by: "ann", dev: { op: "strike", ...op } });
+    if (step.ok) events.push(...step.events);
+    return { step, events };
+  };
+
+  it("is used on the hero picked, again and again, for nothing", () => {
+    let state = fight();
+    const bandit = state.units.find((u) => u.kind === "bandit")!.id;
+    state = dev(state, { op: "place", unit: bandit, at: at(4, 6) });
+    for (let i = 0; i < 3; i++) {
+      const { step, events } = strike(state, { unit: bandit, ability: "cheap_shot", target: "ann" });
+      expect(step.ok).toBe(true);
+      expect(events).toContainEqual(expect.objectContaining({ t: "used", id: bandit, name: expect.any(String), target: "ann" }));
+      state = (step as { state: ZoneState }).state;
+    }
+  });
+
+  it("is refused out of reach, unless it may go anywhere", () => {
+    let state = fight();
+    const bandit = state.units.find((u) => u.kind === "bandit")!.id;
+    state = dev(state, { op: "place", unit: bandit, at: at(12, 7) });
+    expect(strike(state, { unit: bandit, ability: "slash", target: "ann" }).step.ok).toBe(false);
+    expect(strike(state, { unit: bandit, ability: "slash", target: "ann", anywhere: true }).step.ok).toBe(true);
+  });
+
+  it("aims one that lands on a clump at any hex it reaches, with nobody on it", () => {
+    const state = fight((s) => enemy(s, "cultist", at(9, 6)));
+    const cultist = state.units.find((u) => u.kind === "cultist")!.id;
+    const { step, events } = strike(state, { unit: cultist, ability: "immolate", at: at(7, 3) });
+    expect(step.ok).toBe(true);
+    expect(events).toContainEqual(expect.objectContaining({ t: "used", id: cultist, at: at(7, 3) }));
+  });
+
+  it("is only for an enemy in a fight in the sandbox", () => {
+    const state = dev(board(), { op: "start_fight" });
+    const bandit = state.units.find((u) => u.kind === "bandit")!.id;
+    expect(strike(state, { unit: bandit, ability: "slash", target: "ann" }).step.ok).toBe(false);
+  });
+});

@@ -9,9 +9,10 @@ import type { DevOp, SurfaceKind } from "@gantt-quest/world";
 
 /**
  * A tool that takes clicks on the map until it is put down. `pick`: the next click on a unit of that side picks it
- * (`picked`), and puts the tool down. `place`: each click puts the one being played straight on that hex.
+ * (`picked`), and puts the tool down. `place`: each click puts the one being played straight on that hex (the enemy
+ * picked, in the sandbox, if there is one). `strike`: the combat sandbox's enemy ability, armed: the next click aims it.
  */
-export type ZoneDevTool = { tool: "spawn"; kinds: string[] } | { tool: "paint"; surface: SurfaceKind | null; wide: boolean } | { tool: "pick"; side: "hero" | "enemy" } | { tool: "place" };
+export type ZoneDevTool = { tool: "spawn"; kinds: string[] } | { tool: "paint"; surface: SurfaceKind | null; wide: boolean } | { tool: "pick"; side: "hero" | "enemy" } | { tool: "place" } | { tool: "strike"; unit: string; ability: string };
 
 export interface ZoneDevState {
   /** The zone on screen, if there is one. */
@@ -23,8 +24,10 @@ export interface ZoneDevState {
   flags: ZoneDevFlags;
   /** Everyone standing on the map that you can see, for the Combat section to pick from. */
   units: DevUnit[];
-  /** The unit last picked (the `pick` tool, or from a list), by id: drawn ringed on the map. */
+  /** The unit last picked (the `pick` tool, or from a list), by id: drawn ringed on the map. In the sandbox, the enemy being played. */
   picked: string | null;
+  /** The sandbox's enemy abilities reach anywhere: no range or line of sight asked. */
+  anywhere: boolean;
 }
 
 export interface DevUnit {
@@ -54,7 +57,7 @@ export interface KitHero {
   abilities: string[];
 }
 
-let state: ZoneDevState = { open: null, tool: null, heroes: [], flags: NO_FLAGS, units: [], picked: null };
+let state: ZoneDevState = { open: null, tool: null, heroes: [], flags: NO_FLAGS, units: [], picked: null, anywhere: false };
 const listeners = new Set<() => void>();
 
 export function setZoneDev(next: Partial<ZoneDevState>): void {
