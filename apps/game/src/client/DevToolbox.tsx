@@ -2,10 +2,11 @@
 // right edge of a map (in the bottom-right corner where there is none), there
 // only on a development deployment (the worker's ENVIRONMENT is "dev":
 // local and staging; see devTools.ts). It opens a window docked down the left
-// side of the screen, top to bottom, in the big windows' frame (the bag's, the
-// menu's): its name, its tabs and its close and minimize buttons stay put at
-// the top, and only the tab under them scrolls. Minimized, it is that top
-// alone. It has a tab for each kind of tool:
+// side of the screen, from the top to just above the bottom bar, in the fight
+// interface's timber (the combat log's: zone/fight.css): its name, its tabs
+// and its close and minimize buttons stay put at the top, and only the tab
+// under them scrolls. Minimized, it is that top alone. It has a tab for each
+// kind of tool:
 //
 //   Sky & sound   hold the time of day and the weather where you want them,
 //                 and see what the audio engine is doing. Your own tab only.
@@ -33,7 +34,6 @@ import { SkyAndSound } from "./audio/SoundButton";
 import { itemName, label } from "./labels";
 import { PixelIcon } from "./PixelIcon";
 import { BLOCKY_KEY } from "./render/figures";
-import { BrassCorners } from "./ui/BrassCorners";
 import { WRENCH } from "./ui/menuIcons";
 import { MapsTab } from "./zone/MapsTab";
 
@@ -123,11 +123,10 @@ export function DevToolbox({ me, refresh }: { me: Me; refresh(): Promise<void> }
     <>
       {column ? createPortal(spanner, column) : spanner}
       {open && (
-        <aside className={`dev-dock panel window ${folded ? "folded" : ""}`} role="dialog" aria-label="Dev toolbox">
-          <span className="win-plate">Dev Toolbox</span>
-          <BrassCorners />
+        <aside className={`dev-dock ${folded ? "folded" : ""}`} role="dialog" aria-label="Dev toolbox">
           {/* Stays put while the tab under it scrolls. */}
           <div className="dev-dock-top">
+            <strong className="dev-dock-title">Dev toolbox</strong>
             <div className="dev-tabs" role="tablist" aria-label="Dev tools">
               {TABS.map(([id, name]) => (
                 <button key={id} role="tab" aria-selected={tab === id} className={`small ${tab === id ? "selected" : ""}`} onClick={() => (pick(id), fold(false))}>
@@ -135,10 +134,10 @@ export function DevToolbox({ me, refresh }: { me: Me; refresh(): Promise<void> }
                 </button>
               ))}
             </div>
-            <button className="bag-close bag-min hud-btn" aria-expanded={!folded} aria-label={folded ? "Show the dev toolbox" : "Minimize the dev toolbox"} title={folded ? "Show" : "Minimize"} onClick={() => fold(!folded)}>
+            <button className="dev-dock-btn" aria-expanded={!folded} aria-label={folded ? "Show the dev toolbox" : "Minimize the dev toolbox"} title={folded ? "Show" : "Minimize"} onClick={() => fold(!folded)}>
               {folded ? "+" : "–"}
             </button>
-            <button className="bag-close hud-btn" aria-label="Close" title="Close" onClick={() => show(false)}>×</button>
+            <button className="dev-dock-btn" aria-label="Close" title="Close" onClick={() => show(false)}>×</button>
           </div>
           {!folded && (
             <div className="dev-dock-body">
