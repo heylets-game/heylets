@@ -522,6 +522,27 @@ export function sweepHexes(state: ZoneState, from: HexPos, toward: HexPos, rows:
   return out;
 }
 
+/**
+ * A dash's way (EnemyAbilityDef `dash`), from `from` toward `toward`: the straight line of up to `length` hexes out
+ * (lineFrom: it stops at rock and the map's edge), cut short before anything in the way that cannot be passed (a crate,
+ * a chest) or, for one that does not fly, ground too high to spring up onto from the hex before. It comes to rest on the
+ * furthest hex of what is left that it can stand on (`land`), and `through` is every hex before that. Null: there is
+ * nowhere on the line to come to rest.
+ */
+export function dashWay(state: ZoneState, unit: Unit, from: HexPos, toward: HexPos, length: number): { through: HexPos[]; land: HexPos } | null {
+  const line: HexPos[] = [];
+  let level = elevOf(state.map, from);
+  for (const p of lineFrom(state.map, from, toward, length)) {
+    const tile = tileAt(state.map, p);
+    if (!tile || solid(tile) || blockerAt(state, p)) break;
+    if (!flies(unit) && elevOf(state.map, p) > level + JUMP_UP) break;
+    level = elevOf(state.map, p);
+    line.push(p);
+  }
+  for (let i = line.length - 1; i >= 0; i--) if (standable(state, line[i], unit)) return { through: line.slice(0, i), land: line[i] };
+  return null;
+}
+
 /** Why `unit` cannot use this ability on this aim, in words, or null if it can. */
 export function checkAbility(state: ZoneState, unit: Unit, ability: string, aim: Aim): string | null {
   const def = ABILITIES[ability];
@@ -1157,7 +1178,7 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
   const { state } = ctx;
   const dc = 8 + attack.potency;
   const aim = at ?? target?.pos;
-  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name, target: target?.id, ...((attack.kit.area || attack.kit.sweep) && aim ? { at: aim } : {}) });
+  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name, target: target?.id, ...((attack.kit.area || attack.kit.sweep || attack.kit.dash) && aim ? { at: aim } : {}) });
   // What it leaves on whoever it gets through to: `saveOr` unless they save (`save`: they may), and its lesser share
   // (`onSave`) if they do.
   const leave = (victim: Unit, save: boolean) => {
@@ -1205,6 +1226,28 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
       damage(ctx, victim, saved ? Math.floor(dice.total / 2) : dice.total, { actor: enemy.id, what: attack.name, dice, halved: saved });
       if (!saved) leave(victim, false);
     }
+    return;
+  }
+  // A dash: straight through everyone in the way, to the far end of the line. Everyone it passes (in the fight) saves
+  // for half, as from a sweep; it comes to rest beyond, meeting the ground there as a leap does.
+  if (attack.kit.dash && aim) {
+    const way = dashWay(state, enemy, enemy.pos, aim, attack.range);
+    if (!way) return;
+    const from = enemy.pos;
+    provoke(ctx, enemy, way.land, null, () => {});
+    if (enemy.down) return;
+    enemy.pos = way.land;
+    ctx.events.push({ t: "jumped", id: enemy.id, from, to: way.land, dash: { name: attack.name, through: way.through } });
+    const dice = rollShown(ctx.rng, attack.dice);
+    for (const victim of state.units.filter((u) => u.side !== enemy.side && !u.down && !unseen(u) && inFight(state, u.id) && way.through.some((p) => covers(u, p)))) {
+      const saved = saveRoll(ctx, victim, "agi", dc, attack.name).ok;
+      damage(ctx, victim, saved ? Math.floor(dice.total / 2) : dice.total, { actor: enemy.id, what: attack.name, dice, halved: saved });
+      if (!saved) leave(victim, false);
+    }
+    tumble(ctx, enemy, from, null, JUMP_DOWN);
+    if (enemy.down || enterSurface(ctx, enemy) || enemy.down) return;
+    enterWeather(ctx, enemy);
+    ctx.onStep?.(enemy, () => {});
     return;
   }
   if (!target) return;

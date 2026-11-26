@@ -788,7 +788,16 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         // A leap, not a walk; the view sounds it, timed to the landing. The leap of a Lunge is held for its blow,
         // which carries the leaper there itself (signatureMoves.ts wolfLunge), and the blow's sound is its own.
         const lunge = lungeBlow(events, i);
-        const go = () => (renderer.current ? (lunge ? renderer.current.lungeFrom(ev.id) : renderer.current.leapUnit(ev.id, ev.to)) : lunge || sounds.zone("jump"));
+        // A dash (a Cave Bat's Fell Swoop) is its ability's own move, played as it goes (WorldRenderer.dashUnit).
+        const dash = ev.dash;
+        const go = () =>
+          renderer.current
+            ? lunge
+              ? renderer.current.lungeFrom(ev.id)
+              : dash
+                ? renderer.current.dashUnit(ev.id, ev.to, dash.name, dash.through)
+                : renderer.current.leapUnit(ev.id, ev.to)
+            : lunge || dash || sounds.zone("jump");
         unwalked.current.add(go);
         later(() => unwalked.current.delete(go) && go());
         owe(ev.id);
@@ -1006,7 +1015,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           }
           if (own === "burst" && view) return void view.burst(ev.id, ev.name, false, thenOn(() => {}), !!ev.again, centre);
           if (own === "at" && view && aim) return view.moveAt(ev.id, ev.name, aim, landing());
-          if (own === "blow") return;
+          // A dash is played as its user is seen to go, from the dash it is told by (see jumped).
+          if (own === "blow" || own === "dash") return;
           if (links.length > 0) {
             const last = links[links.length - 1][1];
             cast(ev.id, ev.name, last.x, last.z, () => links.forEach(([a, b], i) => timers.current.push(setTimeout(() => fxs.beam(a, b, look.color), i * 140))));
@@ -1303,7 +1313,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         // whatever its usual look (WorldRenderer.attack plays it); one round its user or at a spot was played as it was
         // used, and whoever it catches just flinches.
         const own = ev.actor && !(hit && ev.splash) && actor?.side === "enemy" && view?.ownsMove(ev.actor, ev.what) ? ownRoute(ev.what) : null;
-        const passive = (!mine && (ev.what === "coral_field" || ev.what === "coral_armor")) || (hit && !!ev.splash) || own === "burst" || own === "at";
+        const passive = (!mine && (ev.what === "coral_field" || ev.what === "coral_armor")) || (hit && !!ev.splash) || own === "burst" || own === "at" || own === "dash";
         const kind = passive ? "ground" : own === "blow" ? "melee" : !ev.actor || ev.actor === ev.target || ev.what.startsWith("throw:") || ev.what === "shove" || ev.what === "fall" ? "none" : (mine?.look.kind ?? "melee");
         // The log's line for it: the roll that decided it (if it has a card), then what it did.
         const logged = () => {

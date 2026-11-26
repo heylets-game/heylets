@@ -95,9 +95,24 @@ export interface MoveStage {
   pounce(): number;
   /** A blow has landed on the target: jolt it. */
   jolt(): void;
+  /**
+   * Dash the attacker straight along its way and on through whoever is on it, to come to rest at the far end (a Cave
+   * Bat's Fell Swoop): where it goes through each one it passes, how many seconds in, and a jolt for them as it does;
+   * and how long the whole dash takes (dashTime). Only where it is played as a dash (WorldRenderer.dashUnit, the lab).
+   */
+  dash?(): DashWay;
   /** Rock the whole view, `by` world units at first and dying away over `seconds` (a great quake). None in the lab. */
   shake?(by: number, seconds: number): void;
 }
+
+/** A dash under way (MoveStage.dash): whoever it passes through, and when, and the seconds it takes to come to rest. */
+export interface DashWay {
+  passes: { at: THREE.Vector3; when: number; jolt(): void }[];
+  over: number;
+}
+
+/** How long a dash `far` world units long takes: quick, and not much longer the further it goes. */
+export const dashTime = (far: number) => Math.min(0.6, 0.22 + 0.05 * far);
 
 export interface MoveCtx {
   figure: Figure;
@@ -125,6 +140,12 @@ export interface MoveCtx {
    */
   ground?: THREE.Vector3;
 }
+
+/**
+ * The moves are keyed by the ability's name. One kind's own move for an ability others have by the same name (a bat's
+ * Bite, not a wolf's) is keyed `Name@kind`, and is played for that kind alone (zone/ownMoves.ts ownMove).
+ */
+export const moveName = (key: string) => key.split("@")[0];
 
 export interface SignatureMove {
   /** Who uses it, by enemy kind, for the lab. */
@@ -1479,7 +1500,96 @@ function shadeWail(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alon
   }, peak + waveReaches(far, radius, life));
 }
 
+const BAT_VIOLET = "#9a6bd6";
+const BAT_DUSK = "#4a3b52";
+const BAT_FANG = "#f4efe2";
+const SWOOP_RED = "#e0313f";
+
+/**
+ * A Cave Bat's Bite: it flicks up and back a little, then darts in, and two needle fangs snap shut on the target twice
+ * over, quick as a sting, each nip with a small pale flash; on the second, violet sparks spit out either side and the
+ * target is jolted. The blow is told as the second nip lands.
+ */
+function batBite(stage: MoveStage, ctx: MoveCtx) {
+  const { hitAt, dir, crit, onImpact } = ctx;
+  const flash = crit ? GOLD : BAT_FANG;
+  // A flick up and back before the dart: a little puff of violet off its wings.
+  const wings = hitAt.clone().setY(hitAt.y + 0.35);
+  stage.spawnFx("streak", crit ? GOLD : BAT_VIOLET, dir < 0, { from: wings, to: wings.clone().setY(wings.y + 0.3), life: 0.14, size: [0.6, 0.9], turn: Math.PI / 2, spin: 0, fade: true });
+  const nip = (second: boolean) => {
+    stage.lunge();
+    jaws(stage, ctx, QUICK_BITE * 0.75, second ? 0.2 : 0.16, () => {
+      stage.spawnFx("burst", flash, false, { from: hitAt, to: hitAt, life: 0.14, size: [0.35, second ? 1 : 0.7], spin: 0.5, fade: true });
+      stage.jolt();
+      if (!second) return;
+      stage.sound();
+      for (const side of [false, true]) for (const turn of [-0.35, 0.3]) stage.spawnFx("streak", crit ? GOLD : BAT_VIOLET, side, { from: hitAt, to: hitAt, life: 0.18, size: [0.4, 1.2], turn: side ? -turn : turn, spin: 0, fade: true });
+      onImpact();
+    }, BAT_FANG);
+  };
+  stage.later(() => nip(false), 0.08);
+  stage.later(() => nip(true), 0.26);
+}
+
+/** Seconds between each set of speed lines thrown off a swooping bat. */
+const SWOOP_STREAK_EVERY = 0.025;
+
+/**
+ * A Cave Bat's Fell Swoop: its wings snap back with a burst of dusk-violet, and it tears in a straight line, low and
+ * fast, dark and violet speed lines streaming off it. Each hero it passes through is raked as it goes: three red claw
+ * lines torn across them with a white slash and a flash, and a jolt. Where it comes to rest, its wings flare out in a
+ * last violet burst. What it does to each is told as their hit is.
+ */
+function fellSwoop(stage: MoveStage, ctx: MoveCtx) {
+  const { figure, hitAt, dir, crit, onImpact } = ctx;
+  const flip = dir < 0;
+  const body = () => {
+    const at = figure.root.getWorldPosition(hitAt.clone());
+    at.y += 0.45;
+    return at;
+  };
+  const start = body();
+  // Back the way it came, along the ground: the way what it throws off goes.
+  const back = start.clone().sub(hitAt).setY(0).normalize();
+  stage.spawnFx("burst", crit ? GOLD : BAT_VIOLET, flip, { from: start, to: start, life: 0.2, size: [0.6, 1.6], spin: 0.4, fade: true });
+  for (const side of [-1, 1]) stage.spawnFx("streak", BAT_DUSK, side > 0, { from: start, to: start.clone().addScaledVector(back, 0.5).setY(start.y + side * 0.3), life: 0.18, size: [0.9, 1.2], spin: 0, fade: true });
+  // A stage with nowhere to dash plays it at its target, as a blow.
+  const way: DashWay = stage.dash?.() ?? { passes: [{ at: hitAt, when: 0.05, jolt: () => stage.jolt() }], over: 0 };
+  for (let s = 0; s < way.over; s += SWOOP_STREAK_EVERY) {
+    stage.later(() => {
+      const at = body();
+      for (let i = 0; i < 3; i++) {
+        const from = at.clone().setY(at.y - 0.25 + Math.random() * 0.5).addScaledVector(back, 0.15 + Math.random() * 0.2);
+        const color = crit ? GOLD : i === 0 ? BAT_DUSK : i === 1 ? BAT_VIOLET : STREAK_PALE;
+        stage.spawnFx("streak", color, flip, { from, to: from.clone().addScaledVector(back, 0.75), life: 0.16, size: [1.3, 0.8], spin: 0, fade: true });
+      }
+    }, s);
+  }
+  for (const pass of way.passes) {
+    stage.later(() => {
+      const red = crit ? GOLD : SWOOP_RED;
+      // Three claw lines raked across them, the way it went, a white slash over them and a flash.
+      for (const [n, lift] of [-0.18, 0, 0.18].entries()) {
+        const at = pass.at.clone().setY(pass.at.y + lift);
+        stage.spawnFx("streak", red, flip, { from: at.clone().addScaledVector(back, -0.25), to: at.clone().addScaledVector(back, 0.35), life: 0.22 + n * 0.03, size: [1.1, 1.3], turn: (flip ? 1 : -1) * 0.25, spin: 0, fade: true });
+      }
+      stage.spawnFx("slash", crit ? GOLD : "#f6ecff", flip, { from: pass.at, to: pass.at, life: 0.2, size: [1, 1.8], spin: -dir * 0.8, fade: true });
+      stage.spawnFx("burst", red, false, { from: pass.at, to: pass.at, life: 0.2, size: [0.5, 1.4], spin: 0.5, fade: true });
+      stage.sound();
+      pass.jolt();
+    }, pass.when);
+  }
+  stage.later(() => {
+    const at = body();
+    stage.spawnFx("burst", crit ? GOLD : BAT_VIOLET, flip, { from: at, to: at, life: 0.24, size: [0.7, 1.8], spin: -0.4, fade: true });
+    for (const side of [false, true]) stage.spawnFx("streak", BAT_DUSK, side, { from: at, to: at, life: 0.2, size: [0.5, 1.4], turn: side ? -1.2 : 1.2, spin: 0, fade: true });
+    onImpact();
+  }, Math.max(0.1, way.over));
+}
+
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
+  "Bite@bat": { who: "bat", blurb: "Flicks up and back, then darts in: two needle fangs snap shut twice, quick as a sting, a small pale flash with each nip, and violet sparks spitting out either side of the second.", play: batBite },
+  "Fell Swoop": { who: "bat", blurb: "Its wings snap back in a burst of violet and it tears in a straight line, low and fast, dark speed lines streaming off it: each hero it passes through is raked with three red claw lines, a white slash and a flash, and where it comes to rest its wings flare out.", play: fellSwoop },
   "Chill Touch": { who: "shade", blurb: "Draws up and back, then surges in with its arms stretching out long, wisps streaming off it: a cold flash where its hands land, three pale finger marks drawn down the target, frost glinting and drifting down, a ring of frost at their feet, and wisps of their warmth curling back to it.", play: chillTouch },
   Wail: { who: "shade", blurb: "Huddles in, drawing breath in wisps, then flings itself up and back and screams, arms wide, swelling and trembling: rings roll out over the ground two hexes all round, pale then violet, a ring goes out through the air, sound lines burst from its head and wisps swirl out every way; each hero is jolted as the first ring reaches them, with violet wisps circling their head.", play: shadeWail },
   "Slowing Field": { who: "guardian", blurb: "Opens its arms out wide, chest out and head lifted, and holds there trembling as its eyes and chest gem burn brighter and pulse, a halo pulsing bigger round the gem and little rays of light shooting off it, and motes of cyan light are drawn in to it; then lets go: a last burst of long rays, the glow flashes, three slow cyan rings roll out over the ground two hexes past it, and motes drift lazily up all over the field.", play: slowingField },

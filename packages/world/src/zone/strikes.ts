@@ -4,7 +4,7 @@
 
 import type { HexPos } from "@gantt-quest/core";
 import { aimReaches, strikeReaches } from "./behaviours";
-import { alliesReached, sweepHexes } from "./combat";
+import { alliesReached, dashWay, sweepHexes } from "./combat";
 import { blast, covers, sameHex, span } from "./geometry";
 import { ENEMY_BURST, type EnemyStrike } from "./kit";
 import { clusterHexes, quakeHexes } from "./weather";
@@ -12,12 +12,12 @@ import type { Unit, ZoneState } from "./types";
 
 /**
  * What an enemy ability is aimed at: `self`, nothing (a burst round it, a call to its own side); `hex`, a hex (one that
- * lands on a clump of hexes, or sweeps through rows of them); `unit`, one of the other side (a blow, a shot, a leap).
+ * lands on a clump of hexes, sweeps through rows of them, or dashes through a line of them); `unit`, one of the other side (a blow, a shot, a leap).
  */
 export type StrikeAim = "self" | "hex" | "unit";
 
 export const strikeAim = (attack: EnemyStrike): StrikeAim =>
-  attack.burst || attack.kit.rally || attack.kit.aftershock || attack.kit.field ? "self" : attack.kit.area || attack.kit.sweep ? "hex" : "unit";
+  attack.burst || attack.kit.rally || attack.kit.aftershock || attack.kit.field ? "self" : attack.kit.area || attack.kit.sweep || attack.kit.dash ? "hex" : "unit";
 
 /** Why `enemy` cannot use `attack` on this aim from where it stands, in words, or null if it can. `anywhere`: range and line of sight are not asked. */
 export function checkStrike(state: ZoneState, enemy: Unit, attack: EnemyStrike, aim: { target?: Unit; at?: HexPos }, anywhere = false): string | null {
@@ -29,6 +29,10 @@ export function checkStrike(state: ZoneState, enemy: Unit, attack: EnemyStrike, 
   if (kind === "hex") {
     if (!aim.at) return "Pick a hex.";
     if (attack.kit.sweep) return sameHex(aim.at, enemy.pos) ? "Pick a hex to swing toward." : null;
+    if (attack.kit.dash) {
+      if (sameHex(aim.at, enemy.pos)) return "Pick a hex to dash toward.";
+      return dashWay(state, enemy, enemy.pos, aim.at, attack.range) ? null : `There is nowhere to come to rest that way.`;
+    }
     return anywhere || aimReaches(state, enemy, enemy.pos, attack, aim.at) ? null : `${attack.name} does not reach there from here.`;
   }
   return null;
@@ -47,5 +51,9 @@ export function strikeHexes(state: ZoneState, enemy: Unit, attack: EnemyStrike, 
   if (!at) return [];
   if (attack.kit.area) return clusterHexes(state, enemy.pos, at, attack.kit.area);
   if (attack.kit.sweep) return sweepHexes(state, enemy.pos, at, attack.kit.sweep);
+  if (attack.kit.dash) {
+    const way = dashWay(state, enemy, enemy.pos, at, attack.range);
+    return way ? [...way.through, way.land] : [];
+  }
   return [at];
 }

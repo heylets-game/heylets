@@ -428,7 +428,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   // Cave bats: weak alone, but quick, and they come in swarms.
   bat: {
     kind: "bat", name: "Cave Bat", hp: 9, defence: 13, move: 3, save: 0, init: 3, xp: 7,
-    abilities: ["bat_bite", "screech"],
+    abilities: ["bat_bite", "fell_swoop"],
   },
   // The smugglers' dead, still guarding their camp: slow and steady, and hard to put down.
   skeleton: {

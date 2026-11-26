@@ -21,7 +21,7 @@ import type { Me } from "./api";
 import { label } from "./labels";
 import { makeFigure, type Figure } from "./render/figures";
 import { LOOKS } from "./render/looks";
-import { POUNCE_LANDS, SIGNATURE_MOVES, groundWave, pounceAt, type FxOpts, type MoveStage } from "./render/signatureMoves";
+import { POUNCE_LANDS, SIGNATURE_MOVES, dashTime, groundWave, moveName, pounceAt, type FxOpts, type MoveStage } from "./render/signatureMoves";
 import { fxTexture, lookFor } from "./render/sprites";
 import "./figureLab.css";
 
@@ -63,6 +63,8 @@ type Action = (typeof ACTIONS)[number][0];
 type Act = Action | `move:${string}`;
 /** How far in front of the figure an enemy move's target stands: about the next tile's middle. */
 const TARGET_AHEAD = 1.6;
+/** How far a dash (a Fell Swoop) carries the figure in the lab: on through the target and past it; held there a moment, then back. */
+const DASH = { far: TARGET_AHEAD + 1.6, hold: 0.35, back: 0.3 };
 
 const nameOf = (kind: string) => (HEROES.includes(kind) ? label("class", kind) : FOES.includes(kind) ? label("enemy", kind) : kind.replace(/_/g, " "));
 /** Models with no weapon in the game yet: offered in the main hand, to see them held. */
@@ -200,6 +202,8 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
     let sprang = -Infinity;
     /** A leap at the target under way (a creature's pounce): when it began, on the stage's clock. */
     let pounced = -Infinity;
+    /** A dash through the target under way (a Fell Swoop): when it began, on the stage's clock. */
+    let dashed = -Infinity;
     const draw = (dt: number) => {
       const s = stage.current;
       const now = liveRef.current;
@@ -252,6 +256,12 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
       if (s.figure) {
         s.figure.root.position.z = leapt.ahead;
         s.figure.root.position.y += leapt.up;
+        // A dash goes straight on through the target and past it, is held there a moment, and glides back home.
+        const over = dashTime(DASH.far);
+        const d = t - dashed;
+        if (d >= 0 && d < over + DASH.hold + DASH.back) {
+          s.figure.root.position.z = d < over ? (DASH.far * d) / over : d < over + DASH.hold ? DASH.far : DASH.far * (1 - (d - over - DASH.hold) / DASH.back);
+        }
       }
       if (readout.current) readout.current.textContent = `${t.toFixed(2)}s · lean ${lean.toFixed(2)} · strike ${Math.min(1, Math.abs(lean) * 2).toFixed(2)}`;
     };
@@ -289,6 +299,11 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
           pounce: () => {
             pounced = t;
             return POUNCE_LANDS;
+          },
+          dash: () => {
+            dashed = t;
+            const over = dashTime(DASH.far);
+            return { passes: [{ at: hitAt, when: (over * TARGET_AHEAD) / DASH.far, jolt: () => {} }], over };
           },
           jolt: () => {},
         };
@@ -459,7 +474,7 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
     () =>
       Object.entries(SIGNATURE_MOVES)
         .filter(([, move]) => move.who === kind)
-        .flatMap(([name, move]): [string, { blurb: string }, string][] => [[name, move, `move:${name}`], ...(move.again ? [[`${name}, next turn`, move.again, `move:${name}|again`] as [string, { blurb: string }, string]] : [])]),
+        .flatMap(([key, move]): [string, { blurb: string }, string][] => [[moveName(key), move, `move:${key}`], ...(move.again ? [[`${moveName(key)}, next turn`, move.again, `move:${key}|again`] as [string, { blurb: string }, string]] : [])]),
     [kind],
   );
   // A move set to repeat is let go when its enemy leaves the stage.

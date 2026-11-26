@@ -697,7 +697,7 @@ export function commonCostFor(unit: Pick<Unit, "kind" | "perks">, what: CommonAc
 // ---------- enemies ----------
 
 /** What an enemy's ability does besides its damage, when it lands. */
-export type EnemyAttackKit = Pick<EnemyAbilityDef, "surface" | "push" | "chills" | "splash" | "drain" | "area" | "sweep" | "onSave" | "rally" | "field"> & {
+export type EnemyAttackKit = Pick<EnemyAbilityDef, "surface" | "push" | "chills" | "splash" | "drain" | "area" | "sweep" | "dash" | "onSave" | "rally" | "field"> & {
   /** Its second shaking (EnemyAbilityDef `aftershock`), its damage grown with level as the first's is. */
   aftershock?: { dice: Dice; saveOr?: Inflict };
 };
@@ -831,7 +831,7 @@ export function abilityStrikes(ids: readonly string[], level: number, more = 0):
         cost: a.cost ?? ACTION_AP,
         cooldown: a.cooldown ?? 0,
         kit: {
-          surface: a.surface, push: a.push, chills: a.chills, splash: a.splash, drain: a.drain, area: a.area, sweep: a.sweep, onSave: a.onSave, rally: a.rally, field: a.field,
+          surface: a.surface, push: a.push, chills: a.chills, splash: a.splash, drain: a.drain, area: a.area, sweep: a.sweep, dash: a.dash, onSave: a.onSave, rally: a.rally, field: a.field,
           ...(a.aftershock ? { aftershock: { dice: diceFor(scaled(a.aftershock.damage, a.scales?.damage ?? DEFAULT_SCALE, level) + edge), saveOr: a.aftershock.saveOr } } : {}),
         },
       },

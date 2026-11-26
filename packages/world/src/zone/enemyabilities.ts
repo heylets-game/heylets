@@ -79,6 +79,13 @@ export interface EnemyAbilityDef {
    */
   sweep?: number;
   /**
+   * A dash: its user throws itself straight at the hex it is aimed at, up to `range` hexes (combat.ts dashWay), on
+   * through whoever is in the way, and comes to rest on the furthest hex of that line it can stand on. Nobody is
+   * singled out, so there is no roll to hit: every one of the other side it passes through makes an Agility save,
+   * taking half and nothing of `saveOr` on a success. It draws blows from whoever it leaves the reach of, as a Jump does.
+   */
+  dash?: boolean;
+  /**
    * Laid on the ground round its user: every hex within ENEMY_BURST of where it stands (not rock) shakes now, for
    * `damage`, and is left cracked (weather.ts, a `quake`). As its user's next turn begins, the same hexes heave again
    * for this `damage`, leaving `saveOr` on a failure. Whoever is on them each time (not flying) makes an Agility save
@@ -161,8 +168,10 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   chill_touch: { id: "chill_touch", name: "Chill Touch", damage: 5, potency: 3, saveOr: { effect: "slowed", turns: 2 }, chills: true, weight: 2 },
   // A scream all round it: anyone it gets through to fumbles their next attack.
   wail: { id: "wail", name: "Wail", damage: 3, potency: 3, shape: "burst", saveOr: { effect: "glitched", turns: 1 }, cooldown: 3, weight: 3 },
-  bat_bite: { id: "bat_bite", name: "Bite", damage: 4, potency: 4, saveOr: { effect: "bleeding" }, weight: 2 },
-  screech: { id: "screech", name: "Screech", damage: 2, potency: 3, shape: "burst", weight: 1 },
+  bat_bite: { id: "bat_bite", name: "Bite", damage: 4, potency: 4, weight: 2 },
+  // A cave bat's dive: it drops on the crew and tears straight through them in a line, raking everyone it passes, and
+  // comes to rest beyond. Whoever twists aside takes half and is not cut.
+  fell_swoop: { id: "fell_swoop", name: "Fell Swoop", damage: 3, potency: 3, range: 4, dash: true, saveOr: { effect: "bleeding" }, cooldown: 2, weight: 2 },
   rusted_cutlass: { id: "rusted_cutlass", name: "Rusted Cutlass", damage: 7, potency: 4, weight: 2 },
   bone_rattle: { id: "bone_rattle", name: "Bone Rattle", damage: 4, potency: 3, saveOr: { effect: "stunned", turns: 1 }, weight: 1 },
   engulf: { id: "engulf", name: "Engulf", damage: 6, potency: 3, saveOr: { effect: "slowed", turns: 2 }, weight: 2 },

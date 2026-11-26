@@ -29,8 +29,8 @@ import { FlotsamMarks, type FlotsamMark } from "./flotsam";
 import { OVERLAY_LAYER, PostFx, type Air } from "./post";
 import { fishMount } from "./catchArt";
 import { FRAME, OUTLINE, SITTING_DROP, inflate, makeFigure, type Figure } from "./figures";
-import { playsFor } from "../zone/ownMoves";
-import { POUNCE, SIGNATURE_MOVES, groundWave, leapAir, pounceAt, pounceLands, pounceOver, type MoveStage } from "./signatureMoves";
+import { ownMove } from "../zone/ownMoves";
+import { POUNCE, dashTime, groundWave, leapAir, pounceAt, pounceLands, pounceOver, type MoveStage } from "./signatureMoves";
 import { HIDES, hidingMaterial } from "./silhouette";
 import { BOAT_SCALE, OARLOCKS, ROWER_SEAT, aimOar, rowboatModel, shipOar } from "./rowboat";
 import { BoatWake, WAKE_STEP } from "./wake";
@@ -588,6 +588,8 @@ interface Unit {
   pace?: number;
   /** Knocked across the ground (a shove): moved this many times faster than a walk, without steps, until it arrives. */
   rush?: number;
+  /** Its rush is a dash of its own through the air (dashUnit), not a knock: it throws up no dust. */
+  glide?: boolean;
   /** While knocked across the ground: when (render clock) it next throws up a puff of its dust trail (trailDust). */
   dustAt?: number;
   /** Going into a pit (see sink): until the render clock passes this, nothing else lays it out or clears it away. */
@@ -1910,6 +1912,44 @@ export class WorldRenderer {
   }
 
   /**
+   * A unit dashes to a hex in a straight line, through whoever is on `through` (the hexes it passes on the way), with
+   * no steps and no leap: a Cave Bat's Fell Swoop, `name`, played as its own move as it goes (signatureMoves.ts), each
+   * one it passes jolted as it goes through them. Whatever it was walking is dropped.
+   */
+  dashUnit(id: string, to: HexPos, name: string, through: HexPos[]) {
+    const unit = this.units.get(id);
+    if (!unit) return;
+    this.fight.setOff(id);
+    const from = unit.root.position.clone();
+    from.y -= unit.bob;
+    const end = this.bodyAt(unit.kind, to);
+    // Where it is drawn on its hex: a quarter hex toward the camera from the middle (see syncUnits).
+    const ends = end.clone().setZ(end.z + 0.25);
+    const far = Math.hypot(ends.x - from.x, ends.z - from.z);
+    const over = dashTime(far);
+    unit.leaps?.clear();
+    unit.leap = unit.pounce = unit.launch = undefined;
+    unit.path = [end];
+    unit.rush = far / (4.2 * over);
+    unit.glide = true;
+    if (far > 1e-4) unit.turn = unit.turnGoal = Math.atan2(ends.x - from.x, ends.z - from.z);
+    sounds.attack(name, "melee", this.fighter(id), this.spot(id));
+    const move = ownMove(name, unit);
+    if (!move || far < 1e-4) return;
+    // Whoever stands on a hex it passes: gone through as it reaches them, as far along the way as they stand.
+    const passed = new Set(through.map((p) => `${p.q},${p.r}`));
+    const passes = [...this.units.entries()]
+      .filter(([other, u]) => other !== id && !u.lying && u.root.visible && passed.has((({ q, r }) => `${q},${r}`)(worldToHex(u.goal.x, u.goal.z - 0.25))))
+      .map(([, u]) => {
+        const along = Math.min(1, Math.max(0, ((u.goal.x - from.x) * (ends.x - from.x) + (u.goal.z - from.z) * (ends.z - from.z)) / (far * far)));
+        return { at: u.goal.clone().add(new THREE.Vector3(0, u.size * 0.4, 0.05)), when: along * over, jolt: () => u.kick.set((ends.x - from.x) / far * 0.14, 0.08, (ends.z - from.z) / far * 0.14) };
+      });
+    const dir = ends.clone().project(this.camera).x >= from.clone().project(this.camera).x ? 1 : -1;
+    const stage: MoveStage = { ...this.moveStage(id, id, name, unit, dir, false), dash: () => ({ passes, over }) };
+    move.play(stage, { figure: unit.figure, hitAt: ends.clone().setY(ends.y + unit.size * 0.4), dir, crit: false, onImpact: () => {} });
+  }
+
+  /**
    * A walk that was shown before the server had made it (client/zone/ahead.ts) turned out shorter than shown, or
    * was refused: the unit's walk ends at this hex after all. Whatever it was to walk after that hex is dropped;
    * if it has already gone past (or was never bound for it), it turns round and walks straight back.
@@ -2180,8 +2220,8 @@ export class WorldRenderer {
     if (unit && !unit.lying) {
       // Any burst with a move of its own plays it, not only a ground-pound (zone/ownMoves.ts); the second part of
       // one (an Earthquake's heave, `again`) plays that part of it.
-      const own = SIGNATURE_MOVES[name];
-      if (own && playsFor(own, unit)) {
+      const own = ownMove(name, unit);
+      if (own) {
         sounds.attack(name, "melee", this.fighter(actorId), this.spot(actorId));
         // Should a hit on someone come through attack after all, it is not played a second time.
         this.quakeAt.set(actorId, this.clock);
@@ -2343,8 +2383,7 @@ export class WorldRenderer {
   /** Whether this unit plays `ability` as a move of its own (signatureMoves.ts), not as the usual cast or blow. */
   ownsMove(actorId: string, ability: string): boolean {
     const unit = this.units.get(actorId);
-    const move = SIGNATURE_MOVES[ability];
-    return !!unit && !!move && !unit.lying && playsFor(move, unit);
+    return !!unit && !unit.lying && !!ownMove(ability, unit);
   }
 
   /**
@@ -2353,7 +2392,7 @@ export class WorldRenderer {
    */
   moveAt(actorId: string, ability: string, ground: THREE.Vector3, then: () => void) {
     const unit = this.units.get(actorId);
-    const move = SIGNATURE_MOVES[ability];
+    const move = unit && ownMove(ability, unit);
     if (!unit || !move || unit.lying) return then();
     this.face(unit, ground.x, ground.z);
     const dir = ground.clone().project(this.camera).x >= unit.goal.clone().project(this.camera).x ? 1 : -1;
@@ -2470,12 +2509,12 @@ export class WorldRenderer {
     // A stomp is leant well into, so it is held long enough to be seen. A spell, a shot or a throw is the
     // figure's own gesture, and a blow in the hand its own strike (see below).
     // One with an animation of its own (an Ogre's Slam, a seat drop) is not leant: it plays that instead.
-    const ownQuake = QUAKES.has(ability) ? SIGNATURE_MOVES[ability] : undefined;
-    const playsOwn = !!ownQuake && playsFor(ownQuake, a);
+    const ownQuake = QUAKES.has(ability) ? ownMove(ability, a) : undefined;
+    const playsOwn = !!ownQuake;
     if (QUAKES.has(ability) && !playsOwn) a.lean = -dir * 0.9;
     // One swing that catches several (a Brute's Great Cleave) is swung once, at the first, and lands on the rest.
-    const signature = SIGNATURE_MOVES[ability];
-    const ownSweep = !!signature?.sweeps && playsFor(signature, a);
+    const signature = ownMove(ability, a);
+    const ownSweep = !!signature?.sweeps;
     // It faces the first it catches, and stays so for the rest: turning to each would jerk it round mid-move.
     const caughtAlready = (playsOwn || ownSweep) && this.clock - (this.quakeAt.get(actorId) ?? -Infinity) <= 1;
     if (!a.lying && !caughtAlready) a.turn = a.turnGoal = Math.atan2(t.goal.x - a.goal.x, t.goal.z - a.goal.z);
@@ -2501,7 +2540,7 @@ export class WorldRenderer {
     }
     // An enemy ability with an animation of its own (signatureMoves.ts), the same one the figure lab plays: ahead of the
     // usual shot, throw or spell, so one from afar is played as its own too (zone/ownMoves.ts).
-    if (signature && playsFor(signature, a)) {
+    if (signature) {
       const stage = this.moveStage(actorId, targetId, ability, t, dir, landed);
       if (ownSweep && !caughtAlready) this.quakeAt.set(actorId, this.clock);
       signature.play(stage, { figure: a.figure, hitAt, dir, crit, onImpact, echo: caughtAlready });
@@ -6052,13 +6091,13 @@ export class WorldRenderer {
           if (Math.hypot(next.x - p.x, next.z - p.z) > 1e-4) unit.turnGoal = Math.atan2(next.x - p.x, next.z - p.z);
         }
         // Knocked across the ground, it is followed by the dust it throws up (see trailDust).
-        const slid = unit.rush && !leap ? p.clone() : null;
+        const slid = unit.rush && !leap && !unit.glide ? p.clone() : null;
         if (leap) {
           // Carried by the jump, above.
         } else if (p.distanceTo(next) <= step) {
           p.copy(next);
           unit.path.shift();
-          if (unit.path.length === 0) unit.rush = undefined;
+          if (unit.path.length === 0) unit.rush = unit.glide = undefined;
         } else {
           p.add(next.sub(p).setLength(step));
         }

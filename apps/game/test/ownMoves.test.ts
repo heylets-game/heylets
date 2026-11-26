@@ -3,28 +3,29 @@
 
 import { describe, expect, it } from "vitest";
 import { ABILITIES, ENEMIES, ENEMY_ABILITIES } from "@gantt-quest/world";
-import { SIGNATURE_MOVES } from "../src/client/render/signatureMoves";
-import { ownRoute, playsFor } from "../src/client/zone/ownMoves";
+import { SIGNATURE_MOVES, moveName } from "../src/client/render/signatureMoves";
+import { ownMove, ownRoute, playsFor } from "../src/client/zone/ownMoves";
 
 describe("an enemy's own moves in a fight", () => {
   it("are each named for an enemy ability, so a fight finds them by the name its events carry", () => {
     const names = new Set(Object.values(ENEMY_ABILITIES).map((a) => a.name));
-    for (const name of Object.keys(SIGNATURE_MOVES)) expect(names, name).toContain(name);
+    for (const key of Object.keys(SIGNATURE_MOVES)) expect(names, key).toContain(moveName(key));
   });
 
   it("are each used by the kind the lab shows them for", () => {
-    for (const [name, move] of Object.entries(SIGNATURE_MOVES)) {
-      const users = Object.values(ENEMIES).filter((e) => e.abilities.some((id) => ENEMY_ABILITIES[id]?.name === name)).map((e) => e.kind);
-      expect(users, name).toContain(move.who);
+    for (const [key, move] of Object.entries(SIGNATURE_MOVES)) {
+      const users = Object.values(ENEMIES).filter((e) => e.abilities.some((id) => ENEMY_ABILITIES[id]?.name === moveName(key))).map((e) => e.kind);
+      expect(users, key).toContain(move.who);
     }
   });
 
   it("go round their user, to a spot, or at one target, by the ability's shape", () => {
-    for (const name of Object.keys(SIGNATURE_MOVES)) expect(ownRoute(name), name).not.toBeNull();
+    for (const key of Object.keys(SIGNATURE_MOVES)) expect(ownRoute(moveName(key)), key).not.toBeNull();
     expect(ownRoute("Slam")).toBe("burst");
     expect(ownRoute("Immolate")).toBe("at");
     expect(ownRoute("Club Smash")).toBe("blow");
     expect(ownRoute("Lunge")).toBe("blow");
+    expect(ownRoute("Fell Swoop")).toBe("dash");
     expect(ownRoute("No Such Thing")).toBeNull();
   });
 
@@ -41,10 +42,17 @@ describe("an enemy's own moves in a fight", () => {
     expect(playsFor(swipe, { kind: "snow_bear" })).toBe(true);
   });
 
+  it("are a kind's own where it has one for an ability of a name others share (`Name@kind`)", () => {
+    expect(ownMove("Bite", { kind: "bat" })).toBe(SIGNATURE_MOVES["Bite@bat"]);
+    expect(ownMove("Bite", { kind: "wolf|r2" })).toBe(SIGNATURE_MOVES.Bite);
+    expect(ownMove("Bite", { kind: "turtle" })).toBeUndefined();
+    expect(ownMove("Fell Swoop", { kind: "bat" })).toBe(SIGNATURE_MOVES["Fell Swoop"]);
+  });
+
   it("each play for every kind that has the ability they are shown for in the lab", () => {
-    for (const [name, move] of Object.entries(SIGNATURE_MOVES)) {
-      const users = Object.values(ENEMIES).filter((e) => e.abilities.some((id) => ENEMY_ABILITIES[id]?.name === name));
-      expect(users.filter((e) => playsFor(move, e)).length, name).toBeGreaterThan(0);
+    for (const [key, move] of Object.entries(SIGNATURE_MOVES)) {
+      const users = Object.values(ENEMIES).filter((e) => e.abilities.some((id) => ENEMY_ABILITIES[id]?.name === moveName(key)));
+      expect(users.filter((e) => ownMove(moveName(key), e) === move).length, key).toBeGreaterThan(0);
     }
   });
 });

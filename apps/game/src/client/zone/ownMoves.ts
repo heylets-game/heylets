@@ -9,12 +9,14 @@
 //   hexes in front of its user (a Great Bear's Rending Cleave). Played at the spot as it is used (WorldRenderer.moveAt);
 //   each hero caught just flinches. A sweep whose move strikes each hero caught in turn (`sweeps`: a Brute's Great
 //   Cleave) is a "blow" instead.
+// - "dash": straight through a line of heroes to the far end of it (a Cave Bat's Fell Swoop). Played as its user is
+//   seen to go (WorldRenderer.dashUnit, from the dash it is told by); each hero it passes just flinches.
 // - "blow": at one target, by hand or from afar. Played as each blow is told (WorldRenderer.blow, attack).
 
 import { ENEMY_ABILITIES } from "@gantt-quest/world";
-import { SIGNATURE_MOVES } from "../render/signatureMoves";
+import { SIGNATURE_MOVES, type SignatureMove } from "../render/signatureMoves";
 
-export type OwnRoute = "burst" | "at" | "blow";
+export type OwnRoute = "burst" | "at" | "dash" | "blow";
 
 const BY_NAME = new Map(Object.values(ENEMY_ABILITIES).map((a) => [a.name, a]));
 
@@ -23,6 +25,7 @@ export function ownRoute(name: string): OwnRoute | null {
   const def = BY_NAME.get(name);
   if (!def) return null;
   if (def.shape === "burst" || def.rally || def.field) return "burst";
+  if (def.dash) return "dash";
   return def.area || (def.sweep && !SIGNATURE_MOVES[name]?.sweeps) ? "at" : "blow";
 }
 
@@ -35,4 +38,15 @@ export function ownRoute(name: string): OwnRoute | null {
 export function playsFor(move: { who: string; only?: readonly string[] }, unit: { kind: string }): boolean {
   const kind = unit.kind.split("|")[0];
   return (move.only ?? [move.who]).includes(kind);
+}
+
+/**
+ * The move of its own `unit` plays for the ability called `name`, if it has one: its kind's own (keyed `Name@kind`),
+ * else the one by that name, if that is played for its kind (playsFor).
+ */
+export function ownMove(name: string, unit: { kind: string }): SignatureMove | undefined {
+  const mine = SIGNATURE_MOVES[`${name}@${unit.kind.split("|")[0]}`];
+  if (mine) return mine;
+  const move = SIGNATURE_MOVES[name];
+  return move && playsFor(move, unit) ? move : undefined;
 }

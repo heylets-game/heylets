@@ -10,9 +10,9 @@
 
 import { hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/core";
 import { tileAt } from "../map";
-import { alliesReached, leaps, leavesReach, lungeLanding, shiftInto, shoveDest, sweepHexes } from "./combat";
+import { alliesReached, dashWay, leaps, leavesReach, lungeLanding, shiftInto, shoveDest, sweepHexes } from "./combat";
 import { has } from "./engine";
-import { HIGH_REACH, covers, gap, inFight, meet, nearOf, reachFrom, reaches, sameHex, seesFor, span, strikes } from "./geometry";
+import { HIGH_REACH, blast, covers, gap, inFight, meet, nearOf, reachFrom, reaches, sameHex, seesFor, span, strikes } from "./geometry";
 import { ENEMY_BURST, SPLASH_SHARE, type EnemyStrike, type Mind } from "./kit";
 import { diceAverage } from "./rules";
 import { clusterHexes } from "./weather";
@@ -79,8 +79,20 @@ interface Aim {
  */
 function spreadAims(look: Look, from: HexPos, attack: EnemyStrike, targets: readonly Unit[]): Aim[] | null {
   const { state, enemy } = look;
-  const { area, sweep } = attack.kit;
-  if (!area && !sweep) return null;
+  const { area, sweep, dash } = attack.kit;
+  if (!area && !sweep && !dash) return null;
+  if (dash) {
+    // A dash goes as straight as hexes lie toward its aim: aimed at each hex of the ring as far out as it reaches, it
+    // goes every way it can. It catches whoever is on the hexes it passes through, not where it comes to rest.
+    const out: Aim[] = [];
+    for (const at of blast(state.map, from, attack.range)) {
+      if (hexDistance(from, at) !== attack.range) continue;
+      const way = dashWay(state, enemy, from, at, attack.range);
+      const caught = way ? targets.filter((h) => way.through.some((p) => covers(h, p))) : [];
+      if (caught.length > 0) out.push({ at, caught });
+    }
+    return out;
+  }
   let aims: HexPos[];
   if (area) {
     // What lands on a clump round the hex aimed at covers no hex further than one from it: so a hero's own hex, or one beside it.

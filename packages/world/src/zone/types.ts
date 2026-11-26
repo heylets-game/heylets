@@ -598,8 +598,11 @@ export type ZoneEvent =
   | { t: "burst"; hexes: HexPos[] }
   /** Driven from `from` to `to`, or flattened where it stands (`to` null). `pulled`: hauled toward `id` on a line, not struck back (Throw Pike, Harpoon); the number of this step of the haul, from 1. */
   | { t: "shoved"; id: string; target: string; from: HexPos; to: HexPos | null; pulled?: number }
-  /** `lunge`: not a Jump but the leap of a leaping attack (a Dire Wolf's Lunge) at this target, drawn as part of the blow. */
-  | { t: "jumped"; id: string; from: HexPos; to: HexPos; lunge?: string }
+  /**
+   * `lunge`: not a Jump but the leap of a leaping attack (a Dire Wolf's Lunge) at this target, drawn as part of the blow.
+   * `dash`: not a Jump but a dash (a Cave Bat's Fell Swoop, its `name`) in a straight line through these hexes on the way.
+   */
+  | { t: "jumped"; id: string; from: HexPos; to: HexPos; lunge?: string; dash?: { name: string; through: HexPos[] } }
   /** One who was Unseen gives themselves away. */
   | { t: "seen"; id: string }
   /** Gone from one hex and there on another, with nothing crossed between (Smuggler's Route, Tactical Retreat). */
