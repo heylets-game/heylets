@@ -39,9 +39,9 @@ import { hexDistance, posKey, type HexPos } from "@gantt-quest/core";
 import { behaviourOf, type Look } from "./behaviours";
 import { BELL_AP, goesForBell, liveBell, ringBell, somethingToRouse } from "./bell";
 import { apForMove, checkCommon, doCommon, enemyAct, leavesReach, walk, walkAp } from "./combat";
-import { has, unseen, type Ctx } from "./engine";
+import { has, unseen, type Ctx, type EnemyOrder } from "./engine";
 import { blast, close, elevOf, flies, heldAgainst, inFight, pathIn, sameHex, stepCost, zoneReach, type Reached } from "./geometry";
-import { ACTION_AP, AP_MAX, COMMON_ACTIONS, ENEMY_WHIM, jumpRange, mindOf, unitStrikes, type EnemyStrike, type Mind } from "./kit";
+import { ACTION_AP, AP_MAX, COMMON_ACTIONS, ENEMY_WHIM, jumpRange, mindOf, unitStrike, unitStrikes, type EnemyStrike, type Mind } from "./kit";
 import { seedFromString } from "../rng";
 import { HARMFUL } from "./surfaces";
 import type { Budget, Unit, ZoneState } from "./types";
@@ -137,6 +137,8 @@ export interface Turn {
   goaded: Unit | undefined;
   /** It rang the alarm bell (bell.ts): its caller rouses the place. */
   rang: boolean;
+  /** A dev order (Ctx.order) it is under this turn: it has only that ability, and uses it once; no bell, no taunt. */
+  order?: EnemyOrder;
   /** Its fancy for the attack it is picking now (rollWhim): rolled afresh before each. */
   whim: Whim | undefined;
   ready(): void;
@@ -159,8 +161,17 @@ export interface TurnStep {
 
 function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): void {
   const { state } = ctx;
-  if (state.aiOff) return;
-  const standing = () => state.units.filter((u) => u.side === "hero" && !u.down && !unseen(u) && inFight(state, u.id));
+  // Under a dev order, everyone else passes; the one ordered plays even with the AI off.
+  const order = ctx.order;
+  if (order && order.unit !== enemy.id) return;
+  if (!order && state.aiOff) return;
+  if (order) ctx.order = undefined;
+  const standing = () => state.units.filter((u) => u.side === "hero" && !u.down && !unseen(u) && inFight(state, u.id) && (!order?.target || u.id === order.target));
+  const strikes = (): EnemyStrike[] => {
+    if (!order) return unitStrikes(state, enemy);
+    const ordered = unitStrike(state, enemy, order.ability);
+    return ordered ? [ordered] : [];
+  };
   const mind = mindOf(enemy.kind);
   const air = flies(enemy);
   const harmful = new Set(Object.entries(state.surfaces).filter(([, s]) => HARMFUL.has(s.kind)).map(([key]) => key));
@@ -344,17 +355,18 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
     enemy,
     budget,
     mind,
-    blows: unitStrikes(state, enemy),
+    blows: strikes(),
     heroes,
-    goaded: taunter(enemy, heroes),
+    goaded: order ? undefined : taunter(enemy, heroes),
     rang: false,
+    ...(order ? { order } : {}),
     whim: undefined,
     ready: () => {
-      t.blows = unitStrikes(state, enemy);
+      t.blows = strikes();
     },
     look: () => {
       t.heroes = standing();
-      t.goaded = taunter(enemy, t.heroes);
+      t.goaded = order ? undefined : taunter(enemy, t.heroes);
       return t.heroes;
     },
     out: () => enemy.down || has(enemy, "prone"),
@@ -376,7 +388,7 @@ const bellStep: TurnStep = {
   id: "bell",
   run(t) {
     const { ctx, state, enemy, budget } = t;
-    if (has(enemy, "prone") || !goesForBell(state, enemy)) return "on";
+    if (t.order || has(enemy, "prone") || !goesForBell(state, enemy)) return "on";
     // Taunted since it was sent, it has no mind for the bell: another is sent at the next round. And with every band
     // already in the fight (or gone), there is nobody left for it to rouse: it forgets the bell and fights.
     if (t.goaded || !somethingToRouse(state)) {
@@ -457,6 +469,8 @@ const fightStep: TurnStep = {
         t.ready();
       }
       enemyAct(ctx, enemy, option.attack, option.target, option.at);
+      // A dev order is for the one use.
+      if (t.order) return "end";
     }
     return "end";
   },

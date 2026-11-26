@@ -840,6 +840,10 @@ export function abilityStrikes(ids: readonly string[], level: number, more = 0):
 /** What an enemy kind starts with, as abilityStrikes makes them. */
 export const enemyStrikes = (kind: string, level: number, more = 0): EnemyStrike[] => abilityStrikes(ENEMIES[kind]?.abilities ?? [], level, more);
 
+/** One of this enemy's own abilities as it works on this map, ready or not (a dev order uses it either way). */
+export const unitStrike = (state: Pick<ZoneState, "options">, unit: Unit, id: string): EnemyStrike | undefined =>
+  unit.abilities.includes(id) ? abilityStrikes([id], unit.level, modsOf(state.options).edge)[0] : undefined;
+
 /** What this enemy can do just now: its own abilities, those that are ready, on this map. */
 export const unitStrikes = (state: Pick<ZoneState, "options">, unit: Unit): EnemyStrike[] =>
   abilityStrikes(unit.abilities, unit.level, modsOf(state.options).edge).filter((s) => !(unit.cooldowns[s.id] > 0));

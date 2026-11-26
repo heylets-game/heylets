@@ -575,6 +575,9 @@ describe("ZoneRoom", () => {
     expect(zoneActionFrom({ type: "dev", dev: { op: "timer", off: true } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "timer", off: true } });
     expect(zoneActionFrom({ type: "dev", dev: { op: "clear_enemies" } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "clear_enemies" } });
     expect(zoneActionFrom({ type: "dev", dev: { op: "clear_enemies" } }, "ann", false)).toBeNull();
+    expect(zoneActionFrom({ type: "dev", dev: { op: "enemy_use", unit: "e1", ability: "slash", target: "bob" } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "enemy_use", unit: "e1", ability: "slash", target: "bob" } });
+    expect(zoneActionFrom({ type: "dev", dev: { op: "enemy_use", unit: "e1", ability: "slash", target: 3 } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "enemy_use", unit: "e1", ability: "slash" } });
+    expect(zoneActionFrom({ type: "dev", dev: { op: "enemy_use", unit: "e1" } }, "ann", true)).toBeNull();
     expect(zoneActionFrom({ type: "dev", dev: { op: "kit", unit: "ann", classId: "devops_mage", weapon: "tome", level: "7", abilities: ["tidal_wave", 3] } }, "ann", true)).toEqual({
       type: "dev", by: "ann", dev: { op: "kit", unit: "ann", classId: "devops_mage", weapon: "tome", level: 7, abilities: ["tidal_wave"] },
     });

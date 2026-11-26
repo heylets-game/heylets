@@ -91,6 +91,9 @@ export function zoneActionFrom(raw: unknown, by: string, dev: boolean): ZoneActi
     }
     if (d.op === "standin" && text(d.classId)) return { type: "dev", by, dev: { op: "standin", classId: d.classId } };
     if (d.op === "ai") return { type: "dev", by, dev: { op: "ai", off: !!d.off } };
+    if (d.op === "enemy_use" && text(d.unit) && text(d.ability)) {
+      return { type: "dev", by, dev: { op: "enemy_use", unit: d.unit, ability: d.ability, ...(text(d.target) ? { target: d.target } : {}) } };
+    }
     if (d.op === "undying") return { type: "dev", by, dev: { op: "undying", on: !!d.on } };
     if (d.op === "timer") return { type: "dev", by, dev: { op: "timer", off: !!d.off } };
     if (d.op === "kit" && text(d.unit) && text(d.classId) && text(d.weapon) && Array.isArray(d.abilities)) {
