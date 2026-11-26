@@ -88,8 +88,8 @@ const SMASHES = new Set(["Club Smash"]);
  * in each hand both tossed and jabbed down: the smashes, and the other all-or-nothing swings.
  */
 const HEAVY_SWINGS = new Set([...SMASHES, "Cleave", "Eviscerate", "Crushing Maul", "Crushing Strike", "Sweeping Ruin", "Stone Fist", "Shockwave"]);
-/** A ground-pound (the ogre's Stomp, the guardian's Quake): no step in; the ground shakes out from the attacker's feet and jolts whoever it reaches. */
-const QUAKES = new Set(["Stomp", "Quake"]);
+/** A ground-pound (the ogre's Slam, the guardian's Quake): no step in; the ground shakes out from the attacker's feet and jolts whoever it reaches. */
+const QUAKES = new Set(["Slam", "Quake"]);
 /** Whether a signature move plays for this unit: a unit's `kind` is its sprite key (spriteKey), the kind before the first "|". */
 const playsFor = (move: { only?: readonly string[] }, unit: { kind: string }): boolean => !move.only || move.only.includes(unit.kind.split("|")[0]);
 /** How an attack travels, for its sound: the same split the effects above are drawn by. */
@@ -2118,7 +2118,7 @@ export class WorldRenderer {
   /**
    * An attack all round where the unit stands (a ring): struck as its heavy blow, or, `sung`, played on what it
    * carries (cast, with no instrument); a ground-pound is leant into, or played as its own move where it has one
-   * (an Ogre's Stomp). `then` runs as the blow lands. Returns whether it played its own move, which draws the
+   * (an Ogre's Slam). `then` runs as the blow lands. Returns whether it played its own move, which draws the
    * ground shaking round it itself (so whoever asked draws no ring of their own).
    */
   burst(actorId: string, name: string, sung: boolean, then: () => void): boolean {
@@ -2390,7 +2390,7 @@ export class WorldRenderer {
     const spell = SPELL_COLOR[ability];
     // A stomp is leant well into, so it is held long enough to be seen. A spell, a shot or a throw is the
     // figure's own gesture, and a blow in the hand its own strike (see below).
-    // One with an animation of its own (an Ogre's Stomp, a seat drop) is not leant: it plays that instead.
+    // One with an animation of its own (an Ogre's Slam, a seat drop) is not leant: it plays that instead.
     const ownQuake = QUAKES.has(ability) ? SIGNATURE_MOVES[ability] : undefined;
     const playsOwn = !!ownQuake && playsFor(ownQuake, a);
     if (QUAKES.has(ability) && !playsOwn) a.lean = -dir * 0.9;
@@ -2404,7 +2404,7 @@ export class WorldRenderer {
       // and each hero it reaches is jolted off their feet.
       const first = this.clock - (this.quakeAt.get(actorId) ?? -Infinity) > 1;
       if (first) this.quakeAt.set(actorId, this.clock);
-      // One with an animation of its own (an Ogre's Stomp) plays it for each hero caught, drawn round it only once.
+      // One with an animation of its own (an Ogre's Slam) plays it for each hero caught, drawn round it only once.
       if (ownQuake && playsOwn) {
         ownQuake.play(this.moveStage(actorId, targetId, ability, t, dir, landed), { figure: a.figure, hitAt, dir, crit, onImpact, echo: !first });
         return;

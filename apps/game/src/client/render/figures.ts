@@ -1684,7 +1684,7 @@ const SLAM: Blow = {
  * the body rocking back and the legs bouncing up off the ground with the weight of it, the arms flung out wide.
  * It sits there a moment, then heaves itself back up. `up` is how high off the ground it is, in the figure's own
  * units; `seat` how far into the sit, 0 to 1; `coil` the crouch; `arms` -1 swung back to 1 thrown up; `jolt` the
- * shock of landing, dying away; `rise` the crouch it gets back up through. An Ogre's Stomp (signatureMoves.ts).
+ * shock of landing, dying away; `rise` the crouch it gets back up through. An Ogre's Slam (signatureMoves.ts).
  */
 const SEAT_DROP = {
   hit: 0.62,

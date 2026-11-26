@@ -83,7 +83,7 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   club_smash: { id: "club_smash", name: "Club Smash", damage: 13, potency: 3, splash: true, weight: 1 },
   // An ogre's favourite: it stamps the ground and the whole crew round it is thrown about and left slow on their feet.
   // It needs a few turns to gather itself for another.
-  stomp: { id: "stomp", name: "Stomp", damage: 10, potency: 3, shape: "burst", saveOr: { effect: "slowed", turns: 2 }, cooldown: 4, weight: 2 },
+  slam: { id: "slam", name: "Slam", damage: 10, potency: 3, shape: "burst", saveOr: { effect: "slowed", turns: 2 }, cooldown: 4, weight: 2 },
   rake: { id: "rake", name: "Rake", damage: 7, potency: 4, saveOr: { effect: "bleeding" }, weight: 2 },
   hurl_rock: { id: "hurl_rock", name: "Hurl Rock", damage: 6, potency: 3, range: 5, saveOr: { effect: "stunned", turns: 1 }, weight: 1 },
   dark_bolt: { id: "dark_bolt", name: "Dark Bolt", damage: 7, potency: 4, range: 5, weight: 2 },

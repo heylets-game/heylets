@@ -102,7 +102,7 @@ export interface MoveCtx {
   /** When the blow is told: the damage and what it leaves show then. */
   onImpact(): void;
   /**
-   * For a move that catches several at once (a Stomp), played once for each: this one is not the first, so what it
+   * For a move that catches several at once (a Slam), played once for each: this one is not the first, so what it
    * throws out round its user has been drawn already, and only its landing on this target is left to time.
    */
   echo?: boolean;
@@ -424,19 +424,19 @@ function clubSmash(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Mov
   }, Math.max(0, wait));
 }
 
-/** An Ogre's Stomp wave: as far as it spreads (past every hero two hexes off, ENEMY_BURST) and how long it takes. */
-export const STOMP_WAVE = { radius: 3.8, life: 0.6 };
+/** An Ogre's Slam wave: as far as it spreads (past every hero two hexes off, ENEMY_BURST) and how long it takes. */
+export const SLAM_WAVE = { radius: 3.8, life: 0.6 };
 
 /**
- * An Ogre's Stomp: it crouches, springs straight up into the air and comes down flat on its backside (figures.ts
+ * An Ogre's Slam: it crouches, springs straight up into the air and comes down flat on its backside (figures.ts
  * SEAT_DROP). As it lands the ground pulses out from under it, a bright wave spreading over the ground with a broad
  * dusty one just behind it, and great clouds of dust rolling out after them and billowing up round it. Each hero is
  * jolted, with dust thrown up at their feet, as the wave reaches them, and the blow on them is told then.
  */
-function stomp(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alone }: MoveCtx) {
+function seatSlam(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alone }: MoveCtx) {
   const feet = figure.root.getWorldPosition(new THREE.Vector3());
   const ground = feet.clone().setY(feet.y + 0.08);
-  const { radius, life } = STOMP_WAVE;
+  const { radius, life } = SLAM_WAVE;
   // Only the first plays the drop: by the time the others are told, it has already landed.
   const lands = echo ? 0 : Math.max(0, figure.strike("drop"));
   if (!echo) stage.later(() => {
@@ -472,7 +472,7 @@ function stomp(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alone }:
 }
 
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
-  Stomp: { who: "ogre", blurb: "Crouches, springs up into the air and lands on its backside: a wave pulses out over the ground from its feet, clouds of dust rolling out after it, and each hero is jolted as it reaches them.", play: stomp },
+  Slam: { who: "ogre", blurb: "Crouches, springs up into the air and lands on its backside: a wave pulses out over the ground from its feet, clouds of dust rolling out after it, and each hero is jolted as it reaches them.", play: seatSlam },
   "Club Smash": { who: "ogre", blurb: "Heaves its club right up over its head and brings it straight down: the ground bursts where it lands, a pulse rolling out to the hexes round it, dust thrown out all round and chunks of rock flung every way.", play: clubSmash },
   Maul: { who: "bear", only: BEARS, blurb: "Rears right up on its hind legs and tears into the target with both forepaws by turns, white swooshes behind its claws, every blow tearing three black claw marks across it with white slashes flung off all round.", play: bearMaul },
   "Rending Swipe": { who: "bear", blurb: "Rears back on its hind legs and rakes a forepaw down across the target, its claws leaving a red swoosh, and three red claw marks torn across it.", play: rendingSwipe },

@@ -2019,10 +2019,10 @@ describe("fleeing", () => {
     expect(state.encounter!.order).not.toContain("bo");
     expect(state.encounter!.order).not.toContain("s1");
     // The ogre stamps the ground: Ann, in the fight, is caught; Bo, beside her and not in it, is not.
-    const stomp = enemyStrikes("ogre", 1).find((s) => s.burst)!;
+    const slam = enemyStrikes("ogre", 1).find((s) => s.burst)!;
     const events: ZoneEvent[] = [];
     const ctx: Ctx = { state: structuredClone(state), rng: makeRng(3), events, effects: [] };
-    enemyAct(ctx, unit(ctx.state, ogre.id), stomp, null);
+    enemyAct(ctx, unit(ctx.state, ogre.id), slam, null);
     expect(events.some((e) => (e.t === "hit" || e.t === "roll") && ("target" in e ? e.target === "ann" : e.roll.id === "ann"))).toBe(true);
     expect(events.some((e) => (e.t === "hit" && e.target === "bo") || (e.t === "roll" && e.roll.id === "bo"))).toBe(false);
     // He comes back: he is here again, and near the fight he is in it.

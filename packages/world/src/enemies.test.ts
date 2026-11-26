@@ -58,9 +58,9 @@ describe("the ogre", () => {
     const smash = attacksOf(ogre).find((a) => a.name === "Club Smash")!;
     expect(smash).toMatchObject({ splash: true, weight: 1 });
     expect(smash.saveOr).toBeUndefined();
-    // Its favourite, every few turns, is the stomp: it reaches the whole party, and leaves them slow.
-    const stomp = attacksOf(ogre).find((a) => a.name === "Stomp")!;
-    expect(stomp).toMatchObject({ shape: "burst", damage: 10, cooldown: 4, weight: 2, saveOr: { effect: "slowed" } });
+    // Its favourite, every few turns, is the slam: it reaches the whole party, and leaves them slow.
+    const slam = attacksOf(ogre).find((a) => a.name === "Slam")!;
+    expect(slam).toMatchObject({ shape: "burst", damage: 10, cooldown: 4, weight: 2, saveOr: { effect: "slowed" } });
     expect(ogre.xp).toBeGreaterThan(brute.xp);
   });
 

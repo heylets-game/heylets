@@ -727,7 +727,7 @@ export const ENEMY_KIT: Record<string, EnemyKit> = {
   bandit: {},
   wolf: { pack: true },
   bear: {},
-  // Its Stomp, like anything that strikes the whole crew, is a burst around it.
+  // Its Slam, like anything that strikes the whole crew, is a burst around it.
   ogre: {},
   // It rakes up close, and will throw a rock at whoever keeps away. (Its wounds closing is in zone.ts, at the start of its turn.)
   troll: {},

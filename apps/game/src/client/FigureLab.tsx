@@ -56,7 +56,7 @@ const ACTIONS = [
   ["floss", "Floss", "Emote: straight arms swung side to side across the body, one in front of the hips as the other goes behind, the hips swaying against them (walking stops it)."],
   ["runningman", "Running man", "Emote: running on the spot. A knee driven up, the foot stepped out in front and dragged back under the body as the other knee comes up, arms pushing down, for five seconds (walking stops it)."],
   ["breakdance", "Breakdance", "Emote: a backspin. Down on the back, knees tucked and hugged, spun round six times flat on the floor, then onto the side, head on a fist and an arm to the sky, and back up (walking stops it)."],
-  ["lean", "Lean", "The plain lean, easing off: what every attack used to be, and a stomp still is."],
+  ["lean", "Lean", "The plain lean, easing off: what every attack used to be, and a ground-pound without a move of its own still is."],
 ] as const;
 type Action = (typeof ACTIONS)[number][0];
 /** An action, or an enemy ability's own animation (render/signatureMoves.ts) by its name. */

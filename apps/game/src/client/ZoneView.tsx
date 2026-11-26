@@ -1171,7 +1171,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
             if (under.length > 0) cast(ev.id, ev.name, point(under[0]).x, point(under[0]).z, () => fxs.erupt(under.map((p) => point(p)), look.color, look.style, bind));
           } else if (look.kind === "ring") {
             // Struck all round (a song, played): the ring goes out as the blow lands.
-            // One with a move of its own (an Ogre's Stomp) draws the ground shaking itself: no ring over it.
+            // One with a move of its own (an Ogre's Slam) draws the ground shaking itself: no ring over it.
             let own = false;
             const ring = () => {
               if (!own) fxs.ring(point(user.pos, 0.05), ev.what === "attack" ? 3.6 : covered.length > 6 ? 3.6 : 1.9, look.color);
