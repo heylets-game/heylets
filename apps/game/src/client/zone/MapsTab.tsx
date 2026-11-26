@@ -38,7 +38,7 @@ export function MapsTab() {
   const [options, setOptions] = useState(() => ({ ...DEFAULT_ZONE_OPTIONS, lead: "", seed: "", site: "", clime: "", tier: 0, stone: 0, ...recall() }));
   const [said, setSaid] = useState<{ text: string; bad?: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [spawn, setSpawn] = useState({ kind: "wolf", count: 2 });
+  const [spawn, setSpawn] = useState({ kind: "wolf", count: 1 });
   const [paint, setPaint] = useState<{ surface: SurfaceKind | "clear"; wide: boolean }>({ surface: "poison", wide: true });
   const [standIn, setStandIn] = useState(HERO_CLASSES[0].id);
   const set = (change: Partial<typeof options>) => {
