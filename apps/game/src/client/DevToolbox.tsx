@@ -11,9 +11,9 @@
 //
 //   Sky & sound   hold the time of day and the weather where you want them,
 //                 and see what the audio engine is doing. Your own tab only.
-//   Gold          add gold to your hero's purse, or take it away.
-//   Items         put a chosen piece of gear, or some of a material, in
-//                 your hero's pack, or take a material away.
+//   Items         add gold to your hero's purse, or take it away; put a
+//                 chosen piece of gear, or some of a material, in your
+//                 hero's pack, or take a material away.
 //   Figures       open the figure lab, a stage for trying any figure's
 //                 animations (FigureLab.tsx), or switch the people back to
 //                 their old boxes (this browser only; it reloads the page).
@@ -46,7 +46,6 @@ const TAB_KEY = "gq.dev.tab";
 const FOLDED_KEY = "gq.dev.folded";
 const TABS = [
   ["sky", "Sky & sound"],
-  ["gold", "Gold"],
   ["items", "Items"],
   ["figures", "Figures"],
   ["maps", "Maps"],
@@ -131,7 +130,8 @@ function useDockWidth(): number | null {
 export function DevToolbox({ me, refresh }: { me: Me; refresh(): Promise<void> }) {
   const column = useCameraColumn();
   const [open, setOpen] = useState(() => recall(OPEN_KEY) === "1");
-  const [tab, setTab] = useState<Tab>(() => TABS.find(([id]) => id === recall(TAB_KEY))?.[0] ?? "sky");
+  // (Gold had a tab of its own once: it is on Items now.)
+  const [tab, setTab] = useState<Tab>(() => TABS.find(([id]) => id === (recall(TAB_KEY) === "gold" ? "items" : recall(TAB_KEY)))?.[0] ?? "sky");
   const [lab, setLab] = useState(false);
   const width = useDockWidth();
   const [folded, setFolded] = useState(() => recall(FOLDED_KEY) === "1");
@@ -175,10 +175,15 @@ export function DevToolbox({ me, refresh }: { me: Me; refresh(): Promise<void> }
           {!folded && (
             <div className="dev-dock-body">
           {tab === "sky" && <SkyAndSound />}
-          {tab === "gold" && <Seeding key="gold" me={me} refresh={refresh}>{(seed) => <GoldSeed me={me} seed={seed} />}</Seeding>}
           {tab === "figures" && <FigureStyle openLab={() => setLab(true)} />}
           {tab === "maps" && (me.character?.status === "active" ? <MapsTab /> : <p className="muted">Create a character first: there is no hero to walk in.</p>)}
-          {tab === "items" && <Seeding key="items" me={me} refresh={refresh}>{(seed) => <ItemSeed me={me} seed={seed} />}</Seeding>}
+          {tab === "items" && <Seeding key="items" me={me} refresh={refresh}>{(seed) => (
+            <>
+              <h4>Gold</h4>
+              <GoldSeed me={me} seed={seed} />
+              <ItemSeed me={me} seed={seed} />
+            </>
+          )}</Seeding>}
             </div>
           )}
         </aside>
