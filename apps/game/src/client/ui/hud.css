@@ -56,10 +56,20 @@
   border: max(4px, calc(var(--u) * 6)) solid var(--h-out); border-image: var(--frame-panel) 36 / max(8px, calc(var(--u) * 12)) / max(3px, calc(var(--u) * 5)) round;
   box-shadow: inset 0 2px 0 rgba(214, 150, 96, 0.32), inset 0 -2px 0 rgba(0, 0, 0, 0.55), 0 8px 20px rgba(0, 0, 0, 0.55);
 }
+/* A brass corner at each corner of the frame, the logbook's own (ui/frames.ts, book.css), over the copper. */
+.hud-orn {
+  --at: calc(-1 * max(4px, calc(var(--u) * 6)) - max(3px, calc(var(--u) * 5)));
+  position: absolute; z-index: 2; width: max(20px, calc(var(--u) * 32)); height: max(20px, calc(var(--u) * 32)); pointer-events: none;
+  background: var(--book-corner) center / 100% 100% no-repeat;
+}
+.hud-orn.tl { left: var(--at); top: var(--at); }
+.hud-orn.tr { right: var(--at); top: var(--at); scale: -1 1; }
+.hud-orn.bl { left: var(--at); bottom: var(--at); scale: 1 -1; }
+.hud-orn.br { right: var(--at); bottom: var(--at); scale: -1 -1; }
 /* On a map, as wide as the turn bar over it (--fight-bar-w in zone/fight.css). */
 .hud.full .hud-rack { width: calc(var(--u) * 732); }
 /* The fight lab's stand-in: the board, empty, as tall as the real one on a map. */
-.hud-rack.lab { height: calc(var(--u) * 158); }
+.hud-rack.lab { height: calc(var(--u) * 170); }
 
 /* Each end: the hands; and the bag with a column of small tabs beside it (the cog among them), as tall as the bag. */
 .hud-side { flex: none; display: flex; align-items: center; gap: calc(var(--u) * 6); }
@@ -88,40 +98,91 @@
 
 /* What is in hand, and the bag. */
 .hud-hands { flex: none; display: flex; gap: calc(var(--u) * 4); }
+/* On a map, one hand over the other: as tall as the meters and the slots beside them, with no board to spare. */
+.hud.full .hud-hands { flex-direction: column; }
+/* And the bag as tall as the two hands, a sea bag being a tall sack, with its tabs spread down beside it. */
+.hud.full .hud-slot.bag { height: calc(var(--w) * 2 + var(--u) * 4); }
+.hud.full .hud-side.end .hud-tabs { align-self: stretch; justify-content: space-between; padding-block: calc(var(--u) * 6); }
 
-/* The middle: health, the plaque and energy, experience under them, and the slots under that, between two lines
-   of brass let into the board. */
+/* The middle: health and energy either side of the crest, experience under them, and the slots under that, between
+   two lines of brass let into the board. On a map they start at the top, the crest standing over them. */
 .hud-core {
-  flex: 1 1 auto; min-width: 0; align-self: stretch; display: flex; flex-direction: column; justify-content: center; gap: calc(var(--u) * 6);
+  position: relative; flex: 1 1 auto; min-width: 0; align-self: stretch; display: flex; flex-direction: column; justify-content: center; gap: calc(var(--u) * 6);
   padding: 0 calc(var(--u) * 8);
   border-inline: 2px solid var(--h-out); box-shadow: inset 1px 0 0 rgba(201, 162, 74, 0.3), inset -1px 0 0 rgba(201, 162, 74, 0.3), -1px 0 0 rgba(214, 150, 96, 0.15), 1px 0 0 rgba(214, 150, 96, 0.15);
 }
 .hud.slim .hud-core { width: calc(var(--u) * 300); }
-/* Health and energy sit on the plaque's foot, right over the experience bar; the plaque stands up above them. */
-.hud-gauges { display: flex; align-items: flex-end; gap: calc(var(--u) * 8); }
-
-/* A meter's channel: sunk into the board and rimmed in brass, its liquid drawn in it (LiquidMeter.tsx). */
+.hud.full .hud-core { justify-content: flex-start; }
+/* Health and energy end to end: each as tall as the room beside the crest at its outer end, sloping down near the
+   middle to a thin channel where the two meet under the crest. Each fills from its outer end (energy is drawn
+   mirrored). The rim is the meter's own box, brass fading to dark; the channel is cut the same shape inside it. */
+.hud-gauges { display: flex; align-items: flex-end; gap: 0; }
+.hud { --m-h: calc(var(--u) * 22); --m-thin: max(5px, calc(var(--u) * 8)); --m-slope: calc(var(--u) * 60); }
+.hud.slim { --m-h: calc(var(--u) * 30); --m-thin: max(6px, calc(var(--u) * 10)); --m-slope: calc(var(--u) * 70); }
 .hud-meter {
-  position: relative; flex: 1 1 0; min-width: 0; height: calc(var(--u) * 12); overflow: hidden;
-  background: var(--h-well); border: 2px solid var(--h-out);
-  box-shadow: 0 0 0 1px var(--h-brass-lo), inset 0 2px 3px rgba(0, 0, 0, 0.7);
+  --shape: polygon(0 0, calc(100% - var(--m-slope)) 0, 100% calc(100% - var(--m-thin)), 100% 100%, 0 100%);
+  position: relative; flex: 1 1 0; min-width: 0; height: max(12px, var(--m-h)); box-sizing: border-box; padding: 2px;
+  background: linear-gradient(180deg, #a07a34, var(--h-brass-lo) 40%, var(--h-out)); clip-path: var(--shape);
 }
-.hud-meter.none { opacity: 0.4; }
-.liquid-meter { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+.hud-meter + .hud-meter { --shape: polygon(0 calc(100% - var(--m-thin)), var(--m-slope) 0, 100% 0, 100% 100%, 0 100%); }
+.hud-meter.none .liquid-meter { opacity: 0.4; }
+.liquid-meter {
+  display: block; width: 100%; height: 100%; image-rendering: pixelated;
+  background: var(--h-well); box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.7);
+  clip-path: polygon(0 0, calc(100% - var(--m-slope) + 2px) 0, 100% calc(100% - var(--m-thin) + 2px), 100% 100%, 0 100%);
+}
+/* Energy fills from its outer end too: drawn mirrored, which turns its channel's shape round to match its rim. */
+.hud-meter + .hud-meter .liquid-meter { scale: -1 1; }
+/* With no slots under it, experience is a little thicker. */
+.hud.slim .hud-xp { height: calc(var(--u) * 9); }
 
-/* The plaque: the level on a dark board, trimmed in brass (or, handed a turn, its clock). */
-.hud .hud-plaque {
-  flex: none; position: relative; min-width: max(36px, calc(var(--u) * 58)); height: max(18px, calc(var(--u) * 26)); padding: 0 calc(var(--u) * 8);
-  display: inline-flex; align-items: center; justify-content: center; gap: max(2px, calc(var(--u) * 4));
-  font-family: var(--font-title); font-size: max(13px, calc(var(--u) * 20)); line-height: 1; letter-spacing: 0.02em; color: #ffe9a8; text-shadow: 0 2px 0 #000;
-  background: linear-gradient(180deg, #4a332c, #2b1a17); border: 2px solid var(--h-out); border-radius: 0;
-  box-shadow: 0 0 0 1px var(--h-brass), inset 0 1px 0 rgba(255, 240, 200, 0.22), 0 2px 0 rgba(0, 0, 0, 0.45);
+/* The crest: the level on a face of dark wood in an octagon of brass, a ribbon behind it, standing over the board's
+   top edge from the middle of the core (or, handed a turn, the turn's clock). The meters meet under it. */
+.hud { --crest-w: max(54px, calc(var(--u) * 80)); --crest-h: max(30px, calc(var(--u) * 42)); }
+.hud-crest {
+  position: absolute; left: 50%; z-index: 3; translate: -50% 0; width: var(--crest-w); height: var(--crest-h);
+  /* From the core's top, up through the board's padding and frame and a little over. */
+  top: calc(-1 * (var(--u) * 8 + max(4px, calc(var(--u) * 6)) + max(8px, calc(var(--u) * 14))));
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 1px #000);
 }
-.hud .hud-plaque small { font-family: var(--font-head); font-size: max(8px, calc(var(--u) * 11)); letter-spacing: 0.1em; text-transform: uppercase; color: #c9a877; }
-.hud .hud-plaque:hover:not(:disabled) { color: #fff6cf; background: linear-gradient(180deg, #5a3f35, #33201c); border: 2px solid var(--h-out); box-shadow: 0 0 0 1px var(--h-brass-hi), inset 0 1px 0 rgba(255, 240, 200, 0.3), 0 2px 0 rgba(0, 0, 0, 0.45); }
+.hud-crest:has(.news) { filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.55)) drop-shadow(0 0 1px #000) drop-shadow(0 0 6px rgba(244, 198, 78, 0.7)); }
+/* The ribbon's two swallow-tailed ends, out from behind the crest. */
+.hud-crest-tail {
+  position: absolute; top: 18%; width: max(14px, calc(var(--u) * 24)); height: max(10px, calc(var(--u) * 16));
+  background: linear-gradient(180deg, #b04a40, #7c2f2a 55%, #4e1c1b); box-shadow: inset 0 1px 0 rgba(255, 190, 170, 0.35);
+}
+.hud-crest-tail.l { right: calc(100% - var(--u) * 10); clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 34% 50%); }
+.hud-crest-tail.r { left: calc(100% - var(--u) * 10); clip-path: polygon(0 0, 100% 0, 66% 50%, 100% 100%, 0 100%); }
+.hud .hud-plaque, .hud .hud-plaque:hover:not(:disabled) {
+  --c: calc(var(--u) * 11);
+  --oct: polygon(var(--c) 0, calc(100% - var(--c)) 0, 100% var(--c), 100% calc(100% - var(--c)), calc(100% - var(--c)) 100%, var(--c) 100%, 0 calc(100% - var(--c)), 0 var(--c));
+  position: relative; z-index: 1; isolation: isolate; width: 100%; height: 100%; padding: 0;
+  display: flex; align-items: center; justify-content: center; gap: max(2px, calc(var(--u) * 4));
+  font-family: var(--font-title); font-size: max(15px, calc(var(--u) * 24)); line-height: 1; letter-spacing: 0.02em; color: #ffe9a8; text-shadow: 0 2px 0 #000;
+  /* The brass rim, lit from above. */
+  background: linear-gradient(180deg, #fff1bf 0, #e2b95a 28%, #a8792c 68%, #5e4219 100%);
+  border: none; border-radius: 0; box-shadow: none; clip-path: var(--oct);
+}
+/* The face, sunk inside the rim, with a fine line of brass round it. */
+.hud .hud-plaque::before {
+  content: ""; position: absolute; inset: max(2px, calc(var(--u) * 3)); z-index: -1;
+  background: radial-gradient(ellipse at 50% 20%, #5e3d31, #2a1512 72%);
+  clip-path: polygon(calc(var(--c) - 1px) 0, calc(100% - var(--c) + 1px) 0, 100% calc(var(--c) - 1px), 100% calc(100% - var(--c) + 1px), calc(100% - var(--c) + 1px) 100%, calc(var(--c) - 1px) 100%, 0 calc(100% - var(--c) + 1px), 0 calc(var(--c) - 1px));
+  box-shadow: inset 0 0 0 1px rgba(246, 226, 161, 0.45), inset 0 3px 6px rgba(0, 0, 0, 0.6);
+}
+/* A brass stud either side of the level. */
+.hud .hud-plaque::after {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(circle at 16% 50%, #fff3c4 0, #d9a845 max(1px, calc(var(--u) * 2)), #6f5222 max(2px, calc(var(--u) * 3)), transparent max(2.5px, calc(var(--u) * 3.5))),
+    radial-gradient(circle at 84% 50%, #fff3c4 0, #d9a845 max(1px, calc(var(--u) * 2)), #6f5222 max(2px, calc(var(--u) * 3)), transparent max(2.5px, calc(var(--u) * 3.5)));
+}
+.hud .hud-plaque small { font-family: var(--font-head); font-size: max(8px, calc(var(--u) * 11)); letter-spacing: 0.1em; text-transform: uppercase; color: #d8b98a; }
+.hud .hud-plaque:hover:not(:disabled) { color: #fff6cf; filter: brightness(1.12); }
 .hud .hud-plaque:disabled { opacity: 1; cursor: default; }
-.hud .hud-plaque.news { color: #ffe27a; box-shadow: 0 0 0 1px var(--h-gold), 0 0 10px rgba(244, 198, 78, 0.45), inset 0 1px 0 rgba(255, 240, 200, 0.22), 0 2px 0 rgba(0, 0, 0, 0.45); }
-.hud .hud-plaque.turn.mine { color: #ffe27a; background: linear-gradient(180deg, #6a4a1c, #3b2408); }
+.hud .hud-plaque.news { color: #ffe27a; }
+.hud .hud-plaque.turn.mine { color: #ffe27a; }
+.hud .hud-plaque.turn.mine::before { background: radial-gradient(ellipse at 50% 20%, #7a5420, #3b2408 72%); }
 .hud .hud-plaque.turn.low { color: #ffb0a0; }
 
 /* Experience: a thin channel along the foot, filled green. */
@@ -129,11 +190,11 @@
 .hud-xp i { display: block; height: 100%; background: linear-gradient(180deg, #b6f09a, #5fbf4a 55%, #2c7c3e); box-shadow: inset 0 1px 0 rgba(230, 255, 210, 0.5); transition: width 0.3s; }
 
 /* The slots, on a map: two rows of ten (--cols, BAR_ROW in zone/hotbar.ts). */
-.hud-slots { display: grid; grid-template-columns: repeat(var(--cols, 10), calc(var(--u) * 42)); gap: calc(var(--u) * 2); justify-content: center; }
+.hud-slots { display: grid; grid-template-columns: repeat(var(--cols, 10), calc(var(--u) * 48)); gap: calc(var(--u) * 2); justify-content: center; }
 
 /* A slot: a socket sunk into the board, rimmed in brass, holding its picture. */
 .hud .hud-slot {
-  --w: calc(var(--u) * 42);
+  --w: calc(var(--u) * 48);
   position: relative; flex: none; box-sizing: border-box; width: var(--w); height: var(--w); padding: 0; display: grid; place-items: center;
   color: var(--h-parch); text-shadow: none;
   background: radial-gradient(circle at 50% 38%, #3d2622, var(--h-well) 80%);
@@ -143,6 +204,16 @@
 /* What is in hand, and the bag, are the biggest things on the bar: as wide as their column allows on a map. */
 .hud .hud-slot.hand, .hud .hud-slot.bag { --w: calc(var(--u) * 66); }
 .hud.slim .hud-slot.hand, .hud.slim .hud-slot.bag { --w: calc(var(--u) * 62); }
+/* The gold in the bag, under its picture: in the tall bag on a map, the two stacked in the middle of it; in the
+   square one elsewhere, along its foot with the picture lifted a little. */
+.hud .hud-gold {
+  position: absolute; left: 0; right: 0; bottom: max(1px, calc(var(--u) * 3)); display: flex; align-items: center; justify-content: center; gap: 1px;
+  font: bold max(9px, calc(var(--u) * 12)) ui-monospace, Consolas, monospace; line-height: 1; color: #ffe08a; text-shadow: 0 1px 0 #000, 1px 0 0 #000, -1px 0 0 #000; pointer-events: none;
+}
+.hud .hud-slot.bag .hud-gold .voxel-icon { width: max(10px, calc(var(--u) * 15)); height: max(10px, calc(var(--u) * 15)); }
+.hud.slim .hud-slot.bag > .voxel-icon { width: calc(var(--w) * 0.8); height: calc(var(--w) * 0.8); translate: 0 calc(var(--w) * -0.1); }
+.hud.full .hud-slot.bag { place-content: center; gap: calc(var(--u) * 6); }
+.hud.full .hud-gold { position: static; padding: 1px 5px; background: rgba(0, 0, 0, 0.35); box-shadow: 0 0 0 1px rgba(111, 82, 34, 0.6); }
 /* Three tabs stacked as tall as the bag beside them. */
 .hud.slim { --tab-h: calc(var(--u) * 18); }
 .hud .hud-slot.bag { box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.75), 0 0 0 1px var(--h-brass), 0 1px 0 1px rgba(214, 150, 96, 0.12); }

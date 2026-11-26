@@ -4,18 +4,21 @@
 //
 //                 where you stand .... what to do here
 //        o o o          points          o o o o
-//   +------------------------------------------------------------+
-//   |                  |           (Lv 7)                 |           |
-//   | [ hand ][ hand ] | [= health =]      [= energy =]   | [ bag ] L |
-//   | [      ][      ] | ========= experience =========== | [     ] ^ |
-//   |                  | [ ][ ][ ][ ][ ][ ][ ][ ][ ][ ]   | [     ] * |
-//   |                  | [ ][ ][ ][ ][ ][ ][ ][ ][ ][ ]   |           |
-//   +------------------------------------------------------------+
+//   +---------------------------------------------------------+
+//   | [hand] |               (Lv 7)               | [   ] book |
+//   | [    ] | [== health ==]      [== energy ==] | [   ]      |
+//   | [hand] | ========== experience ============ | [bag] rest |
+//   | [    ] | [ ][ ][ ][ ][ ][ ][ ][ ][ ][ ]     | [   ]      |
+//   |        | [ ][ ][ ][ ][ ][ ][ ][ ][ ][ ]     | [   ] menu |
+//   +---------------------------------------------------------+
 //
-// Left: what is in each hand. In the middle: health, a plaque
+// Left: what is in each hand (on a map, one over the other, as tall as the
+// slots; elsewhere side by side). Brass corners, as on the logbook, finish
+// the frame. In the middle: health, a plaque
 // with the hero's level (it opens the logbook) and energy (gathering outings
 // left today), the experience bar under them, and the slots under that.
-// Right: the bag (I or B opens it too), and beside it a column of small tabs:
+// Right: the bag (I or B opens it too) with the gold in it under the bag's
+// picture, and beside it a column of small tabs:
 // the logbook, rest (or, in a fight, the emote wheel) and the menu. A view
 // may hand the bar a turn (`turn`: the plaque is then its clock, pressed to
 // end it) and points to show as pips over it (`pips`); none does now, a fight
@@ -45,11 +48,14 @@ import { PixelIcon } from "../PixelIcon";
 import { LiquidMeter } from "./LiquidMeter";
 import { ITEM_ICON } from "../zone/actionIcons";
 import { logbookNews } from "../Logbook";
+import { GOLD_ICON, ThingIcon } from "../thingIcons";
 import { BAR_ROW } from "../zone/hotbar";
 import "./hud.css";
 
 /** A campfire: rest. */
 const FIRE = ["....#.....", "....##....", "...###.#..", "..####.##.", "..#######.", ".###.####.", ".##...###.", "..##.###..", "#..####..#", ".########.", "#........#"];
+/** A closed book, spine to the left: the logbook. */
+const BOOK = [".#########", "#.########", "#.##....##", "#.########", "#.###..###", "#.########", "#.########", "#.########", "#.########", "#.#......#", ".#########"];
 const HOURGLASS = ["########", ".#....#.", ".######.", "..####..", "...##...", "..#..#..", ".#.##.#.", ".######.", "########"];
 
 /** A row of turn points: lit for those left, dark for those spent. */
@@ -132,6 +138,8 @@ interface Props {
   menu: ReactNode;
 }
 
+/** Gold in a few characters, to fit under the bag: 950, 12.4k, 3.1m. */
+export const shortGold = (n: number) => (n < 10_000 ? String(n) : n < 1_000_000 ? `${Math.floor(n / 100) / 10}k` : `${Math.floor(n / 100_000) / 10}m`);
 const typing = (e: KeyboardEvent) => !!(e.target as HTMLElement | null)?.closest?.("input, textarea, select, [contenteditable]");
 
 /** A tooltip's words: what the thing is, a line about it, more if there is more, and the key that works it. */
@@ -358,6 +366,8 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
       </div>
 
       <div className="hud-rack" ref={board} onPointerLeave={() => setTip(null)}>
+        {/* Brass corners, as on the logbook's cover. */}
+        {(["tl", "tr", "bl", "br"] as const).map((k) => <i key={k} className={`hud-orn ${k}`} aria-hidden />)}
         {/* Left: weapon and shield. */}
         <span className="hud-side">
           {/* Each with the card it has in the bag. On a map either hand can take a lit torch instead. */}
@@ -368,11 +378,11 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
         </span>
 
         <span className="hud-core">
-          {/* Health, the plaque, and energy. Their numbers are in their tooltips. */}
-          <span className="hud-gauges">
-            <span className="hud-meter" {...hover(<Tip name="Health" line={`${nowHp} of ${maxHp} hit points${hp?.shield ? `, and a shield of ${hp.shield}` : ""}`} />)}>
-              <LiquidMeter kind="hp" now={nowHp} max={maxHp} shield={hp?.shield} w={60} h={4} />
-            </span>
+          {/* The level on a crest of brass and wood with a ribbon behind it, standing over the board's top edge: it opens the
+              logbook (or, handed a turn, it is the turn's clock). */}
+          <span className="hud-crest">
+            <i className="hud-crest-tail l" aria-hidden />
+            <i className="hud-crest-tail r" aria-hidden />
             {turn ? (
               <button
                 className={`hud-plaque turn ${turn.onEnd ? "mine" : ""} ${turn.seconds !== null && turn.seconds <= 15 ? "low" : ""}`}
@@ -390,9 +400,16 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
                 <span>{c.level}</span>
               </button>
             )}
+          </span>
+          {/* Health and energy, end to end: tall at the outer ends, tapering to meet under the crest, each filling from its
+              outer end. Their numbers are in their tooltips. */}
+          <span className="hud-gauges">
+            <span className="hud-meter" {...hover(<Tip name="Health" line={`${nowHp} of ${maxHp} hit points${hp?.shield ? `, and a shield of ${hp.shield}` : ""}`} />)}>
+              <LiquidMeter kind="hp" now={nowHp} max={maxHp} shield={hp?.shield} w={60} h={6} />
+            </span>
             {meter ? (
               <span className="hud-meter" {...hover(<Tip name={meter.name} line={`${meter.now} of ${meter.max}${meter.note ? ` · ${meter.note}` : ""}`} />)}>
-                <LiquidMeter kind={meter.kind} now={meter.now} max={meter.max} w={60} h={4} />
+                <LiquidMeter kind={meter.kind} now={meter.now} max={meter.max} w={60} h={6} />
               </span>
             ) : (
               <span className="hud-meter none" aria-hidden />
@@ -419,9 +436,16 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
           >
             {/* The sea bag itself, as a thing: drawn in the round like everything that goes in it. */}
             <Icon name="sea-bag" color="#e0b12e" size={40} />
+            {/* And the gold in it, under it. */}
+            <span className="hud-gold" aria-label={`${c.gold} gold`}>
+              <ThingIcon icon={GOLD_ICON} size={16} />
+              <span>{shortGold(c.gold)}</span>
+            </span>
           </button>
           <span className="hud-tabs">
-            <button className={`hud-tab ${news ? "news" : ""}`} aria-label="Logbook" disabled={!onBook} onClick={onBook} {...hover(<Tip name="Logbook" line={news ? "Something to spend or pick" : "Your hero, stats and skills"} keys="L" />)}>L</button>
+            <button className={`hud-tab ${news ? "news" : ""}`} aria-label="Logbook" disabled={!onBook} onClick={onBook} {...hover(<Tip name="Logbook" line={news ? "Something to spend or pick" : "Your hero, stats and skills"} keys="L" />)}>
+              <PixelIcon rows={BOOK} size={11} />
+            </button>
             {rest && (
               <button className="hud-tab" aria-label="Rest" disabled={rest.disabled} onClick={rest.run} {...hover(<Tip name="Rest" line={rest.hint} />)}>
                 <PixelIcon rows={FIRE} size={11} />
