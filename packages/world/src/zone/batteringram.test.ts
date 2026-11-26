@@ -26,7 +26,7 @@ function charge(seed: number) {
 
 describe("a brute's Battering Ram", () => {
   it("costs 2 AP, waits 2 turns, and is the brute.s only push", () => {
-    expect(ram).toMatchObject({ cost: 2, cooldown: 2 });
+    expect(ram).toMatchObject({ cost: 2, cooldown: 2, weight: 2 });
     expect(ENEMIES.brute.abilities).toEqual(["beatdown", "battering_ram", "great_cleave"]);
   });
 
