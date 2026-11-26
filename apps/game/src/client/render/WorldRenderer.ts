@@ -386,6 +386,8 @@ const PAN_KEYS: Record<string, [number, number]> = {
 };
 /** Seconds between tellings of which way your own hero looks. */
 const LOOK_SEND_S = 0.15;
+/** How much larger than a unit its body glow's shell is (bodyGlow): a rim round it, not a coat over it. */
+const BODY_GLOW_GROW = 1.07;
 /** How long a figure lying down is, as a share of its size: its tag hangs over the middle of it. */
 const LYING = 0.45;
 /** How long a shove that knocks someone off their feet keeps them down, at least, before they get up (longer if Prone). */
@@ -2017,6 +2019,42 @@ export class WorldRenderer {
       if (t < 1) return;
       stop();
       this.scene.remove(ghost);
+      for (const m of mats) m.dispose();
+    });
+  }
+
+  /**
+   * A glow round a unit's whole body, in one colour, pulsing up `pulses` times over `life` seconds and gone: a shell of
+   * its shape as it stands now, a little larger than it and drawn from the inside out, so only a rim of light shows
+   * round it, following it while it lasts. Something taking hold of it (a Frenzy).
+   */
+  bodyGlow(id: string, color: string, life = 1.3, pulses = 2) {
+    const unit = this.units.get(id);
+    if (!unit) return;
+    const mats: THREE.MeshBasicMaterial[] = [];
+    const shell = unit.root.clone(true);
+    shell.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh) {
+        const m = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending });
+        (o as THREE.Mesh).material = m;
+        mats.push(m);
+      } else if ((o as THREE.Light).isLight || (o as THREE.Sprite).isSprite) o.visible = false;
+    });
+    const grow = BODY_GLOW_GROW;
+    this.scene.add(shell);
+    let age = 0;
+    const stop = this.addTicker((dt) => {
+      age += dt;
+      const t = Math.min(1, age / life);
+      // Each pulse swells and falls away; the whole of it fades out toward the end.
+      const pulse = Math.sin(Math.PI * ((t * pulses) % 1));
+      for (const m of mats) m.opacity = 0.85 * pulse * (1 - t * 0.5);
+      shell.position.copy(unit.root.position);
+      shell.quaternion.copy(unit.root.quaternion);
+      shell.scale.copy(unit.root.scale).multiplyScalar(grow + 0.04 * pulse);
+      if (t < 1) return;
+      stop();
+      this.scene.remove(shell);
       for (const m of mats) m.dispose();
     });
   }
