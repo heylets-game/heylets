@@ -1600,6 +1600,26 @@ describe("the alarm bell rouses the place", () => {
     expect(events.some((e) => e.t === "roll" && e.roll.kind === "attack" && e.roll.id === made.mate && e.roll.target === "ann")).toBe(true);
   });
 
+  it("with every band already in the fight, nobody is sent for the bell, and one already sent forgets it and fights", () => {
+    const made = place();
+    let state = must(made.state, { type: "dev", by: "ann", dev: { op: "start_fight" } });
+    for (const g of ["g2", "g3", "g4"]) state.groups[g].alerted = true;
+    // Never picked, however many rounds it rolls for.
+    for (let seed = 1; seed <= 10; seed++) {
+      const tried = structuredClone(state);
+      Object.assign(tried.encounter!, { round: 6, bell: { goer: null, rolled: 0 } });
+      pickBellGoer({ state: tried, rng: makeRng(seed), events: [], effects: [] });
+      expect(tried.encounter!.bell!.goer, `seed ${seed}`).toBeNull();
+    }
+    // Sent before the rest came, standing right by the bell: it does not wait there, but comes at Ann.
+    state.encounter!.bell = { goer: made.mate, rolled: 99 };
+    const events: ZoneEvent[] = [];
+    for (let i = 0; i < 6; i++) state = must(state, { type: "timeout" }, events);
+    expect(got(events, "bell")).toEqual([]);
+    expect(state.encounter!.bell!.goer).toBeNull();
+    expect(events.some((e) => e.t === "roll" && e.roll.kind === "attack" && e.roll.id === made.mate && e.roll.target === "ann")).toBe(true);
+  });
+
   it("an enemy beside the bell rings it, for 4 AP, not in the first round, and every band that can get to the fight is in it, told as one crowd", () => {
     const made = place();
     const events: ZoneEvent[] = [];

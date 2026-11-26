@@ -375,8 +375,9 @@ const bellStep: TurnStep = {
   run(t) {
     const { ctx, state, enemy, budget } = t;
     if (has(enemy, "prone") || !goesForBell(state, enemy)) return "on";
-    // Taunted since it was sent, it has no mind for the bell: another is sent at the next round.
-    if (t.goaded) {
+    // Taunted since it was sent, it has no mind for the bell: another is sent at the next round. And with every band
+    // already in the fight (or gone), there is nobody left for it to rouse: it forgets the bell and fights.
+    if (t.goaded || !somethingToRouse(state)) {
       state.encounter!.bell!.goer = null;
       return "on";
     }
@@ -385,7 +386,7 @@ const bellStep: TurnStep = {
       t.rang = true;
       return "end";
     }
-    if (somethingToRouse(state) && t.toward((r) => r.stop && hexDistance(r.pos, bell.pos) <= 1)) {
+    if (t.toward((r) => r.stop && hexDistance(r.pos, bell.pos) <= 1)) {
       if (!t.out() && ringBell(ctx, enemy, budget)) t.rang = true;
       return "end";
     }
