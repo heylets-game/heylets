@@ -1571,7 +1571,7 @@ const GET_UP_HIPS = -1;
  * `n` counts the figure's actions, so two flinches in a row need not be the same.
  */
 interface Act {
-  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
+  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
   t: number;
   n: number;
   /** A jump's seconds off the ground (see JUMP). */
@@ -1632,6 +1632,30 @@ const SWING: Blow = {
   off: [[0, 0], [0.11, -0.45], [0.17, 0.4], [0.52, 0]],
   step: [[0, 0], [0.1, 0.3], [0.17, 1], [0.32, 1], [0.52, 0]],
 };
+
+/**
+ * Two side slashes in one breath, quick and flat: the arm lifted level and wound out to the figure's right, the
+ * shoulders turned with it, swept across the front at chest height and on past the left, where the follow-through
+ * is the wind-up of a backhand that sweeps it straight back across and out to the right; then back to guard. The
+ * first cut lands at `hit` and the second at `second`. A Bandit's Cheap Shot (signatureMoves.ts).
+ */
+const SLICES: Blow & { second: number } = {
+  hit: 0.15,
+  second: 0.3,
+  over: 0.62,
+  arm: [[0, -0.4], [0.08, -1.3], [0.15, -1.4], [0.22, -1.3], [0.3, -1.4], [0.39, -1.3], [0.62, -0.3]],
+  bend: [[0, -1.2], [0.08, -0.9], [0.15, -0.15], [0.22, -1.1], [0.3, -0.15], [0.39, -0.3], [0.62, -1.2]],
+  out: [[0, 0.1], [0.08, 1.3], [0.15, 0.2], [0.22, -0.9], [0.3, -0.2], [0.39, 1.2], [0.62, 0.1]],
+  blade: [[0, 0.3], [0.08, 1.45], [0.15, 1.2], [0.22, 1.4], [0.3, 1.2], [0.39, 1.25], [0.62, 0.3]],
+  lean: [[0, 0], [0.08, -0.05], [0.15, 0.12], [0.3, 0.14], [0.42, 0.1], [0.62, 0]],
+  twist: [[0, 0], [0.08, -0.6], [0.15, 0.3], [0.22, 0.75], [0.3, -0.1], [0.39, -0.6], [0.62, 0]],
+  rise: [[0, 0], [0.62, 0]],
+  crouch: [[0, 0], [0.15, 0.12], [0.3, 0.14], [0.42, 0.1], [0.62, 0]],
+  off: [[0, 0], [0.08, -0.3], [0.15, 0.3], [0.22, 0.3], [0.3, -0.3], [0.62, 0]],
+  step: [[0, 0], [0.08, 0.3], [0.15, 1], [0.42, 1], [0.62, 0]],
+};
+/** Seconds from the first of the two side slashes landing to the second. */
+export const SLICES_APART = SLICES.second - SLICES.hit;
 
 /**
  * A thrust, for a weapon that stabs: the hand drawn back to the hip with the point levelled at the mark, then a
@@ -2223,9 +2247,9 @@ const RECORDER_LENGTH = 6.4;
 const HAMMER = { hit: 0.4, over: 0.86, up: [[0, 0.25], [0.3, 1], [0.4, 0], [0.48, 0.18], [0.86, 0.25]] as Keys };
 const STIR = { over: 30, turns: 25 };
 /** How long each kind of action lasts. */
-const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
+const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
 /** When each kind of blow lands. */
-const ACT_HIT = { strike: SWING.hit, stab: THRUST.hit, pounce: POUNCE.hit, heavy: SWEEP.hit, twin: TWIN.hit };
+const ACT_HIT = { strike: SWING.hit, stab: THRUST.hit, slices: SLICES.hit, pounce: POUNCE.hit, heavy: SWEEP.hit, twin: TWIN.hit };
 /**
  * The weapons whose ordinary blow is not a cut, by weapon or by the icon in the hand: a dagger's is a leap and a
  * stab downward (see POUNCE), a rapier's a straight thrust at arm's length (see THRUST). An archer strikes with
@@ -2233,7 +2257,7 @@ const ACT_HIT = { strike: SWING.hit, stab: THRUST.hit, pounce: POUNCE.hit, heavy
  */
 const LIGHT: Record<string, "pounce" | "stab"> = { daggers: "pounce", dirk: "pounce", rapier: "stab", shortbow: "pounce", crossbow: "pounce", pistol: "pounce", blunderbuss: "pounce", harpoon_gun: "pounce", bow: "pounce", none: "stab" };
 /** The blows a knife kept out of sight is drawn for (see biped's sidearm). */
-const DRAWN = new Set<Act["kind"]>(["strike", "stab", "pounce", "heavy", "twin"]);
+const DRAWN = new Set<Act["kind"]>(["strike", "stab", "pounce", "heavy", "twin", "slices"]);
 /** Things cast with by being held up, not swung: lifted high beside the head, then presented to the mark in both hands, upright all the while. */
 const FOCUS = new Set(["orb", "astrolabe", "bilge-chalice"]);
 
@@ -2643,7 +2667,7 @@ function biped(top: THREE.Group, parts: Part[], drawnElbow = ELBOW) {
       if (levels.length === 0) heldL.joint.rotation.x -= lift * left;
       return;
     }
-    const k = act.kind === "stab" ? THRUST : act.kind === "pounce" ? POUNCE : act.kind === "twin" ? TWIN : SWING;
+    const k = act.kind === "stab" ? THRUST : act.kind === "pounce" ? POUNCE : act.kind === "twin" ? TWIN : act.kind === "slices" ? SLICES : SWING;
     // Eased in over the first moments and back out over the last, so it starts and ends wherever the figure was.
     const over = act.kind === "heavy" ? SWEEP.over : act.kind === "cast" ? CAST.over : act.kind === "play" ? PLAY.over : act.kind === "guard" ? GUARD.over : act.kind === "taunt" ? TAUNT.over : act.kind === "hammer" || act.kind === "stir" ? ACT_OVER[act.kind] : k.over;
     const fade = Math.min(1, Math.max(0, (over - t) / 0.18));
@@ -8711,11 +8735,12 @@ export interface Figure {
   /**
    * Strike a blow. "light" is the ordinary one for what is in hand: a cut, with a dagger a leap and a stab
    * downward, with a rapier a straight thrust. "stab" is that thrust at arm's length, with whatever is held. "heavy" is a great two-handed sweep from side to side, or with a weapon
-   * in each hand both tossed up, caught points down and jabbed downward. A person, a giant
+   * in each hand both tossed up, caught points down and jabbed downward. "slices" is two flat side slashes, one
+   * each way, the first landing when this says and the second SLICES_APART after. A person, a giant
    * or a skeleton winds up and steps in first, and this returns the seconds until the blow lands, for whatever
    * it hits to wait; a creature lunges at once, as it always did, and this returns 0.
    */
-  strike(how?: "light" | "stab" | "heavy"): number;
+  strike(how?: "light" | "stab" | "heavy" | "slices"): number;
   /**
    * Cast a spell, or throw something: the casting hand swings round overhead and comes down to point at the mark.
    * Returns the seconds until it points, which is when what is cast should leave; 0 for a creature, which only
@@ -9047,7 +9072,7 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
     hands: () => rig.hands ?? null,
     loose: () => rig.loose?.() ?? 0,
     strike(how = "light") {
-      const kind = how === "heavy" ? (rig.twin ? "twin" : "heavy") : how === "stab" ? "stab" : (rig.light ?? "strike");
+      const kind = how === "heavy" ? (rig.twin ? "twin" : "heavy") : how === "stab" || how === "slices" ? how : (rig.light ?? "strike");
       asked = kind;
       return rig.acts ? ACT_HIT[kind] : 0;
     },

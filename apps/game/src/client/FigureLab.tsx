@@ -194,7 +194,7 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
         if (f.arc) f.sprite.position.y += f.arc * 4 * k * (1 - k);
         const size = f.size[0] + (f.size[1] - f.size[0]) * k;
         f.sprite.scale.set(size, size, 1);
-        f.sprite.material.rotation = f.spin * k;
+        f.sprite.material.rotation = (f.turn ?? 0) + f.spin * k;
         if (f.fade) f.sprite.material.opacity = 1 - k * k;
         if (k >= 1) {
           fxGroup.remove(f.sprite);
@@ -239,12 +239,12 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
             const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: fxTexture(kind, color, flip), transparent: true, depthTest: false }));
             sprite.position.copy(opts.from);
             sprite.scale.set(opts.size[0], opts.size[0], 1);
+            sprite.material.rotation = opts.turn ?? 0;
             sprite.renderOrder = 9;
             fxGroup.add(sprite);
             fx.push({ ...opts, sprite, age: 0 });
           },
           later: (run, seconds) => pending.push({ at: t + seconds, run }),
-          bladeAt: () => hitAt.clone().sub(figure.root.position).setY(0).setLength(0.45).add(figure.root.position).setY(SIZE * 0.55),
           sound: () => {},
           lunge: () => {
             lean = -0.9;

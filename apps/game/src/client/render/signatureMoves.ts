@@ -6,7 +6,7 @@
 // figure lab (FigureLab.tsx), where each one has a button of its own. A new one added here shows in both.
 
 import type * as THREE from "three";
-import type { Figure } from "./figures";
+import { SLICES_APART, type Figure } from "./figures";
 import type { FxKind } from "./sprites";
 
 /** One effect sprite: flown from `from` to `to` over `life` seconds, growing from one size to the other. */
@@ -15,7 +15,10 @@ export interface FxOpts {
   to: THREE.Vector3;
   life: number;
   size: [number, number];
+  /** Total rotation over its life, in radians. */
   spin: number;
+  /** Its rotation to begin with, in radians. */
+  turn?: number;
   fade: boolean;
   arc?: number;
   onEnd?: () => void;
@@ -26,8 +29,6 @@ export interface MoveStage {
   spawnFx(kind: FxKind, color: string, flip: boolean, opts: FxOpts): void;
   /** Run this so many seconds on, on the stage's clock (slowed and paused with it, in the lab). */
   later(run: () => void, seconds: number): void;
-  /** Where the attacker's blade is just now, a little toward the target: where what it throws off starts. */
-  bladeAt(): THREE.Vector3;
   /** The attack's sound again, for a swing after the first (the stage plays the first itself). */
   sound(): void;
   /** Spring the attacker at the target: for a creature, which has no swing of its own. */
@@ -57,38 +58,31 @@ export interface SignatureMove {
 }
 
 const CHEAP_SHOT_RED = "#e0313f";
-/** Seconds after the first cut lands that the second swing begins. */
-const CHEAP_SHOT_GAP = 0.08;
 
 /**
- * Two quick swings. Each throws a red wave off the blade at the target, and it lands there as a slash: the first one
- * way, the second the other, so the two cross. The blow is told when the second lands.
+ * Two flat side slashes, one each way: a forehand across the front from the right, carried straight on into a
+ * backhand from the left (figures.ts SLICES). Each leaves a red swipe lying flat across the target, the second a
+ * little below the first and swept the other way. The blow is told when the second lands.
  */
 function cheapShot(stage: MoveStage, { figure, hitAt, dir, perfect, onImpact }: MoveCtx) {
-  const flip = dir < 0;
-  const cut = (second: boolean, after: () => void) => {
-    stage.spawnFx("wave", CHEAP_SHOT_RED, flip, { from: stage.bladeAt(), to: hitAt, life: 0.12, size: [0.9, 1.7], spin: (second ? dir : -dir) * 0.35, fade: false, onEnd: () => {
-      stage.spawnFx("slash", perfect ? "#ffd23f" : CHEAP_SHOT_RED, second ? !flip : flip, { from: hitAt, to: hitAt, life: 0.26, size: [1.3, 2.3], spin: (second ? dir : -dir) * 0.9, fade: true });
-      stage.jolt();
-      after();
-    } });
+  const cut = (second: boolean) => {
+    // The swipe is drawn as a quarter circle bowed up and to one side; turned an eighth, it lies flat, an arch.
+    const flip = second ? dir > 0 : dir < 0;
+    const at = hitAt.clone().setY(hitAt.y + (second ? -0.1 : 0.12));
+    stage.spawnFx("slash", perfect ? "#ffd23f" : CHEAP_SHOT_RED, flip, { from: at, to: at, life: 0.24, size: [1.4, 2.3], turn: flip ? -Math.PI / 4 : Math.PI / 4, spin: (flip ? 1 : -1) * 0.5, fade: true });
+    stage.jolt();
   };
-  const first = figure.strike("light");
-  if (first <= 0) {
-    stage.lunge();
-    cut(false, () => {});
-    stage.later(() => cut(true, onImpact), 0.2);
-    return;
-  }
+  const first = figure.strike("slices");
+  // A creature has no swing of its own: it springs at the target, and the two cuts land as it does.
+  if (first <= 0) stage.lunge();
+  stage.later(() => cut(false), first);
   stage.later(() => {
-    cut(false, () => {});
-    stage.later(() => {
-      stage.sound();
-      stage.later(() => cut(true, onImpact), figure.strike("light"));
-    }, CHEAP_SHOT_GAP);
-  }, first);
+    stage.sound();
+    cut(true);
+    onImpact();
+  }, first + (first > 0 ? SLICES_APART : 0.2));
 }
 
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
-  "Cheap Shot": { who: "bandit", blurb: "A quick double cut: each swing throws a red wave off the blade that lands as a slash, the second crossing the first.", play: cheapShot },
+  "Cheap Shot": { who: "bandit", blurb: "Two quick side slashes, a forehand then a backhand, each leaving a flat red swipe across the target.", play: cheapShot },
 };

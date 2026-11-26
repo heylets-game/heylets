@@ -840,6 +840,8 @@ interface Fx {
   size: [number, number];
   /** Total rotation over its life, in radians. */
   spin: number;
+  /** Its rotation to begin with, in radians (the spin is added to it). */
+  turn?: number;
   fade: boolean;
   /** How high it rises over the middle of its flight, in world units: a lob. */
   arc?: number;
@@ -2335,7 +2337,6 @@ export class WorldRenderer {
       const stage: MoveStage = {
         spawnFx: (kind, color, flipped, opts) => this.spawnFx(kind, color, flipped, opts),
         later: (run, seconds) => this.later(run, seconds),
-        bladeAt: () => a.root.position.clone().add(new THREE.Vector3(dir * 0.45, a.size * 0.55, 0.05)),
         sound: () => sounds.attack(ability, attackStyle(ability), this.fighter(actorId), this.spot(actorId)),
         lunge: () => this.lunge(actorId, targetId),
         jolt: () => {
@@ -2429,6 +2430,7 @@ export class WorldRenderer {
     sprite.renderOrder = 4;
     sprite.position.copy(opts.from);
     sprite.scale.set(opts.size[0], opts.size[0], 1);
+    sprite.material.rotation = opts.turn ?? 0;
     sprite.renderOrder = 9;
     this.fxGroup.add(sprite);
     this.fx.push({ sprite, age: 0, ...opts });
@@ -5931,7 +5933,7 @@ export class WorldRenderer {
       if (f.arc) f.sprite.position.y += f.arc * 4 * t * (1 - t);
       const size = f.size[0] + (f.size[1] - f.size[0]) * t;
       f.sprite.scale.set(size, size, 1);
-      f.sprite.material.rotation = f.spin * t;
+      f.sprite.material.rotation = (f.turn ?? 0) + f.spin * t;
       if (f.fade) f.sprite.material.opacity = 1 - t * t;
       if (t >= 1) {
         this.fxGroup.remove(f.sprite);

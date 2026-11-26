@@ -600,7 +600,7 @@ export function bubbleTexture(text: string): { texture: THREE.CanvasTexture; wid
 
 // ---------- battle effects ----------
 
-export type FxKind = "slash" | "bolt" | "arrow" | "burst" | "spark" | "mote" | "dust" | "fleck" | "splash" | "rock" | "note" | "notes" | "bang" | "wave";
+export type FxKind = "slash" | "bolt" | "arrow" | "burst" | "spark" | "mote" | "dust" | "fleck" | "splash" | "rock" | "note" | "notes" | "bang";
 
 const fxCache = new Map<string, THREE.CanvasTexture>();
 
@@ -635,21 +635,6 @@ export function fxTexture(kind: FxKind, color: string, flip = false): THREE.Canv
         if (Math.abs(d - 11) <= width / 2 + 0.3) dot(x, y, Math.abs(d - 11.4) < 0.7 ? "#ffffff" : color);
       }
     }
-  } else if (kind === "wave") {
-    // A wave of force thrown off a blade, travelling right: a tall thin crescent bowed forward, bright along its
-    // leading edge and thinning to points top and bottom, with a few flecks trailing behind it.
-    for (let y = 0; y < N; y++) {
-      for (let x = 0; x < N; x++) {
-        const dx = x - 3.5;
-        const dy = y - 7.5;
-        const a = Math.atan2(dy, dx);
-        if (Math.abs(a) > 1.1) continue;
-        const d = Math.hypot(dx, dy);
-        const width = 0.5 + 2.2 * Math.cos((a / 1.1) * (Math.PI / 2));
-        if (Math.abs(d - 8) <= width / 2 + 0.2) dot(x, y, d > 8.3 ? "#ffd0d4" : color);
-      }
-    }
-    for (const [x, y] of [[6, 6], [5, 9], [3, 7], [2, 8], [4, 5], [3, 10]] as const) dot(x, y);
   } else if (kind === "bolt") {
     for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
       const d = Math.hypot(x - 9.5, y - 7.5);
