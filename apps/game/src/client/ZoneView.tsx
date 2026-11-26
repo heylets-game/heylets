@@ -1520,12 +1520,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           const spurred = !!SPURS[ev.kind];
           const target = ev.target;
           later(() => {
-            // Spurred on (a Frenzy from a Howl): a flare of its colour over them, motes thrown off it.
-            const head = spurred ? renderer.current?.unitHead(target) : null;
-            if (head) {
-              spells.current?.flash(head, CONDITION_INFO[ev.kind].color, 1.3);
-              spells.current?.burst(head, CONDITION_INFO[ev.kind].color, 9);
-            }
+            // Spurred on (a Frenzy from a Howl): a glow of its colour round their whole body, pulsing.
+            if (spurred) renderer.current?.bodyGlow(target, CONDITION_INFO[ev.kind].color);
             sounds.effect(ev.kind, view?.whereIs(ev.target));
             view?.floatOver(ev.target, `${CONDITION_INFO[ev.kind].name}${stacks}`, CONDITION_INFO[ev.kind].color);
           });
