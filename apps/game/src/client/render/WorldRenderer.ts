@@ -4548,7 +4548,7 @@ export class WorldRenderer {
       }
       // With its HP to show (in a fight, or hurt), an enemy's plate has a red bar of it under the name.
       const plate: PlateStats | undefined = u.hp !== undefined && !u.down ? { hp: u.hp } : undefined;
-      want.set(u.id, { kind: u.kind, pos, hex: key(u.pos), faceKey: u.id, size: isBoss(u.kind) ? 1.9 : isBig(u.kind) ? 1.6 : 1.4, label: u.name ?? (plate ? "" : undefined), plate, tone: "foe", ring: u.hostile ? ENEMY_RED : undefined, through: u.hostile ? ENEMY_RED : undefined, pulse: !!u.active, hp: u.hp, down: u.down, falls: true, nameless: true, prone: u.prone, effects: u.effects, stack: slot });
+      want.set(u.id, { kind: u.kind, pos, hex: key(u.pos), faceKey: u.id, size: isBoss(u.kind) ? 1.9 : isBig(u.kind) ? 1.6 : 1.4, label: u.name ?? (plate ? "" : undefined), plate, tone: "foe", ring: u.hostile && !u.down ? ENEMY_RED : undefined, through: u.hostile ? ENEMY_RED : undefined, pulse: !!u.active, hp: u.hp, down: u.down, falls: true, nameless: true, prone: u.prone, effects: u.effects, stack: slot });
     }
 
     const turned = new Map<string, number>();
