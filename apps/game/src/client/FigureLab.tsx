@@ -1,4 +1,4 @@
-// The figure lab: a dev-only stage for trying every figure's animations.
+// The model preview (once the figure lab): a dev-only stage for trying every figure's animations.
 // Opened from the dev toolbox's Figures tab (DevToolbox.tsx), so it is there
 // only on a development deployment.
 //
@@ -352,7 +352,7 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
         if (!now.paused) draw(real * now.speed);
         failing = false;
       } catch (e) {
-        if (!failing) console.error("Figure lab: a frame failed", e);
+        if (!failing) console.error("Model preview: a frame failed", e);
         failing = true;
       }
       // The camera goes round the figure; the figure itself stays facing +z, as in the game.
@@ -472,11 +472,11 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
   };
 
   return (
-    <div className="figure-lab" role="dialog" aria-label="Figure lab">
+    <div className="figure-lab" role="dialog" aria-label="Model preview">
       <canvas key={generation} ref={canvas} className="figure-lab-stage" aria-label="The figure on its stage. Drag to look round it; scroll to come closer." role="img" />
       <div className="figure-lab-side panel">
         <div className="figure-lab-head">
-          <strong>Figure lab</strong>
+          <strong>Model preview</strong>
           <button className="link" onClick={onClose}>
             Close
           </button>

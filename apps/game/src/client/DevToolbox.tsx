@@ -9,14 +9,13 @@
 // under them scrolls. Minimized, it is that top alone. It has a tab for each
 // kind of tool:
 //
-//   Sky & sound   hold the time of day and the weather where you want them,
-//                 and see what the audio engine is doing. Your own tab only.
+//   Audio/visual  open the model preview, a stage for trying any figure's
+//                 animations (FigureLab.tsx); hold the time of day and the
+//                 weather where you want them, and see what the audio engine
+//                 is doing. Your own tab only.
 //   Items         add gold to your hero's purse, or take it away; put a
 //                 chosen piece of gear, or some of a material, in your
 //                 hero's pack, or take a material away.
-//   Figures       open the figure lab, a stage for trying any figure's
-//                 animations (FigureLab.tsx), or switch the people back to
-//                 their old boxes (this browser only; it reloads the page).
 //   Maps/combat   make a zone (a map to walk and fight on) and walk into it;
 //                 while one is on screen, place enemies, paint the ground and
 //                 the rest (zone/MapsTab.tsx).
@@ -35,6 +34,7 @@ import { SkyAndSound } from "./audio/SoundButton";
 import { itemName, label } from "./labels";
 import { PixelIcon } from "./PixelIcon";
 import { BLOCKY_KEY } from "./render/figures";
+import { DevSection } from "./DevSection";
 import { WRENCH } from "./ui/menuIcons";
 import { MapsTab } from "./zone/MapsTab";
 
@@ -45,12 +45,14 @@ const OPEN_KEY = "gq.dev.readout";
 const TAB_KEY = "gq.dev.tab";
 const FOLDED_KEY = "gq.dev.folded";
 const TABS = [
-  ["sky", "Sky & sound"],
+  ["av", "Audio/visual"],
   ["items", "Items"],
-  ["figures", "Figures"],
   ["maps", "Maps/combat"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
+
+/** Tabs there once were, and where what was on them is now. */
+const FORMER_TABS: Record<string, Tab> = { gold: "items", sky: "av", figures: "av" };
 
 const recall = (key: string): string | null => {
   try {
@@ -130,9 +132,13 @@ function useDockWidth(): number | null {
 export function DevToolbox({ me, refresh }: { me: Me; refresh(): Promise<void> }) {
   const column = useCameraColumn();
   const [open, setOpen] = useState(() => recall(OPEN_KEY) === "1");
-  // (Gold had a tab of its own once: it is on Items now.)
-  const [tab, setTab] = useState<Tab>(() => TABS.find(([id]) => id === (recall(TAB_KEY) === "gold" ? "items" : recall(TAB_KEY)))?.[0] ?? "sky");
+  // (Gold, Sky & sound and Figures had tabs of their own once: they are on Items and Audio/visual now.)
+  const [tab, setTab] = useState<Tab>(() => TABS.find(([id]) => id === (FORMER_TABS[recall(TAB_KEY) ?? ""] ?? recall(TAB_KEY)))?.[0] ?? "av");
   const [lab, setLab] = useState(false);
+  // The old box people had a switch here once; with it gone, nobody is left stuck with them (from the next reload).
+  useEffect(() => {
+    if (recall(BLOCKY_KEY) === "1") remember(BLOCKY_KEY, null);
+  }, []);
   const width = useDockWidth();
   const [folded, setFolded] = useState(() => recall(FOLDED_KEY) === "1");
   const fold = (on: boolean) => {
@@ -174,8 +180,19 @@ export function DevToolbox({ me, refresh }: { me: Me; refresh(): Promise<void> }
           </div>
           {!folded && (
             <div className="dev-dock-body">
-          {tab === "sky" && <SkyAndSound />}
-          {tab === "figures" && <FigureStyle openLab={() => setLab(true)} />}
+          {tab === "av" && (
+            <div className="dev-seed">
+              <DevSection id="av.models" title="Model preview" open>
+                <p className="muted">A stage for any hero, townsperson or enemy: walk, strike, shoot, sit, row, slowed or a frame at a time.</p>
+                <div className="dev-row">
+                  <button className="small primary" onClick={() => setLab(true)}>Open the model preview</button>
+                </div>
+              </DevSection>
+              <DevSection id="av.sky" title="Sky & sound" open>
+                <SkyAndSound />
+              </DevSection>
+            </div>
+          )}
           {tab === "maps" && (me.character?.status === "active" ? <MapsTab /> : <p className="muted">Create a character first: there is no hero to walk in.</p>)}
           {tab === "items" && <Seeding key="items" me={me} refresh={refresh}>{(seed) => (
             <>
@@ -194,34 +211,6 @@ export function DevToolbox({ me, refresh }: { me: Me; refresh(): Promise<void> }
         </Suspense>
       )}
     </>
-  );
-}
-
-/** Switch the people (in this browser) back to their old box models, to compare. Every figure is built afresh, so it reloads. */
-function FigureStyle({ openLab }: { openLab(): void }) {
-  const blocky = recall(BLOCKY_KEY) === "1";
-  const flip = () => {
-    remember(BLOCKY_KEY, blocky ? null : "1");
-    location.reload();
-  };
-  return (
-    <div className="dev-seed">
-      <p>The figure lab is a stage for any hero, townsperson or enemy: walk, strike, shoot, sit, row, slowed or a frame at a time.</p>
-      <div className="dev-row">
-        <button className="small primary" onClick={openLab}>
-          Open the figure lab
-        </button>
-      </div>
-      <p>
-        People are drawn <strong>{blocky ? "in the old boxes" : "low-poly"}</strong>.
-      </p>
-      <p className="muted">Heroes who chose how they look stay low-poly either way. Creatures (wolves, bears, bats, ghosts, slimes, skeletons) are still boxes.</p>
-      <div className="dev-row">
-        <button className="small primary" onClick={flip}>
-          {blocky ? "Back to low-poly" : "Show the old boxes"}
-        </button>
-      </div>
-    </div>
   );
 }
 
