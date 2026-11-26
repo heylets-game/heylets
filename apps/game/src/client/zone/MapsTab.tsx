@@ -15,6 +15,7 @@
 import { useEffect, useState } from "react";
 import { ABILITIES, MAX_PARTY, CLIMES, DEFAULT_ZONE_OPTIONS, ENEMIES, HERO_CLASSES, SITES, SITE_IDS, SURFACE_INFO, WEAPONS, poolFor, type SurfaceKind, type ZoneBiome, type ZoneSize } from "@gantt-quest/world";
 import { api, PROFILE } from "../api";
+import { DevSection } from "../DevSection";
 import { setZoneDev, useZoneDev, type KitHero } from "./zoneDev";
 
 const SIZES: ZoneSize[] = ["small", "medium", "large"];
@@ -83,7 +84,8 @@ export function MapsTab() {
 
   return (
     <fieldset className="dev-seed dev-maps" disabled={busy}>
-      <p><strong>Make a map</strong> <span className="muted">and walk into it. The start is open ground; the enemy stand beyond it, and a fight starts when you run up to one (or hit one from afar).</span></p>
+      <DevSection id="maps.make" title="Make a map" open>
+      <p className="muted">Walk into it. The start is open ground; the enemy stand beyond it, and a fight starts when you run up to one (or hit one from afar).</p>
       <div className="dev-row">
         <label>
           Size
@@ -134,12 +136,13 @@ export function MapsTab() {
         </label>
         <button className="small primary" onClick={generate}>Make it and walk in</button>
       </div>
+      </DevSection>
 
       {dev.open && send && (
         <>
           <p><strong>Map <span className="selectable code">{dev.open.code}</span></strong> <span className="muted">is on screen.</span></p>
-          <div className="dev-kit-hero">
-            <p><strong>Combat sandbox</strong> <span className="muted">A fight goes by your hand: no enemy takes its turn, no turn ends of itself, nothing is timed, and there is no battle music. Turns come round when you move them on.</span></p>
+          <DevSection id="maps.sandbox" title="Combat sandbox" open>
+            <p className="muted">A fight goes by your hand: no enemy takes its turn, no turn ends of itself, nothing is timed, and there is no battle music. Turns come round when you move them on.</p>
             <div className="dev-row">
               <label><input type="checkbox" checked={dev.flags.sandbox} onChange={(e) => send({ op: "sandbox", on: e.target.checked })} /> Sandbox</label>
               {dev.flags.sandbox && (
@@ -152,8 +155,9 @@ export function MapsTab() {
                 </>
               )}
             </div>
-            {dev.flags.sandbox && <p className="muted">Everyone in the fight is yours to play, on anyone's turn, as often as you like: AP and cooldowns are put back after everything you do. Click an enemy in it to play it: its abilities show over the map.</p>}
-          </div>
+            {dev.flags.sandbox && <p className="muted">Everyone in the fight is yours to play, on anyone's turn, as often as you like: AP and cooldowns are put back after everything you do. Click an enemy in it, or anyone in the turn order, to play them.</p>}
+          </DevSection>
+          <DevSection id="maps.fight" title="Fight controls" open>
           <div className="dev-row">
             <button className="small" onClick={() => send({ op: "heal" })}>Heal and restock everyone</button>
             <button className="small" onClick={() => send({ op: "start_fight" })}>Start a fight here</button>
@@ -166,6 +170,8 @@ export function MapsTab() {
             <label><input type="checkbox" checked={dev.flags.undying} onChange={(e) => send({ op: "undying", on: e.target.checked })} /> Heroes cannot die</label>
             <label><input type="checkbox" checked={dev.flags.timerOff} onChange={(e) => send({ op: "timer", off: e.target.checked })} /> No turn timer</label>
           </div>
+          </DevSection>
+          <DevSection id="maps.place" title="Enemies & ground" open>
           <div className="dev-row">
             <label>
               Enemy
@@ -192,6 +198,8 @@ export function MapsTab() {
               {tool?.tool === "paint" ? "Done painting" : "Paint: click the map"}
             </button>
           </div>
+          </DevSection>
+          <DevSection id="maps.crew" title="Crew" note="stand-ins, and your heroes' kits">
           <div className="dev-row">
             <label>
               Stand-in crewmate
@@ -201,6 +209,7 @@ export function MapsTab() {
           </div>
           {dev.heroes.map((h) => <HeroKit key={h.id} hero={h} send={send} />)}
           <p className="muted">A second player: open <a href={link} target="_blank" rel="noreferrer">this link</a> in another window. Stand-ins are yours to play on their turns.</p>
+          </DevSection>
         </>
       )}
       <p className={`dev-said ${said?.bad ? "bad" : "muted"}`} role="status">{said?.text}</p>

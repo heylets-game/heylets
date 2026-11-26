@@ -17,7 +17,7 @@
 //   Figures       open the figure lab, a stage for trying any figure's
 //                 animations (FigureLab.tsx), or switch the people back to
 //                 their old boxes (this browser only; it reloads the page).
-//   Maps          make a zone (a map to walk and fight on) and walk into it;
+//   Maps/combat   make a zone (a map to walk and fight on) and walk into it;
 //                 while one is on screen, place enemies, paint the ground and
 //                 the rest (zone/MapsTab.tsx).
 //
@@ -48,7 +48,7 @@ const TABS = [
   ["sky", "Sky & sound"],
   ["items", "Items"],
   ["figures", "Figures"],
-  ["maps", "Maps"],
+  ["maps", "Maps/combat"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
 
