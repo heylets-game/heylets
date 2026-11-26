@@ -689,7 +689,7 @@ export function commonCostFor(unit: Pick<Unit, "kind" | "perks">, what: CommonAc
 // ---------- enemies ----------
 
 /** What an enemy's ability does besides its damage, when it lands. */
-export type EnemyAttackKit = Pick<EnemyAbilityDef, "surface" | "push" | "chills" | "splash" | "drain" | "area">;
+export type EnemyAttackKit = Pick<EnemyAbilityDef, "surface" | "push" | "chills" | "splash" | "drain" | "area" | "sweep">;
 
 /** The share of a blow that splashes onto each other hero beside its target (EnemyAbilityDef `splash`). */
 export const SPLASH_SHARE = 0.5;
@@ -819,7 +819,7 @@ export function abilityStrikes(ids: readonly string[], level: number, more = 0):
         behaviour: (a.behaviour ?? (burst ? "burst" : "strike")) as BehaviourId,
         cost: a.cost ?? ACTION_AP,
         cooldown: a.cooldown ?? 0,
-        kit: { surface: a.surface, push: a.push, chills: a.chills, splash: a.splash, drain: a.drain, area: a.area },
+        kit: { surface: a.surface, push: a.push, chills: a.chills, splash: a.splash, drain: a.drain, area: a.area, sweep: a.sweep },
       },
     ];
   });

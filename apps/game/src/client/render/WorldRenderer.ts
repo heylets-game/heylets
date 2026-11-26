@@ -2417,8 +2417,11 @@ export class WorldRenderer {
     const ownQuake = QUAKES.has(ability) ? SIGNATURE_MOVES[ability] : undefined;
     const playsOwn = !!ownQuake && playsFor(ownQuake, a);
     if (QUAKES.has(ability) && !playsOwn) a.lean = -dir * 0.9;
+    // One swing that catches several (a Brute's Great Cleave) is swung once, at the first, and lands on the rest.
+    const signature = SIGNATURE_MOVES[ability];
+    const ownSweep = !!signature?.sweeps && playsFor(signature, a);
     // It faces the first it catches, and stays so for the rest: turning to each would jerk it round mid-move.
-    const caughtAlready = playsOwn && this.clock - (this.quakeAt.get(actorId) ?? -Infinity) <= 1;
+    const caughtAlready = (playsOwn || ownSweep) && this.clock - (this.quakeAt.get(actorId) ?? -Infinity) <= 1;
     if (!a.lying && !caughtAlready) a.turn = a.turnGoal = Math.atan2(t.goal.x - a.goal.x, t.goal.z - a.goal.z);
     const hitAt = t.goal.clone().add(new THREE.Vector3(0, t.size * 0.4, 0.05));
 
@@ -2442,10 +2445,10 @@ export class WorldRenderer {
     }
     // An enemy ability with an animation of its own (signatureMoves.ts), the same one the figure lab plays: ahead of the
     // usual shot, throw or spell, so one from afar is played as its own too (zone/ownMoves.ts).
-    const signature = SIGNATURE_MOVES[ability];
     if (signature && playsFor(signature, a)) {
       const stage = this.moveStage(actorId, targetId, ability, t, dir, landed);
-      signature.play(stage, { figure: a.figure, hitAt, dir, crit, onImpact });
+      if (ownSweep && !caughtAlready) this.quakeAt.set(actorId, this.clock);
+      signature.play(stage, { figure: a.figure, hitAt, dir, crit, onImpact, echo: caughtAlready });
       return;
     }
     const rock = THROWN[ability];

@@ -46,8 +46,8 @@ export interface EnemyAbilityDef {
   saveOr?: Inflict;
   /** Left under the target when it lands. */
   surface?: { kind: SurfaceKind; rounds: number };
-  /** Knocks the target back a hex when it lands. */
-  push?: boolean;
+  /** Knocks the target back when it lands: `true` for a hex, or a number of hexes (it stops early at anything in the way). */
+  push?: boolean | number;
   /**
    * When it lands, its shock pulses out: every other hero beside the target takes half the blow too (SPLASH_SHARE),
    * or a quarter if they save (Agility).
@@ -59,6 +59,12 @@ export interface EnemyAbilityDef {
    * `saveOr` on a failure. Its `surface` is left on all of them.
    */
   area?: number;
+  /**
+   * A wide swing at the hero beside it that carries on through this many rows of three hexes, each an arc one hex
+   * further out (combat.ts sweepHexes): no roll to hit, but everyone in them makes an Agility save, taking half on
+   * a success and suffering `saveOr` on a failure.
+   */
+  sweep?: number;
   /** Freezes water under the target. */
   chills?: boolean;
   /** When it lands, its user heals this share of the damage it dealt (a troll's Chomp). */
@@ -102,8 +108,9 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   chomp: { id: "chomp", name: "Chomp", damage: 6, potency: 3, drain: 0.5, cost: 1, cooldown: 2, weight: 1 },
   dark_bolt: { id: "dark_bolt", name: "Dark Bolt", damage: 7, potency: 4, range: 5, weight: 2 },
   immolate: { id: "immolate", name: "Immolate", damage: 7, potency: 2, range: 5, area: 4, saveOr: { effect: "burning" }, surface: { kind: "fire", rounds: 2 }, cooldown: 3, weight: 2 },
-  maul: { id: "maul", name: "Maul", damage: 11, potency: 3, saveOr: { effect: "stunned", turns: 1 }, weight: 2 },
-  brute_shove: { id: "brute_shove", name: "Shove", damage: 6, potency: 4, push: true, weight: 1 },
+  beatdown: { id: "beatdown", name: "Beatdown", damage: 11, potency: 3, saveOr: { effect: "prone", turns: 1 }, weight: 1 },
+  great_cleave: { id: "great_cleave", name: "Great Cleave", damage: 9, potency: 3, sweep: 2, cooldown: 4, weight: 2 },
+  battering_ram: { id: "battering_ram", name: "Battering Ram", damage: 6, potency: 4, push: 3, cooldown: 2, weight: 1 },
   volley: { id: "volley", name: "Volley", damage: 6, potency: 4, range: 6, weight: 2 },
   barbed_arrow: { id: "barbed_arrow", name: "Barbed Arrow", damage: 5, potency: 3, range: 6, saveOr: { effect: "bleeding" }, weight: 2 },
   savage_bite: { id: "savage_bite", name: "Savage Bite", damage: 9, potency: 5, saveOr: { effect: "bleeding" }, weight: 2 },
