@@ -7,7 +7,7 @@
 //   +---------------------------------------------------------+
 //   | [ hand ][ hand ] | [= health =] (Lv 7) [= energy =] | [ bag ] |
 //   | [        ]       | ========= experience =========== | [     ] |
-//   |     rest         | [ ][ ][ ][ ][ ][ ][ ][ ][ ][ ]   | L I  *  |
+//   |     rest         | [ ][ ][ ][ ][ ][ ][ ][ ][ ][ ]   |  L  *   |
 //   |                  | [ ][ ][ ][ ][ ][ ][ ][ ][ ][ ]   |         |
 //   +---------------------------------------------------------+
 //
@@ -15,8 +15,8 @@
 // fight, the emote wheel). In the middle: health, a plaque
 // with the hero's level (it opens the logbook) and energy (gathering outings
 // left today), the experience bar under them, and the slots under that.
-// Right: the bag, and under it small tabs for the logbook, the bag's key
-// and the menu. A view
+// Right: the bag (I or B opens it too), and under it small tabs for the
+// logbook and the menu. A view
 // may hand the bar a turn (`turn`: the plaque is then its clock, pressed to
 // end it) and points to show as pips over it (`pips`); none does now, a fight
 // on the tiles having a turn bar of its own (zone/TurnBar.tsx). Nothing on the
@@ -420,7 +420,7 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
           {slots && <span className="hud-slots" style={{ "--cols": BAR_ROW } as CSSProperties}>{shown.slice(0, BAR_ROW * 2).map(slotButton)}</span>}
         </span>
 
-        {/* Right: the bag, and under it the tabs for the logbook, the bag and the menu. */}
+        {/* Right: the bag, and under it the tabs for the logbook and the menu. */}
         <span className="hud-side">
           <button
             className="hud-slot bag"
@@ -434,7 +434,6 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
           </button>
           <span className="hud-tabs">
             <button className={`hud-tab ${news ? "news" : ""}`} aria-label="Logbook" disabled={!onBook} onClick={onBook} {...hover(<Tip name="Logbook" line={news ? "Something to spend or pick" : "Your hero, stats and skills"} keys="L" />)}>L</button>
-            <button className="hud-tab" aria-label="Sea bag" disabled={!onBag || !!bagBlocked} onClick={onBag} {...hover(<Tip name="Sea bag" line={bagBlocked} keys="I" />)}>I</button>
             <span className="hud-tab cog" {...hover(<Tip name="Menu" line="Settings, your account and the way out" keys="Esc" />)}>{menu}</span>
           </span>
         </span>
