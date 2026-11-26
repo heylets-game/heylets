@@ -89,6 +89,14 @@ const SMASHES = new Set(["Club Smash"]);
 const HEAVY_SWINGS = new Set([...SMASHES, "Cleave", "Eviscerate", "Crushing Maul", "Crushing Strike", "Sweeping Ruin", "Stone Fist", "Shockwave"]);
 /** A ground-pound (the ogre's Stomp, the guardian's Quake): no step in; the ground shakes out from the attacker's feet and jolts whoever it reaches. */
 const QUAKES = new Set(["Stomp", "Quake"]);
+/**
+ * Melee blows struck twice over (the Bandit's Cheap Shot): two quick swings, each throwing a red wave off the blade
+ * that lands as a slash, the second crossing the first.
+ */
+const DOUBLE_CUTS = new Set(["Cheap Shot"]);
+const DOUBLE_CUT_RED = "#e0313f";
+/** Seconds after the first cut lands that the second swing begins. */
+const DOUBLE_CUT_GAP = 0.08;
 /** How an attack travels, for its sound: the same split the effects above are drawn by. */
 const attackStyle = (ability: string): AttackStyle => (SPELL_COLOR[ability] ? "magic" : ARROW_ABILITIES.has(ability) || THROWN[ability] ? "ranged" : "melee");
 const isBoss = (kind: string) => !!ENEMIES[kind]?.boss;
@@ -2326,6 +2334,33 @@ export class WorldRenderer {
       const wait = (kind === "arrow" && (a.figure.loose() || a.figure.fire())) || (spell && a.figure.play()) || a.figure.cast();
       if (wait > 0) this.later(fly, wait);
       else fly();
+      return;
+    }
+    if (DOUBLE_CUTS.has(ability)) {
+      // Each cut sends a red wave off the blade at the target, and it lands there as a slash: the first one way, the
+      // second the other, so the two cross. The blow is told (onImpact) when the second lands.
+      const cut = (second: boolean, after: () => void) => {
+        const from = a.root.position.clone().add(new THREE.Vector3(dir * 0.45, a.size * 0.55, 0.05));
+        this.spawnFx("wave", DOUBLE_CUT_RED, flip, { from, to: hitAt, life: 0.12, size: [0.9, 1.7], spin: (second ? dir : -dir) * 0.35, fade: false, onEnd: () => {
+          this.spawnFx("slash", perfect ? "#ffd23f" : DOUBLE_CUT_RED, second ? !flip : flip, { from: hitAt, to: hitAt, life: 0.26, size: [1.3, 2.3], spin: (second ? dir : -dir) * 0.9, fade: true });
+          if (landed) t.kick.set(dir * 0.1, 0, 0);
+          after();
+        } });
+      };
+      const first = a.figure.strike("light");
+      if (first <= 0) {
+        this.lunge(actorId, targetId);
+        cut(false, () => {});
+        this.later(() => cut(true, onImpact), 0.2);
+        return;
+      }
+      this.later(() => {
+        cut(false, () => {});
+        this.later(() => {
+          sounds.attack(ability, attackStyle(ability), this.fighter(actorId), this.spot(actorId));
+          this.later(() => cut(true, onImpact), a.figure.strike("light"));
+        }, DOUBLE_CUT_GAP);
+      }, first);
       return;
     }
     // Melee: the figure winds up, steps half way across its tile and strikes (a creature, with no such
