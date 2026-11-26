@@ -3202,8 +3202,9 @@ describe("the Mage's class abilities", () => {
     expect(state.weather).toHaveLength(0);
   });
 
-  it("Chain Lightning: leaps to the nearest enemy within 2 hexes it has not struck, on and on, each struck once", () => {
-    for (let seed = 1; seed <= 6; seed++) {
+  it("Chain Lightning: leaps to the nearest enemy within 2 hexes it has not struck, on and on, each struck once, until it misses", () => {
+    const lengths = new Set<number>();
+    for (let seed = 1; seed <= 24; seed++) {
       let { state, dummy } = party();
       state.rng = seed;
       const chain = [at(7, 6), at(9, 6), at(10, 6), at(8, 7)].map((p) => addDummy(state, p));
@@ -3211,12 +3212,21 @@ describe("the Mage's class abilities", () => {
       const apart = addDummy(state, at(13, 8));
       const events: ZoneEvent[] = [];
       state = must(state, { type: "use", by: "ann", unit: "ann", ability: "chain_lightning", target: chain[0] }, events);
-      const struck = events.filter((e) => e.t === "roll" && e.roll.kind === "attack").map((e) => e.t === "roll" && e.roll.target);
+      const rolls = events.flatMap((e) => (e.t === "roll" && e.roll.kind === "attack" ? [e.roll] : []));
+      const struck = rolls.map((r) => r.target);
+      expect(struck[0]).toBe(chain[0]);
       expect(new Set(struck).size).toBe(struck.length);
-      expect(new Set(struck)).toEqual(new Set(chain));
+      for (const id of struck) expect(chain).toContain(id);
       expect(struck).not.toContain(apart);
       expect(struck).not.toContain(dummy);
+      // Every strike but the last hit; the chain only stops short on a miss.
+      expect(rolls.slice(0, -1).every((r) => r.ok)).toBe(true);
+      if (rolls[rolls.length - 1].ok) expect(new Set(struck)).toEqual(new Set(chain));
+      lengths.add(struck.length);
     }
+    // Over the seeds, it sometimes runs the whole chain and sometimes is cut short.
+    expect(lengths.has(4)).toBe(true);
+    expect([...lengths].some((n) => n < 4)).toBe(true);
   });
 
   it("Roar of Thunder: never misses, always throws the enemy a hex back, and Stuns it unless it saves", () => {
