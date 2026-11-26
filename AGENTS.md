@@ -6,7 +6,7 @@ The game is **The Harbor of Heylets** in `apps/game`, with its rules in `package
 
 ## Build things to be reused
 
-When you design a system or a mechanic, or change one, write it so it can be used again: general, driven by data, not tied to the one case in front of you. Expect that it will be. A new enemy ability, for instance, should be a shape or an effect any ability can take, not code for that enemy alone. Write a one-off only when there is a clear reason to and a clear gain from it, and say what that is in a comment.
+When you design a system or a mechanic, or change one, write it so it can be used again: general, driven by data, not tied to the one case in front of you. Expect that it will be. A new enemy ability, for instance, should be a shape or an effect any ability can take, not code for that enemy alone. That is one example, not the limit of the rule: it holds for everything, from rules and content to the UI, animations, the server and dev tools. Write a one-off only when there is a clear reason to and a clear gain from it, and say what that is in a comment.
 
 ## Release notes for the notice board
 
