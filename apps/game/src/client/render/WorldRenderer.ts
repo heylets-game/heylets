@@ -2381,7 +2381,9 @@ export class WorldRenderer {
     const ownQuake = QUAKES.has(ability) ? SIGNATURE_MOVES[ability] : undefined;
     const playsOwn = !!ownQuake && (!ownQuake.only || ownQuake.only.includes(a.kind));
     if (QUAKES.has(ability) && !playsOwn) a.lean = -dir * 0.9;
-    if (!a.lying) a.turn = a.turnGoal = Math.atan2(t.goal.x - a.goal.x, t.goal.z - a.goal.z);
+    // It faces the first it catches, and stays so for the rest: turning to each would jerk it round mid-move.
+    const caughtAlready = playsOwn && this.clock - (this.quakeAt.get(actorId) ?? -Infinity) <= 1;
+    if (!a.lying && !caughtAlready) a.turn = a.turnGoal = Math.atan2(t.goal.x - a.goal.x, t.goal.z - a.goal.z);
     const hitAt = t.goal.clone().add(new THREE.Vector3(0, t.size * 0.4, 0.05));
 
     if (QUAKES.has(ability)) {

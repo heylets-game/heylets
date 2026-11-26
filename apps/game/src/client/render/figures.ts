@@ -1689,11 +1689,13 @@ const SLAM: Blow = {
 const SEAT_DROP = {
   hit: 0.62,
   over: 1.65,
-  up: [[0, 0], [0.24, 0], [0.42, 6.5], [0.62, 0]] as Keys,
-  seat: [[0, 0], [0.3, 0], [0.5, 0.85], [0.62, 1], [1.15, 1], [1.5, 0]] as Keys,
-  coil: [[0, 0], [0.2, 0.8], [0.26, 0.2], [0.34, 0]] as Keys,
-  arms: [[0, 0], [0.2, -0.8], [0.3, 1], [0.5, 0.8], [0.62, 0.2], [0.9, 0], [1.65, 0]] as Keys,
-  jolt: [[0, 0], [0.62, 0], [0.66, 1], [0.8, 0.25], [0.95, 0]] as Keys,
+  /** Off the ground from `spring` till it lands at `hit`, `high` at the top: a true arc, so it comes down hard. */
+  spring: 0.26,
+  high: 6.5,
+  seat: [[0, 0], [0.3, 0], [0.56, 1], [1.15, 1], [1.5, 0]] as Keys,
+  coil: [[0, 0], [0.2, 0.8], [0.3, 0]] as Keys,
+  arms: [[0, 0], [0.2, -0.8], [0.34, 1], [0.62, 0.2], [0.9, 0]] as Keys,
+  jolt: [[0, 0], [0.62, 0], [0.7, 1], [0.84, 0.25], [1.0, 0]] as Keys,
   rise: [[0, 0], [1.15, 0], [1.3, 0.6], [1.5, 0.3], [1.65, 0]] as Keys,
   lean: [[0, 0], [0.2, 0.35], [0.3, 0], [0.62, -0.1], [1.15, 0], [1.3, 0.4], [1.65, 0]] as Keys,
 };
@@ -2785,11 +2787,15 @@ function biped(top: THREE.Group, parts: Part[], drawnElbow = ELBOW) {
       const jolt = along(d.jolt, t);
       const arms = along(d.arms, t);
       // Crouched to spring and to get back up: the feet on the ground for both, then the legs go out ahead to sit.
+      // The sit sets the hips' height itself, so what the knees take off them goes as far into it as it is.
+      const hips = top.position.y;
       knees(0.75 * along(d.coil, t) + along(d.rise, t));
+      top.position.y = hips + (top.position.y - hips) * (1 - seat);
       bow(along(d.lean, t), 0);
       head.joint.rotation.x -= along(d.lean, t) * 0.5;
       floorSit(seat);
-      top.position.y += along(d.up, t);
+      const air = (t - d.spring) / (d.hit - d.spring);
+      if (air > 0 && air < 1) top.position.y += 4 * d.high * air * (1 - air);
       // Down on its backside: rocked back, the legs bounced up off the ground, the hips squashed into it.
       torso.joint.rotation.x -= 0.35 * jolt;
       head.joint.rotation.x += 0.3 * jolt;
