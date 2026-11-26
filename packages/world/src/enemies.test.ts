@@ -91,3 +91,12 @@ describe("the training dummy", () => {
     expect(dummy.hp).toBeGreaterThan(Math.max(...Object.values(ENEMIES).filter((e) => !e.boss && e.kind !== "dummy").map((e) => e.hp)));
   });
 });
+
+describe("the cultist", () => {
+  it("bolts from range, and every few turns throws fire onto a clump of four hexes", () => {
+    const { cultist } = ENEMIES;
+    const immolate = attacksOf(cultist).find((a) => a.name === "Immolate")!;
+    expect(immolate).toMatchObject({ damage: 7, range: 5, area: 4, cooldown: 3, weight: 2, saveOr: { effect: "burning" }, surface: { kind: "fire" } });
+    expect(attacksOf(cultist).find((a) => a.name === "Dark Bolt")).toMatchObject({ weight: 2 });
+  });
+});

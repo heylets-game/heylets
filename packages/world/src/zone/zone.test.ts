@@ -16,6 +16,7 @@ import { propOf } from "./props";
 import { SITE_IDS, backdropOf, siteInside, type SiteId } from "./sites";
 import { ACTION_AP, AP_MAX, AP_TURN, AQUEOUS, RALLY, SUMMON_AP_TURN, AURAS, CHART, COMMON_ACTIONS, BLOCK, BONUS_AP, BOLSTER, AGAINST_WAVES, ENDURE, STAND_STRONG, STURDY, ENEMY_BURST, ENEMY_KIT, ENEMY_MOVE_AP, EXPLORE_ROUND_MS, FLEE_RANGE, LIGHT_RADIUS, SHIELD_SET_ASIDE, TACTICS, TORCH_GROUND_ROUNDS, TORCH_HELD_ROUNDS, TORCH_ROUND_MS, abilityDice as abilityDiceFor, commonCost, enemyHp, DEFAULT_MIND, abilityStrikes, enemyMove, enemyStrikes, mindOf, tacticOf, unitStrikes } from "./kit";
 import { MAX_CATCHUP_ROUNDS, nextTick } from "./clock";
+import { clusterHexes } from "./weather";
 import { d20, diceAverage, diceFor, heroMove, hitChance } from "./rules";
 import { createZone, ensureMouth, loadZone, spentOut, standInHero, stepZone, zoneView } from "./zone";
 import { DELVE_CRATES, DELVE_GLOWCAPS as GLOWCAP_COUNT, generateDelve } from "./delve";
@@ -2069,6 +2070,38 @@ describe("fleeing", () => {
       expect(unit(ctx.state, "ann").conditions.some((c) => c.kind === "stunned")).toBe(false);
     }
     expect(seen.size).toBe(2);
+  });
+
+  it("throws a Cultist's Immolate onto four hexes round its target: each hero there saves for half, and fire is left on all four", () => {
+    let state = board();
+    state.aiOff = true;
+    const ann = at(5, 6);
+    const [boAt] = hexNeighbors(ann, GRID);
+    const cultAt = at(5, 2);
+    const hexes = clusterHexes(state, cultAt, ann, 4);
+    expect(hexes).toHaveLength(4);
+    // Cy stands well off it.
+    const cyAt = at(5, 10);
+    expect(hexes.every((p) => hexDistance(p, cyAt) > 1)).toBe(true);
+    for (const [id, pos] of [["ann", ann], ["bo", boAt], ["cy", cyAt]] as const) Object.assign(hero(state, id, "qa_paladin", pos), { hp: 900, maxHp: 900 });
+    const caught = ["ann", "bo"].filter((id) => hexes.some((p) => hexDistance(p, unit(state, id).pos) === 0));
+    expect(caught).toContain("ann");
+    const cult = enemy(state, "cultist", cultAt);
+    state = provoke(state);
+    const immolate = enemyStrikes("cultist", 1).find((s) => s.name === "Immolate")!;
+    const events: ZoneEvent[] = [];
+    const ctx: Ctx = { state: structuredClone(state), rng: makeRng(3), events, effects: [] };
+    enemyAct(ctx, unit(ctx.state, cult.id), immolate, unit(ctx.state, "ann"));
+    expect(events).toContainEqual(expect.objectContaining({ t: "used", name: "Immolate", target: "ann", at: ann }));
+    // No roll to hit: a save for each one caught, and a hit on each, full or half.
+    expect(events.some((e) => e.t === "roll" && e.roll.kind === "attack")).toBe(false);
+    for (const id of caught) {
+      const save = events.find((e): e is Extract<ZoneEvent, { t: "roll" }> => e.t === "roll" && e.roll.id === id)!;
+      const hit = events.find((e): e is Extract<ZoneEvent, { t: "hit" }> => e.t === "hit" && e.target === id)!;
+      expect(hit.amount).toBe(Math.max(1, save.roll.ok ? Math.floor(hit.dice!.total / 2) : hit.dice!.total));
+    }
+    expect(events.some((e) => e.t === "hit" && e.target === "cy")).toBe(false);
+    for (const p of hexes) expect(ctx.state.surfaces[posKey(p)]?.kind).toBe("fire");
   });
 
   it("brings a hero's class abilities with them, after the weapon's, and refreshes them on a return", () => {

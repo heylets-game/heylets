@@ -14,6 +14,7 @@ import { has } from "./engine";
 import { HIGH_REACH, inFight, reachFrom, seesFor, strikes } from "./geometry";
 import { ENEMY_BURST, SPLASH_SHARE, type EnemyStrike, type Mind } from "./kit";
 import { diceAverage } from "./rules";
+import { clusterHexes } from "./weather";
 import { HARMFUL } from "./surfaces";
 import type { Unit, ZoneState } from "./types";
 
@@ -83,7 +84,10 @@ const strike: Behaviour = {
       if (!strikeReaches(look.state, look.enemy, from, attack, hero)) continue;
       // A blow that splashes is worth its share again for every other hero beside the one it is aimed at.
       const beside = attack.kit.splash ? targets.filter((h) => h !== hero && hexDistance(h.pos, hero.pos) === 1).length : 0;
-      let worth = average * (1 + beside * SPLASH_SHARE) * (look.whim?.(attack, hero) ?? 1);
+      // One thrown onto a clump of hexes is worth what a burst is to each hero on them: about half save for half.
+      const area = attack.kit.area ? clusterHexes(look.state, from, hero.pos, attack.kit.area) : null;
+      const share = area ? 0.75 * targets.filter((h) => area.some((p) => hexDistance(p, h.pos) === 0)).length : 1 + beside * SPLASH_SHARE;
+      let worth = average * share * (look.whim?.(attack, hero) ?? 1);
       if (leaps(attack)) worth *= leapRisk(look.state, look.enemy, from, lungeLanding(look.state, look.enemy, from, attack, hero)!);
       if (has(hero, "taunting")) worth *= 3;
       if (!best || worth > best.worth) best = { attack, target: hero, worth };

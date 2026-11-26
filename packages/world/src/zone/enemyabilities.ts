@@ -48,8 +48,17 @@ export interface EnemyAbilityDef {
   surface?: { kind: SurfaceKind; rounds: number };
   /** Knocks the target back a hex when it lands. */
   push?: boolean;
-  /** When it lands, every other hero beside the target takes half the blow too (SPLASH_SHARE), with no save. */
+  /**
+   * When it lands, its shock pulses out: every other hero beside the target takes half the blow too (SPLASH_SHARE),
+   * or a quarter if they save (Agility).
+   */
   splash?: boolean;
+  /**
+   * Thrown at the target's hex, it lands on this many hexes together round it (weather.ts clusterHexes), not on the
+   * target alone: no roll to hit, but everyone on them makes an Agility save, taking half on a success and suffering
+   * `saveOr` on a failure. Its `surface` is left on all of them.
+   */
+  area?: number;
   /** Freezes water under the target. */
   chills?: boolean;
   /**
@@ -87,7 +96,7 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   rake: { id: "rake", name: "Rake", damage: 7, potency: 4, saveOr: { effect: "bleeding" }, weight: 2 },
   hurl_rock: { id: "hurl_rock", name: "Hurl Rock", damage: 6, potency: 3, range: 5, saveOr: { effect: "stunned", turns: 1 }, weight: 1 },
   dark_bolt: { id: "dark_bolt", name: "Dark Bolt", damage: 7, potency: 4, range: 5, weight: 2 },
-  immolate: { id: "immolate", name: "Immolate", damage: 4, potency: 2, range: 5, saveOr: { effect: "burning" }, surface: { kind: "fire", rounds: 2 }, weight: 1 },
+  immolate: { id: "immolate", name: "Immolate", damage: 7, potency: 2, range: 5, area: 4, saveOr: { effect: "burning" }, surface: { kind: "fire", rounds: 2 }, cooldown: 3, weight: 2 },
   maul: { id: "maul", name: "Maul", damage: 11, potency: 3, saveOr: { effect: "stunned", turns: 1 }, weight: 2 },
   brute_shove: { id: "brute_shove", name: "Shove", damage: 6, potency: 4, push: true, weight: 1 },
   volley: { id: "volley", name: "Volley", damage: 6, potency: 4, range: 6, weight: 2 },

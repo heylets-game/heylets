@@ -250,7 +250,7 @@ const ENEMY_FX: Record<string, Fx> = {
   Volley: fx("arrow", "#e8dcc0"),
   "Barbed Arrow": fx("arrow", "#e8dcc0"),
   "Dark Bolt": fx("bolt", "#a78bfa"),
-  Immolate: fx("bolt", "#ff7a2a"),
+  Immolate: fx("lob", "#ff7a2a"),
   "Acid Splash": fx("bolt", "#f0e44a"),
 };
 

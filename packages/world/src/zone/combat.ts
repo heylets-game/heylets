@@ -1054,7 +1054,7 @@ function lungeAt(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit): bool
 export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | null): void {
   const { state } = ctx;
   const dc = 8 + attack.potency;
-  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name, target: target?.id });
+  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name, target: target?.id, ...(attack.kit.area && target ? { at: target.pos } : {}) });
   const leave = (victim: Unit, save: boolean) => {
     if (victim.down || !attack.saveOr) return;
     const effect = attack.saveOr.effect;
@@ -1072,6 +1072,19 @@ export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Uni
     return;
   }
   if (!target) return;
+  // Thrown at their hex, it lands on a clump of hexes round it: everyone there (in the fight) saves for half, and
+  // whatever it leaves on the ground is left on all of it.
+  if (attack.kit.area) {
+    const hexes = clusterHexes(state, enemy.pos, target.pos, attack.kit.area);
+    const dice = rollShown(ctx.rng, attack.dice);
+    for (const victim of state.units.filter((u) => u.side !== enemy.side && !u.down && !unseen(u) && inFight(state, u.id) && hexes.some((p) => sameHex(p, u.pos)))) {
+      const saved = saveRoll(ctx, victim, "agi", dc, attack.name).ok;
+      damage(ctx, victim, saved ? Math.floor(dice.total / 2) : dice.total, { actor: enemy.id, what: attack.name, dice, halved: saved });
+      if (!saved) leave(victim, false);
+    }
+    if (attack.kit.surface) placeSurface(ctx, hexes, attack.kit.surface.kind, attack.kit.surface.rounds, enemy.id);
+    return;
+  }
   // A leap: through the air to beside them first, then a blow by hand.
   const leap = leaps(attack);
   if (leap && !lungeAt(ctx, enemy, attack, target)) return;
