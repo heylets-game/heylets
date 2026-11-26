@@ -90,6 +90,8 @@ const SMASHES = new Set(["Club Smash"]);
 const HEAVY_SWINGS = new Set([...SMASHES, "Cleave", "Eviscerate", "Crushing Maul", "Crushing Strike", "Sweeping Ruin", "Stone Fist", "Shockwave"]);
 /** A ground-pound (the ogre's Stomp, the guardian's Quake): no step in; the ground shakes out from the attacker's feet and jolts whoever it reaches. */
 const QUAKES = new Set(["Stomp", "Quake"]);
+/** Whether a signature move plays for this unit: a unit's `kind` is its sprite key (spriteKey), the kind before the first "|". */
+const playsFor = (move: { only?: readonly string[] }, unit: { kind: string }): boolean => !move.only || move.only.includes(unit.kind.split("|")[0]);
 /** How an attack travels, for its sound: the same split the effects above are drawn by. */
 const attackStyle = (ability: string): AttackStyle => (SPELL_COLOR[ability] ? "magic" : ARROW_ABILITIES.has(ability) || THROWN[ability] ? "ranged" : "melee");
 const isBoss = (kind: string) => !!ENEMIES[kind]?.boss;
@@ -2379,7 +2381,7 @@ export class WorldRenderer {
     // figure's own gesture, and a blow in the hand its own strike (see below).
     // One with an animation of its own (an Ogre's Stomp, a seat drop) is not leant: it plays that instead.
     const ownQuake = QUAKES.has(ability) ? SIGNATURE_MOVES[ability] : undefined;
-    const playsOwn = !!ownQuake && (!ownQuake.only || ownQuake.only.includes(a.kind));
+    const playsOwn = !!ownQuake && playsFor(ownQuake, a);
     if (QUAKES.has(ability) && !playsOwn) a.lean = -dir * 0.9;
     // It faces the first it catches, and stays so for the rest: turning to each would jerk it round mid-move.
     const caughtAlready = playsOwn && this.clock - (this.quakeAt.get(actorId) ?? -Infinity) <= 1;
@@ -2445,7 +2447,7 @@ export class WorldRenderer {
     }
     // An enemy ability with an animation of its own (signatureMoves.ts), the same one the figure lab plays.
     const signature = SIGNATURE_MOVES[ability];
-    if (signature && (!signature.only || signature.only.includes(a.kind))) {
+    if (signature && playsFor(signature, a)) {
       const stage = this.moveStage(actorId, targetId, ability, t, dir, landed);
       signature.play(stage, { figure: a.figure, hitAt, dir, crit, onImpact });
       return;
