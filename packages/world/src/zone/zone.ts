@@ -183,9 +183,13 @@ export function ensureEnemyAbilities(state: ZoneState): ZoneState {
 /** Conditions saved under a name they no longer go by, and the one they go by now. */
 const RENAMED: Record<string, Condition> = { glitched: "fumbling" };
 
-/** A zone saved with conditions under an old name (RENAMED) has them under the new one. */
+/**
+ * A zone saved with conditions under an old name (RENAMED) has them under the new one; and one saved from before
+ * conditions were things of fights alone has none left on anyone out of a fight but what outlasts fights (shedOutside).
+ */
 function renameConditions(state: ZoneState): ZoneState {
   for (const u of state.units) for (const c of u.conditions) c.kind = RENAMED[c.kind] ?? c.kind;
+  shedOutside(state, state.units);
   return state;
 }
 
@@ -375,6 +379,18 @@ function reachIn(ctx: Ctx, unit: Unit, touched: Unit[]): void {
   if (!touched.some((u) => u.id !== unit.id && enc.order.includes(u.id))) return;
   enter(ctx, enc, unit);
   ctx.events.push({ t: "fight_join", id: unit.id });
+}
+
+/**
+ * Whether what a unit does to these (an ability, a throw, a shove) opens a fight or joins one: it reaches a band
+ * (`struck`, the groups it is about to rouse), or someone already in a fight. Then what it leaves takes hold
+ * (Ctx.opening) on whoever it touches, though the fight begins only once it is done.
+ */
+const opens = (state: ZoneState, struck: string[], touched: Unit[]): boolean => struck.length > 0 || touched.some((u) => inFight(state, u.id));
+
+/** After an opening (opens): whoever it touched who is in no fight after all keeps nothing it left them (leaveFight). */
+function shedOutside(state: ZoneState, units: Unit[]): void {
+  for (const u of units) if (!inFight(state, u.id)) leaveFight(u);
 }
 
 /**
@@ -1229,9 +1245,12 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
     if (tactic.cooldown) unit.cooldowns[action.ability] = tactic.cooldown;
     // A heal splashed among enemies is a kindness, as a healing potion thrown is: it starts nothing.
     const struck = tactic.splash ? [] : touched.filter((u) => u.side === "enemy" && !u.down).map((u) => u.group!);
+    ctx.opening = opens(state, struck, touched);
     resolveAbility(ctx, unit, action.ability, aim);
+    ctx.opening = false;
     engage(ctx, struck, unit);
     reachIn(ctx, unit, touched);
+    shedOutside(state, [unit, ...touched]);
     return null;
   }
   if (action.type === "common") {
@@ -1243,9 +1262,13 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
     if (back) return back;
     const cost = spend(budget, commonCostFor(unit, action.what, action.what === "jump" && isBlink(state, unit, aim.at)));
     if (cost) return cost;
+    const struck = action.what === "shove" && target?.group ? [target.group] : [];
+    ctx.opening = !!target && opens(state, struck, [target]);
     doCommon(ctx, unit, action.what, aim, budget);
-    if (action.what === "shove" && target?.group) engage(ctx, [target.group], unit);
+    ctx.opening = false;
+    engage(ctx, struck, unit);
     if (target) reachIn(ctx, unit, [target]);
+    shedOutside(state, [unit, ...(target ? [target] : [])]);
     if (action.what === "flee") flee(ctx, unit);
     return null;
   }
@@ -1343,9 +1366,12 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
   if (cost) return cost;
   // A healing potion among enemies is a kindness; anything else is a declaration.
   const struck = def.heal ? [] : touched.filter((u) => u.side === "enemy" && !u.down).map((u) => u.group!);
+  ctx.opening = opens(state, struck, touched);
   throwItem(ctx, unit, action.item, action.at);
+  ctx.opening = false;
   engage(ctx, struck, unit);
   reachIn(ctx, unit, touched);
+  shedOutside(state, [unit, ...touched]);
   return null;
 }
 

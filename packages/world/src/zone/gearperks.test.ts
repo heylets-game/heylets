@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { posKey, type HexPos } from "@gantt-quest/core";
-import { at, fails, flatBoard, has, must, standEnemy, standHero, unit } from "../test/zoneBoard";
+import { at, fails, flatBoard, has, inAFight, must, standEnemy, standHero, unit } from "../test/zoneBoard";
 import { ENEMIES } from "../content";
 import { BLINK_AP, type Perks } from "../gear";
 import type { Tile } from "../map";
@@ -88,7 +88,10 @@ describe("Ice Cleats (sure-footed)", () => {
     const state = board();
     ann(state, at(4, 6), { sure_footed: 1 });
     lay(state, "water", [at(5, 6)]);
-    expect(has(must(state, move(at(5, 6))), "ann", "wet")).toBe(true);
+    // Out of a fight nothing takes hold but Lucky (engine.ts OUTLASTS_FIGHT): the wading is done in one.
+    expect(has(must(state, move(at(5, 6))), "ann", "wet")).toBe(false);
+    addCondition(ctxOf(inAFight(state, "ann")), unit(state, "ann"), "wet", 2);
+    expect(has(state, "ann", "wet")).toBe(true);
   });
 });
 
@@ -204,10 +207,12 @@ describe("what gear keeps off", () => {
     for (const [perk, kind] of cases) {
       const state = board();
       ann(state, at(4, 6), { [perk]: 1 });
+      inAFight(state, "ann");
       addCondition(ctxOf(state), unit(state, "ann"), kind, 2);
       expect(has(state, "ann", kind)).toBe(false);
       const bare = board();
       ann(bare, at(4, 6));
+      inAFight(bare, "ann");
       addCondition(ctxOf(bare), unit(bare, "ann"), kind, 2);
       expect(has(bare, "ann", kind)).toBe(true);
     }

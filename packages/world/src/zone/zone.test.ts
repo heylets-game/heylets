@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { GRID, at, fails, flatBoard, has, must, standEnemy as enemy, standHero, unit } from "../test/zoneBoard";
+import { GRID, at, fails, flatBoard, has, inAFight, must, standEnemy as enemy, standHero, unit } from "../test/zoneBoard";
 import { STARTING_STATS, hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/core";
 import { BEHAVIOURS } from "./behaviours";
 import { ENEMY_ABILITIES } from "./enemyabilities";
 import { ABILITIES, EFFECT_TICK, ENEMIES, HERO_CLASSES, SUNDERED_DEFENCE, REELING_AP, WEAPONS, abilitiesFor } from "../content";
 import { CLIMES, type Tile } from "../map";
 import { makeRng } from "../rng";
-import { abilityArea, checkAbility, checkCommon, courseFor, crateBlow, enemyAct, moveLeft, walk, walkAp, wayBetween } from "./combat";
+import { FIGHTS_ONLY, abilityArea, checkAbility, checkCommon, courseFor, crateBlow, enemyAct, moveLeft, walk, walkAp, wayBetween } from "./combat";
 import { addCondition, addShield, addStacks, attackContext, burnOf, damage, defenceOf, shieldOf, shieldUnit, type Ctx } from "./engine";
 import { shantyOf, shantyRadius, songsOn } from "./song";
 import { chartOf, constellationLinks } from "./stars";
@@ -1874,7 +1874,7 @@ describe("fleeing", () => {
     expect(state.encounter!.order).toContain("ann");
   });
 
-  it("keeps a hero who fled from reaching back into the fight from outside it, but not from looking after themselves", () => {
+  it("keeps a hero who fled from reaching back into the fight from outside it, or using what is for fights alone", () => {
     const { state: start, wolf } = pair("devops_mage");
     const out = must(start, flee());
     // Sturdy enough to outlast a shock, so the fight is still on to be in.
@@ -1884,8 +1884,8 @@ describe("fleeing", () => {
     expect(fails(out, { type: "use", by: "ann", unit: "ann", ability: "shock", target: wolf })).toMatch(/got away from that fight/);
     expect(fails(out, { type: "use", by: "ann", unit: "ann", ability: "mend", target: "bo" })).toMatch(/got away from that fight/);
     expect(fails(out, { type: "throw", by: "ann", unit: "ann", item: "healing", at: unit(out, "bo").pos })).toMatch(/got away from that fight/);
-    const self = must(out, { type: "use", by: "ann", unit: "ann", ability: "mend", target: "ann" });
-    expect(self.encounter!.order).not.toContain("ann");
+    // Mending themselves is for a fight, and they are out of it (onlyInFights).
+    expect(fails(out, { type: "use", by: "ann", unit: "ann", ability: "mend", target: "ann" })).toBe(FIGHTS_ONLY);
     // A hero who never was in it, shooting in from further off than JOIN_RANGE, is in it too.
     let far = board();
     far.aiOff = true;
@@ -3085,6 +3085,7 @@ describe("the Paladin's class abilities", () => {
       let { state, dummy, spare } = party();
       const second = enemy(state, "dummy", spare).id;
       const far = enemy(state, "dummy", at(8, 6)).id;
+      inAFight(state, second, far);
       expect(hexDistance(unit(state, "ann").pos, unit(state, second).pos)).toBe(1);
       state.rng = seed;
       const events: ZoneEvent[] = [];
@@ -5246,6 +5247,7 @@ describe("Bard weapons", () => {
   it("Second Wind on an ally: they are healed and Inspired, and it is still there on their own turn", () => {
     let { state } = duel("dummy", "frontend_bard", at(5, 6), at(9, 6));
     hero(state, "bo", "qa_paladin", at(5, 7));
+    inAFight(state, "bo");
     unit(state, "ann").abilities = ["encore"];
     unit(state, "bo").hp = 5;
     state = must(state, { type: "use", by: "ann", unit: "ann", ability: "encore", target: "bo" });
@@ -5339,6 +5341,7 @@ describe("Bard weapons", () => {
     // The duel has stepped Ann up to (6, 6): Bo is 1 hex off, Cy 3.
     hero(state, "bo", "qa_paladin", at(7, 6));
     hero(state, "cy", "refactor_rogue", at(9, 6));
+    inAFight(state, "bo", "cy");
     unit(state, "ann").abilities = ["hornpipe"];
     expect([hexDistance(unit(state, "ann").pos, unit(state, "bo").pos), hexDistance(unit(state, "ann").pos, unit(state, "cy").pos)]).toEqual([1, 3]);
     const stride = state.encounter!.budgets.ann.stride;
@@ -5408,6 +5411,7 @@ describe("Sage weapons", () => {
     let { state } = duel("dummy", "staff_sage", at(5, 6), at(11, 6));
     hero(state, "bo", "qa_paladin", at(9, 6));
     hero(state, "cy", "refactor_rogue", at(12, 9));
+    inAFight(state, "bo", "cy");
     unit(state, "ann").abilities = ["st_elmos_fire"];
     expect(hexDistance(unit(state, "ann").pos, unit(state, "bo").pos)).toBe(3);
     expect(checkAbility(state, unit(state, "ann"), "st_elmos_fire", { target: "cy" })).toMatch(/Out of range/);

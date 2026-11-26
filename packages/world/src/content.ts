@@ -147,6 +147,12 @@ export function heroClass(id: string): HeroClass | undefined {
 
 export type AbilityTarget = "enemy" | "all_enemies" | "ally" | "self";
 
+/**
+ * Whether an ability can be used only in a fight: one aimed at the user or an ally. Out of one, a hero's abilities are
+ * the ones aimed at enemies, and using one starts the fight.
+ */
+export const onlyInFights = (def: Pick<AbilityDef, "target">): boolean => def.target === "self" || def.target === "ally";
+
 export interface AbilityDef {
   id: string;
   name: string;

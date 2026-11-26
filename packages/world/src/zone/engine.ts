@@ -23,6 +23,11 @@ export interface Ctx {
    * stop it there. `flush` writes out the steps taken so far, so what follows is told in order.
    */
   onStep?: (unit: Unit, flush: () => void) => boolean;
+  /**
+   * Set while an action that starts a fight, or joins one, is done (zone.ts opening): what it leaves takes hold on
+   * whoever it touches, as the fight it opens begins, though nobody is in it yet (takesHold).
+   */
+  opening?: boolean;
 }
 
 export const has = (unit: Unit, kind: Condition): boolean => unit.conditions.some((c) => c.kind === kind);
@@ -38,7 +43,7 @@ export function removeCondition(unit: Unit, kind: Condition): void {
 export function addCondition(ctx: Ctx, unit: Unit, kind: Condition, rounds: number, amount?: number): void {
   // Bleeding and Burning come in stacks that last as long as they always do, whatever asked for them.
   if (isStacking(kind)) return addStacks(ctx, unit, kind, amount ?? 1);
-  if (unit.down || rounds <= 0) return;
+  if (unit.down || rounds <= 0 || !takesHold(ctx, unit, kind)) return;
   // What gear keeps off: a Storm Crown Stunning, a Stoker's Apron Burning, Sea-Legs Slops a fall, Windrunner Leggings Slowing.
   if (gearWards(unit, kind)) return;
   // A Wind-god's Shanty keeps everyone in it light on their feet.
@@ -85,7 +90,7 @@ export function gearWards(unit: Unit, kind: Condition): boolean {
  * stack over; each stack of Burning has its own, and the others burn on as they were. Something soaked cannot be set burning.
  */
 export function addStacks(ctx: Ctx, unit: Unit, kind: StackingEffect, n = 1): void {
-  if (unit.down || n <= 0) return;
+  if (unit.down || n <= 0 || !takesHold(ctx, unit, kind)) return;
   if (kind === "burning" && has(unit, "wet")) return;
   if (gearWards(unit, kind)) return;
   const enc = ctx.state.encounter;
@@ -276,8 +281,17 @@ export function addShield(ctx: Ctx, unit: Unit, amount: number): void {
   if (amount > 0 && shieldable(ctx, unit)) addCondition(ctx, unit, "bolstered", SHIELD_KEEPS, shieldOf(unit) + amount);
 }
 
-/** The only conditions a unit takes with it out of a fight: Lucky, a coin's worth of luck from the town well. */
+/**
+ * The only conditions a unit can have out of a fight: Lucky, a coin's worth of luck from the town well. Every other
+ * one is a thing of fights: it takes hold only on someone in one (takesHold), and goes when they leave it (leaveFight).
+ */
 export const OUTLASTS_FIGHT: ReadonlySet<Condition> = new Set(["lucky"]);
+
+/**
+ * Whether a condition can be put on a unit now: on anyone in a fight, or touched by what opens one (Ctx.opening), and
+ * out of one only what outlasts fights.
+ */
+const takesHold = (ctx: Ctx, unit: Unit, kind: Condition): boolean => !!ctx.opening || inFight(ctx.state, unit.id) || OUTLASTS_FIGHT.has(kind);
 
 /** The fight is over for this unit (it ended, or they got away from it): every condition on it goes, bar OUTLASTS_FIGHT. */
 export function leaveFight(unit: Unit): void {

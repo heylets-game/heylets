@@ -69,6 +69,8 @@ import {
   CHART,
   shantyRadius,
   checkAbility,
+  FIGHTS_ONLY,
+  onlyInFights,
   checkCommon,
   checkThrow,
   commonCost,
@@ -2820,10 +2822,11 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       icon: { ...abilityIcon(id), flat: true },
       name: def.name,
       line: [costName(tactic.cost), cooldownText(tactic.cooldown ?? 0), reachText, dice].filter(Boolean).join(" · "),
-      more: def.blurb,
+      more: !fighting && onlyInFights(def) ? `${def.blurb} ${FIGHTS_ONLY}` : def.blurb,
       wait: wait || undefined,
       picked: (pick?.kind === "ability" && pick.id === id) || taken.has(`ab:${id}`),
-      spent: !canPay(tactic.cost) || (fighting && wait > 0),
+      // One for fights alone (onlyInFights) is shown spent out of one, while no fight is on for it to reach a friend in.
+      spent: !canPay(tactic.cost) || (fighting && wait > 0) || (!fighting && onlyInFights(def) && !state.encounter),
       run: () => choose(id),
     };
   }
