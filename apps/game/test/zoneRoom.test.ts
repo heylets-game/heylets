@@ -571,6 +571,10 @@ describe("ZoneRoom", () => {
     expect(Object.values(ann.state.surfaces).map((s) => s.kind)).toEqual(["fire"]);
     expect(zoneActionFrom({ type: "dev", dev: { op: "heal" } }, "ann", false)).toBeNull();
     expect(zoneActionFrom({ type: "dev", dev: { op: "heal" } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "heal" } });
+    expect(zoneActionFrom({ type: "dev", dev: { op: "undying", on: true } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "undying", on: true } });
+    expect(zoneActionFrom({ type: "dev", dev: { op: "timer", off: true } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "timer", off: true } });
+    expect(zoneActionFrom({ type: "dev", dev: { op: "clear_enemies" } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "clear_enemies" } });
+    expect(zoneActionFrom({ type: "dev", dev: { op: "clear_enemies" } }, "ann", false)).toBeNull();
     expect(zoneActionFrom({ type: "dev", dev: { op: "kit", unit: "ann", classId: "devops_mage", weapon: "tome", level: "7", abilities: ["tidal_wave", 3] } }, "ann", true)).toEqual({
       type: "dev", by: "ann", dev: { op: "kit", unit: "ann", classId: "devops_mage", weapon: "tome", level: 7, abilities: ["tidal_wave"] },
     });
