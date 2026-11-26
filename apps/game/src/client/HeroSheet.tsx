@@ -38,11 +38,12 @@ const RIGHT: Slot[] = ["main_hand", "off_hand", "legs", "boots"];
 /** A sheet fetched this recently is shown as it is; older ones are fetched again (gear changes). */
 const FRESH_MS = 20_000;
 
-const cache = new Map<string, { at: number; hero: PublicHero }>();
+const cache = new Map<string, { at: number; hero: PublicHero; yours: boolean }>();
 // A look saved anywhere (the wardrobe at home, too) makes every kept sheet stale.
 if (typeof window !== "undefined") window.addEventListener(LOOK_CHANGED, () => cache.clear());
 
-function useHero(id: string | null, reload = 0): { hero: PublicHero | null; error: string | null } {
+/** `yours`: one of this account's own heroes (another of the party, say), whose look and name can be changed. */
+function useHero(id: string | null, reload = 0): { hero: PublicHero | null; yours: boolean; error: string | null } {
   const [, bump] = useState(0);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -52,8 +53,8 @@ function useHero(id: string | null, reload = 0): { hero: PublicHero | null; erro
     if (hit && Date.now() - hit.at < FRESH_MS && !reload) return;
     let live = true;
     api.hero(id).then(
-      ({ hero }) => {
-        cache.set(id, { at: Date.now(), hero });
+      ({ hero, yours }) => {
+        cache.set(id, { at: Date.now(), hero, yours: yours === true });
         if (live) bump((n) => n + 1);
       },
       (err: Error) => live && setError(err.message),
@@ -62,7 +63,8 @@ function useHero(id: string | null, reload = 0): { hero: PublicHero | null; erro
       live = false;
     };
   }, [id, reload]);
-  return { hero: id ? (cache.get(id)?.hero ?? null) : null, error };
+  const hit = id ? cache.get(id) : undefined;
+  return { hero: hit?.hero ?? null, yours: hit?.yours ?? false, error };
 }
 
 /** Whose sheet is open. Picking someone opens theirs; picking them again, or Close, shuts it. */
@@ -85,6 +87,7 @@ export function useHeroSheet(self?: string) {
 
 interface Props {
   id: string;
+  /** The hero this tab is acting as (`me.player.id`): marked "(you)", and the one whose logbook the sheet opens. */
   you: string;
   onClose(): void;
   /** Your own hero as the logbook reads them, and how to open it: a button on your own sheet. */
@@ -94,7 +97,7 @@ interface Props {
 export function HeroSheet({ id, you, onClose, logbook }: Props) {
   // Bumped after they save a new look, to read their sheet again (with any starting clothes they were given).
   const [reload, setReload] = useState(0);
-  const { hero, error } = useHero(id, reload);
+  const { hero, yours, error } = useHero(id, reload);
   const [picked, setPicked] = useState<Slot | null>(null);
   const [changing, setChanging] = useState(false);
   /** Their new name while they are typing it (your own sheet only); null when not renaming. */
@@ -121,7 +124,7 @@ export function HeroSheet({ id, you, onClose, logbook }: Props) {
     setSavingName(true);
     setRenameError(null);
     try {
-      await api.rename(renaming);
+      await api.rename(renaming, hero?.id);
       // The same as a new look: kept sheets are dropped and the room (Harbor, hut) re-reads the hero for everyone.
       window.dispatchEvent(new Event(LOOK_CHANGED));
       setRenaming(null);
@@ -214,8 +217,8 @@ export function HeroSheet({ id, you, onClose, logbook }: Props) {
         </div>
         <button className="small" onClick={onClose} aria-label="Close">✕</button>
       </header>
-      {/* Your own look and name can be changed here. */}
-      {hero.id === you && (
+      {/* The look and name of any of your own heroes can be changed here: the one you are acting as, or another of your party. */}
+      {(hero.id === you || yours) && (
         <div className="hs-own-actions">
           <button type="button" className="small" onClick={() => setChanging(true)}>
             Change look

@@ -677,7 +677,7 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
           <button className="primary" onClick={onLeave}>Back to the Harbor</button>
         </div>
       )}
-      {heroSheet.open && you && <HeroSheet id={heroSheet.open} you={you} onClose={heroSheet.close} logbook={me.character ? { hero: me.character, open: () => { heroSheet.close(); setBook(true); } } : undefined} />}
+      {heroSheet.open && <HeroSheet id={heroSheet.open} you={me.player.id} onClose={heroSheet.close} logbook={me.character ? { hero: me.character, open: () => { heroSheet.close(); setBook(true); } } : undefined} />}
     </div>
   );
 }
