@@ -36,9 +36,10 @@ export interface ZoneDevFlags {
   aiOff: boolean;
   undying: boolean;
   timerOff: boolean;
+  sandbox: boolean;
 }
 
-const NO_FLAGS: ZoneDevFlags = { aiOff: false, undying: false, timerOff: false };
+export const NO_FLAGS: ZoneDevFlags = { aiOff: false, undying: false, timerOff: false, sandbox: false };
 
 export interface KitHero {
   id: string;

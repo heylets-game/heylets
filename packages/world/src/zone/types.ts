@@ -381,6 +381,12 @@ export interface ZoneState {
   /** Dev switch: a turn in a fight has no time limit (the server sets no deadline). */
   timerOff?: boolean;
   /**
+   * Dev switch: the combat sandbox (the Maps tab). A fight goes by the dev's hand, not its own flow: no enemy plays its
+   * turn, no turn ends of itself, and nothing is timed. Turns still come round, one after another, when the dev moves
+   * them on (DevOp "next_turn"), and all that happens as one starts or a round ends happens as ever.
+   */
+  sandbox?: boolean;
+  /**
    * A switch for the tests alone: heroes one after another in the order take their turns together, as fights
    * once went, so what one hero's ability does for another's can be tried within a single turn. Nothing sets
    * it in play: there, a turn is always one fighter's alone.
@@ -431,6 +437,10 @@ export type DevOp =
    * it is in none); on its turn it uses that ability once, cooling down or not, and the fight goes on as ever after.
    */
   | { op: "enemy_use"; unit: string; ability: string; target?: string }
+  /** The combat sandbox (ZoneState.sandbox), on or off. Off in the middle of an enemy's turn: it plays it. */
+  | { op: "sandbox"; on: boolean }
+  /** In a fight: end whoever's turn it is and start the next one's (`round`: every turn to the end of the round). */
+  | { op: "next_turn"; round?: boolean }
   /** Heroes cannot go down: 0 HP does nothing. */
   | { op: "undying"; on: boolean }
   /** No time limit on a turn in a fight. */

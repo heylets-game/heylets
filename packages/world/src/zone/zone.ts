@@ -187,6 +187,9 @@ export function zoneView(state: ZoneState, you: string, hidden: readonly string[
   return { ...rest, ...mine, units: rest.units.filter(sentToClient(state, new Set(hidden))), you, ...(fighting.length > 0 ? { dark: fighting } : {}) };
 }
 
+/** Whether a fight's turns go untimed: the dev switch for it, or the combat sandbox. */
+export const zoneUntimed = (state: Pick<ZoneState, "timerOff" | "sandbox">): boolean => !!state.timerOff || !!state.sandbox;
+
 /** Whose turn the server is waiting on, as a key that changes when the wait does. Null out of a fight. */
 export function zoneAwaiting(state: ZoneState): string | null {
   return state.encounter && state.encounter.acting.length > 0 ? `t:${state.encounter.turnNo}` : null;
@@ -449,7 +452,7 @@ export const HEAR_RANGE = 5;
  * A fight is heard. Any band that has noticed nobody, with one of its own within HEAR_RANGE of someone still
  * standing in the fight, turns on the party: it is in the fight from now on. Called as each new round begins.
  */
-function reinforce(ctx: Ctx): void {
+function reinforce(ctx: Ctx, only?: readonly string[]): void {
   const { state } = ctx;
   const enc = state.encounter;
   if (!enc) return;
@@ -458,7 +461,7 @@ function reinforce(ctx: Ctx): void {
   if (!hero) return;
   const heard = new Set<string>();
   for (const e of standing(state, "enemy")) {
-    if (!e.group || state.groups[e.group]?.alerted || heard.has(e.group)) continue;
+    if (!e.group || state.groups[e.group]?.alerted || heard.has(e.group) || (only && !only.includes(e.group))) continue;
     if (fighters.some((f) => hexDistance(f.pos, e.pos) <= HEAR_RANGE)) heard.add(e.group);
   }
   for (const group of heard) ctx.events.push({ t: "noise", group });
@@ -769,7 +772,8 @@ function advance(ctx: Ctx): void {
     enc.done = next.filter((u) => !ready.includes(u)).map((u) => u.id);
     if (settle(ctx)) return;
     if (ready.length === 0) continue;
-    if (next[0].side === "enemy") {
+    // In the sandbox an enemy's turn waits on the dev, as a hero's does.
+    if (next[0].side === "enemy" && (!state.sandbox || ctx.order)) {
       // The bell, rung: the whole place is roused.
       if (enemyTurn(ctx, next[0], enc.budgets[next[0].id])) rouse(ctx);
       enc.done = [next[0].id];
@@ -833,6 +837,8 @@ function dev(ctx: Ctx, by: string, op: DevOp): string | null {
       const pos = (i === 0 && first) || free(op.at);
       if (pos) state.units.push(enemyUnit(state, kind, pos, group));
     });
+    // Put down near enough to a fight to hear it: it is in it at once, as it would be at the end of the round.
+    reinforce(ctx, [group]);
   } else if (op.op === "paint") {
     const hexes = op.hexes.filter((p) => tileAt(state.map, p)).slice(0, 60);
     if (op.kind) placeSurface(ctx, hexes, op.kind, PAINT_ROUNDS, null);
@@ -904,6 +910,28 @@ function dev(ctx: Ctx, by: string, op: DevOp): string | null {
     const missed = !!ctx.order;
     delete ctx.order;
     if (missed) return `${foe.name} gets no turn (stunned, or the fight is over).`;
+  } else if (op.op === "sandbox") {
+    if (op.on) {
+      state.sandbox = true;
+      return null;
+    }
+    delete state.sandbox;
+    // Back to the fight's own flow: an enemy whose turn it was plays it now.
+    const enc = state.encounter;
+    const foe = enc?.acting.map((id) => unitById(state, id)).find((u) => u?.side === "enemy" && !u.down && !enc.done.includes(u.id));
+    if (enc && foe && enc.budgets[foe.id]) {
+      if (enemyTurn(ctx, foe, enc.budgets[foe.id])) rouse(ctx);
+      enc.done.push(foe.id);
+    }
+  } else if (op.op === "next_turn") {
+    const enc = state.encounter;
+    if (!enc) return "There is no fight on.";
+    const round = enc.round;
+    for (let turns = 0; state.encounter === enc && turns < (op.round ? enc.order.length + 1 : 1); turns++) {
+      enc.done = [...enc.acting];
+      advance(ctx);
+      if (op.round && enc.round !== round) break;
+    }
   } else if (op.op === "undying") {
     if (op.on) state.undying = true;
     else delete state.undying;
@@ -1223,7 +1251,7 @@ export function stepZone(prev: ZoneState, action: ZoneAction): ZoneStep {
     // Its last AP spent, the unit that acted has had its turn.
     const id = "unit" in action ? action.unit : undefined;
     const left = id ? enc.budgets[id] : undefined;
-    if (id && left && enc.acting.includes(id) && !enc.done.includes(id) && spentOut(left)) enc.done.push(id);
+    if (id && left && enc.acting.includes(id) && !enc.done.includes(id) && spentOut(left) && !state.sandbox) enc.done.push(id);
     const waiting = enc.acting.some((id) => !enc.done.includes(id) && !unitById(state, id)?.down);
     if (!waiting) advance(ctx);
   }

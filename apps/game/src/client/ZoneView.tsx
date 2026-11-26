@@ -154,7 +154,7 @@ import { COMMON_ICON, ITEM_ICON, abilityIcon } from "./zone/actionIcons";
 import { BAR_SLOTS, assignSlot, barChoices, loadBar, moveSlot, saveBar } from "./zone/hotbar";
 import { believe, foreseeWalk, giveUp, settle, standing, type Ahead } from "./zone/ahead";
 import { playback, type Playback } from "./zone/playback";
-import { setZoneDev, useZoneDev } from "./zone/zoneDev";
+import { NO_FLAGS, setZoneDev, useZoneDev } from "./zone/zoneDev";
 import "./zone/zone.css";
 import { CombatLog, RollToast, type LogEntry } from "./zone/CombatLog";
 import { TimedTurnBar, type SongCall } from "./zone/TurnBar";
@@ -1865,8 +1865,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   useEffect(() => {
     setZoneDev({ heroes: mine.filter((u) => !u.summon).map((u) => ({ id: u.id, name: u.name, classId: u.kind, level: u.level, weapon: u.outfit?.main_hand?.ref, abilities: u.torchHand === "main" ? (u.stowed ?? []) : u.abilities })) });
   }, [mineKey]);
-  const flags = { aiOff: !!state?.aiOff, undying: !!state?.undying, timerOff: !!state?.timerOff };
-  useEffect(() => setZoneDev({ flags }), [flags.aiOff, flags.undying, flags.timerOff]);
+  const flags = { aiOff: !!state?.aiOff, undying: !!state?.undying, timerOff: !!state?.timerOff, sandbox: !!state?.sandbox };
+  useEffect(() => setZoneDev({ flags }), [flags.aiOff, flags.undying, flags.timerOff, flags.sandbox]);
   // And everyone standing on it, for its Combat section.
   const onMap = state?.units.filter((u) => !u.down && !u.lost && !u.summon && !state.dark?.includes(u.id)) ?? [];
   const onMapKey = onMap.map((u) => `${u.id}:${u.name}:${u.abilities.join(",")}`).join("|");
@@ -1939,7 +1939,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     if (act) saveBar(act.kind, next);
   };
 
-  useAudioScene(mine.some((u) => enc?.order.includes(u.id)) ? "battle" : state?.options.biome === "caves" || (state?.scene && siteInside(state.scene.site)) ? "caverns" : "island");
+  // The combat sandbox (dev toolbox) is no fight to score: the map's own sound plays on.
+  useAudioScene(mine.some((u) => enc?.order.includes(u.id)) && !state?.sandbox ? "battle" : state?.options.biome === "caves" || (state?.scene && siteInside(state.scene.site)) ? "caverns" : "island");
 
   // ---------- the renderer ----------
 
@@ -1964,7 +1965,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const send = zone.send;
   useEffect(() => {
     setZoneDev({ open: { code, send: (op) => send({ type: "dev", dev: op }) } });
-    return () => setZoneDev({ open: null, tool: null, heroes: [], flags: { aiOff: false, undying: false, timerOff: false }, units: [], picked: null });
+    return () => setZoneDev({ open: null, tool: null, heroes: [], flags: NO_FLAGS, units: [], picked: null });
   }, [code, send]);
 
   /** An alarm bell rung where it stands: it swings, waves of sound pulse out of it, and its toll is heard. */

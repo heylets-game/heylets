@@ -164,7 +164,7 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
   // Under a dev order, everyone else passes; the one ordered plays even with the AI off.
   const order = ctx.order;
   if (order && order.unit !== enemy.id) return;
-  if (!order && state.aiOff) return;
+  if (!order && (state.aiOff || state.sandbox)) return;
   if (order) ctx.order = undefined;
   const standing = () => state.units.filter((u) => u.side === "hero" && !u.down && !unseen(u) && inFight(state, u.id) && (!order?.target || u.id === order.target));
   const strikes = (): EnemyStrike[] => {
