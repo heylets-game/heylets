@@ -54,15 +54,20 @@ async function catchOne(): Promise<GatherView> {
   return (await step({ t: "fought", edges })).outing!;
 }
 
-/** Fish until a living catch (not a haul, and not one that fills the creel) is landed, then keep it. */
+/**
+ * Fish until a living catch (not a haul, and not one that fills the creel) is landed, then keep it. The one kept is
+ * the heaviest of its species this sitting: a heavier one thrown back would be the Catch Book's best, with no fish_id.
+ */
 async function keepAFish(): Promise<string> {
+  const thrownBack = new Set<string>();
   for (let i = 0; i < 60; i++) {
     at(clock + 1000);
     const view = await catchOne();
     const pending = view.sitting!.pending;
     if (!pending) continue;
     // Hauls are not fish; and one big enough to fill the creel would end the sitting before the test wants it to.
-    if (FISH[pending.species].kind === "haul" || pending.grams > 20_000) {
+    if (FISH[pending.species].kind === "haul" || pending.grams > 20_000 || thrownBack.has(pending.species)) {
+      thrownBack.add(pending.species);
       await step({ t: "release" });
       continue;
     }
@@ -336,6 +341,16 @@ describe("fishing from a boat", () => {
     const cast = await stepOuting(db, "ann", { t: "cast", power: 0.5, spot: "sea", vessel: "rowboat" }, where());
     if (typeof cast === "string") throw new Error(cast);
     expect(cast.outing!.sitting!.spot).toBe("coast_west");
+  });
+
+  it("fishes from the party's boat, when another of the party walks the town", async () => {
+    // Ann and Bo are one account's party. Bo walks the Harbor, in the rowboat Bo owns; the player acts as Ann.
+    sql.prepare("UPDATE players SET user_id = 'acct', party = 1 WHERE id IN ('ann', 'bo')").run();
+    sql.prepare("INSERT INTO furnishings (player_id, def_id, label, meta_json, created_at) VALUES ('bo', 'rowboat', 'rowboat', '{}', 0)").run();
+    here = afloatAt("sea");
+    const r = await startOuting(db, "ann", "fishing", "sea", { crewId: "CREWAA", pos: here, by: "bo" });
+    if (typeof r === "string") throw new Error(r);
+    expect(r.outing!.sitting!.spot).toBe("sea");
   });
 
   it("carries more in a rowboat, and brings up the open sea's fish", async () => {

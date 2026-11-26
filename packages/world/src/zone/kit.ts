@@ -8,6 +8,7 @@ import type { StatKey, Stats } from "@gantt-quest/core";
 import { ABILITIES, EFFECT_INFO, EFFECT_TICK, ENEMIES, STACK_TURNS, SUNDERED_DEFENCE, type AbilityDef, type EffectKind } from "../content";
 import type { BehaviourId } from "./behaviours";
 import { ENEMY_ABILITIES, type EnemyAbilityDef } from "./enemyabilities";
+import { BLINK_AP } from "../gear";
 import { modsOf } from "./mods";
 import { DEFAULT_SCALE, diceFor, scaled, type Dice } from "./rules";
 import type { CommonAction, Condition, ShantyKind, SurfaceKind, Throwable, Unit, WeatherKind, ZoneState } from "./types";
@@ -115,10 +116,10 @@ export interface Tactic {
   /** Puts this condition on the user for `rounds` of their own turns: an aura, worked by the condition itself (see AURAS). */
   aura?: { kind: Condition; rounds: number };
   /**
-   * Shields the user, and every ally within `range` of them, with `shield` points plus the user's level, for `rounds` of each one's
-   * turns (Bolstered), and `water` more for each one standing in water.
+   * Shields the user, and every ally within `range` of them, with `shield` points plus the user's level (Bolstered), and `water`
+   * more for each one standing in water. A shield lasts until blows spend it or the fight ends.
    */
-  shield?: { range: number; shield: number; rounds: number; water?: number };
+  shield?: { range: number; shield: number; water?: number };
   /** Leaves this weather over the hexes it covers (weather.ts), instead of striking them. */
   weather?: WeatherKind;
   /** Single: lands without an attack roll. */
@@ -191,8 +192,8 @@ const spell = (range: number, extra: Partial<Tactic> = {}): Tactic => ({ cost: 2
 const guard = (): Tactic => ({ cost: 1, reach: "spell", range: 0, shape: "self" });
 const mend = (range: number, extra: Partial<Tactic> = {}): Tactic => ({ cost: 2, reach: "spell", range, shape: "ally", ...extra });
 
-/** Bolster: a shield of `shield` points plus the Paladin's level on them and every ally within `range`, for `rounds` of each one's turns. */
-export const BOLSTER = { range: 2, shield: 10, rounds: 3 };
+/** Bolster: a shield of `shield` points plus the Paladin's level on them and every ally within `range`. */
+export const BOLSTER = { range: 2, shield: 10 };
 
 /**
  * The Warden's. Endure: a shield of `shield` plus the Warden's level on themselves (and they are Guarded: content.ts).
@@ -200,17 +201,17 @@ export const BOLSTER = { range: 2, shield: 10, rounds: 3 };
  * `hexes` hexes for `rounds` rounds; the user's side gets `defence` more Defence beside it. Bulwark Strike shields the Warden
  * `shield` plus their level first, then adds `perShield` of their shield to the damage. Taunt reaches `range` hexes, for `rounds`.
  */
-export const ENDURE = { range: 0, shield: 10, rounds: 2 };
+export const ENDURE = { range: 0, shield: 10 };
 export const OVERWHELM = { hexes: 2, stun: 1 };
 export const FORTIFY = { hexes: 3, rounds: 3, defence: 1 };
-export const BULWARK = { shield: 4, rounds: 2, perShield: 0.5 };
+export const BULWARK = { shield: 4, perShield: 0.5 };
 export const TAUNT = { range: 2, rounds: 2 };
 /** Sturdy Blow (the maul): a shield of `shield` plus the user's level, on top of any they have, hit or miss. */
-export const STURDY = { shield: 3, rounds: 1 };
+export const STURDY = { shield: 3 };
 /** Stand Strong (the maul): a shield of `shield` plus the user's level and `perFoe` for each enemy beside them, on top of any they have. */
-export const STAND_STRONG = { shield: 3, perFoe: 3, rounds: 1 };
+export const STAND_STRONG = { shield: 3, perFoe: 3 };
 /** Against the Waves (the axe): a shield of `shield` plus the user's level, `water` more standing in water. */
-export const AGAINST_WAVES = { range: 0, shield: 4, rounds: 1, water: 4 };
+export const AGAINST_WAVES = { range: 0, shield: 4, water: 4 };
 
 /**
  * Weather (weather.ts), by kind: how many rounds of a fight it hangs on after the one it is made in. Rain heals
@@ -334,8 +335,8 @@ export const BLACK_SPOT = { rounds: 4 };
 export const RED_SKY = { rounds: 3 };
 export const UNHOLY_WATERS = { water: 3, fire: 2 };
 
-/** Block (the greatsword): a shield of `shield` points plus the user's level on themselves, through their next turn. */
-export const BLOCK = { range: 0, shield: 8, rounds: 1 };
+/** Block (the greatsword): a shield of `shield` points plus the user's level on themselves. */
+export const BLOCK = { range: 0, shield: 8 };
 
 export const TACTICS: Record<string, Tactic> = {
   punch: melee(),
@@ -546,7 +547,7 @@ export const CONDITION_INFO: Record<Condition, { name: string; blurb: string; co
   wet: { name: "Wet", blurb: "Soaked through: lightning hits harder, and it cannot burn.", color: "#7dd3fc" },
   beacon: { name: "Beacon", blurb: `Gives light, and it and allies within 2 hexes get +${AURAS.beaconHit} to hit.`, color: "#fff7d6" },
   mending: { name: "Healing Aura", blurb: "At the start of each of its turns, it and every ally within 2 hexes heal a little.", color: "#5dffa0" },
-  bolstered: { name: "Bolstered", blurb: "A shield takes the damage of blows before its HP does, until it is spent or wears off.", color: "#9ec9ff" },
+  bolstered: { name: "Bolstered", blurb: "A shield takes the damage of blows before its HP does, until it is spent or the fight ends.", color: "#9ec9ff" },
   invisible: { name: "Unseen", blurb: "Enemies cannot see it to attack it. Its next roll to hit has advantage, and using any ability (or throwing, or shoving) gives it away.", color: "#b8c4d6" },
   contraband: { name: "Contraband", blurb: "Smuggled fire bombs in the pack, to throw before they are found out.", color: "#ff8a3a" },
   regenerating: { name: "Regenerating", blurb: "Heals at the start of each of its turns, more when it stands in water.", color: "#5eead4" },
@@ -666,8 +667,22 @@ export function cleanItems(raw: Partial<Record<string, number>> | undefined): Pa
 
 /** How far a hero can throw: 5 hexes, further for the strong, never under 3. */
 export const throwRange = (strMod: number): number => Math.max(3, 5 + strMod);
-/** How far anyone can jump, in hexes, whatever their Strength. */
+/** How far anyone can jump, in hexes, whatever their Strength (further in Springheel Boots: jumpRange). */
 export const JUMP_RANGE = 2;
+/** How far this unit can jump: Springheel Boots add their reach. */
+export const jumpRange = (unit: Pick<Unit, "perks">): number => JUMP_RANGE + (unit.perks?.long_jump ?? 0);
+/** How far this unit can blink in place of a jump (Phase Treads), or 0. */
+export const blinkRange = (unit: Pick<Unit, "perks">): number => unit.perks?.blink ?? 0;
+
+/**
+ * The AP a common action costs this unit: as commonCost, but a Jump is 1 AP less in Springheel Boots, and a blink
+ * (`blink`: a Jump made as one in Phase Treads, isBlink) is BLINK_AP.
+ */
+export function commonCostFor(unit: Pick<Unit, "kind" | "perks">, what: CommonAction, blink = false): number {
+  if (what !== "jump") return commonCost(what, unit.kind);
+  if (blink) return BLINK_AP;
+  return COMMON_ACTIONS.jump.cost - (unit.perks?.long_jump ? 1 : 0);
+}
 
 // ---------- enemies ----------
 

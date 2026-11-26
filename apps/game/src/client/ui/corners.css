@@ -1,0 +1,9 @@
+/* Brass corners (ui/BrassCorners.tsx): the logbook's own, over the four corners of their holder. */
+.brass-corner {
+  position: absolute; z-index: 4; width: var(--corner-size, 34px); height: var(--corner-size, 34px); pointer-events: none;
+  background: var(--book-corner) center / 100% 100% no-repeat;
+}
+.brass-corner.tl { left: var(--corner-at, -6px); top: var(--corner-at, -6px); }
+.brass-corner.tr { right: var(--corner-at, -6px); top: var(--corner-at, -6px); scale: -1 1; }
+.brass-corner.bl { left: var(--corner-at, -6px); bottom: var(--corner-at, -6px); scale: 1 -1; }
+.brass-corner.br { right: var(--corner-at, -6px); bottom: var(--corner-at, -6px); scale: -1 -1; }

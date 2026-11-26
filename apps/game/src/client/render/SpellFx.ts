@@ -2688,6 +2688,18 @@ export class SpellFx {
     );
   }
 
+  /**
+   * Someone joins a shanty: a few notes in its colour rise off them from about the shoulder, a little apart, moving
+   * as that shanty's notes move (SongMood).
+   */
+  chime(feet: THREE.Vector3, color: string, mood: SongMood) {
+    const count = 6;
+    const turn = rand(0, Math.PI * 2);
+    for (let i = 0; i < count; i++) {
+      this.note(feet.clone().setY(feet.y + rand(0.9, 1.25)), color, mood, turn + (i / count) * Math.PI * 2 + rand(-0.3, 0.3), rand(0.35, 0.6), i * 0.07, 1.2, 0.7);
+    }
+  }
+
   /** One music note floating off `at`: out along `angle` at `speed`, bobbing, sinking or swirling as the mood has it, and fading over `life`. */
   private note(at: THREE.Vector3, color: string, mood: SongMood, angle: number, speed: number, delay = 0, life = 1.1, size = 0.75) {
     const s = this.speck(Math.random() < 0.5 ? "note" : "notes", color, at, 0);

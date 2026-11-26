@@ -3491,6 +3491,7 @@ const KNEE = -2.5;
 const SIT = HALF_PI - 0.08;
 
 /** A leg to draw boxes on in the hip's space: each goes to the thigh or the shin, and one that crosses the knee is cut there. */
+type Limb = ReturnType<typeof limb>;
 function limb(thigh: Part, shin: Part) {
   return {
     box(color: string, w: number, h: number, d: number, x = 0, y = 0, z = 0) {
@@ -5385,8 +5386,167 @@ function lowSpyglassVisor(head: Part, trim: string) {
   head.ring(brass, 0.54, 0.1, ...along(0.85), [0, out, 0]);
 }
 
-/** Armor on the head, rounded: a leather hood, the Spyglass Visor, or a diving helm (anything else). */
-function lowWornHelmet(head: Part, helmet: { ref: string; icon: string }, trim: string) {
+/** The hats worn in the helmet slot that are drawn by their ref (lowWornHat, blockyHat): no diving helm's bowl. */
+const WORN_HATS = new Set(["tricorn", "sun_hat", "bandana", "lookout_cap", "miners_lamp", "storm_crown"]);
+
+/**
+ * A short peak over the brow, angled a little down, following the curve of a band (rings round the head, its
+ * lowest at `y`), as the Lantern Helm's: short, as the camera looks down on heroes and a longer one hides the eyes.
+ */
+function brimPeak(head: Part, c: string, band: readonly Ring[], y: number) {
+  const f = ringAt(band, y);
+  const peak: Pt[] = [];
+  for (const [x, out] of [[0, 0.95], [1.6, 0.7], [2.9, 0.22]] as const) {
+    const z = f.dz + f.rz * Math.sqrt(Math.max(0, 1 - (x / f.rx) ** 2));
+    peak.push([x, y + 0.05, z - 0.1], [x, y - 0.15, z - 0.1], [x, y - 0.01 - out * 0.15, z + out], [x, y - 0.17 - out * 0.15, z + out]);
+  }
+  head.shape(c, sym(peak));
+}
+
+/** A hat worn in the helmet slot, rounded, by its ref (see WORN_HATS). False for a ref it does not draw. */
+function lowWornHat(head: Part, ref: string, trim: string, look: Look): boolean {
+  switch (ref) {
+    case "tricorn":
+      // Tricorn: black, edged in gold braid, with a cockade of the trim (the class tricorn's shape).
+      lowHat(head, { ...look, hat: "tricorn", hatColor: "#25222c", accent: trim });
+      return true;
+    case "bandana": {
+      // Bandana: red cloth tied close over the head, knotted at the back with two tails, spotted white, its hem
+      // at the brow in the trim.
+      const red = "#c23a30";
+      lowHat(head, { ...look, hat: "kerchief", hatColor: red, knotSide: false });
+      const cloth = fitted(grown(OVER_HAIR, -0.05));
+      for (const [y, a] of [[4.5, 0.5], [4.6, -0.6], [5.5, 0], [5.6, 1.2], [5.4, -1.3], [6.4, 0.6], [6.5, -0.5], [4.7, 1.6], [4.8, -1.75], [6.2, 1.9], [6.3, -2.0], [7.0, 0]] as const) {
+        head.ball("#f3ede0", 0.17, ...onRing(cloth, y, a, 0.04), 0, [1, 1, 0.6]);
+      }
+      head.loft(trim, fitted([[3.92, 3.76, 3.46], [4.15, 3.78, 3.48]]), 10);
+      return true;
+    }
+    case "sun_hat": {
+      // Straw Sun Hat: a wide brim of straw drooping a little at its edge, a ring of the weave across it, a round
+      // crown and a band of the trim.
+      const straw = "#e3c77e";
+      head.loft(straw, fitted([[4.72, 5.95, 5.7, -0.05], [4.95, 5.95, 5.7, -0.05], [5.2, 3.9, 3.62, -0.05]]), 16);
+      head.loft(tone(straw, -0.14), fitted([[5.02, 5.35, 5.1, -0.05], [5.1, 4.95, 4.7, -0.05]]), 16);
+      head.loft(straw, fitted([[5.0, 3.72, 3.45, -0.05], [6.6, 3.45, 3.2, -0.1], [7.6, 3.05, 2.85, -0.12], [7.95, 2.0, 1.9, -0.12], [8.05, 0.4, 0.4, -0.12]]), 12);
+      head.loft(trim, fitted([[5.15, 3.82, 3.55, -0.05], [5.85, 3.72, 3.45, -0.07]]), 12);
+      return true;
+    }
+    case "lookout_cap": {
+      // Lookout's Cap: a navy peaked cap, its flat top wider than its band, the band dark with a line of the trim, a
+      // shiny black peak, and a brass badge on the front with a stone of the trim.
+      const navy = "#24365a";
+      const crown = fitted([[3.9, 3.86, 3.56], [4.9, 3.9, 3.6, -0.02], [6.0, 4.25, 4.0, 0.05], [6.55, 4.15, 3.9, 0], [6.8, 3.3, 3.05, -0.05], [6.9, 0.5, 0.5, -0.05]]);
+      head.loft(navy, crown, 12);
+      const band = fitted([[3.85, 3.96, 3.66], [4.7, 3.98, 3.68, -0.02]]);
+      head.loft(tone(navy, -0.25), band, 12);
+      head.loft(trim, fitted([[4.7, 4.0, 3.7, -0.02], [4.86, 4.0, 3.7, -0.02]]), 12);
+      brimPeak(head, GEAR.dark, band, 3.9);
+      const f = facet(crown, 12, 5.4, 0, 0.12);
+      spot(head, DIVE_BRASS, 0.62, 0.5, 0.2, 0, 5.4, f.z, [-0.25, 0, 0]);
+      head.ball(trim, 0.2, 0, 5.4, f.z + 0.14, 0);
+      return true;
+    }
+    case "miners_lamp": {
+      // Miner's Lamp: a snug leather cap with a dark band, and on its front a brass lamp on a bracket, its lens lit,
+      // rimmed in the trim.
+      const leather = "#6b4a2e";
+      const cap = fitted([[3.95, 3.82, 3.52], [5.3, 3.8, 3.5, -0.05], [6.5, 3.16, 2.96, -0.1], [7.25, 2.0, 1.9, -0.1], [7.6, 0.6, 0.6, -0.1]]);
+      head.loft(leather, cap, 12);
+      const band = fitted([[3.8, 3.98, 3.68], [4.55, 3.98, 3.68, -0.02]]);
+      head.loft(tone(leather, -0.2), band, 12);
+      brimPeak(head, tone(leather, -0.1), band, 3.85);
+      const f = facet(cap, 12, 5.3, 0, 0);
+      head.box(DIVE_BRASS, 1.1, 1.3, 0.3, 0, 5.2, f.z + 0.1);
+      head.cyl(DIVE_BRASS, 0.62, 0.7, 1.0, 0, 5.4, f.z + 0.7, 10, [HALF_PI, 0, 0]);
+      head.cyl(tone(DIVE_BRASS, 0.15), 0.85, 0.65, 0.35, 0, 5.4, f.z + 1.3, 10, [HALF_PI, 0, 0]);
+      head.ring(trim, 0.78, 0.11, 0, 5.4, f.z + 1.48);
+      head.glowBall("#fff0b0", 0.62, 0, 5.4, f.z + 1.4);
+      return true;
+    }
+    case "storm_crown": {
+      // Storm Crown: a band of dark silver, rising round it in points like lightning bolts (tallest at the front),
+      // and a stone of the trim, glowing, set in the front of the band.
+      const silver = "#6c7380";
+      const band = fitted([[4.25, 3.86, 3.56], [4.95, 3.86, 3.56, -0.02]]);
+      head.loft(silver, band, 12);
+      head.loft(tone(silver, 0.22), fitted([[4.9, 3.92, 3.62, -0.02], [5.05, 3.92, 3.62, -0.02]]), 12);
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const tall = 1.4 + 0.9 * Math.max(0, Math.cos(a));
+        const base = onRing(band, 4.95, a, -0.05);
+        const side: Pt = [Math.cos(a), 0, -Math.sin(a)];
+        const step = (p: Pt, up: number, along: number, out: number): Pt => [p[0] + side[0] * along + Math.sin(a) * out, p[1] + up, p[2] + side[2] * along + Math.cos(a) * out];
+        const p1 = step(base, 0.45 * tall, 0.3, 0.06);
+        const p2 = step(p1, 0.12 * tall, -0.45, 0.04);
+        const p3 = step(p2, 0.5 * tall, 0.22, 0.06);
+        strut(head, silver, base, p1, 0.24, 0.18);
+        strut(head, silver, p1, p2, 0.17, 0.16);
+        strut(head, silver, p2, p3, 0.17, 0.03);
+        head.ball(tone(silver, 0.3), 0.08, ...p3, 0);
+      }
+      const f = facet(band, 12, 4.6, 0, 0.14);
+      head.ring(tone(silver, 0.25), 0.46, 0.1, 0, 4.6, f.z);
+      head.glowBall(trim, 0.42, 0, 4.6, f.z + 0.05);
+      return true;
+    }
+  }
+  return false;
+}
+
+/** A hat worn in the helmet slot, on the box figure, by its ref (see WORN_HATS). False for a ref it does not draw. */
+function blockyHat(head: Part, ref: string, trim: string, look: Look): boolean {
+  switch (ref) {
+    case "tricorn":
+      drawHat(head, { ...look, hat: "tricorn", hatColor: "#25222c", accent: trim });
+      for (const s of [-1, 1]) head.box(GEAR.gold, 0.3, 0.3, 8, s * 5.3, 6.4, 0, [0, 0, -s * 0.4]);
+      head.box(GEAR.gold, 9.5, 0.3, 0.3, 0, 6.85, -5.05, [-0.25, 0, 0]);
+      return true;
+    case "bandana":
+      drawHat(head, { ...look, hat: "kerchief", hatColor: "#c23a30" });
+      for (const [x, z] of [[-1.8, 3.3], [1.2, 3.3], [3.55, 0.5], [-3.55, -0.8]] as const) head.box("#f3ede0", Math.abs(x) > 3 ? 0.2 : 0.5, 0.5, Math.abs(x) > 3 ? 0.5 : 0.2, x, 5.6, z);
+      head.box(trim, 7.1, 0.3, 6.6, 0, 4.7, -0.1);
+      return true;
+    case "sun_hat":
+      head.cyl("#e3c77e", 6.6, 6.6, 0.4, 0, 5.9, 0, 12);
+      head.cyl(tone("#e3c77e", -0.14), 5.2, 5.2, 0.45, 0, 5.9, 0, 12);
+      head.cyl("#e3c77e", 4.4, 4.4, 0.5, 0, 5.95, 0, 12);
+      head.cyl("#e3c77e", 3, 3.3, 2.4, 0, 7.3, 0, 8);
+      head.cyl(trim, 3.4, 3.4, 0.6, 0, 6.5, 0, 8);
+      return true;
+    case "lookout_cap":
+      head.box("#24365a", 7.2, 1.8, 6.8, 0, 6, 0);
+      head.box("#24365a", 7.8, 0.6, 7.4, 0, 7.1, 0.1);
+      head.box(tone("#24365a", -0.25), 7.3, 0.8, 6.9, 0, 5.1, 0);
+      head.box(trim, 7.35, 0.2, 6.95, 0, 5.55, 0);
+      head.box(GEAR.dark, 5, 0.3, 2, 0, 4.8, 3.9, [0.2, 0, 0]);
+      head.box(DIVE_BRASS, 1.2, 1, 0.3, 0, 6.3, 3.5);
+      return true;
+    case "miners_lamp":
+      head.box("#6b4a2e", 7.1, 3, 6.7, 0, 5.4, 0);
+      head.box(tone("#6b4a2e", -0.2), 7.3, 0.7, 6.9, 0, 4.2, 0);
+      head.cyl(DIVE_BRASS, 0.8, 0.9, 1.4, 0, 5.6, 3.9, 6, [HALF_PI, 0, 0]);
+      head.box(trim, 1.6, 1.6, 0.2, 0, 5.6, 4.6);
+      head.glowBox("#fff0b0", 1.1, 1.1, 0.3, 0, 5.6, 4.7);
+      return true;
+    case "storm_crown":
+      head.box("#6c7380", 7.1, 0.9, 6.6, 0, 5.0, -0.1);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        const [x, z] = [Math.sin(a) * 3.3, Math.cos(a) * 3.1];
+        const tall = i === 0 ? 1.4 : 1;
+        head.box("#6c7380", 0.45, 1 * tall, 0.45, x, 5.9 * 1, z, [0, a, 0.4]);
+        head.box("#6c7380", 0.4, 1.1 * tall, 0.4, x + Math.cos(a) * 0.2, 6.8 + (tall - 1), z - Math.sin(a) * 0.2, [0, a, -0.4]);
+      }
+      head.glowBox(trim, 0.9, 0.9, 0.3, 0, 5.0, 3.3);
+      return true;
+  }
+  return false;
+}
+
+/** Armor on the head, rounded: a hat (see WORN_HATS), a leather hood, the Spyglass Visor, or a diving helm (anything else). */
+function lowWornHelmet(head: Part, helmet: { ref: string; icon: string }, trim: string, look: Look) {
+  if (lowWornHat(head, helmet.ref, trim, look)) return;
   const rings = HEAD_RINGS[(chosen ?? face)?.headShape ?? "round"] ?? HEAD_RINGS.round;
   if (helmet.ref === "hood" || helmet.icon === "hood") {
     lowHood(head, GEAR.leather, rings, trim);
@@ -5605,8 +5765,9 @@ function coatPanel(part: Part, color: string, s: number, a0: number, a1: number,
 }
 
 /** An arm in a sleeve with a cuff, from the shoulder joint down. */
+const SLEEVE: Ring[] = [[-3.9, 0.95, 0.95], [-2.6, 1.05, 1.05], [-1, 1.2, 1.22], [0.2, 1.32, 1.32], [0.95, 0.75, 0.75]];
 function lowSleeve(arm: Part, cloth: string, cuff: string) {
-  arm.loft(cloth, [[-3.9, 0.95, 0.95], [-2.6, 1.05, 1.05], [-1, 1.2, 1.22], [0.2, 1.32, 1.32], [0.95, 0.75, 0.75]], 6);
+  arm.loft(cloth, SLEEVE, 6);
   arm.loft(cuff, [[-4.15, 1.08, 1.08], [-3.45, 1.1, 1.1]], 6);
 }
 
@@ -5816,45 +5977,101 @@ function lowBareLeg(thigh: Part, shin: Part | null, skin: string) {
   thigh.loft(LINEN, [[-1.5, 1.42, 1.48], [0.3, 1.6, 1.6], [0.9, 1.2, 1.2]], 6);
 }
 
+/** How mail is drawn: iron, and the darker line of each course of rings across it. */
+const MAIL_COURSE = tone(GEAR.iron, -0.2);
+
 /**
- * A mail hauberk over the chest, low-poly: mail on the low-poly chest, rounded steel breast and back plates,
- * a mail skirt over the hips, a gold belt, and the trim's colour on the breastplate. Returns how far forward
+ * Courses of mail on a loft through `rings`, from `y0` down to `y1`: a thin darker band round it every `step`,
+ * standing `by` proud of it, so the iron reads as rows of rings rather than a plate.
+ */
+function mailCourses(part: Part, rings: readonly Ring[], y0: number, y1: number, by: number, step = 0.42, sides = 8) {
+  for (let y = y0; y > y1; y -= step) part.loft(MAIL_COURSE, [around(rings, y - 0.07, by), around(rings, y + 0.07, by)], sides);
+}
+
+/**
+ * The Hauberk of Calm Seas over the chest, low-poly: a mail shirt in courses of rings down to a mail skirt over the
+ * hips, rounded steel breast and back plates over it with a ridge down the middle and rivets along the top, a gold
+ * belt, and on the breastplate a roundel in the trim's colour with a calm sea across it. Returns how far forward
  * its front is (for an amulet over it).
  */
 function lowHauberk(torso: Part, skin: string, sh: number, trim: string): number {
   const rings = lowChest(torso, skin, GEAR.iron, sh, GEAR.gold);
   const hip = ringAt(rings, -0.6);
-  torso.loft(tone(GEAR.iron, -0.1), [around(rings, 0.55, 0.1), [-1.5, hip.rx + 0.35, hip.rz + 0.3, hip.dz]], 8);
+  const skirt: Ring[] = [around(rings, 0.55, 0.1), [-1.5, hip.rx + 0.35, hip.rz + 0.3, hip.dz]];
+  torso.loft(tone(GEAR.iron, -0.06), skirt, 8);
+  // The mail: courses of rings round the skirt and the waist, and its hem a darker roll.
+  mailCourses(torso, [...skirt].reverse(), 0.2, -1.4, 0.05);
+  mailCourses(torso, rings, 2.3, 1.8, 0.03);
+  torso.loft(MAIL_COURSE, [[-1.62, hip.rx + 0.4, hip.rz + 0.35, hip.dz], [-1.3, hip.rx + 0.37, hip.rz + 0.32, hip.dz]], 8);
   for (const back of [false, true]) {
     const pts: Pt[] = [];
     for (const y of [2.3, 3.5, 4.15, 4.75, 5.45]) {
       const r = ringAt(rings, y);
       for (const deg of [-64, -32, 0, 32, 64]) {
         const a = (deg / 180) * Math.PI;
-        const z = Math.cos(a) * (r.rz + 0.24);
+        // A ridge down the middle: the plate comes a little further forward there.
+        const z = Math.cos(a) * (r.rz + 0.24 + (deg === 0 ? 0.14 : 0));
         pts.push([Math.sin(a) * (r.rx + 0.24), y, back ? -z + r.dz : z + r.dz]);
       }
     }
     torso.shape(GEAR.steel, pts);
+    // Rivets along its top edge.
+    for (const deg of [-50, -25, 0, 25, 50]) {
+      const a = (deg / 180) * Math.PI;
+      const r = ringAt(rings, 5.25);
+      const z = Math.cos(a) * (r.rz + 0.34 + (deg === 0 ? 0.1 : 0));
+      torso.ball(GEAR.shine, 0.13, Math.sin(a) * (r.rx + 0.3), 5.25, back ? -z + r.dz : z + r.dz);
+    }
   }
-  const front = ringAt(rings, 4.2).rz + ringAt(rings, 4.2).dz + 0.3;
-  torso.box(trim, 1.3, 1.3, 0.4, 0, 4.2, front);
+  const front = ringAt(rings, 4.2).rz + ringAt(rings, 4.2).dz + 0.4;
+  // The roundel: a gold rim round a disc of the trim, and a calm sea across it, a low swell in gold.
+  spot(torso, GEAR.gold, 0.85, 0.85, 0.3, 0, 4.1, front - 0.02);
+  spot(torso, trim, 0.68, 0.68, 0.3, 0, 4.1, front + 0.06);
+  for (const [x0, x1, y0, y1] of [[-0.5, -0.12, 3.92, 4.06], [-0.12, 0.25, 4.06, 3.92], [0.25, 0.55, 3.92, 4.04]]) strut(torso, GEAR.gold, [x0, y0, front + 0.2], [x1, y1, front + 0.2], 0.07);
   return front;
 }
 
 /**
- * An oilskin greatcoat over the chest, low-poly (the skirts are coat panels, drawn with the other long coats):
- * a stand-up collar, a placket with gold buttons, a dark belt with a buckle in the trim's colour. Returns how
- * far forward its front is.
+ * An oilskin greatcoat over the chest, low-poly (the skirts are coat panels, drawn with the other long coats, and
+ * the cape over the shoulders is drawn with the head: see lowCape): a stand-up collar, double-breasted, its front
+ * buttoned over to one side in two rows of gold buttons with its edge in the trim, and a dark belt with a buckle in
+ * the trim's colour. Returns how far forward its front is.
  */
 function lowGreatcoat(torso: Part, skin: string, oilskin: string, sh: number, trim: string): number {
   const rings = lowChest(torso, skin, oilskin, sh, GEAR.dark);
   torso.loft(tone(oilskin, -0.1), [around(rings, 5.55, 0.18, -0.05), [6.55, 1.95, 1.75, -0.3]], 8);
   const front = (y: number) => ringAt(rings, y).rz * Math.cos(Math.PI / 8) + ringAt(rings, y).dz;
-  placket(torso, tone(oilskin, 0.08), rings, 0.45, 2.15, 5.55, 0.12);
-  for (const y of [2.5, 3.6, 4.7]) torso.ball(GEAR.gold, 0.3, 0, y, front(y) + 0.25);
+  // The front buttoned over: a wide flap from the waist to the collar, its edge on the wearer's left in the trim.
+  placket(torso, tone(oilskin, 0.06), rings, 1.15, 1.9, 5.55, 0.1);
+  for (let i = 0; i < 4; i++) {
+    const [y0, y1] = [1.9 + (3.65 * i) / 4, 1.9 + (3.65 * (i + 1)) / 4];
+    strut(torso, trim, onChest(rings, 1.15, y0, 0.14).at, onChest(rings, 1.15, y1, 0.14).at, 0.11);
+  }
+  for (const y of [2.5, 3.5, 4.5]) for (const x of [-0.7, 0.7]) torso.ball(GEAR.gold, 0.24, ...onChest(rings, x, y, 0.3).at, 0);
   torso.box(trim, 1.2, 1.1, 0.4, 0, 1.3, front(1.3) + 0.12);
   return front(4.5) + 0.1;
+}
+
+/**
+ * The greatcoat's cape, low-poly: a short cape of oilskin over the shoulders and the tops of the arms, all round,
+ * hemmed in a darker band, under the collar. `over` is how far the coat stands out past the chest.
+ */
+function lowCape(torso: Part, oilskin: string, over: number) {
+  const arm = (4.05 * m.shoulders + 0.45) / m.girth;
+  const [widest, top] = [1.32 / m.girth, 0.75 / m.girth];
+  const t = over + 0.18;
+  // Longest at the back, shortest at the sides where it lies over the arms.
+  const hem = (a: number) => 0.2 + 0.25 * Math.abs(Math.cos(a)) + (Math.cos(a) < 0 ? 0.3 : 0);
+  const rings: HemRing[] = [
+    [4.95, arm + widest + t + 0.12, 2.4 + t, 0.1, 1],
+    [5.75, arm + top + t + 0.22, 2.28 + t, 0.08, 0.1],
+    [6.35, 3.2 + t, 2.1 + t, 0.02, 0],
+    [6.75, 2.45 + t, 1.9 + t, 0, 0],
+    [6.95, 2, 1.75, 0, 0],
+  ];
+  torso.hanging(oilskin, rings, 16, hem);
+  const [y, rx, rz, dz] = rings[0];
+  torso.hanging(tone(oilskin, -0.14), [[y - 0.03, rx + 0.07, rz + 0.07, dz, 1], [y + 0.28, rx + 0.07, rz + 0.07, dz, 1]], 16, hem);
 }
 
 /**
@@ -5902,38 +6119,1027 @@ function lowDiverPlate(torso: Part, skin: string, sh: number, trim: string): num
 }
 
 /**
- * Armor on the legs, low-poly: loose sailcloth trousers tied at the shin, or iron greaves with steel at the knee and
- * shin. On a peg leg's side (no `shin`), only what is over the thigh.
+ * Bands of `color` round a loft through `rings`, from `y0` down to `y1`, one every `step`, `half` either side of its
+ * line and standing `by` proud of it: mail's courses of rings, a quilt's stitching, a jersey's stripes.
  */
-function lowLegArmor(thigh: Part, shin: Part | null, ref: string, trim: string) {
+function bands(part: Part, color: string, rings: readonly Ring[], y0: number, y1: number, by: number, step = 0.42, sides = 8, half = 0.07) {
+  for (let y = y0; y > y1; y -= step) part.loft(color, [around(rings, y - half, by), around(rings, y + half, by)], sides);
+}
+
+/** What the new tops are made of. */
+const JERSEY = "#f2efe6";
+const JERSEY_BLUE = "#2d4f8a";
+const SHIRT = "#ebe3cf";
+const JERKIN = "#7a5030";
+const LACE = "#d8c39a";
+const PAD = "#dccfa8";
+const STOKER_SHIRT = "#3b3c44";
+const APRON = "#5e3e26";
+const SCORCH = "#2a1c14";
+const BARNACLE_IRON = "#7c8985";
+const VERDIGRIS = "#4f9e88";
+const SHELL = "#d4ccb6";
+const GHOST = "#dde2e8";
+const GHOST_SHADE = "#aeb7c4";
+const GHOST_SHIRT = "#4a4f5c";
+/** The tops drawn here by their ref (lowTop, lowTopArm, blockyTop), and the cloth of each one's sleeves. */
+const TOP_CLOTH: Record<string, string> = { jersey: JERSEY, jerkin: SHIRT, gambeson: PAD, stoker_apron: STOKER_SHIRT, barnacle_mail: BARNACLE_IRON, ghostsail: GHOST };
+
+/**
+ * A barnacle on a surface at `at` facing `yaw` (radians about y, 0 straight ahead): a little cone of shell standing
+ * out of it, open at its top, dark inside.
+ */
+function barnacle(part: Part, at: Pt, yaw: number, r: number) {
+  const n: Pt = [Math.sin(yaw), 0, Math.cos(yaw)];
+  part.cyl(SHELL, r * 0.45, r, r * 1.1, ...at, 8, [HALF_PI, 0, -yaw]);
+  part.ball(tone(SHELL, -0.5), r * 0.36, at[0] + n[0] * r * 0.5, at[1], at[2] + n[2] * r * 0.5, 0);
+}
+
+/**
+ * A top worn on the body, low-poly, by its ref (see TOP_CLOTH). Returns how far forward its front is (for an amulet
+ * over it, on the box figure), or null for a ref it does not draw.
+ */
+function lowTop(torso: Part, ref: string, skin: string, sh: number, trim: string): number | null {
+  const front = (rings: readonly Ring[], by: number) => ringAt(rings, 4.2).rz + ringAt(rings, 4.2).dz + by;
+  switch (ref) {
+    case "jersey": {
+      // Striped Jersey: a sailor's jersey of white banded round in blue from the hips to the shoulders, a ribbed
+      // hem, a boat neck of blue, and a patch of the trim on the left breast with an anchor on it.
+      const rings = lowChest(torso, skin, JERSEY, sh);
+      bands(torso, JERSEY_BLUE, rings, 5.0, -0.4, 0.06, 0.75, 8, 0.18);
+      torso.loft(tone(JERSEY, -0.08), [around(rings, -0.7, 0.07), around(rings, -0.25, 0.07)]);
+      torso.loft(JERSEY_BLUE, [around(rings, 5.75, 0.07), around(rings, 6.15, 0.05)]);
+      const p = onChest(rings, 1.45, 3.85, 0.12);
+      spot(torso, trim, 0.52, 0.58, 0.16, ...p.at, [0, p.yaw, 0]);
+      const on = (dx: number, dy: number): Pt => [p.at[0] + Math.cos(p.yaw) * dx + Math.sin(p.yaw) * 0.1, p.at[1] + dy, p.at[2] - Math.sin(p.yaw) * dx + Math.cos(p.yaw) * 0.1];
+      strut(torso, JERSEY, on(0, 0.35), on(0, -0.32), 0.06);
+      strut(torso, JERSEY, on(-0.22, 0.18), on(0.22, 0.18), 0.05);
+      cord(torso, JERSEY, [on(-0.3, -0.12), on(-0.16, -0.32), on(0, -0.36), on(0.16, -0.32), on(0.3, -0.12)], 0.05);
+      return front(rings, 0.1);
+    }
+    case "jerkin": {
+      // Leather Jerkin: brown leather with no sleeves over a pale shirt, from the hips to the shoulders, open up the
+      // front and laced across, with brass eyelets; a dark belt buckled in the trim.
+      const rings = lowChest(torso, skin, SHIRT, sh);
+      const jerkin = [-0.75, 0.4, 1.6, 3.6, 4.6, 5.3, 5.75].map((y) => around(rings, y, 0.12));
+      torso.loft(JERKIN, jerkin);
+      torso.loft(tone(JERKIN, -0.12), [around(jerkin, -0.8, 0.03), around(jerkin, -0.55, 0.03)]);
+      placket(torso, tone(JERKIN, -0.38), jerkin, 0.3, 1.05, 5.55, 0.04);
+      const z = (y: number) => faceAt(jerkin, y) + 0.08;
+      for (let i = 0; i < 5; i++) {
+        const y = 1.35 + i * 0.85;
+        strut(torso, LACE, [-0.45, y, z(y)], [0.45, y + 0.42, z(y + 0.42)], 0.07);
+        strut(torso, LACE, [0.45, y, z(y)], [-0.45, y + 0.42, z(y + 0.42)], 0.07);
+        for (const x of [-0.48, 0.48]) for (const dy of [0, 0.42]) torso.ball(GEAR.gold, 0.09, x, y + dy, z(y + dy), 0);
+      }
+      torso.loft(GEAR.dark, [around(jerkin, 0.6, 0.06), around(jerkin, 1.05, 0.06)]);
+      torso.box(trim, 0.9, 0.7, 0.3, 0, 0.82, faceAt(jerkin, 0.82) + 0.12);
+      return front(jerkin, 0.12);
+    }
+    case "gambeson": {
+      // Quilted Gambeson: a padded coat of pale tan, thick over the chest and down over the hips, quilted in a
+      // grid of stitched lines, with a padded collar and toggles of the trim down the front.
+      const rings = lowChest(torso, skin, PAD, sh);
+      const hip = ringAt(rings, -0.6);
+      const quilt: Ring[] = [[-1.5, hip.rx + 0.42, hip.rz + 0.38, hip.dz], ...[-0.6, 0.4, 1.6, 3.6, 4.6, 5.3, 5.75].map((y) => around(rings, y, 0.2))];
+      torso.loft(PAD, quilt);
+      const stitch = tone(PAD, -0.2);
+      bands(torso, stitch, quilt, 5.2, -1.3, 0.015, 0.62, 8, 0.035);
+      for (let k = 0; k < 8; k++) cord(torso, stitch, [-1.4, -0.6, 0.4, 1.6, 3.6, 4.6, 5.3].map((y): Pt => {
+        const f = facet(quilt, 8, y, k, 0.015);
+        return [f.x, y, f.z];
+      }), 0.035);
+      torso.loft(tone(PAD, -0.06), [[5.95, 2.2, 1.85, -0.05], [6.75, 1.75, 1.55, 0]]);
+      torso.loft(tone(PAD, -0.16), [around(quilt, -1.55, 0.03), around(quilt, -1.3, 0.03)]);
+      for (const y of [1.1, 2.3, 3.5, 4.7]) {
+        torso.box(trim, 0.75, 0.24, 0.24, 0, y, faceAt(quilt, y) + 0.1);
+        torso.ball(tone(PAD, -0.25), 0.1, -0.5, y, faceAt(quilt, y) + 0.05, 0);
+      }
+      return front(quilt, 0.1);
+    }
+    case "stoker_apron": {
+      // Stoker's Apron: a heavy leather apron over a dark shirt, its bib up the chest on straps over the shoulders,
+      // riveted in brass at its corners and buckled in the trim, a pocket on it, and scorched black here and there
+      // (its skirt hangs from the hips: see lowApronSkirt).
+      const rings = lowChest(torso, skin, STOKER_SHIRT, sh, GEAR.dark);
+      const bib: Pt[] = [];
+      for (const [y, w] of [[0.9, 1.9], [2.4, 1.8], [3.9, 1.6], [5.1, 1.4]] as const) {
+        for (const x of [-w, -w / 2, 0, w / 2, w]) bib.push(onChest(rings, x, y, 0.14).at, onChest(rings, x, y, -0.25).at);
+      }
+      torso.shape(APRON, bib);
+      cord(torso, tone(APRON, -0.12), [-1.4, -0.7, 0, 0.7, 1.4].map((x) => onChest(rings, x, 5.1, 0.12).at), 0.1);
+      for (const s of [-1, 1]) {
+        const back = (y: number, x: number): Pt => {
+          const r = ringAt(rings, y);
+          return [s * x, y, r.dz - r.rz * Math.sqrt(Math.max(0, 1 - (x / r.rx) ** 2)) - 0.14];
+        };
+        cord(torso, tone(APRON, -0.1), [onChest(rings, s * 1.3, 5.0, 0.16).at, [s * 1.6, 6.62, 0.3], [s * 1.6, 6.5, -1.05], back(5.3, 1.45), back(3.8, 1.3)], 0.16);
+        torso.box(trim, 0.5, 0.5, 0.22, ...onChest(rings, s * 1.3, 4.95, 0.32).at, [0, onChest(rings, s * 1.3, 4.95, 0).yaw, 0]);
+      }
+      for (const [x, y] of [[-1.75, 1.05], [1.75, 1.05], [-1.35, 4.9], [1.35, 4.9]] as const) torso.ball(DIVE_BRASS, 0.14, ...onChest(rings, x, y, 0.22).at, 0);
+      const pocket = onChest(rings, 0.85, 1.7, 0.2);
+      torso.box(tone(APRON, -0.1), 1.0, 0.85, 0.2, ...pocket.at, [0, pocket.yaw, 0]);
+      for (const [x, y, rx, ry, t] of [[-0.7, 2.5, 0.55, 0.38, 0.5], [0.6, 3.6, 0.42, 0.3, -0.4], [-0.2, 4.5, 0.3, 0.22, 0.2]] as const) {
+        const p = onChest(rings, x, y, 0.18);
+        spot(torso, SCORCH, rx, ry, 0.1, ...p.at, [0, p.yaw, t]);
+      }
+      return front(rings, 0.2);
+    }
+    case "barnacle_mail": {
+      // Barnacle Mail: a mail shirt of sea-worn iron in courses of rings down to a skirt over the hips, patched green
+      // with verdigris and crusted with barnacles, belted in weed-green, and a sea-glass pearl of the trim at its
+      // buckle.
+      const rings = lowChest(torso, skin, BARNACLE_IRON, sh, "#3d5a4a");
+      const hip = ringAt(rings, -0.6);
+      const skirt: Ring[] = [around(rings, 0.55, 0.1), [-1.5, hip.rx + 0.35, hip.rz + 0.3, hip.dz]];
+      torso.loft(tone(BARNACLE_IRON, -0.06), skirt, 8);
+      const course = tone(BARNACLE_IRON, -0.22);
+      bands(torso, course, [...skirt].reverse(), 0.2, -1.4, 0.05);
+      bands(torso, course, rings, 5.5, 1.8, 0.03);
+      torso.loft(course, [[-1.62, hip.rx + 0.4, hip.rz + 0.35, hip.dz], [-1.3, hip.rx + 0.37, hip.rz + 0.32, hip.dz]], 8);
+      for (const [x, y, rx, ry, t, k] of [[-1.3, 3.2, 0.9, 0.6, 0.4, 0], [1.0, 4.6, 0.7, 0.5, -0.3, 0.1], [0.5, 2.0, 0.8, 0.45, 0.2, -0.06], [-0.4, 5.3, 0.5, 0.4, 0, 0.12]] as const) {
+        const p = onChest(rings, x, y, 0.08);
+        spot(torso, tone(VERDIGRIS, k), rx, ry, 0.12, ...p.at, [0, p.yaw, t]);
+      }
+      for (const [x, y, r] of [[-2.2, 4.85, 0.42], [-1.75, 4.35, 0.32], [-2.55, 4.2, 0.3], [-1.95, 5.3, 0.26], [1.55, 2.25, 0.38], [1.95, 2.7, 0.3], [2.1, 1.95, 0.26], [-0.8, 0.95, 0.3], [0.2, 3.3, 0.24]] as const) {
+        const p = onChest(rings, x, y, 0.06);
+        barnacle(torso, p.at, p.yaw, r);
+      }
+      const pearl = onChest(rings, 0, 1.3, 0.24);
+      torso.ring(tone(BARNACLE_IRON, 0.2), 0.4, 0.1, ...pearl.at);
+      torso.glowBall(trim, 0.34, ...pearl.at);
+      return front(rings, 0.25);
+    }
+    case "ghostsail": {
+      // Ghostsail Cloak: a pale grey-white cloak over a dark shirt, round the back and over the shoulders and open
+      // down the front, its edges in shade, fastened over the cape with a clasp of the trim, glowing. Its skirts
+      // hang to the knees in tatters (drawn with the other long coats) and its cape and hood with the head: see
+      // lowGhostCape.
+      const rings = lowChest(torso, skin, GHOST_SHIRT, sh);
+      for (const s of [-1, 1]) {
+        const pts: Pt[] = [];
+        for (const y of [0.4, 2.4, 4.4, 5.3, 5.9, 6.3]) {
+          const r = ringAt(rings, y);
+          for (const deg of [s * 30, s * 60, s * 95, s * 130, s * 160, s * 180]) {
+            const a = (deg / 180) * Math.PI;
+            pts.push([Math.sin(a) * (r.rx + 0.16), y, Math.cos(a) * (r.rz + 0.16) + r.dz]);
+          }
+        }
+        torso.shape(GHOST, pts);
+        const edge = [0.4, 1.4, 2.4, 3.5, 4.5, 5.3, 5.95].map((y): Pt => onRing(rings, y, s * 0.5, 0.18));
+        cord(torso, GHOST_SHADE, edge, 0.15);
+      }
+      return front(rings, 0.15);
+    }
+  }
+  return null;
+}
+
+/**
+ * The sleeves and what is on the arm for a top drawn by lowTop, on one arm (`s` the side: -1 right, 1 left). `hood`
+ * is a hood's mantle over the shoulders, under which nothing stands out from them.
+ */
+function lowTopArm(arm: Part, ref: string, s: number, trim: string, hood: boolean) {
+  switch (ref) {
+    case "jersey":
+      lowSleeve(arm, JERSEY, JERSEY_BLUE);
+      bands(arm, JERSEY_BLUE, SLEEVE, 0.0, -3.4, 0.05, 0.75, 6, 0.16);
+      return;
+    case "jerkin":
+      // Full shirt sleeves, billowing over the forearm.
+      lowSleeve(arm, SHIRT, tone(SHIRT, -0.1));
+      arm.loft(SHIRT, [[-3.6, 1.12, 1.12], [-3.0, 1.34, 1.34], [-2.3, 1.22, 1.22]], 6);
+      return;
+    case "gambeson": {
+      const padded = grown(SLEEVE, 0.14);
+      arm.loft(PAD, padded, 6);
+      bands(arm, tone(PAD, -0.2), padded, 0.3, -3.5, 0.01, 0.6, 6, 0.035);
+      arm.loft(tone(PAD, -0.1), [[-4.15, 1.2, 1.2], [-3.45, 1.26, 1.26]], 6);
+      return;
+    }
+    case "stoker_apron":
+      // Dark shirt sleeves, and heavy leather gauntlets to the forearm, scorched at their flared tops.
+      lowSleeve(arm, STOKER_SHIRT, STOKER_SHIRT);
+      arm.loft(APRON, [[-4.2, 1.18, 1.18], [-3.2, 1.3, 1.3], [-2.6, 1.52, 1.52]], 6);
+      arm.loft(SCORCH, [[-2.78, 1.56, 1.56], [-2.55, 1.56, 1.56]], 6);
+      arm.ball(DIVE_BRASS, 0.12, s * 1.36, -3.4, 0.2, 0);
+      return;
+    case "barnacle_mail":
+      // Mail sleeves, and barnacles and a sprig of coral crusted over the top of the shoulder.
+      lowSleeve(arm, BARNACLE_IRON, tone(BARNACLE_IRON, -0.15));
+      bands(arm, tone(BARNACLE_IRON, -0.22), SLEEVE, -1.1, -2.7, 0.03, 0.5, 6);
+      if (hood) return;
+      for (const [x, z, r] of [[0.35, 0.3, 0.36], [0.75, -0.25, 0.3], [0.1, -0.45, 0.26], [0.95, 0.45, 0.24], [-0.2, 0.55, 0.22]] as const) {
+        arm.cyl(SHELL, r * 0.45, r, r * 1.1, s * x, 1.3, z, 8);
+        arm.ball(tone(SHELL, -0.5), r * 0.36, s * x, 1.3 + r * 0.5, z, 0);
+      }
+      arm.ball(VERDIGRIS, 0.5, s * 1.25, 0.1, 0.2, 0, [0.4, 1, 1]);
+      strut(arm, "#c4604f", [s * 0.45, 1.3, 0.1], [s * 0.6, 2.2, 0.25], 0.12, 0.07);
+      strut(arm, "#c4604f", [s * 0.52, 1.75, 0.16], [s * 0.95, 2.15, 0], 0.08, 0.05);
+      arm.ball(trim, 0.12, s * 0.6, 2.25, 0.25, 0);
+      return;
+    case "ghostsail":
+      // Wide pale sleeves, flaring to ragged cuffs with tatters hanging from them.
+      arm.loft(GHOST, grown(SLEEVE, 0.12), 6);
+      arm.loft(GHOST, [[-4.1, 1.55, 1.55], [-3.4, 1.28, 1.28]], 6);
+      for (let k = 0; k < 3; k++) {
+        const a = k * 2.1 + s;
+        arm.cone(k % 2 ? GHOST : GHOST_SHADE, 0.26, 0.85, Math.sin(a) * 1.3, -4.45, Math.cos(a) * 1.3, 4, [Math.PI, 0, 0]);
+      }
+      return;
+  }
+}
+
+/**
+ * The ring a long coat's skirts are cut from (see coatPanel) at height `y`, `grow` further out: its half-width,
+ * half-depth and how far forward its middle is. For putting things on a skirt.
+ */
+function skirtRing(y: number, grow: number): [number, number, number] {
+  const all: [number, number, number, number][] = [
+    [1.4, 2.85 * (1 + m.hips) * 0.5, 2, 0.05],
+    [0.2, Math.max(3.1 * m.hips, thighReach(0.2) + 0.1), 2.25, 0],
+    [coatHem(), Math.max(3.4 * m.hips, thighReach(0.2) + 0.25), 2.6, -0.15],
+  ];
+  const i = y >= all[1][0] ? 0 : 1;
+  const [p, q] = [all[i], all[i + 1]];
+  const t = Math.max(0, Math.min(1, (p[0] - y) / (p[0] - q[0])));
+  return [p[1] + (q[1] - p[1]) * t + grow, p[2] + (q[2] - p[2]) * t + grow, p[3] + (q[3] - p[3]) * t];
+}
+
+/** A point on a skirt (see skirtRing) on side `s`, `a` radians round from the front, at height `y`. */
+function onSkirt(s: number, y: number, a: number, grow: number): Pt {
+  const [rx, rz, dz] = skirtRing(y, grow);
+  return [s * Math.sin(a) * rx, y, Math.cos(a) * rz + dz];
+}
+
+/**
+ * A pair of skirts hung from the hips, one each side, each on a joint of its own that turns with the thigh on that
+ * side (as a long coat's do: see the skirts in person): `draw` dresses each one, in the torso's units.
+ */
+function hipSkirts(b: Biped, draw: (skirt: Part, s: number) => void) {
+  for (const s of [-1, 1]) {
+    const skirt = new Part(b.torso.joint, 0, SKIRT_PIVOT, 0);
+    skirt.skin.position.y = -SKIRT_PIVOT;
+    skirt.skin.scale.set(m.girth, 1, m.girth);
+    draw(skirt, s);
+    extraParts.push(skirt);
+    // Nothing below the knee to fold: a loose joint stands in for the lower piece.
+    skirts.push({ joint: skirt.joint, thigh: (s > 0 ? b.thighL : b.thighR).joint, fold: new THREE.Group(), shin: (s > 0 ? b.shinL : b.shinR).joint });
+  }
+}
+
+/**
+ * Tatters hanging from the hem of a long coat's lower skirt (see coatPanel), on side `s` from `a0` to `a1`: `n`
+ * ragged strips of the cloth, each a different length.
+ */
+function tatters(part: Part, color: string, s: number, a0: number, a1: number, grow: number, n: number) {
+  const y = coatHem();
+  for (let i = 0; i < n; i++) {
+    const a = a0 + ((a1 - a0) * (i + 0.5)) / n;
+    const w = ((a1 - a0) / n) * 0.42;
+    const len = 0.5 + 0.35 * ((i * 7 + (s > 0 ? 1 : 0)) % 3);
+    part.shape(i % 2 ? color : tone(color, -0.08), [onSkirt(s, y + 0.3, a - w, grow), onSkirt(s, y + 0.3, a + w, grow), onSkirt(s, y + 0.3, a - w, grow - 0.14), onSkirt(s, y + 0.3, a + w, grow - 0.14), onSkirt(s, y - len, a, grow - 0.05)]);
+  }
+}
+
+/**
+ * The Kilt's kilt, low-poly: tartan of green crossed with navy and lines of the trim, round the hips to above the
+ * knee, its apron lapped over the front and held with a pin; it hangs as a long coat's skirts do, so the legs stride
+ * under it. And a sporran on the front, of leather with a face of pale fur and tassels.
+ */
+function lowKilt(b: Biped, torso: Part, trim: string) {
+  const tartan = "#2e5a3c";
+  const dark = "#1f2f4a";
+  // Its hem a little above the knee, so the knees show over a tall boot.
+  const hem = KNEE * m.legs + 0.8;
+  const span: [number, number] = [1.0, hem];
+  hipSkirts(b, (skirt, s) => {
+    coatPanel(skirt, tartan, s, 0, Math.PI, 0.06, span);
+    for (const a of [0.3, 0.95, 1.6, 2.25, 2.9]) coatPanel(skirt, dark, s, a, a + 0.12, 0.08, span);
+    for (const y of [0.4, -0.6, -1.6]) coatPanel(skirt, dark, s, 0, Math.PI, 0.09, [y, y - 0.22]);
+    for (const y of [-0.1, -1.1]) coatPanel(skirt, trim, s, 0, Math.PI, 0.1, [y, y - 0.08]);
+    if (s < 0) return;
+    // The apron, from the left over the front, and its pin.
+    coatPanel(skirt, tartan, s, -0.45, 0.55, 0.14, span);
+    for (const y of [0.4, -0.6, -1.6]) coatPanel(skirt, dark, s, -0.45, 0.55, 0.16, [y, y - 0.22]);
+    for (const y of [-0.1, -1.1]) coatPanel(skirt, trim, s, -0.45, 0.55, 0.17, [y, y - 0.08]);
+    coatPanel(skirt, dark, s, 0.05, 0.17, 0.16, span);
+    const pin = onSkirt(s, hem + 0.7, -0.3, 0.2);
+    strut(skirt, GEAR.steel, [pin[0], pin[1] - 0.45, pin[2]], [pin[0], pin[1] + 0.45, pin[2]], 0.07);
+    skirt.ball(trim, 0.18, pin[0], pin[1] + 0.45, pin[2], 0);
+  });
+  // The sporran, on the torso over the front of the kilt, hung from a chain round the hips.
+  const z = skirtRing(-0.5, 0.2)[1] + skirtRing(-0.5, 0.2)[2];
+  torso.shape("#5a3a24", [[-0.75, 0.15, z], [0.75, 0.15, z], [-0.85, -1.4, z + 0.2], [0.85, -1.4, z + 0.2], [-0.6, 0.15, z + 0.4], [0.6, 0.15, z + 0.4], [-0.75, -1.35, z + 0.65], [0.75, -1.35, z + 0.65]]);
+  spot(torso, "#ece6d8", 0.62, 0.62, 0.2, 0, -0.75, z + 0.58, [0.12, 0, 0]);
+  torso.box(GEAR.gold, 1.5, 0.25, 0.3, 0, 0.05, z + 0.3);
+  for (const x of [-0.35, 0, 0.35]) {
+    strut(torso, GEAR.dark, [x, -0.6, z + 0.75], [x, -1.5, z + 0.82], 0.06);
+    torso.ball(trim, 0.13, x, -1.55, z + 0.82, 0);
+  }
+}
+
+/** The Stoker's Apron's skirt, on one of the skirts hung from the hips (see hipSkirts): leather to the knee, riveted and scorched. */
+function lowApronSkirt(skirt: Part, s: number) {
+  const hem = KNEE * m.legs - 0.25;
+  // The two halves lap a little at the middle, the left over the right.
+  const grow = s > 0 ? 0.27 : 0.24;
+  coatPanel(skirt, APRON, s, -0.04, 0.95, grow, [1.2, hem]);
+  for (const y of [hem + 0.25, 0.9]) skirt.ball(DIVE_BRASS, 0.14, ...onSkirt(s, y, 0.85, grow + 0.06), 0);
+  const p = onSkirt(s, -1.1, 0.45, grow + 0.04);
+  spot(skirt, SCORCH, 0.5, 0.38, 0.1, ...p, [0, s * 0.45, s * 0.6]);
+}
+
+/**
+ * The Ghostsail Cloak's cape and hood, low-poly, drawn with the head as the greatcoat's cape is (see lowCape): pale
+ * cloth over the shoulders and the tops of the arms, its hem ragged all round; and its hood, down, a soft fold lying
+ * over the back of the shoulders below the neck, shadowed inside (`hoodDown`: under a diving helm there is no room).
+ */
+function lowGhostCape(torso: Part, over: number, hoodDown: boolean, trim: string) {
+  const arm = (4.05 * m.shoulders + 0.45) / m.girth;
+  const [widest, top] = [1.32 / m.girth, 0.75 / m.girth];
+  const t = over + 0.18;
+  const hem = (a: number) => 0.35 + 0.3 * Math.abs(Math.cos(a)) + (Math.cos(a) < 0 ? 0.55 : 0) + 0.32 * Math.abs(Math.sin(a * 5));
+  const rings: HemRing[] = [
+    [4.95, arm + widest + t + 0.12, 2.4 + t, 0.1, 1],
+    [5.75, arm + top + t + 0.22, 2.28 + t, 0.08, 0.1],
+    [6.35, 3.2 + t, 2.1 + t, 0.02, 0],
+    [6.75, 2.45 + t, 1.9 + t, 0, 0],
+    [6.95, 2, 1.75, 0, 0],
+  ];
+  torso.hanging(GHOST, rings, 20, hem);
+  // Its clasp at the front, glowing in the trim, on a little chain either side.
+  const clasp: Pt = [0, 5.25, 2.35 + t + 0.28];
+  for (const s of [-1, 1]) strut(torso, GEAR.steel, clasp, [s * 0.9, 5.45, clasp[2] - 0.12], 0.07);
+  torso.ring(GEAR.steel, 0.42, 0.1, ...clasp);
+  torso.glowBall(trim, 0.34, ...clasp);
+  if (!hoodDown) return;
+  torso.ball(GHOST, 1.7, 0, 6.05, -(2.1 + t), 1, [1.35, 0.7, 0.75]);
+  torso.ball(GHOST_SHADE, 1.05, 0, 6.6, -(1.6 + t), 1, [1.25, 0.42, 0.55]);
+}
+
+/**
+ * A top worn on the body, on the box figure, by its ref (see TOP_CLOTH). Returns how far forward its front is (for an
+ * amulet over it), or null for a ref it does not draw.
+ */
+function blockyTop(torso: Part, ref: string, trim: string): number | null {
+  switch (ref) {
+    case "jersey":
+      torso.box(JERSEY, 7, 6, 3.8, 0, 3, 0);
+      for (const y of [0.5, 1.7, 2.9, 4.1, 5.3]) torso.box(JERSEY_BLUE, 7.1, 0.5, 3.9, 0, y, 0);
+      torso.box(trim, 1, 1, 0.3, 1.8, 3.5, 1.95);
+      return 2;
+    case "jerkin":
+      torso.box(SHIRT, 7, 6, 3.8, 0, 3, 0);
+      torso.box(JERKIN, 7.2, 5.6, 4.1, 0, 2.8, 0);
+      torso.box(tone(JERKIN, -0.38), 0.7, 4.6, 0.2, 0, 3.2, 2.07);
+      for (const y of [1.6, 2.7, 3.8, 4.9]) for (const k of [-1, 1]) torso.box(LACE, 1.1, 0.18, 0.2, 0, y, 2.17, [0, 0, k * 0.5]);
+      torso.box(GEAR.dark, 7.4, 0.8, 4.3, 0, 1.0, 0);
+      torso.box(trim, 1, 0.8, 0.3, 0, 1.0, 2.25);
+      return 2.15;
+    case "gambeson": {
+      const stitch = tone(PAD, -0.2);
+      torso.box(PAD, 7.4, 6.2, 4.2, 0, 3, 0);
+      torso.box(PAD, 7.6, 1.6, 4.4, 0, -0.4, 0);
+      for (const y of [0.6, 1.8, 3.0, 4.2, 5.4]) torso.box(stitch, 7.45, 0.12, 4.25, 0, y, 0);
+      for (const x of [-2.4, -0.8, 0.8, 2.4]) torso.box(stitch, 0.12, 7.6, 4.45, x, 2.6, 0);
+      for (const y of [1.2, 2.4, 3.6, 4.8]) torso.box(trim, 0.8, 0.3, 0.3, 0, y, 2.2);
+      torso.box(tone(PAD, -0.06), 3.4, 0.9, 3.2, 0, 6.3, 0);
+      return 2.2;
+    }
+    case "stoker_apron":
+      torso.box(STOKER_SHIRT, 7, 6, 3.8, 0, 3, 0);
+      torso.box(GEAR.dark, 7.2, 0.7, 4.05, 0, 1.3, 0);
+      torso.box(APRON, 4.4, 3.8, 0.4, 0, 3.6, 2.05);
+      for (const s of [-1, 1]) {
+        torso.box(tone(APRON, -0.1), 0.55, 1.8, 0.3, s * 1.75, 5.7, 1.72, [-0.6, 0, -s * 0.12]);
+        torso.box(trim, 0.6, 0.5, 0.25, s * 1.6, 5.2, 2.3);
+        for (const y of [1.9, 5.2]) torso.box(DIVE_BRASS, 0.35, 0.35, 0.2, s * 2, y - (y > 5 ? 0.5 : 0), 2.3);
+      }
+      torso.box(APRON, 5.8, 5.4, 0.45, 0, -1.2, 2.45, [-0.07, 0, 0]);
+      torso.box(SCORCH, 1.2, 0.8, 0.2, -0.8, 3.0, 2.28);
+      torso.box(SCORCH, 1.4, 1, 0.2, 1.0, -1.6, 2.72, [-0.07, 0, 0]);
+      return 2.3;
+    case "barnacle_mail":
+      torso.box(BARNACLE_IRON, 7, 6, 3.8, 0, 3, 0);
+      torso.box(tone(BARNACLE_IRON, -0.1), 7.3, 1.4, 4.1, 0, 0.1, 0);
+      torso.box("#3d5a4a", 7.4, 0.8, 4.2, 0, 1.3, 0);
+      for (const [x, y, w] of [[-1.4, 3.2, 1.6], [1.2, 4.6, 1.2], [0.6, 2.2, 1.4]] as const) torso.box(VERDIGRIS, w, 0.9, 0.2, x, y, 1.95);
+      for (const [x, y] of [[-2.4, 4.8], [-1.8, 4.3], [1.9, 2.4], [2.4, 2.0], [-0.8, 0.9]] as const) {
+        torso.ball(SHELL, 0.45, x, y, 2.0);
+        torso.box(tone(SHELL, -0.5), 0.3, 0.3, 0.2, x, y, 2.4);
+      }
+      torso.glowBox(trim, 0.8, 0.8, 0.3, 0, 1.3, 2.25);
+      return 2.2;
+    case "ghostsail":
+      torso.box(GHOST_SHIRT, 7, 6, 3.8, 0, 3, 0);
+      torso.box(GHOST, 7.6, 6.6, 0.7, 0, 3, -1.9);
+      for (const s of [-1, 1]) {
+        torso.box(GHOST, 1.8, 6.6, 4.4, s * 2.95, 3, 0);
+        torso.box(GHOST_SHADE, 0.3, 6.6, 0.3, s * 2.05, 3, 2.1);
+      }
+      torso.box(GHOST, 8, 1.2, 4.6, 0, 5.7, 0);
+      torso.box(GHOST, 4.2, 1.8, 2, 0, 6.2, -2.6);
+      torso.glowBox(trim, 0.8, 0.8, 0.4, 0, 5.4, 2.4);
+      return 2.1;
+  }
+  return null;
+}
+
+/** What is on the arm, on the box figure, for a top drawn by blockyTop (over the sleeve drawn in its TOP_CLOTH). */
+function blockyTopArm(arm: Part, ref: string, s: number, trim: string): boolean {
+  switch (ref) {
+    case "jersey":
+      for (const y of [-0.5, -1.7, -2.9]) arm.box(JERSEY_BLUE, 2.1, 0.5, 2.5, 0, y, 0);
+      arm.box(JERSEY_BLUE, 2.2, 0.7, 2.6, 0, -4, 0);
+      return true;
+    case "jerkin":
+      arm.box(tone(SHIRT, -0.1), 2.2, 0.7, 2.6, 0, -4, 0);
+      return true;
+    case "gambeson":
+      arm.box(PAD, 2.7, 1.4, 3, s * 0.1, 0.1, 0);
+      for (const y of [-1.2, -2.4]) arm.box(tone(PAD, -0.2), 2.1, 0.12, 2.5, 0, y, 0);
+      arm.box(tone(PAD, -0.1), 2.2, 0.7, 2.6, 0, -4, 0);
+      return true;
+    case "stoker_apron":
+      arm.box(APRON, 2.4, 1.8, 2.8, 0, -3.7, 0);
+      arm.box(SCORCH, 2.5, 0.3, 2.9, 0, -2.85, 0);
+      return true;
+    case "barnacle_mail":
+      arm.box(tone(BARNACLE_IRON, 0.06), 2.9, 1.5, 3.3, s * 0.2, 0.2, 0);
+      for (const [x, z] of [[0.3, 0.6], [0.8, -0.5], [-0.1, -0.2]] as const) arm.ball(SHELL, 0.4, s * x, 1.1, z);
+      arm.box(trim, 0.4, 0.4, 0.4, s * 0.6, 1.3, 0.6);
+      arm.box(tone(BARNACLE_IRON, -0.15), 2.2, 0.7, 2.6, 0, -4, 0);
+      return true;
+    case "ghostsail":
+      arm.box(GHOST, 2.7, 1.1, 3, 0, -4, 0);
+      arm.box(GHOST_SHADE, 0.6, 1, 0.3, s * 0.6, -4.9, 1.2);
+      return true;
+  }
+  return false;
+}
+
+/** How far out from the chest each top drawn by lowTop stands, where an amulet lies over it (see amuletOver). */
+const TOP_OVER: Record<string, number> = { jersey: 0.14, jerkin: 0.24, gambeson: 0.3, stoker_apron: 0.3, barnacle_mail: 0.36 };
+
+/**
+ * What is worn on one leg, on the box figure, by its ref (the leg's box runs from the hip at 0 down to the ground at
+ * -5; `s` is the side, -1 right, 1 left). False for a ref it does not draw.
+ */
+function blockyLegs(leg: Limb, thigh: Part, shin: Part, ref: string, trim: string, skin: string, s: number): boolean {
+  switch (ref) {
+    case "breeches":
+      leg.box("#2f4a6e", 2.7, 3.1, 2.9, 0, -1.5, 0);
+      for (const x of [-0.7, 0.7]) leg.box("#e8e0c8", 0.3, 3.1, 2.95, x, -1.5, 0);
+      leg.box(trim, 2.8, 0.4, 3, 0, -3.0, 0);
+      leg.box(STOCKING, 2.4, 2, 2.6, 0, -4, 0);
+      return true;
+    case "chaps":
+      leg.box("#3a3634", 2.4, 5, 2.6, 0, -2.5, 0);
+      leg.box("#8a5a34", 2.7, 4.6, 0.5, 0, -2.4, 1.2);
+      leg.box("#8a5a34", 0.5, 4.6, 2.5, s * 1.3, -2.4, 0.1);
+      for (let y = -0.6; y > -4.6; y -= 0.8) leg.box(tone("#8a5a34", -0.1), 0.5, 0.15, 0.5, s * 1.7, y, -0.4);
+      leg.box(trim, 0.4, 0.4, 0.4, s * 1.6, -1.2, 0.6);
+      return true;
+    case "kilt":
+      leg.box(skin, 2.4, 5, 2.6, 0, -2.5, 0);
+      leg.box("#e2d8c0", 2.6, 1.8, 2.8, 0, -4, 0);
+      leg.box(trim, 0.3, 0.7, 0.6, s * 1.35, -3.4, 0.2);
+      return true;
+    case "sea_legs":
+      leg.box("#22365a", 2.9, 3.4, 3.1, 0, -1.7, 0);
+      leg.box("#22365a", 3.6, 1.8, 3.8, 0, -4.1, 0.2);
+      leg.box(trim, 0.2, 5, 0.4, s * 1.5, -2.4, 0);
+      return true;
+    case "pathfinders":
+      leg.box("#5f5a3a", 2.7, 3.1, 2.9, 0, -1.5, 0);
+      leg.box(tone("#5f5a3a", -0.1), 0.4, 1.3, 1.4, s * 1.45, -1.6, 0.1);
+      leg.box(trim, 0.3, 0.3, 0.3, s * 1.7, -1.1, 0.1);
+      for (let i = 0; i < 4; i++) shin.box(i % 2 ? "#8a7a58" : tone("#8a7a58", -0.08), 2.6, 0.45, 2.8, 0, -3.2 - i * 0.45 - KNEE, 0, [0, 0, (i % 2 ? 1 : -1) * 0.12]);
+      return true;
+    case "windrunners":
+      leg.box("#e3e8ef", 2.5, 5, 2.7, 0, -2.5, 0);
+      leg.box(trim, 2.6, 0.4, 2.8, 0, -2.5, 0);
+      shin.box(trim, 0.2, 0.4, 2.4, s * 1.4, -2.8 - KNEE, -1.6, [0.35, 0, 0]);
+      thigh.box(trim, 0.2, 0.4, 2.2, s * 1.4, -0.4, -1.5, [0.35, 0, 0]);
+      return true;
+  }
+  return false;
+}
+
+/**
+ * Footwear on one leg, on the box figure, by its ref (the ground is at -5). `under` is the ref worn on the legs, or
+ * "" for none. False for a ref it does not draw.
+ */
+function blockyBoots(leg: Limb, shin: Part, ref: string, trim: string, skin: string, under: string): boolean {
+  // In the shin's own space (the knee at 0), for what is not a plain box.
+  const lo = (y: number) => y - KNEE;
+  switch (ref) {
+    case "clogs":
+      leg.box(CORK, 3, 0.6, 4.6, 0, -4.7, 0.6);
+      leg.box(CLOG_WOOD, 2.9, 1.2, 4.3, 0, -3.85, 0.5);
+      shin.box(CLOG_WOOD, 2.2, 0.8, 1, 0, lo(-3.65), 2.5, [-0.4, 0, 0]);
+      leg.box(trim, 1.2, 0.2, 0.9, 0, -3.22, 1.4);
+      return true;
+    case "sandals":
+      leg.box(skin, 2.4, 1.2, 3.3, 0, -4.4, 0.4);
+      leg.box(ROPE, 2.7, 0.35, 3.8, 0, -4.85, 0.5);
+      leg.box(ROPE, 2.6, 0.3, 0.4, 0, -4.1, 1.3);
+      for (const y of [-3.6, -3.1]) shin.box(ROPE, 2.6, 0.3, 2.8, 0, lo(y), 0, [0, 0, y < -3.3 ? 0.15 : -0.15]);
+      leg.box(trim, 0.4, 0.4, 0.4, 0, -3.0, 1.45);
+      return true;
+    case "buckled_shoes":
+      if (!under) leg.box(STOCKING, 2.5, 1.8, 2.7, 0, -3.1, 0);
+      leg.box("#26232b", 2.7, 1.2, 3.6, 0, -4.4, 0.45);
+      leg.box(trim, 2.7, 0.5, 1, 0, -4.8, -0.8);
+      leg.box(GEAR.gold, 1.3, 0.9, 0.2, 0, -3.95, 2.25);
+      return true;
+    case "cleats":
+      leg.box("#5a3d2a", 2.9, 2.4, 3.2, 0, -3.8, 0.1);
+      leg.box("#5a3d2a", 2.9, 1.2, 1.3, 0, -4.35, 2);
+      leg.box("#e6dccb", 3.4, 1, 3.7, 0, -2.5, 0.1);
+      leg.box(trim, 3, 0.4, 0.5, 0, -4.2, 2.5);
+      for (const x of [-1, 1]) for (const z of [-0.9, 0.8, 2.2]) leg.box(GEAR.iron, 0.3, 0.4, 0.3, x, -5.1, z);
+      return true;
+    case "springheels":
+      leg.box("#7a4a2a", 2.9, 3.1, 3.2, 0, -3.1, 0.1);
+      leg.box("#7a4a2a", 2.9, 1.2, 1.3, 0, -4.3, 2);
+      leg.box(tone("#7a4a2a", 0.1), 3.2, 0.8, 3.5, 0, -1.6, 0.1);
+      leg.box(trim, 3.25, 0.4, 3.55, 0, -2.1, 0.1);
+      for (const y of [-4.95, -4.65]) shin.cyl(y < -4.8 ? DIVE_BRASS : tone(DIVE_BRASS, 0.15), 0.65, 0.65, 0.2, 0, lo(y), -0.7, 6);
+      return true;
+    case "couriers":
+      leg.box("#ece6d6", 2.7, 1.1, 3.6, 0, -4.45, 0.45);
+      leg.box(trim, 2.8, 0.25, 3.7, 0, -4.95, 0.45);
+      for (const x of [-1.4, 1.4]) shin.box(trim, 0.2, 0.7, 1.4, x, lo(-3.7), -0.5, [0.5, 0, 0]);
+      return true;
+    case "sneaks":
+      leg.box("#3a3442", 2.6, 1, 3.6, 0, -4.5, 0.5);
+      for (const [i, y] of [-3.8, -3.3, -2.8].entries()) shin.box(tone("#3a3442", i % 2 ? 0.12 : 0.04), 2.6, 0.35, 2.8, 0, lo(y), 0, [0, 0, (i % 2 ? 1 : -1) * 0.15]);
+      leg.box(trim, 0.4, 0.4, 0.4, 0.6, -2.7, 1.4);
+      return true;
+    case "cloudsteps":
+      leg.box(SKY, 2.9, 2.7, 3.2, 0, -3.6, 0.1);
+      leg.box(CLOUD, 2.9, 1.2, 1.3, 0, -4.35, 2);
+      leg.box(CLOUD, 3.2, 0.8, 3.5, 0, -2.2, 0.1);
+      leg.box(GEAR.gold, 3.25, 0.4, 3.55, 0, -2.8, 0.1);
+      shin.glowBox(trim, 0.6, 0.6, 0.2, 0, lo(-3.4), 1.75);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        puff(shin, i % 2 ? CLOUD : "#e1edf9", 0.65, Math.sin(a) * 1.5, lo(-4.95), 0.6 + Math.cos(a) * 2.1);
+      }
+      return true;
+    case "phase_treads":
+      leg.box("#3b2a55", 2.9, 2.7, 3.2, 0, -3.6, 0.1);
+      leg.box("#3b2a55", 2.9, 1.2, 1.3, 0, -4.35, 2);
+      leg.box(tone("#3b2a55", 0.12), 3.2, 0.8, 3.5, 0, -2.2, 0.1);
+      shin.glowBox(trim, 0.2, 1.8, 0.1, 0, lo(-3.5), 1.72);
+      shin.glowBox(trim, 0.8, 0.15, 0.1, 0, lo(-3.2), 1.72, [0, 0, 0.6]);
+      shin.glowBox(trim, 0.15, 0.15, 1, 0, lo(-3.8), 2.6);
+      return true;
+  }
+  return false;
+}
+
+/** The Kilt on the box figure: tartan round the hips over the tops of the legs, and a sporran. */
+function blockyKilt(torso: Part, trim: string) {
+  torso.box("#2e5a3c", 7.6, 3.4, 4.4, 0, -1.3, 0);
+  for (const y of [-0.4, -1.8]) torso.box("#1f2f4a", 7.7, 0.35, 4.5, 0, y, 0);
+  for (const x of [-2.4, -0.8, 0.8, 2.4]) torso.box("#1f2f4a", 0.3, 3.4, 4.5, x, -1.3, 0);
+  torso.box(trim, 7.75, 0.15, 4.55, 0, -1.1, 0);
+  torso.box("#5a3a24", 1.6, 1.6, 0.6, 0, -0.9, 2.5);
+  torso.box("#ece6d8", 1.1, 1.1, 0.2, 0, -0.9, 2.85);
+  torso.box(trim, 0.3, 0.3, 0.3, 0, -1.9, 2.6);
+}
+
+/**
+ * Cloud that drifts, set by makeFigure for the figure being built: puffs round Cloudstep Boots' soles and under a
+ * hero floating on them, each wandering a little round where it was put, out of step with the rest (see drift).
+ */
+let puffs: { joint: THREE.Object3D; at: THREE.Vector3; phase: number }[] = [];
+
+/** A puff of cloud on `parent` at (x, y, z), on a joint of its own so it can drift (see puffs). */
+function puff(parent: Part, color: string, r: number, x: number, y: number, z: number) {
+  const p = new Part(parent.joint, x, y, z);
+  p.ball(color, r, 0, 0, 0, 1, [1, 0.7, 1]);
+  extraParts.push(p);
+  puffs.push({ joint: p.joint, at: new THREE.Vector3(x, y, z), phase: puffs.length * 2.39 });
+}
+
+/** Each puff wandering a short way round its spot, and swelling and easing a little, out of step with the others. */
+function drift(list: typeof puffs, t: number) {
+  for (const p of list) {
+    const k = p.phase;
+    p.joint.position.set(p.at.x + 0.2 * Math.sin(t * 0.8 + k), p.at.y + 0.08 * Math.sin(t * 1.27 + k * 1.7), p.at.z + 0.2 * Math.cos(t * 0.63 + k * 0.6));
+    p.joint.scale.setScalar(1 + 0.09 * Math.sin(t * 1.05 + k * 2.3));
+  }
+}
+
+/**
+ * Cloudstep Boots: how high the wearer floats over the ground, and how far up and down they bob on it and how fast
+ * (radians a second: about once every 1.8 seconds), in the figure's own units (22 to its height).
+ */
+const HOVER = 1.6;
+const HOVER_BOB = 0.6;
+const HOVER_RATE = (Math.PI * 2) / 1.8;
+
+/** The little cloud under a hero floating on Cloudstep Boots, below the feet in the figure's top's space. */
+function hoverCloud(top: THREE.Group): Part {
+  const cloud = new Part(top, 0, 0, 0);
+  extraParts.push(cloud);
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2;
+    const r = i % 3 === 0 ? 2.6 : 1.7;
+    puff(cloud, i % 2 ? CLOUD : "#e4eefa", 0.75 + 0.2 * (i % 3), Math.sin(a) * r * 1.2, -0.7 - 0.12 * (i % 2), Math.cos(a) * r + 0.4);
+  }
+  return cloud;
+}
+
+/**
+ * Armor on the legs, low-poly. Boots come up over the shin to just under the knee, so what tells one from another
+ * is on the thigh and the knee, and over the top of the boot. `s` is the side (-1 right, 1 left). On a peg leg's
+ * side (no `shin`), only what is over the thigh.
+ */
+function lowLegArmor(thigh: Part, shin: Part | null, ref: string, trim: string, s: number, skin = "#f1c9a5") {
+  const outside = (rings: readonly Ring[], y: number, by: number): Pt => [s * (ringAt(rings, y).rx + by), y, 0];
   if (ref === "diving_legs") {
-    // Riveted Leggings: dark canvas, a riveted iron knee plate, and a brass band round the top of the shin.
+    // Riveted Leggings: dark canvas, a riveted iron plate down the front of the thigh, a round iron knee plate
+    // rimmed in brass with rivets round it and a boss of the trim, and a brass band round the top of the boot.
     const canvas = "#4d4a3e";
-    thigh.loft(canvas, grown(THIGH, 0.12), 6);
+    const legs = grown(THIGH, 0.12);
+    thigh.loft(canvas, legs, 6);
     shin?.loft(canvas, grown(SHIN, 0.1), 6);
-    shin?.ball(DIVE_IRON, 1.05, 0, 0.05, 0.75, 0, [1.2, 1, 0.85]);
-    for (const x of [-0.55, 0.55]) shin?.ball(tone(DIVE_IRON, 0.2), 0.15, x, 0.05, 1.62, 0);
-    shin?.loft(DIVE_BRASS, [[-1.05, 1.36, 1.4], [-0.6, 1.38, 1.42]], 6);
-    thigh.loft(trim, [[0.05, 1.62, 1.62], [0.45, 1.58, 1.58]], 6);
+    thigh.shape(DIVE_IRON, sym([[0.82, -0.35, 1.42], [0.78, -2.2, 1.22], [0, -0.3, 1.78], [0, -2.25, 1.55]]));
+    for (const y of [-0.6, -1.45, -2.05]) for (const x of [-0.55, 0.55]) thigh.ball(tone(DIVE_IRON, 0.22), 0.13, x, y, 1.58 + (y + 0.35) * 0.11);
+    // A seam down the outside of the canvas.
+    strut(thigh, tone(canvas, -0.12), outside(legs, -2.5, 0.02), outside(legs, -0.2, 0.02), 0.08);
+    if (!shin) return;
+    // The plate over a brass lip a little wider than it, which shows round its edge.
+    shin.ball(DIVE_BRASS, 1.1, 0, 0.1, 0.72, 1, [1.24, 1.06, 0.72]);
+    shin.ball(DIVE_IRON, 1.0, 0, 0.1, 0.82, 1, [1.2, 1.02, 0.82]);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
+      shin.ball(tone(DIVE_IRON, 0.22), 0.12, Math.cos(a) * 0.72, 0.1 + Math.sin(a) * 0.72, 1.52);
+    }
+    shin.ball(trim, 0.3, 0, 0.1, 1.68);
+    shin.loft(DIVE_BRASS, [[-0.62, 1.58, 1.62], [-0.3, 1.58, 1.62]], 8);
     return;
   }
   if (ref === "trousers") {
+    // Sailcloth Trousers: loose pale canvas, sewn in panels with a seam down the outside, a patch on the knee,
+    // bloused out over the top of the boot and tied there with a cord in the trim, knotted with its ends hanging.
     const cloth = "#d8cfb4";
-    thigh.loft(cloth, grown(THIGH, 0.14), 6);
-    shin?.loft(cloth, [[-1.55, 1.18, 1.24], [-1, 1.32, 1.38, -0.05], [0.4, 1.28, 1.32]], 6);
-    shin?.loft(trim, [[-1.75, 1.22, 1.28], [-1.35, 1.24, 1.3]], 6);
-    thigh.box(tone(cloth, -0.1), 0.9, 1.1, 0.3, 0.45, -1.6, 1.42);
+    const legs = grown(THIGH, 0.22);
+    thigh.loft(cloth, legs, 6);
+    strut(thigh, tone(cloth, -0.12), outside(legs, -2.8, 0.02), outside(legs, 0.2, 0.02), 0.08);
+    thigh.box(tone(cloth, -0.1), 0.9, 1.1, 0.3, 0.45, -1.7, 1.52);
+    if (!shin) return;
+    // Under the boot it is a plain leg (it shows above a short boot); over the boot top it billows out.
+    shin.loft(cloth, [[-2.15, 1.12, 1.18], [-1, 1.26, 1.32, -0.05], [-0.72, 1.66, 1.7], [-0.25, 1.74, 1.78], [0.45, 1.48, 1.52]], 6);
+    shin.loft(trim, [[-0.82, 1.62, 1.66], [-0.6, 1.64, 1.68]], 6);
+    const knot: Pt = [s * 0.75, -0.7, 1.55];
+    shin.ball(tone(trim, -0.06), 0.24, ...knot, 0);
+    for (const k of [-1, 1]) strut(shin, trim, knot, [knot[0] + s * 0.12 * (k + 2), knot[1] - 0.75, knot[2] + 0.05], 0.08, 0.06);
     return;
   }
-  thigh.loft(GEAR.iron, grown(THIGH, 0.06), 6);
-  shin?.loft(GEAR.iron, grown(SHIN, 0.08), 6);
-  shin?.ball(GEAR.steel, 0.95, 0, 0.05, 0.85, 0, [1.15, 0.95, 0.8]);
-  shin?.shape(GEAR.steel, sym([[0.75, -0.55, 0.95], [0.7, -1.95, 0.85], [0, -0.45, 1.38], [0, -2.05, 1.25]]));
-  thigh.loft(trim, [[0.05, 1.62, 1.62], [0.5, 1.56, 1.56]], 6);
+  // Stripes down a leg: one down the middle of each face of a six-sided loft through `rings`, from `y0` up to `y1`.
+  const stripes = (part: Part, color: string, rings: readonly Ring[], ys: readonly number[], r: number) => {
+    for (let k = 0; k < 6; k++) cord(part, color, ys.map((y): Pt => {
+      const f = facet(rings, 6, y, k, 0.02);
+      return [f.x, y, f.z];
+    }), r);
+  };
+  if (ref === "breeches") {
+    // Striped Breeches: navy breeches striped down the leg in cream, buttoned at the knee under a band of the trim,
+    // and pale stockings below them.
+    const cloth = "#2f4a6e";
+    const legs = grown(THIGH, 0.16);
+    thigh.loft(cloth, legs, 6);
+    stripes(thigh, "#e8e0c8", legs, [-2.75, -1.4, 0.2, 0.75], 0.13);
+    if (!shin) return;
+    shin.loft(STOCKING, grown(SHIN, 0.03), 6);
+    const knee: Ring[] = [[-0.65, 1.3, 1.34, -0.04], [0.4, 1.3, 1.32]];
+    shin.loft(cloth, knee, 6);
+    stripes(shin, "#e8e0c8", knee, [-0.6, 0.35], 0.12);
+    shin.loft(trim, [[-0.75, 1.38, 1.42, -0.04], [-0.5, 1.39, 1.43, -0.04]], 6);
+    for (const y of [-0.3, 0.1]) shin.ball(GEAR.gold, 0.15, s * 1.36, y, 0.3);
+    return;
+  }
+  if (ref === "chaps") {
+    // Leather Chaps: brown leather over the front and the outside of each leg, from the hip to the boot, fringed down
+    // its outer edge and studded with silver conchos round a boss of the trim, over dark trousers.
+    const under = "#3a3634";
+    const hide = "#8a5a34";
+    const turn: Rot = [0, s * 0.55, 0];
+    thigh.loft(under, grown(THIGH, 0.06), 6);
+    const chap = grown(THIGH, 0.2);
+    thigh.frontLoft(hide, chap, 1.9, 8, turn);
+    // The fringe, standing out along the outer edge, and the conchos.
+    const edge = s * (0.55 + 1.82);
+    for (let y = -2.6; y < 0.3; y += 0.38) strut(thigh, tone(hide, -0.1), onRing(chap, y, edge, -0.05), onRing(chap, y - 0.25, edge, 0.4), 0.07, 0.05);
+    for (const y of [-0.4, -1.6]) {
+      const at = onRing(chap, y, s * 1.35, 0.06);
+      thigh.ball(GEAR.steel, 0.26, ...at, 0, [1, 1, 0.5]);
+      thigh.ball(trim, 0.13, at[0] + s * 0.12, at[1], at[2], 0);
+    }
+    if (!shin) return;
+    shin.loft(under, grown(SHIN, 0.06), 6);
+    const lower = grown(SHIN, 0.18);
+    shin.frontLoft(hide, lower, 1.9, 8, turn);
+    for (let y = -2.0; y < 0.3; y += 0.38) strut(shin, tone(hide, -0.1), onRing(lower, y, edge, -0.05), onRing(lower, y - 0.25, edge, 0.4), 0.07, 0.05);
+    return;
+  }
+  if (ref === "kilt") {
+    // Kilt: the kilt itself hangs from the hips (see lowKilt); below it bare knees, and wool socks turned down under
+    // the knee with a flash of the trim on the outside.
+    lowLeg(thigh, shin, skin);
+    if (!shin) return;
+    const sock = "#e2d8c0";
+    shin.loft(sock, [[-2.3, 1.0, 1.04], [-1, 1.22, 1.27, -0.05], [-0.78, 1.22, 1.27, -0.05]], 6);
+    shin.loft(tone(sock, -0.08), [[-0.95, 1.3, 1.35, -0.05], [-0.55, 1.3, 1.35, -0.05]], 6);
+    for (const k of [-1, 1]) shin.shape(trim, [[s * 1.3, -0.95, k * 0.12 + 0.1], [s * 1.38, -0.95, k * 0.12 + 0.2], [s * 1.3, -1.65, k * 0.28 + 0.1], [s * 1.38, -1.65, k * 0.28 + 0.2]]);
+    return;
+  }
+  if (ref === "sea_legs") {
+    // Sea-Legs Slops: wide navy bell-bottoms flaring out over the feet (so a boot's shaft is not drawn under them: see
+    // lowBoots), a darker hem, a stripe of the trim down the outside, and brass buttons on the front flap.
+    const navy = "#22365a";
+    const legs = grown(THIGH, 0.24);
+    thigh.loft(navy, legs, 8);
+    strut(thigh, trim, outside(legs, -2.8, 0.03), outside(legs, 0.3, 0.03), 0.09);
+    for (const y of [-0.6, -0.05]) thigh.ball(GEAR.gold, 0.15, -s * 0.45, y, ringAt(legs, y).rz * 0.93 + 0.08);
+    if (!shin) return;
+    const bell: Ring[] = [[-2.15, 1.85, 2.0, 0.35], [-1.6, 1.62, 1.72, 0.2], [-0.6, 1.48, 1.52, 0.05], [0.45, 1.52, 1.55]];
+    shin.loft(navy, bell, 8);
+    shin.loft(tone(navy, -0.14), [around(bell, -2.2, 0.03), around(bell, -1.95, 0.03)], 8);
+    strut(shin, trim, outside(bell, -1.95, 0.03), outside(bell, 0.4, 0.03), 0.09);
+    return;
+  }
+  if (ref === "pathfinders") {
+    // Pathfinder's Breeches: green-brown breeches with a big pocket on the outside of each thigh, its flap buttoned
+    // with the trim, buckled below the knee; and below that, puttees wound round the shin to the ankle.
+    const cloth = "#5f5a3a";
+    const wrap = "#8a7a58";
+    const legs = grown(THIGH, 0.16);
+    thigh.loft(cloth, legs, 6);
+    const side = outside(legs, -1.35, 0.06);
+    thigh.box(tone(cloth, -0.08), 0.35, 1.35, 1.3, side[0], -1.4, 0.1);
+    thigh.box(tone(cloth, -0.16), 0.45, 0.42, 1.38, side[0] + s * 0.04, -0.7, 0.1);
+    thigh.ball(trim, 0.15, side[0] + s * 0.24, -0.78, 0.1, 0);
+    strut(thigh, tone(cloth, -0.12), outside(legs, -2.8, 0.02), outside(legs, 0.2, 0.02), 0.07);
+    if (!shin) return;
+    for (let i = 0; i < 7; i++) {
+      const y = -2.2 + i * 0.27;
+      const r = ringAt(SHIN, y);
+      shin.loft(i % 2 ? wrap : tone(wrap, -0.08), [[-0.16, r.rx + 0.1, r.rz + 0.1], [0.16, r.rx + 0.1, r.rz + 0.1]], 6, 0, y, r.dz, [0, 0, 0.22]);
+    }
+    shin.loft(cloth, [[-0.45, 1.3, 1.34, -0.04], [0.4, 1.28, 1.32]], 6);
+    shin.loft(GEAR.leather, [[-0.5, 1.36, 1.4, -0.04], [-0.3, 1.36, 1.4, -0.04]], 6);
+    shin.box(GEAR.gold, 0.3, 0.3, 0.2, s * 0.75, -0.4, 1.15, [0, s * 0.6, 0]);
+    return;
+  }
+  if (ref === "windrunners") {
+    // Windrunner Leggings: sleek pale leggings seamed down the side, a band of the trim round each knee and at the
+    // hip, and from each a pair of ribbons of the trim streaming out behind.
+    const pale = "#e3e8ef";
+    const legs = grown(THIGH, 0.04);
+    thigh.loft(pale, legs, 6);
+    strut(thigh, tone(pale, -0.14), outside(legs, -2.8, 0.02), outside(legs, 0.4, 0.02), 0.06);
+    const hip = onRing(legs, 0.2, s * 1.4, 0.06);
+    thigh.ball(trim, 0.28, ...hip, 0);
+    ribbon(thigh, trim, hip, [hip[0] + s * 0.35, -0.6, hip[2] - 1.6], 0.42, 0.22);
+    ribbon(thigh, tone(trim, 0.12), [hip[0] + s * 0.35, -0.6, hip[2] - 1.6], [hip[0] + s * 0.5, -1.5, hip[2] - 2.8], 0.22, 0.1);
+    ribbon(thigh, tone(trim, -0.1), hip, [hip[0] + s * 0.5, -1.0, hip[2] - 1.2], 0.34, 0.12);
+    if (!shin) return;
+    shin.loft(pale, grown(SHIN, 0.04), 6);
+    const knee: Ring[] = [[0.0, 1.18, 1.22], [0.28, 1.17, 1.21]];
+    shin.loft(trim, knee, 6);
+    const tie = onRing(knee, 0.14, s * 1.6, 0.05);
+    ribbon(shin, trim, tie, [tie[0] + s * 0.3, -0.7, tie[2] - 1.4], 0.32, 0.16);
+    ribbon(shin, tone(trim, 0.12), [tie[0] + s * 0.3, -0.7, tie[2] - 1.4], [tie[0] + s * 0.4, -1.4, tie[2] - 2.4], 0.16, 0.08);
+    return;
+  }
+  // Deckhand Greaves: iron over the thigh with a steel lame across it, a domed steel knee cop with a wing on the
+  // outside, and a steel greave down the front of the shin, buckled on over the boot with a strap in the trim.
+  const legs = grown(THIGH, 0.06);
+  thigh.loft(GEAR.iron, legs, 6);
+  thigh.loft(GEAR.steel, [around(legs, -1.75, 0.05), around(legs, -1.2, 0.07)], 6);
+  thigh.loft(tone(GEAR.iron, -0.15), [around(legs, -0.7, 0.04), around(legs, -0.5, 0.04)], 6);
+  if (!shin) return;
+  shin.loft(GEAR.iron, grown(SHIN, 0.08), 6);
+  shin.ball(GEAR.steel, 0.95, 0, 0.1, 0.9, 1, [1.15, 1, 0.8]);
+  shin.ball(GEAR.shine, 0.18, 0, 0.35, 1.68);
+  // The wing: a fan of steel on the outside of the knee.
+  shin.shape(GEAR.steel, [[s * 1.05, 0.75, 0.55], [s * 1.05, -0.55, 0.55], [s * 1.55, 0.1, 0.25], [s * 1.25, 0.1, 0.95], [s * 1.2, 0.6, 0.2], [s * 1.2, -0.4, 0.2]]);
+  shin.shape(GEAR.steel, sym([[0.95, -0.35, 1.4], [0.85, -1.85, 1.3], [0, -0.3, 1.82], [0, -1.95, 1.68]]));
+  shin.loft(trim, [[-0.98, 1.56, 1.6], [-0.74, 1.56, 1.6]], 8);
+  shin.box(GEAR.gold, 0.4, 0.4, 0.2, s * 0.9, -0.86, 1.3, [0, s * 0.6, 0]);
 }
 
-/** Boots, low-poly: short iron-shod treads, or tall sea boots turned down at the top. */
-function lowBoots(foot: Part, shin: Part, ref: string, trim: string) {
+/** A point `by` outside a loft through `rings` at height `y`, `a` radians round from +z toward +x. */
+function onRing(rings: readonly Ring[], y: number, a: number, by: number): Pt {
+  const r = ringAt(rings, y);
+  return [Math.sin(a) * (r.rx + by), y, Math.cos(a) * (r.rz + by) + r.dz];
+}
+
+/** A rod through each of `pts` in turn, a joint at each bend: a cord, a strap, a lace. */
+function cord(part: Part, color: string, pts: readonly Pt[], r: number) {
+  for (let i = 0; i + 1 < pts.length; i++) {
+    strut(part, color, pts[i], pts[i + 1], r);
+    if (i > 0) part.ball(color, r, ...pts[i], 0);
+  }
+}
+
+/** A strap over the top of a low-poly shoe (lowShoe), across it `z` forward of the heel. */
+function overFoot(foot: Part, color: string, z: number, r: number, top = 1.3) {
+  cord(foot, color, [[-1.42, 0.3, z], [-1.3, top - 0.1, z], [0, top, z], [1.3, top - 0.1, z], [1.42, 0.3, z]], r);
+}
+
+/** A flat ribbon from `a` to `b`, `w` wide (up and down) and thin across x: a streamer, a feather. */
+function ribbon(part: Part, color: string, a: Pt, b: Pt, w: number, wb = w) {
+  const pts: Pt[] = [];
+  for (const [p, h] of [[a, w], [b, wb]] as const) for (const dy of [-h / 2, h / 2]) for (const dx of [-0.05, 0.05]) pts.push([p[0] + dx, p[1] + dy, p[2]]);
+  part.shape(color, pts);
+}
+
+/**
+ * The shaft of a boot on the shin, from the ankle up to `top` (the knee is 0), a little wider as it goes up, and
+ * its rings (for bands round it).
+ */
+function bootShaft(shin: Part, color: string, top: number, by = 0): Ring[] {
+  const rings: Ring[] = [[-2.35, 1.1 + by, 1.14 + by], [-1, 1.3 + by, 1.34 + by, -0.05], [top, 1.32 + by, 1.36 + by, -0.05]];
+  shin.loft(color, rings, 6);
+  return rings;
+}
+
+/** A thin glowing line from `a` to `b` on a surface facing `yaw` (radians about y): a rune's stroke. */
+function glowStroke(part: Part, color: string, a: Pt, b: Pt, yaw: number, w = 0.1) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const dz = b[2] - a[2];
+  const across = dx * Math.cos(yaw) - dz * Math.sin(yaw);
+  const len = Math.hypot(dx, dy, dz);
+  part.glowBox(color, w, len, 0.06, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2, [0, yaw, -Math.atan2(across, dy)]);
+}
+
+/** What the new footwear is made of. */
+const CLOG_WOOD = "#dcc08a";
+const CORK = "#8a5a34";
+const STOCKING = "#ece6d8";
+const CLOUD = "#f3f7fc";
+const SKY = "#a9cdf0";
+
+/**
+ * Boots, low-poly, by the ref worn. `skin` shows through what is open (sandals); `under` is what is worn on the legs
+ * (a ref, or "" for none): wide slops hang down over a boot's shaft, so only the foot is drawn under them, and bare
+ * shins (none) show the stockings that go with low shoes.
+ */
+function lowBoots(foot: Part, leg: Part, ref: string, trim: string, skin = "#f1c9a5", under = "") {
+  // Under the Sea-Legs Slops only the foot shows: what goes on the shin is drawn on a part that is never built.
+  const shin = under === "sea_legs" ? new Part(new THREE.Group()) : leg;
+  if (ref === "clogs") {
+    // Cork Clogs: a deep clog of pale wood on a thick cork sole, its toe rounded and turned up, a band of the trim
+    // painted over the toe; a wool sock rolled at the ankle above it.
+    foot.shape(CORK, sym([[1.34, 0, -1.45], [1.42, 0, 1.4], [1.02, 0, 2.7], [0, 0, 3.0], [1.34, 0.52, -1.45], [1.42, 0.52, 1.4], [1.02, 0.6, 2.75], [0, 0.72, 3.1]]));
+    foot.shape(CLOG_WOOD, sym([[1.3, 0.45, -1.4], [1.38, 0.45, 1.4], [1.0, 0.55, 2.65], [0, 0.7, 3.05], [1.22, 1.62, -1.2], [1.28, 1.5, 0.45], [0.95, 1.3, 1.95], [0.35, 1.35, 3.0], [0, 1.4, 3.3]]));
+    foot.loft(tone(CLOG_WOOD, -0.16), [[1.5, 1.02, 1.08, -0.45], [1.72, 1.02, 1.08, -0.45]], 8);
+    spot(foot, trim, 0.5, 0.32, 0.14, 0, 1.38, 2.4, [-1.0, 0, 0]);
+    shin.loft("#d7cdb2", [[-2.35, 1.02, 1.06], [-1.75, 1.1, 1.14]], 6);
+    shin.loft(tone("#d7cdb2", -0.08), [[-1.85, 1.2, 1.24], [-1.55, 1.2, 1.24]], 6);
+    return;
+  }
+  if (ref === "sandals") {
+    // Rope Sandals: the bare foot on a plaited rope sole, a strap over the toes and two crossing over the instep,
+    // and cords wound crossing up the ankle, knotted at the front with a bead of the trim.
+    lowBareFoot(foot, skin);
+    foot.shape(ROPE, sym([[1.08, 0, -1.15], [1.18, 0, 1.35], [0.82, 0, 2.38], [0, 0, 2.62], [1.08, 0.32, -1.15], [1.18, 0.32, 1.35], [0.82, 0.32, 2.38], [0, 0.32, 2.62]]));
+    cord(foot, ROPE, [[-0.95, 0.3, 1.55], [-0.5, 0.74, 1.6], [0.5, 0.74, 1.6], [0.95, 0.3, 1.55]], 0.12);
+    for (const s of [-1, 1]) cord(foot, tone(ROPE, -0.06), [[s * 1.0, 0.3, 0.65], [0, 1.08, 0.05], [-s * 0.9, 1.05, -0.75]], 0.11);
+    const ankle: Ring[] = [[-2.5, 0.9, 0.96], ...SHIN];
+    for (const turn of [-1, 1]) {
+      const pts: Pt[] = [];
+      for (let i = 0; i <= 10; i++) pts.push(onRing(ankle, -2.3 + i * 0.1, turn * (i / 10) * Math.PI * 2.5, 0.12));
+      cord(shin, tone(ROPE, turn > 0 ? 0 : -0.08), pts, 0.09);
+    }
+    shin.ball(trim, 0.22, ...onRing(ankle, -1.25, 0, 0.18), 0);
+    return;
+  }
+  if (ref === "buckled_shoes") {
+    // Buckled Shoes: low black shoes on a heel of the trim, a tongue up the front with a big square brass buckle on
+    // it; pale stockings above (on bare shins: under anything worn on the legs, those show).
+    const black = "#26232b";
+    lowShoe(foot, black);
+    foot.box(trim, 2.7, 0.5, 1.15, 0, 0.25, -0.9);
+    foot.shape(black, sym([[0.55, 0.9, 0.35], [0.55, 1.75, 0.15], [0.5, 0.8, 1.35], [0.5, 1.7, 0.75]]));
+    const [tl, tr, br, bl]: Pt[] = [[-0.46, 1.55, 0.92], [0.46, 1.55, 0.92], [0.46, 0.98, 1.36], [-0.46, 0.98, 1.36]];
+    cord(foot, GEAR.gold, [tl, tr, br, bl, tl], 0.1);
+    strut(foot, tone(GEAR.gold, 0.15), [0, 1.55, 0.92], [0, 0.98, 1.36], 0.06);
+    if (!under) shin.loft(STOCKING, [[-2.35, 1.0, 1.04], [-1, 1.2, 1.25, -0.05], [-0.6, 1.2, 1.25, -0.05]], 6);
+    return;
+  }
+  if (ref === "cleats") {
+    // Ice Cleats: stout dark boots, a thick cuff of pale fur round the top, a strap of the trim over the instep, and
+    // small iron spikes standing out under the sole round its edge.
+    const hide = "#5a3d2a";
+    lowShoe(foot, hide);
+    overFoot(foot, trim, 0.55, 0.13, 1.3);
+    for (const [x, z] of [[1.1, -1.15], [1.22, 0.1], [1.15, 1.3], [0.7, 2.3], [0, 2.6], [0, -1.3]] as const) {
+      for (const k of x ? [-1, 1] : [0]) foot.cone(GEAR.iron, 0.17, 0.45, k * x, 0.02, z, 4, [Math.PI, 0, 0]);
+    }
+    const shaft = bootShaft(shin, hide, -1.2, 0.06);
+    shin.loft(tone(hide, -0.12), [around(shaft, -2.0, 0.04), around(shaft, -1.85, 0.04)], 6);
+    shin.loft("#e6dccb", [[-1.4, 1.5, 1.55], [-1.0, 1.66, 1.7], [-0.55, 1.5, 1.55]], 8);
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2;
+      shin.ball(tone("#e6dccb", i % 2 ? -0.07 : 0.04), 0.42, Math.sin(a) * 1.58, -1.0 + (i % 3) * 0.12 - 0.12, Math.cos(a) * 1.62, 0, [1, 0.8, 1]);
+    }
+    return;
+  }
+  if (ref === "springheels") {
+    // Springheel Boots: tall brown leather boots, their heels raised on coiled brass springs (the toe on the
+    // ground), a brass buckle up each side, and a cuff with a band of the trim at the top.
+    const hide = "#7a4a2a";
+    const lift = 0.75;
+    // Raised at the heel, sloping to the toe on the ground.
+    const up = (pts: Pt[]): Pt[] => pts.map(([x, y, z]) => [x, y + lift * Math.max(0, Math.min(1, (1.9 - z) / 3)), z]);
+    foot.shape(hide, sym(up([[1.22, 0, -1.3], [1.3, 0, 1.4], [0.9, 0, 2.45], [0, 0, 2.7], [1.05, 1.35, -1.05], [1.1, 1.15, 0.7], [0.75, 0.75, 2.15], [0, 0.85, 2.4]])));
+    foot.shape(tone(hide, -0.16), sym(up([[1.3, 0, -1.4], [1.38, 0, 1.45], [0.95, 0, 2.55], [0, 0, 2.8], [1.3, 0.3, -1.4], [1.38, 0.3, 1.45], [0.95, 0.3, 2.55], [0, 0.3, 2.8]])));
+    foot.cyl(DIVE_BRASS, 0.56, 0.56, 0.12, 0, 0.06, -0.85, 8);
+    for (let k = 0; k < 4; k++) foot.ring(k % 2 ? tone(DIVE_BRASS, 0.15) : DIVE_BRASS, 0.42, 0.09, 0, 0.2 + k * 0.15, -0.85, [HALF_PI, 0, 0.12]);
+    const shaft = bootShaft(shin, hide, -0.3, 0.02);
+    shin.loft(tone(hide, 0.1), [[-0.45, 1.46, 1.5, -0.05], [-0.05, 1.5, 1.54, -0.05]], 6);
+    shin.loft(trim, [around(shaft, -0.62, 0.05), around(shaft, -0.42, 0.05)], 6);
+    for (const y of [-1.9, -1.2]) {
+      const r = ringAt(shaft, y);
+      for (const s of [-1, 1]) shin.box(GEAR.gold, 0.15, 0.36, 0.42, s * (r.rx + 0.08), y, 0);
+    }
+    return;
+  }
+  if (ref === "couriers") {
+    // Courier's Shoes: light pale running shoes on a thin sole of the trim, a pale sock above, and a small wing of
+    // the trim on each side of the ankle, swept back.
+    const pale = "#ece6d6";
+    lowShoe(foot, pale);
+    foot.shape(tone(trim, -0.05), sym([[1.32, 0, -1.42], [1.4, 0, 1.45], [0.96, 0, 2.56], [0, 0, 2.82], [1.32, 0.2, -1.42], [1.4, 0.2, 1.45], [0.96, 0.2, 2.56], [0, 0.2, 2.82]]));
+    overFoot(foot, tone(pale, -0.12), 0.9, 0.08, 1.22);
+    overFoot(foot, tone(pale, -0.12), 0.3, 0.08, 1.28);
+    shin.loft("#f1ede4", [[-2.35, 1.0, 1.04], [-1.75, 1.08, 1.12]], 6);
+    for (const s of [-1, 1]) {
+      for (let k = 0; k < 3; k++) {
+        const root: Pt = [s * 1.05, -1.95 + k * 0.05, 0.1 - k * 0.1];
+        const tip: Pt = [s * (1.25 + k * 0.06), -1.45 + k * 0.25, -1.0 - k * 0.22];
+        ribbon(shin, k === 1 ? tone(trim, 0.15) : trim, root, tip, 0.34 - k * 0.04, 0.12);
+      }
+    }
+    return;
+  }
+  if (ref === "sneaks") {
+    // Soft-Sole Sneaks: slippers of dark felt with no sole to speak of, a soft point at the toe, bound up the ankle
+    // with wraps of felt crossing one way and the other, the end tucked under a tie of the trim.
+    const felt = "#3a3442";
+    foot.shape(felt, sym([[1.15, 0, -1.25], [1.22, 0, 1.3], [0.82, 0, 2.45], [0, 0, 2.85], [1.0, 1.2, -1.0], [1.0, 1.0, 0.7], [0.6, 0.62, 2.2], [0, 0.66, 2.65]]));
+    foot.shape(tone(felt, -0.16), sym([[1.2, 0, -1.3], [1.27, 0, 1.33], [0.85, 0, 2.5], [0, 0, 2.9], [1.2, 0.16, -1.3], [1.27, 0.16, 1.33], [0.85, 0.16, 2.5], [0, 0.16, 2.9]]));
+    overFoot(foot, tone(felt, 0.1), 0.2, 0.12, 1.25);
+    for (let i = 0; i < 6; i++) {
+      const y = -2.2 + i * 0.3;
+      const r = ringAt(SHIN, y);
+      shin.loft(tone(felt, i % 2 ? 0.12 : 0.04), [[-0.13, r.rx + 0.1, r.rz + 0.1], [0.13, r.rx + 0.1, r.rz + 0.1]], 6, 0, y, r.dz, [0, 0, (i % 2 ? 1 : -1) * 0.2]);
+    }
+    shin.ball(trim, 0.22, ...onRing(SHIN, -0.5, 0.4, 0.15), 0);
+    strut(shin, trim, onRing(SHIN, -0.5, 0.4, 0.15), onRing(SHIN, -0.95, 0.55, 0.16), 0.08, 0.05);
+    return;
+  }
+  if (ref === "cloudsteps") {
+    // Cloudstep Boots: white boots with sky-blue shafts banded in gold, a soft white cuff, a stone of the trim at
+    // the front, and puffs of cloud all round the soles (the wearer floats a little: see HOVER).
+    lowShoe(foot, CLOUD);
+    overFoot(foot, GEAR.gold, 0.8, 0.09, 1.22);
+    for (let i = 0; i < 11; i++) {
+      const a = (i / 11) * Math.PI * 2;
+      puff(foot, i % 2 ? CLOUD : "#e1edf9", 0.42 + 0.1 * (i % 3), Math.sin(a) * 1.45, 0.15, 0.7 + Math.cos(a) * 2.25);
+    }
+    const shaft = bootShaft(shin, SKY, -0.55);
+    shin.loft(GEAR.gold, [around(shaft, -0.75, 0.06), around(shaft, -0.55, 0.06)], 6);
+    shin.loft(CLOUD, [[-0.55, 1.44, 1.48, -0.05], [-0.15, 1.48, 1.52, -0.05]], 6);
+    shin.glowBall(trim, 0.24, ...onRing(shaft, -1.25, 0, 0.08));
+    return;
+  }
+  if (ref === "phase_treads") {
+    // Phase Treads: dark violet boots, runes in the trim glowing down the front and sides of the shafts and a line of
+    // it along the toe.
+    const violet = "#3b2a55";
+    lowShoe(foot, violet);
+    foot.glowBox(trim, 0.12, 0.08, 1.3, 0, 1.0, 1.55, [-0.42, 0, 0]);
+    const shaft = bootShaft(shin, violet, -0.5);
+    shin.loft(tone(violet, 0.12), [[-0.7, 1.42, 1.46, -0.05], [-0.25, 1.46, 1.5, -0.05]], 6);
+    for (const a of [0, 1.45, -1.45]) {
+      const p = (y: number, da: number) => onRing(shaft, y, a + da, 0.03);
+      glowStroke(shin, trim, p(-2.0, 0), p(-1.0, 0), a);
+      glowStroke(shin, trim, p(-1.75, -0.22), p(-1.35, 0), a);
+      glowStroke(shin, trim, p(-1.35, 0), p(-1.1, 0.22), a);
+    }
+    return;
+  }
   if (ref === "lead_boots") {
     // Lead Boots: heavy and dark, a brass cap over the toe, tall shafts with a brass band, a strap in the trim.
     lowShoe(foot, "#3d3f44");
@@ -6667,8 +7873,10 @@ function person(top: THREE.Group, look: Look, outfit: Outfit | undefined, asleep
       }
       else lowLeg(thigh, below, look.legs);
     }
-    else if (lowPoly && legs) lowLegArmor(thigh, below, legs.ref, trim("legs"));
-    else if (legs?.ref === "trousers") {
+    else if (lowPoly && legs) lowLegArmor(thigh, below, legs.ref, trim("legs"), thigh === b.thighR ? -1 : 1, look.skin);
+    else if (legs && blockyLegs(leg, thigh, shin, legs.ref, trim("legs"), look.skin, thigh === b.thighR ? -1 : 1)) {
+      // Drawn by its ref (see blockyLegs).
+    } else if (legs?.ref === "trousers") {
       // Sailcloth: pale, loose, tied at the shin.
       const cloth = "#d8cfb4";
       leg.box(cloth, 3, 4.4, 3.1, 0, -2.2, 0);
@@ -6687,11 +7895,13 @@ function person(top: THREE.Group, look: Look, outfit: Outfit | undefined, asleep
     if (peg) continue;
     if (lowPoly && !boots) {
       if (bare("boots")) lowBareFoot(foot, look.skin);
-      else if (look.boots) lowBoots(foot, shin, "sea", look.boots);
+      else if (look.boots) lowBoots(foot, shin, "sea", look.boots, look.skin, legs?.ref ?? "");
       else lowShoe(foot, GEAR.dark);
     }
-    else if (lowPoly && boots) lowBoots(foot, shin, boots.ref, trim("boots"));
-    else if (boots?.ref === "treads") {
+    else if (lowPoly && boots) lowBoots(foot, shin, boots.ref, trim("boots"), look.skin, legs?.ref ?? "");
+    else if (boots && blockyBoots(leg, shin, boots.ref, trim("boots"), look.skin, legs?.ref ?? "")) {
+      // Drawn by its ref (see blockyBoots).
+    } else if (boots?.ref === "treads") {
       // Short and iron-shod.
       leg.box("#5a4632", 2.9, 1.8, 3.2, 0, -4, 0.1);
       leg.box("#5a4632", 2.9, 1.1, 1.3, 0, -4.35, 2);
@@ -6710,13 +7920,21 @@ function person(top: THREE.Group, look: Look, outfit: Outfit | undefined, asleep
   }
 
   tier = TIER.body;
+  // The Kilt hangs from the hips over the tops of the legs, with its sporran on the front.
+  if (legs?.ref === "kilt") {
+    if (lowPoly) lowKilt(b, torso, trim("legs"));
+    else blockyKilt(torso, trim("legs"));
+  }
 
   // Chest, belt and coat-tails.
   const body = armor("body");
   const undressed = bare("body");
   const greatcoat = body?.ref === "greatcoat";
   const oilskin = "#b1933c";
-  const cloth = greatcoat ? oilskin : body ? GEAR.iron : look.body;
+  const ghostsail = body?.ref === "ghostsail";
+  // A coat to below the knee, its skirts hung from the hips (see the skirts below).
+  const longCoat = greatcoat || ghostsail;
+  const cloth = greatcoat ? oilskin : body ? (TOP_CLOTH[body.ref] ?? GEAR.iron) : look.body;
   let front = 1.95;
   if (!lowPoly) torso.box(look.skin, 2.6, 0.8, 2.6, 0, 6.1, 0);
   // The torso is as stout as chosen (box armor is as broad as the shoulders it sits on).
@@ -6728,6 +7946,8 @@ function person(top: THREE.Group, look: Look, outfit: Outfit | undefined, asleep
     front = lowGreatcoat(torso, look.skin, oilskin, m.shoulders / m.girth, trim("body"));
   } else if (lowPoly && body?.ref === "diving_plate") {
     front = lowDiverPlate(torso, look.skin, m.shoulders / m.girth, trim("body"));
+  } else if (lowPoly && body && body.ref in TOP_CLOTH) {
+    front = lowTop(torso, body.ref, look.skin, m.shoulders / m.girth, trim("body")) ?? front;
   } else if (lowPoly && body) {
     front = lowHauberk(torso, look.skin, m.shoulders / m.girth, trim("body"));
   } else if (greatcoat) {
@@ -6738,6 +7958,8 @@ function person(top: THREE.Group, look: Look, outfit: Outfit | undefined, asleep
     torso.box(GEAR.dark, 7.4, 0.9, 4.2, 0, 1, 0);
     torso.box(trim("body"), 1.2, 1.1, 0.4, 0, 1, 2.2);
     front = 2.2;
+  } else if (body && body.ref in TOP_CLOTH) {
+    front = blockyTop(torso, body.ref, trim("body")) ?? front;
   } else if (body) {
     // A hauberk: mail, with a breastplate over it and a gold belt.
     torso.box(GEAR.iron, 7, 6, 3.8, 0, 3, 0);
@@ -6754,9 +7976,9 @@ function person(top: THREE.Group, look: Look, outfit: Outfit | undefined, asleep
     torso.box(look.accent, 7.3, 1, 4.1, 0, 1.3, 0);
     torso.box(GEAR.gold, 1.2, 1, 0.3, 0, 1.3, 2.15);
   }
-  if (greatcoat || (look.coat && !body && !undressed)) {
-    // A long coat, open at the front, down over the legs.
-    const edgeColor = greatcoat ? trim("body") : look.coatTrim ?? look.accent;
+  if (longCoat || (look.coat && !body && !undressed)) {
+    // A long coat, open at the front, down over the legs (the Ghostsail Cloak's edged in shade, ragged at the hem).
+    const edgeColor = greatcoat ? trim("body") : ghostsail ? GHOST_SHADE : look.coatTrim ?? look.accent;
     if (lowPoly) {
       // Each side's skirt hangs from the hip on a joint of its own and turns with the leg on that side (see
       // skirts), so the legs stride under the coat instead of through it: hinged level with the hip joints, so
@@ -6766,7 +7988,7 @@ function person(top: THREE.Group, look: Look, outfit: Outfit | undefined, asleep
         const skirt = new Part(torso.joint, 0, SKIRT_PIVOT, 0);
         skirt.skin.position.y = -SKIRT_PIVOT;
         skirt.skin.scale.set(m.girth, 1, m.girth);
-        const coatCloth = greatcoat ? cloth : look.coatColor ?? cloth;
+        const coatCloth = longCoat ? cloth : look.coatColor ?? cloth;
         const thigh = (s > 0 ? b.thighL : b.thighR).joint;
         // Folded at the knee: the upper skirt turns with the thigh, and below the knee a second piece, hinged
         // there, bends with the shin, so the hem follows the lower leg as it kicks back.
@@ -6775,22 +7997,29 @@ function person(top: THREE.Group, look: Look, outfit: Outfit | undefined, asleep
         const knee = KNEE * m.legs;
         coatPanel(skirt, coatCloth, s, 0.42, Math.PI + 0.05, SKIRT_EASE, [1.4, knee - FOLD_OVERLAP]);
         coatPanel(skirt, edgeColor, s, 0.38, 0.52, SKIRT_EASE + 0.06, [1.4, knee - FOLD_OVERLAP]);
+        // The greatcoat has a flap pocket on each skirt, at the hip.
+        if (greatcoat) coatPanel(skirt, tone(coatCloth, -0.1), s, 0.8, 1.3, SKIRT_EASE + 0.1, [0, -0.5]);
         const fold = new Part(skirt.joint, 0, knee - SKIRT_PIVOT, 0);
         fold.skin.position.y = -knee;
         fold.skin.scale.set(m.girth, 1, m.girth);
         coatPanel(fold, coatCloth, s, 0.42, Math.PI + 0.05, SKIRT_EASE - 0.14, [knee + FOLD_OVERLAP, coatHem()]);
         coatPanel(fold, edgeColor, s, 0.38, 0.52, SKIRT_EASE - 0.08, [knee + FOLD_OVERLAP, coatHem()]);
+        if (ghostsail) tatters(fold, coatCloth, s, 0.42, Math.PI + 0.05, SKIRT_EASE - 0.14, 9);
         extraParts.push(skirt, fold);
         skirts.push({ joint: skirt.joint, thigh, fold: fold.joint, shin: (s > 0 ? b.shinL : b.shinR).joint });
       }
     } else {
       for (const s of [-1, 1]) {
-        torso.box(greatcoat ? cloth : look.coatColor ?? cloth, 2.7, 4.6, 4.3, s * 2.4, -2, 0);
+        torso.box(longCoat ? cloth : look.coatColor ?? cloth, 2.7, 4.6, 4.3, s * 2.4, -2, 0);
         torso.box(edgeColor, 0.5, 4.6, 0.4, s * 1.25, -2, 2.05);
+        // Tatters below the hem.
+        if (ghostsail) for (const [x, z, h] of [[1.6, 1.6, 1.2], [3.2, 1.2, 0.8], [3.6, -0.6, 1.3], [2.4, -1.9, 1]] as const) torso.box(GHOST_SHADE, 0.7, h, 0.4, s * x, -4.3 - h / 2, z);
       }
-      torso.box(greatcoat ? cloth : look.coatColor ?? cloth, 7.3, 4.6, 1, 0, -2, -1.7);
+      torso.box(longCoat ? cloth : look.coatColor ?? cloth, 7.3, 4.6, 1, 0, -2, -1.7);
     }
   }
+  // The Stoker's Apron's skirt, hung from the hips so the legs stride under it.
+  if (lowPoly && body?.ref === "stoker_apron") hipSkirts(b, lowApronSkirt);
   if (look.apron && !body && !undressed) {
     // An apron over the clothes: a bib on the chest with a strap over each shoulder, a darker tape round the
     // waist, and a skirt hanging a little clear of the thighs to the knees, a pocket on it.
@@ -6961,7 +8190,7 @@ function person(top: THREE.Group, look: Look, outfit: Outfit | undefined, asleep
   const amulet = outfit?.amulet;
   // Low-poly, it lies over whatever is worn (a hauberk's plates, a greatcoat's buttons, a tunic's placket), and
   // is drawn once the head is, in case a long beard is in its way.
-  const amuletOver = greatcoat ? 0.45 : body ? 0.36 : undressed ? 0.04 : 0.14;
+  const amuletOver = longCoat ? 0.45 : body ? (TOP_OVER[body.ref] ?? 0.36) : undressed ? 0.04 : 0.14;
   if (amulet && !lowPoly) {
     torso.box(GEAR.gold, 3.4, 0.4, 0.3, 0, 5.3, front + 0.1);
     if (amulet.ref === "keystone") {
@@ -7039,6 +8268,10 @@ function person(top: THREE.Group, look: Look, outfit: Outfit | undefined, asleep
         // Oilskin sleeves, cuffed in the coat's trim.
         lowSleeve(arm, oilskin, trim("body"));
       } else {
+        if (body && body.ref in TOP_CLOTH) {
+          lowTopArm(arm, body.ref, s, trim("body"), hood);
+          continue;
+        }
         if (body?.ref === "diving_plate") {
           // Riveted iron sleeves, a big round pauldron rimmed in brass with a boss of the trim, and an iron
           // vambrace banded in brass.
@@ -7052,9 +8285,10 @@ function person(top: THREE.Group, look: Look, outfit: Outfit | undefined, asleep
           arm.loft(DIVE_BRASS, [[-2.75, 1.3, 1.3], [-2.5, 1.3, 1.3]], 8);
           continue;
         }
-        // Mail sleeves, a steel pauldron over the shoulder edged in the trim (under a hood's mantle, none),
-        // and a steel vambrace.
+        // Mail sleeves in courses of rings, a steel pauldron over the shoulder edged in the trim (under a hood's
+        // mantle, none), and a steel vambrace.
         lowSleeve(arm, GEAR.iron, GEAR.steel);
+        mailCourses(arm, SLEEVE, -1.1, -2.7, 0.03, 0.5, 6);
         if (!hood) {
           arm.ball(GEAR.steel, 1.55, s * 0.25, 0.35, 0, 0, [1.05, 0.72, 1.15]);
           arm.loft(trim("body"), [[-0.75, 1.5, 1.5], [-0.45, 1.5, 1.5]], 8, s * 0.2);
@@ -7069,6 +8303,8 @@ function person(top: THREE.Group, look: Look, outfit: Outfit | undefined, asleep
     if (greatcoat) {
       arm.box(trim("body"), 2.3, 0.8, 2.7, 0, -3.9, 0);
       arm.box(tone(oilskin, -0.1), 2.6, 1, 3, s * 0.1, 0.1, 0);
+    } else if (body && blockyTopArm(arm, body.ref, s, trim("body"))) {
+      // Drawn by its ref (see blockyTopArm).
     } else if (body) {
       arm.box(GEAR.steel, 2.9, 1.5, 3.3, s * 0.2, 0.2, 0);
       arm.box(trim("body"), 3, 0.4, 3.4, s * 0.2, -0.7, 0);
@@ -7098,9 +8334,11 @@ function person(top: THREE.Group, look: Look, outfit: Outfit | undefined, asleep
   // Over the hair and the head.
   tier = TIER.headgear;
   if (lowPoly && helmet) {
-    lowWornHelmet(head, helmet, trim("helmet"));
+    lowWornHelmet(head, helmet, trim("helmet"), look);
   } else if (helmet?.ref === "hood" || helmet?.icon === "hood") {
     drawHood(head, GEAR.leather, trim("helmet"));
+  } else if (helmet && blockyHat(head, helmet.ref, trim("helmet"), look)) {
+    // A hat drawn by its ref (see blockyHat).
   } else if (helmet?.ref === "visor" || helmet?.icon === "brutal-helm") {
     // A lookout's leather cap banded in brass, flaps over the ears, goggles, and a spyglass over one eye alight at its end.
     head.box("#7a4a2a", 7.1, 3, 6.7, 0, 5.4, 0);
@@ -7138,6 +8376,14 @@ function person(top: THREE.Group, look: Look, outfit: Outfit | undefined, asleep
   if (lowPoly && hood) {
     tier = TIER.mantle;
     lowMantle(torso, helmet ? GEAR.leather : (look.hatColor ?? look.body), amuletOver, helmet ? trim("helmet") : look.accent, helmet ? trim("helmet") : undefined);
+  } else if (lowPoly && greatcoat) {
+    // The greatcoat's cape, where no hood's mantle covers the shoulders already.
+    tier = TIER.mantle;
+    lowCape(torso, oilskin, amuletOver);
+  } else if (lowPoly && ghostsail) {
+    // The cloak's cape, and its hood down behind the neck where a diving helm's bowl leaves room for it.
+    tier = TIER.mantle;
+    lowGhostCape(torso, amuletOver, !helmet || WORN_HATS.has(helmet.ref) || helmet.ref === "visor" || helmet.icon === "brutal-helm", trim("body"));
   }
   tier = TIER.body;
 
@@ -8865,6 +10111,7 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
   mouths = [];
   lids = [];
   skirts = [];
+  puffs = [];
   figureKind = kind;
   castPace = 1;
   slung = null;
@@ -8877,6 +10124,9 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
   if (face?.skin && face.hair) look = { ...look, skin: face.skin, hair: face.hair };
   talkFace = lowPoly && !chosen && TOWNSFOLK.test(kind);
   const rig = rigFor(kind, top, look, outfit, !!opts.asleep);
+  // Cloudstep Boots: the wearer floats, bobbing, over a little cloud of their own (see HOVER).
+  const hovers = outfit?.boots?.ref === "cloudsteps" && !!rig.hands;
+  const cloud = hovers ? hoverCloud(top) : null;
   const fade = { value: 1 };
   const mats: Mats = {
     body: fadeable(bodyMaterial(), fade, "gq-figure-body"),
@@ -8895,6 +10145,7 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
   const mouthParts = mouths;
   const lidParts = lids;
   const hems = skirts;
+  const clouds = puffs;
   const pace = castPace;
   /** How long an action of this kind takes this figure. */
   const lasts = (kind: Act["kind"]) => ACT_OVER[kind] * (kind === "cast" ? pace : 1);
@@ -9048,6 +10299,15 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
     if (loose.length > 0) swingDangles(loose, first ? 0 : dt, top, body);
     if (turners.length > 0) turnSpinners(turners, first ? 0 : dt);
     if (flashers.length > 0) flashBolts(flashers, p.time);
+    if (hovers) {
+      // Floating on Cloudstep Boots, on top of whatever else lifts it (a leap, a stride): lifted on the scaler, which
+      // nothing else moves, so the rig's own poses and the caller's placing are left as they are. Down on the
+      // ground (or in a seat, or at the oars) it does not float, and its cloud is gone.
+      const afloat = !p.lying && !fallen && !rowing && anim.sitting === 0 && anim.floor === 0;
+      scaler.position.y = afloat ? (HOVER + HOVER_BOB * Math.sin(p.time * HOVER_RATE + beat)) * scaler.scale.x : 0;
+      cloud!.joint.visible = afloat;
+    }
+    if (clouds.length > 0) drift(clouds, p.time + beat);
     // A long coat's skirts swing with the legs under them, forward and back and out to the side.
     for (const h of hems) {
       h.joint.rotation.set(h.thigh.rotation.x * SKIRT_FOLLOW, 0, h.thigh.rotation.z * SKIRT_FOLLOW);

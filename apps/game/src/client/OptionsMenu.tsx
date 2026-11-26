@@ -32,6 +32,8 @@ export interface MenuAction {
 
 /** Out to the main menu (#menu in App.tsx), from wherever you are. */
 export const MAIN_MENU_HASH = "#menu";
+/** The main menu, straight into making a new hero (the party picker's "Make a new hero"). */
+export const NEW_HERO_HASH = "#menu/new-hero";
 
 export function OptionsMenu({ reset, resetBlocked, mainMenuBlocked, title = "The Harbor of Heylets", subtitle, actions = [] }: {
   /** Offered where your hero can safely be put back. */

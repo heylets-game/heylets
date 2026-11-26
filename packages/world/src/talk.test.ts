@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { KEEPER_HOUSES } from "./keepers";
 import { REGULARS } from "./regulars";
 import { SALESMEN } from "./salesman";
-import { TALK_PAGE, TALK_PER_DAY, TALK_VOICES, barkeepTalk, dealerTalk, keeperTalk, loneChoice, pagesOf, regularTalk, salesmanTalk, talkProblem, type Conversation } from "./talk";
+import { TALK_PAGE, TALK_PER_DAY, TALK_VOICES, TOWNSFOLK, barkeepTalk, dealerTalk, decoratorTalk, fishmongerTalk, isTownsperson, keeperTalk, loneChoice, moreToSay, pagesOf, regularTalk, salesmanTalk, talkProblem, type Conversation } from "./talk";
 
 const everyone: Conversation[] = [
   barkeepTalk("Nobody in the corner."),
@@ -10,6 +10,8 @@ const everyone: Conversation[] = [
   ...REGULARS.map((r) => regularTalk(r)),
   ...SALESMEN.map((s) => salesmanTalk(s, `salesman:${s.id}`)),
   ...KEEPER_HOUSES.map((h) => keeperTalk(h)),
+  fishmongerTalk("Off the point.", () => "Keep your line wet."),
+  decoratorTalk(),
 ];
 
 describe("talking to the townsfolk", () => {
@@ -32,10 +34,15 @@ describe("talking to the townsfolk", () => {
     expect(Object.values(TALK_VOICES).every((v) => Math.abs(v) <= 12)).toBe(true);
   });
 
-  it("lets only Old Tam be asked anything, and has him say when he is tired of it", () => {
-    const asking = everyone.filter((c) => c.choices.some((ch) => ch.ask));
-    expect(asking.map((c) => c.unit)).toEqual(["barkeep"]);
-    expect(asking[0].tired).toBeTruthy();
+  it("lets everyone be asked anything, each as who they are, and has each say when they are tired of it", () => {
+    for (const c of everyone) {
+      expect(c.choices.filter((ch) => ch.ask), c.name).toHaveLength(1);
+      expect(c.tired, c.name).toBeTruthy();
+      expect(isTownsperson(c.who), c.name).toBe(true);
+    }
+    expect(new Set(everyone.map((c) => c.who)).size).toBe(TOWNSFOLK.length);
+    expect(Object.keys(TALK_VOICES).sort()).toEqual([...TOWNSFOLK].sort());
+    expect(isTownsperson("regular:nobody")).toBe(false);
     expect(barkeepTalk("Nobody in the corner.").greeting.at(-1)).toBe("Nobody in the corner.");
   });
 
@@ -46,6 +53,9 @@ describe("talking to the townsfolk", () => {
     expect(loneChoice(keeperTalk("galley"))?.says).toBeTruthy();
     expect(loneChoice(barkeepTalk())).toBeNull();
     expect(loneChoice(dealerTalk())).toBeNull();
+    // With a question to ask still, the replies come up once the offer is done.
+    expect(everyone.every(moreToSay)).toBe(true);
+    expect(moreToSay({ choices: [{ id: "shop", label: "Shop", opens: "shop" }, { id: "bye", label: "Bye", bye: true }] })).toBe(false);
   });
 
   it("stops the questions at the day's limit", () => {

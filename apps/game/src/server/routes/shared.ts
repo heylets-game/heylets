@@ -69,7 +69,7 @@ export async function harborParty(env: Env, crewId: string, playerId: string) {
 /**
  * Where the player is standing in their crew's Harbor right now, as its room knows it (the room checked every step
  * of the way there), and whose Harbor it is; null if they are not walking it. One figure walks the town for a whole
- * party (party.ts): a member of it who is not that figure stands where the figure does.
+ * party (party.ts): a member of it who is not that figure stands where the figure does, and is told whose figure it is (`by`).
  */
 export async function harborStanding(env: Env, playerId: string): Promise<Standing | null> {
   const crew = await crewFor(env.DB, playerId);
@@ -87,7 +87,7 @@ export async function harborStanding(env: Env, playerId: string): Promise<Standi
   // Not walking it themselves: the party is only looked up then, and only if they are in it.
   for (const id of await partyOf(env.DB, playerId, true)) {
     const pos = await where(id);
-    if (pos) return { crewId: crew.id, pos };
+    if (pos) return { crewId: crew.id, pos, by: id };
   }
   return null;
 }

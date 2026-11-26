@@ -28,7 +28,7 @@
 // when it is more than is left; `moveCost` does the same for the steps bought.
 // Nothing here knows the rules: it draws what it is handed.
 
-import { useRef, type CSSProperties, type ReactNode } from "react";
+import { useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useCountdown } from "../ui/useCountdown";
 import "./fight.css";
 
@@ -57,8 +57,26 @@ export interface TurnBarProps {
   seconds: number | null;
   /** End the turn. Absent when it cannot be ended (not yours). */
   onEnd?: () => void;
-  /** Small things for this moment, in a row over the bar: "Join song", "Pick up the torch". */
+  /** Small things for this moment, in a row over the bar: "Pick up the torch", "Flee". */
   extra?: ReactNode;
+  /** Shanties an ally is singing that this hero stands in and could join now: each a call of its own over the bar. */
+  songs?: SongCall[];
+}
+
+/** A shanty to join, as the turn bar shows it. */
+export interface SongCall {
+  /** Who is singing it (one call to each Bard). */
+  key: string;
+  bard: string;
+  /** The shanty's name ("Lively Shanty") and its colour. */
+  song: string;
+  color: string;
+  /** What joining costs, and why it cannot be done just now (absent: it can). */
+  cost: number;
+  blocked?: string;
+  /** What joining it does, a line at a time, for the tip. */
+  tip: string[];
+  onJoin: () => void;
 }
 
 /** More chevrons than this and a run of steps is drawn as one bar. */
@@ -81,7 +99,48 @@ function Track({ now, max, cost = 0 }: { now: number; max: number; cost?: number
 
 const steps = (n: number) => `${n} step${n === 1 ? "" : "s"}`;
 
-export function TurnBar({ myTurn, actor, waitingFor, round, ap, apMax, apTurn, apCost, move, stride, moveCost, course, seconds, onEnd, extra }: TurnBarProps) {
+/**
+ * A shanty to join: a call over the bar in the shanty's own colour, a note in a brass ring sounding out of it.
+ * Pointed at, it shows on the sockets what it would spend, as anything aimed does.
+ */
+function SongButton({ call, onCost }: { call: SongCall; onCost: (cost: number | null) => void }) {
+  const ok = !call.blocked;
+  return (
+    <button
+      type="button"
+      className="ft-song"
+      style={{ "--c": call.color } as CSSProperties}
+      disabled={!ok}
+      onClick={call.onJoin}
+      onPointerEnter={() => onCost(call.cost)}
+      onPointerLeave={() => onCost(null)}
+      onFocus={() => onCost(call.cost)}
+      onBlur={() => onCost(null)}
+      aria-label={`Join ${call.bard}'s ${call.song}, ${call.cost} AP${call.blocked ? `: ${call.blocked}` : ""}`}
+    >
+      <span className="ft-song-cost" aria-hidden>{call.cost} AP</span>
+      <span className="ft-song-note" aria-hidden>
+        <i /><i />
+        <svg viewBox="0 0 16 16"><path d="M6 2.2 14 0v10.6a2.6 2.1 0 1 1-1.6-1.9V3.4L7.6 4.6v7.9a2.6 2.1 0 1 1-1.6-1.9z" /></svg>
+      </span>
+      <span className="ft-song-text">
+        <strong>Join song</strong>
+        <small>{call.bard.split(" ")[0]}'s {call.song.replace(/ Shanty$/, "")}</small>
+      </span>
+      <span className="ft-tip" role="tooltip">
+        <b>{call.song} · {call.bard}</b>
+        {call.tip.map((line) => <span key={line}>{line}</span>)}
+        {call.blocked && <span className="ft-song-why">{call.blocked}</span>}
+      </span>
+    </button>
+  );
+}
+
+export function TurnBar({ myTurn, actor, waitingFor, round, ap, apMax, apTurn, apCost: aimed, move, stride, moveCost, course, seconds, onEnd, extra, songs }: TurnBarProps) {
+  // A song call pointed at shows its cost on the sockets, over whatever else would.
+  const [songCost, setSongCost] = useState<number | null>(null);
+  const calls = myTurn ? (songs ?? []) : [];
+  const apCost = calls.length > 0 && songCost !== null ? songCost : aimed;
   // How long this turn's clock was when it was first seen, for how much of the ring is left.
   const clock = useRef({ key: "", full: 0 });
   const key = `${myTurn}|${actor}|${waitingFor ?? ""}|${round}`;
@@ -102,6 +161,11 @@ export function TurnBar({ myTurn, actor, waitingFor, round, ap, apMax, apTurn, a
 
   return (
     <div className={`fight-ui fight-turn ${myTurn ? "mine" : "waiting"} ${urgent ? "urgent" : ""}`} role="group" aria-label={myTurn ? `Your turn: ${actor}, round ${round}` : `Round ${round}: waiting for ${waitingFor ?? "the others"}`}>
+      {calls.length > 0 && (
+        <div className="ft-songs">
+          {calls.map((call) => <SongButton key={call.key} call={call} onCost={setSongCost} />)}
+        </div>
+      )}
       {extra && <div className="fight-turn-extra">{extra}</div>}
       <div className="fight-turn-bar">
         {/* Keyed by whose turn it is, so the pennant is run up afresh each time the turn comes round. */}

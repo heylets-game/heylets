@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { hexDistance } from "@gantt-quest/core";
-import { BANTER_GAP_MS, BANTER_LINES, BANTER_SLOT_MS, banterAt, banterPair } from "./banter";
+import { BANTER_GAP_MS, BANTER_LINES, BANTER_SLOT_MS, BANTER_NO_REPEAT, banterAt, banterPair, gossipLines, smallTalkToday, type Gossip } from "./banter";
 import { GAME_DAY_MS } from "./gameclock";
 import { REGULARS } from "./regulars";
 import { regularAbout } from "./wander";
@@ -62,6 +62,65 @@ describe("the townsfolk talking among themselves", () => {
     for (const x of BANTER_LINES) {
       for (const t of x.lines) expect(t.length, t).toBeLessThanOrEqual(80);
       if (x.pair) for (const who of x.pair) expect(ids.has(who as never), who).toBe(true);
+    }
+  });
+
+  it("has a different half of the small talk in play from one day to the next", () => {
+    const today = BANTER_LINES.map((_, i) => smallTalkToday(CREW, 100, i));
+    const tomorrow = BANTER_LINES.map((_, i) => smallTalkToday(CREW, 101, i));
+    expect(today.filter(Boolean).length).toBeGreaterThan(BANTER_LINES.length / 4);
+    expect(today.filter(Boolean).length).toBeLessThan((BANTER_LINES.length * 3) / 4);
+    expect(today).not.toEqual(tomorrow);
+    // What is said over a few hours of one day is only that day's.
+    const said = new Set(over("pub", 6).flatMap(({ lines }) => lines.map((l) => l.text)));
+    const day = Math.floor(DAY0 / 86_400_000);
+    BANTER_LINES.forEach((x, i) => {
+      if (!smallTalkToday(CREW, day, i) && x.lines.some((t) => said.has(t))) {
+        // Only where none of today's fitted whoever was near (then any will do), which a whole night never is.
+        expect(x.lines.every((t) => said.has(t))).toBe(false);
+      }
+    });
+  });
+
+  it("does not take a topic up again within a few minutes", () => {
+    const heard = over("pub", 6);
+    heard.forEach(({ at, lines }, i) => {
+      for (const prev of heard.slice(Math.max(0, i - 5), i)) {
+        if (at - prev.at <= BANTER_NO_REPEAT * BANTER_SLOT_MS) expect(lines[0].text, new Date(at).toISOString()).not.toBe(prev.lines[0].text);
+      }
+    });
+  });
+
+  const GOSSIP: Gossip[] = [
+    { kind: "garden", who: "Josh", crop: "herbs", beds: 3, ready: true },
+    { kind: "voyage", who: "Greyson", place: "Cinder Reach", cleared: false },
+    { kind: "gear", who: "Mara", item: "Storm Cutlass" },
+    { kind: "fish", who: "Ann", fish: "sea bass", weight: "3.2 kg" },
+    { kind: "news", text: "Fishing: a perfect catch pays a little more." },
+  ];
+
+  it("talks about what the crew has been up to, by name, every way of it short enough for a bubble", () => {
+    for (const g of GOSSIP) {
+      for (const way of gossipLines(g)) {
+        expect(way.length).toBeGreaterThanOrEqual(2);
+        for (const [, t] of way) {
+          expect(t, t).not.toMatch(/[{}]/);
+          expect(t.length, t).toBeLessThanOrEqual(90);
+        }
+        if (g.kind !== "news") expect(way.some(([, t]) => t.includes(g.who))).toBe(true);
+      }
+    }
+    expect(gossipLines(GOSSIP[0])[0][0][1]).toBe("Have you seen Josh's herb garden?!");
+    const heard = new Set<string>();
+    for (let t = DAY0; t < DAY0 + 30 * GAME_DAY_MS; t += BANTER_SLOT_MS) for (const l of banterAt(CREW, "pub", t, GOSSIP) ?? []) heard.add(l.text);
+    for (const name of ["Josh", "Greyson", "Mara", "Ann"]) expect([...heard].some((t) => t.includes(name)), name).toBe(true);
+    expect([...heard].some((t) => t.includes("a perfect catch"))).toBe(true);
+  });
+
+  it("says the same for everyone with the same gossip, and only small talk with none", () => {
+    for (let t = DAY0; t < DAY0 + GAME_DAY_MS; t += BANTER_SLOT_MS) {
+      expect(banterAt(CREW, "pub", t, GOSSIP)).toEqual(banterAt(CREW, "pub", t, [...GOSSIP]));
+      for (const l of banterAt(CREW, "pub", t) ?? []) expect(BANTER_LINES.some((x) => x.lines.includes(l.text)), l.text).toBe(true);
     }
   });
 });

@@ -40,8 +40,8 @@ import { behaviourOf, type Look } from "./behaviours";
 import { BELL_AP, goesForBell, liveBell, ringBell, somethingToRouse } from "./bell";
 import { apForMove, checkCommon, doCommon, enemyAct, leavesReach, walk, walkAp } from "./combat";
 import { has, unseen, type Ctx } from "./engine";
-import { blast, elevOf, flies, heldAgainst, inFight, pathIn, sameHex, stepCost, zoneReach, type Reached } from "./geometry";
-import { ACTION_AP, AP_MAX, COMMON_ACTIONS, ENEMY_WHIM, JUMP_RANGE, mindOf, unitStrikes, type EnemyStrike, type Mind } from "./kit";
+import { blast, close, elevOf, flies, heldAgainst, inFight, pathIn, sameHex, stepCost, zoneReach, type Reached } from "./geometry";
+import { ACTION_AP, AP_MAX, COMMON_ACTIONS, ENEMY_WHIM, jumpRange, mindOf, unitStrikes, type EnemyStrike, type Mind } from "./kit";
 import { seedFromString } from "../rng";
 import { HARMFUL } from "./surfaces";
 import type { Budget, Unit, ZoneState } from "./types";
@@ -219,7 +219,7 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
     const leapable = usable.filter((b) => b.cost + jumpAp <= budget.ap);
     if (best && !best.attacks && strike && !air && leapable.length > 0) {
       const afoot = Math.max(...leapable.map((b) => reach(b.cost + jumpAp)));
-      const range = JUMP_RANGE;
+      const range = jumpRange(enemy);
       for (const reached of clean.values()) {
         if (!reached.stop || reached.cost > afoot) continue;
         const from = { ...enemy, pos: reached.pos };

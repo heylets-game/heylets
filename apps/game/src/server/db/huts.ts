@@ -64,7 +64,7 @@ export async function getHut(db: D1Database, playerId: string, crewId?: string |
       .all<HutSummary["stash"][number]>(),
     db
       .prepare(
-        `SELECT id AS itemId, stored_in AS containerId, name, icon, slot, rarity, kind, ref, power, level_req, stat_bonus_json, upgrades FROM inventory
+        `SELECT id AS itemId, stored_in AS containerId, name, icon, slot, rarity, kind, ref, power, level_req, stat_bonus_json, upgrades, perk_amount FROM inventory
          WHERE player_id = ?1 AND stored_in IN ${inHome} ORDER BY id`,
       )
       .bind(playerId, ...world.bind)

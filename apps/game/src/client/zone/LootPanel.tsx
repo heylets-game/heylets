@@ -20,7 +20,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { FURNISHINGS, RARITY_COLOR, SLOT_LABEL, THROWABLES, armorBlock, modEffect, modName, modSide, stoneName, type ItemDef, type LootItem, type Slot } from "@gantt-quest/world";
-import { Icon, ItemDetail, bonusSummary, powerLabel } from "../items";
+import { Icon, ItemDetail, PerkLine, bonusSummary, powerLabel } from "../items";
 import { blurb, itemName, label } from "../labels";
 import { BlueprintIcon, GOLD_ICON, ThingIcon, furnishingIcon, resourceIcon } from "../thingIcons";
 import { ITEM_ICON, STONE_ICON } from "./actionIcons";
@@ -126,6 +126,7 @@ function LootCard({ item, viewer, how }: { item: LootItem; viewer?: LootPanelPro
             {g.kind === "armor" && ` (blocks ${armorBlock(g.power)} on its own)`}
           </p>
           {bonusSummary(g) && <p className="good">{bonusSummary(g)}</p>}
+          <PerkLine item={g} />
           {g.levelReq > 1 && <p className="muted">Requires level {g.levelReq}</p>}
         </div>
       );

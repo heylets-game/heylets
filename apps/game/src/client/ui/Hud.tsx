@@ -1,57 +1,62 @@
-// The bottom bar: the one fixed piece of HUD every view shares. It is built
-// like a ship's rack, in flat colours and hard two-pixel edges:
+// The bottom bar: the one fixed piece of HUD every view shares. It is a
+// board of the same tarred, lamplit timber as the fight's turn bar and the
+// shops' shelves (zone/fight.css, shelf.css), trimmed in dull brass:
 //
 //                 where you stand .... what to do here
 //        o o o          points          o o o o
-//    @[== health ==]@  <( level )>  @[== second meter ==]@
-//      ================ experience =================
-//   L [hand][hand] | [ ][ ][ ][ ][ ][ ][ ][ ][ ] | [bag] I
+//   +---------------------------------------------------------+
+//   | [hand] |               (Lv 7)               | [   ] book |
+//   | [    ] | [== health ==]      [== energy ==] | [   ]      |
+//   | [hand] | ========== experience ============ | [bag] rest |
+//   | [    ] | [ ][ ][ ][ ][ ][ ][ ][ ][ ][ ]     | [   ]      |
+//   |        | [ ][ ][ ][ ][ ][ ][ ][ ][ ][ ]     | [   ] menu |
+//   +---------------------------------------------------------+
 //
-// The rack is one picture of timber drawn in code (rackArt.ts), with what
-// changes laid over it. It is sectioned by two raised posts. Left of the
-// first: what is in each hand. Between them, the slots: what the hero can do
-// in a fight (see below). Right of the second: the bag. On the beam over it
-// runs the experience bar. Above that sit two meters, health on the left
-// and energy (gathering outings left today) on the right, with a plaque
-// between them that shows
-// the hero's level and opens the logbook. A view may hand the bar a turn
-// instead (`turn`: the plaque is then its clock, pressed to end it) and
-// points to show as pips over the meters (`pips`); none does now, a fight
-// on the tiles having a turn bar of its own (zone/TurnBar.tsx). Tabs hang
-// off the rack's ends: the logbook and rest on the left, the bag's key and
-// the menu on the right. Nothing on the
+// Left: what is in each hand (on a map, one over the other, as tall as the
+// slots; elsewhere side by side). Brass corners, as on the logbook, finish
+// the frame. In the middle: health, a plaque
+// with the hero's level (it opens the logbook) and energy (gathering outings
+// left today), the experience bar under them, and the slots under that.
+// Right: the bag (I or B opens it too) with the gold in it under the bag's
+// picture, and beside it a column of small tabs:
+// the logbook, rest (or, in a fight, the emote wheel) and the menu. A view
+// may hand the bar a turn (`turn`: the plaque is then its clock, pressed to
+// end it) and points to show as pips over it (`pips`); none does now, a fight
+// on the tiles having a turn bar of its own (zone/TurnBar.tsx). Nothing on the
 // bar is labelled: pointing at a thing brings up a card over the bar saying
 // what it is (a meter's numbers, an item's card as in the bag, what an
 // ability does, a key).
 //
-// The rack is two rows deep, eighteen slots, and each is something the hero
-// can do in a fight: an ability, a common action, a thing from the pack,
-// each with its picture. The player lays them out as they like (drag one
-// onto another to swap them), and the layout is kept per class (zone/hotbar.ts).
-// In a fight on the tiles (a zone) the view hands the slots in as `slots`:
-// each is then a button with its key (1 to 9 for the top row, Shift with
-// them for the bottom), and a right-click chooses what goes there. Anywhere
-// else the same bar is shown as it was left, to look at and rearrange.
+// The slots are only there on a map (a zone), which hands them in as `slots`:
+// two rows of ten, each something the hero can do in a fight (an ability, a
+// common action, a thing from the pack), a button with its key (1 to 9 and 0
+// for the top row, Shift with them for the bottom). Drag one onto another to
+// swap them; a right-click chooses what goes there; the layout is kept per
+// class (zone/hotbar.ts). Anywhere else (the Harbor, a hut, the pub, a shop)
+// there is nothing to fight, so the bar is slim: the meters and the
+// experience alone between the hands and the bag.
 //
 // I (or B) opens and closes the bag and L opens the logbook, unless you are
 // typing. The bag's button does the same: press it again to put the bag away.
 
 import { Children, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { dragSource, useDropTarget } from "../dragDrop";
-import { ABILITIES, COMMON_ACTIONS, ITEM_AP, RARITY_COLOR, THROWABLES, abilitiesFor, classAbilitiesOf, commonCost, loadoutOf, maxHpFor, parseAbilityLoadout, tacticOf, withClassAbilities, xpToNext, type CommonAction, type Throwable } from "@gantt-quest/world";
+import { ITEM_AP, RARITY_COLOR, loadoutOf, maxHpFor, xpToNext } from "@gantt-quest/world";
 import { api, type Me } from "../api";
 import { Icon, ItemDetail, toOwned } from "../items";
-import { blurb, label } from "../labels";
 import { PixelIcon } from "../PixelIcon";
+import { BrassCorners } from "./BrassCorners";
 import { LiquidMeter } from "./LiquidMeter";
-import { COMMON_ICON, ITEM_ICON, abilityIcon } from "../zone/actionIcons";
+import { ITEM_ICON } from "../zone/actionIcons";
 import { logbookNews } from "../Logbook";
-import { loadBar, moveSlot, saveBar } from "../zone/hotbar";
-import { RACK, RACK_ROW, paintRack } from "./rackArt";
+import { GOLD_ICON, ThingIcon } from "../thingIcons";
+import { BAR_ROW } from "../zone/hotbar";
 import "./hud.css";
 
 /** A campfire: rest. */
 const FIRE = ["....#.....", "....##....", "...###.#..", "..####.##.", "..#######.", ".###.####.", ".##...###.", "..##.###..", "#..####..#", ".########.", "#........#"];
+/** A closed book, spine to the left: the logbook. */
+const BOOK = [".#########", "#.########", "#.##....##", "#.########", "#.###..###", "#.########", "#.########", "#.########", "#.########", "#.#......#", ".#########"];
 const HOURGLASS = ["########", ".#....#.", ".######.", "..####..", "...##...", "..#..#..", ".#.##.#.", ".######.", "########"];
 
 /** A row of turn points: lit for those left, dark for those spent. */
@@ -107,7 +112,7 @@ interface Props {
   pips?: HudPips[];
   /** Small extras beside the points: "connecting…" while a place's connection is down, the keys held on a map. */
   chips?: ReactNode;
-  /** The slots as the view wants them (a fight on the tiles): up to two rows of nine, null for an empty one. Otherwise the bar is shown as this class last left it. */
+  /** The slots, on a map: two rows of ten, null for an empty one. Left out, the bar is slim, with no slots. */
   slots?: (HudSlot | null)[];
   /** The player dragged slot `from` onto slot `to`. */
   onSlotMove?(from: number, to: number): void;
@@ -134,10 +139,8 @@ interface Props {
   menu: ReactNode;
 }
 
-/** A place on the rack's picture, in its art pixels, as a style: the stylesheet's --p is how big one of those is drawn. */
-const box = (x: number, y: number, w: number, h: number): CSSProperties => ({ left: `calc(${x} * var(--p))`, top: `calc(${y} * var(--p))`, width: `calc(${w} * var(--p))`, height: `calc(${h} * var(--p))` });
-const well = (x: number) => box(x, RACK.slotY, RACK.slot, RACK.slot);
-const tab = (side: "left" | "right", n: number) => box(RACK.tabs[side], RACK.tabs.y[n], RACK.tabs.w, RACK.tabs.h);
+/** Gold in a few characters, to fit under the bag: 950, 12.4k, 3.1m. */
+export const shortGold = (n: number) => (n < 10_000 ? String(n) : n < 1_000_000 ? `${Math.floor(n / 100) / 10}k` : `${Math.floor(n / 100_000) / 10}m`);
 const typing = (e: KeyboardEvent) => !!(e.target as HTMLElement | null)?.closest?.("input, textarea, select, [contenteditable]");
 
 /** A tooltip's words: what the thing is, a line about it, more if there is more, and the key that works it. */
@@ -158,16 +161,23 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
   const worn = items.filter((i) => i.equipped);
   const weapon = worn.find((i) => i.slot === "main_hand");
   const offhand = worn.find((i) => i.slot === "off_hand");
-  // With nothing in hand there is only the punch. Likewise read (the loadout is stored as JSON) only when it changes.
-  const abilities = useMemo(
-    () => withClassAbilities(abilitiesFor(weapon?.ref), c ? classAbilitiesOf(c.class_id, c.level, parseAbilityLoadout(c.ability_loadout)) : []),
-    [weapon?.ref, c?.class_id, c?.level, c?.ability_loadout],
-  );
 
-  /** What the pointer is over on the bar, and where along it (in the picture's pixels), for the card that explains it. */
+  /** What the pointer is over on the bar, and where along it (in the board's own pixels), for the card that explains it. */
   const [tip, setTip] = useState<{ x: number; node: ReactNode } | null>(null);
-  const hover = (x: number, node: ReactNode) => ({ onPointerEnter: () => setTip({ x, node }), onPointerLeave: () => setTip(null), onPointerDown: () => setTip(null) });
-  const [hpAt, otherAt] = RACK.meters;
+  const board = useRef<HTMLDivElement>(null);
+  const hover = (node: ReactNode) => ({
+    onPointerEnter: (e: ReactPointerEvent<HTMLElement>) => {
+      const el = board.current;
+      if (!el) return;
+      const at = el.getBoundingClientRect();
+      const thing = e.currentTarget.getBoundingClientRect();
+      // The view may be zoomed (the UI scale): measured on the screen, placed in the board's own pixels.
+      const zoom = at.width / (el.offsetWidth || at.width);
+      setTip({ x: (thing.left + thing.width / 2 - at.left) / zoom, node });
+    },
+    onPointerLeave: () => setTip(null),
+    onPointerDown: () => setTip(null),
+  });
 
   // Energy (gathering outings left today) is always on the right. A view that keeps its own count (the Harbor, a
   // hut) hands it in, fresh after each outing or rest; anywhere else the bar reads it once, on the way in.
@@ -182,29 +192,14 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
     };
   }, [!!given, heroId]);
   const meter: HudMeter | undefined = given ?? (energy ? { name: "Energy", note: "gathering outings left today", now: energy.left, max: energy.max, kind: "stamina" } : undefined);
-  const plaqueX = RACK.plaque.x + RACK.plaque.w / 2;
 
   // The newest slots, for the key handler, which is not rebound each time they change.
   const slotsNow = useRef(slots);
   slotsNow.current = slots;
 
-  // The rack's timber is one fixed picture, painted once.
-  const art = useRef<HTMLCanvasElement>(null);
-  const rackRows = 2;
-  // Out of a fight: the bar as this class last left it, to look at and rearrange.
-  const classId = me.character?.class_id ?? "";
-  const abilityKey = abilities.join(",");
-  const [layout, setLayout] = useState<string[]>([]);
-  useEffect(() => {
-    if (classId) setLayout(loadBar(classId, abilities));
-  }, [classId, abilityKey]);
-  useEffect(() => {
-    if (art.current) paintRack(art.current, rackRows);
-  }, [me.character === null, rackRows]);
-
-  // How much of the bottom of the screen the bar takes (its rack and the pips over it, not the "here" strip), as
+  // How much of the bottom of the screen the bar takes (its board and the pips over it, not the "here" strip), as
   // --hud-h on the page: whatever a view floats over the bottom (a minigame's controls) sits clear above it.
-  // --hud-all-h is the same with the "here" strip counted in: what must clear that as well (the talk, on a phone).
+  // --hud-all-h is the same with the "here" strip counted in: what must clear that as well (the talk).
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = root.current;
@@ -227,7 +222,7 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
       document.documentElement.style.removeProperty("--hud-h");
       document.documentElement.style.removeProperty("--hud-all-h");
     };
-  }, [c === null]);
+  }, [c === null, !!slots]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -235,10 +230,10 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
       const k = e.key.toLowerCase();
       if ((k === "b" || k === "i") && onBag && !bagBlocked) onBag();
       if (k === "l" && onBook) onBook();
-      // A fight's slots answer to their numbers, 1 to 9 and then 0: the top row plain, the bottom row with Shift.
+      // A map's slots answer to their numbers, 1 to 9 and then 0: the top row plain, the bottom row with Shift.
       const digit = /^Digit([0-9])$/.exec(e.code)?.[1];
       const col = digit === undefined ? -1 : (Number(digit) + 9) % 10;
-      const slot = col >= 0 && col < RACK.mid.length ? slotsNow.current?.[col + (e.shiftKey ? RACK.mid.length : 0)] : undefined;
+      const slot = col >= 0 && col < BAR_ROW ? slotsNow.current?.[col + (e.shiftKey ? BAR_ROW : 0)] : undefined;
       if (slot?.run && !slot.spent) slot.run();
     };
     addEventListener("keydown", onKey);
@@ -261,18 +256,7 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
     const d = dragSource({ kind: "slot", index: i }, { onLift: () => setTip(null) });
     return { ...d, onPointerDown: (e: ReactPointerEvent<HTMLElement>) => (setTip(null), d.onPointerDown?.(e)) };
   };
-  if (!c) return <div className="hud" ref={root}><div className="hud-rack"><span className="hud-caps">{children}{menu}</span></div></div>;
-
-  /** One slot of the bar as it is shown out of a fight: what it is and what it costs, with nothing to press. */
-  const reminder = (key: string): HudSlot | null => {
-    const [kind, id] = [key.slice(0, 2), key.slice(3)];
-    const cost = (ap: number) => `${ap} AP`;
-    if (kind === "ab" && ABILITIES[id]) return { id: key, icon: { ...abilityIcon(id), flat: true }, name: label("ability", id), line: `${cost(tacticOf(id).cost)} · used in a fight`, more: blurb("ability", id) };
-    if (kind === "do" && COMMON_ACTIONS[id as CommonAction]) return { id: key, icon: { ...COMMON_ICON[id as CommonAction], flat: true }, name: COMMON_ACTIONS[id as CommonAction].name, line: `${cost(commonCost(id as CommonAction, c.class_id))} · used in a fight`, more: COMMON_ACTIONS[id as CommonAction].blurb };
-    if (kind === "it" && THROWABLES[id as Throwable]) return { id: key, icon: ITEM_ICON[id as Throwable], name: THROWABLES[id as Throwable].name, line: "Carried into a fight", more: THROWABLES[id as Throwable].blurb, count: me.consumables?.[id as Throwable] ?? 0 };
-    return null;
-  };
-  const shown = slots ?? layout.map(reminder);
+  if (!c) return <div className="hud slim" ref={root}><div className="hud-rack"><span className="hud-caps">{children}{menu}</span></div></div>;
 
   /**
    * A hand's slot: what it holds, with its card. On a map, a lit torch there (a click puts it away, and what was
@@ -280,7 +264,6 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
    * plain click never does: it put the weapon away unasked, and in a fight left it out of reach till the next turn.
    */
   const handSlot = (hand: "main" | "off") => {
-    const at = RACK.hands[hand === "main" ? 0 : 1];
     const worn = hand === "main" ? weapon : offhand;
     const slot = hand === "main" ? "main_hand" : "off_hand";
     if (torch && torch.rounds !== null && torch.hand === hand) {
@@ -291,11 +274,10 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
         <button
           key={slot}
           className={`hud-slot hand lit ${torch.stow ? "" : "spent"}`}
-          style={well(at)}
           aria-label={`Put away the lit torch in your ${hand} hand`}
           aria-disabled={!torch.stow}
           onClick={() => torch.stow?.()}
-          {...hover(at + 7, <Tip name="Lit torch" line={line} more={`${away} It burns down only while a fight goes on. Throw it from the bar to leave it burning on the ground.`} />)}
+          {...hover(<Tip name="Lit torch" line={line} more={`${away} It burns down only while a fight goes on. Throw it from the bar to leave it burning on the ground.`} />)}
         >
           <Icon name={ITEM_ICON.torch.name} color={ITEM_ICON.torch.color} size={34} />
           <span className="hud-count">{torch.rounds}</span>
@@ -308,32 +290,20 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
       const what = hand === "main" ? "swing it as a weapon (your weapon put away; it may set whoever it hits Burning)" : `hold it up${offhand ? " (your shield set aside)" : ""}`;
       const hint = torch.light ? `Drag the torch here from the bar to light one and ${what}. ${ITEM_AP.light} AP in a fight.` : (torch.why ?? "You cannot light one now.");
       return (
-        <span
-          key={slot}
-          className="hud-slot hand"
-          style={well(at)}
-          data-hand={hand}
-          {...handDrop}
-          {...hover(at + 7, <>{card}<Tip name="A torch" line={hint} more={`${torch.carried} carried.`} /></>)}
-        >
+        <span key={slot} className="hud-slot hand" data-hand={hand} {...handDrop} {...hover(<>{card}<Tip name="A torch" line={hint} more={`${torch.carried} carried.`} /></>)}>
           {worn && <Icon name={worn.icon} color={RARITY_COLOR[worn.rarity]} size={40} />}
         </span>
       );
     }
     return (
-      <span key={slot} className="hud-slot hand" style={well(at)} {...hover(at + 7, card)}>
+      <span key={slot} className="hud-slot hand" {...hover(card)}>
         {worn && <Icon name={worn.icon} color={RARITY_COLOR[worn.rarity]} size={40} />}
       </span>
     );
   };
 
-  const moveShown = onSlotMove ?? ((from: number, to: number) => {
-    const next = moveSlot(layout, from, to);
-    setLayout(next);
-    saveBar(c.class_id, next);
-  });
-
-  rack.current = { shown, move: moveShown, light: torch?.light };
+  const shown = slots ?? [];
+  rack.current = { shown, move: (from, to) => onSlotMove?.(from, to), light: torch?.light };
 
   const bonus = loadoutOf(worn).bonus;
   const stats = { str: c.str + (bonus.str ?? 0), int_stat: c.int_stat + (bonus.int_stat ?? 0), vit: c.vit + (bonus.vit ?? 0), agi: c.agi + (bonus.agi ?? 0), dex: c.dex + (bonus.dex ?? 0) };
@@ -347,8 +317,43 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
     </span>
   );
 
+  /** One of a map's slots: what the hero can do, a button with its key; any of them can be dropped on and asked to hold something else. */
+  const slotButton = (s: HudSlot | null, i: number) => {
+    const lower = i >= BAR_ROW;
+    const digit = ((i % BAR_ROW) + 1) % 10;
+    const keys = `${lower ? "Shift " : ""}${digit}`;
+    const arrange = {
+      "data-rack": i,
+      ...slotDrop,
+      onContextMenu: (e: MouseEvent) => {
+        e.preventDefault();
+        onSlotMenu?.(i);
+      },
+    };
+    if (!s) {
+      return <button key={`empty${i}`} className="hud-slot act empty" aria-label={`Empty slot ${keys}`} onClick={() => onSlotMenu?.(i)} {...arrange} {...hover(<Tip name="Empty slot" line={onSlotMenu ? "Click to choose what goes here." : "Drag a slot here to move it."} more={onSlotMenu ? "Drag a slot onto another to swap them; right-click one to change it." : undefined} keys={keys} />)} />;
+    }
+    return (
+      <button
+        key={s.id}
+        className={`hud-slot act ${s.picked ? "picked" : ""} ${s.spent ? "spent" : ""} ${s.wait ? "cooling" : ""}`}
+        aria-label={s.name}
+        aria-pressed={!!s.picked}
+        aria-disabled={!s.run || !!s.spent}
+        onClick={() => !s.spent && s.run?.()}
+        {...arrange}
+        {...hover(<Tip name={s.name} line={s.line} more={s.more} keys={keys} />)}
+        {...slotDrag(i)}
+      >
+        <Icon name={s.icon.name} color={s.icon.color} size={30} flat={s.icon.flat} />
+        {s.wait ? <span className="hud-wait" aria-label={`${s.wait} turn${s.wait === 1 ? "" : "s"} to wait`}>{s.wait}</span> : s.count !== undefined && <span className="hud-count">{s.count}</span>}
+        <span className="hud-key">{lower ? "⇧" : ""}{digit}</span>
+      </button>
+    );
+  };
+
   return (
-    <div className="hud" ref={root} role="toolbar" aria-label="Your hero">
+    <div className={`hud ${slots ? "full" : "slim"}`} ref={root} role="toolbar" aria-label="Your hero">
       {(place || Children.toArray(children).length > 0) && (
         <div className="hud-here">
           {place && <span className="hud-place">{place}</span>}
@@ -361,118 +366,103 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
         <span className="hud-points-side end">{chips}</span>
       </div>
 
-      <div className="hud-rack" style={box(0, 0, RACK.w, RACK.h + (rackRows - 1) * RACK_ROW)} onPointerLeave={() => setTip(null)}>
-        <canvas ref={art} className="hud-rack-art" aria-hidden />
-        <div className="hud-xp" style={box(RACK.xp.x, RACK.xp.y, RACK.xp.w, RACK.xp.h)} {...hover(RACK.xp.x + RACK.xp.w / 2, <Tip name="Experience" line={`${c.xp} of ${next} to level ${c.level + 1}`} />)}>
-          <div style={{ width: `${(100 * c.xp) / next}%` }} />
-        </div>
-
-        {/* Over the cornice: health, the plaque, and the view's other count. Their numbers are in their tooltips. */}
-        <div className="hud-meter" style={box(hpAt.x, hpAt.y, hpAt.w, hpAt.h)} {...hover(hpAt.x + hpAt.w / 2, <Tip name="Health" line={`${nowHp} of ${maxHp} hit points${hp?.shield ? `, and a shield of ${hp.shield}` : ""}`} />)}>
-          <LiquidMeter kind="hp" now={nowHp} max={maxHp} shield={hp?.shield} w={hpAt.w} h={hpAt.h} />
-        </div>
-        {meter && (
-          <div className="hud-meter" style={box(otherAt.x, otherAt.y, otherAt.w, otherAt.h)} {...hover(otherAt.x + otherAt.w / 2, <Tip name={meter.name} line={`${meter.now} of ${meter.max}${meter.note ? ` · ${meter.note}` : ""}`} />)}>
-            <LiquidMeter kind={meter.kind} now={meter.now} max={meter.max} w={otherAt.w} h={otherAt.h} />
-          </div>
-        )}
-        {turn ? (
-          <button
-            className={`hud-plaque turn ${turn.onEnd ? "mine" : ""} ${turn.seconds !== null && turn.seconds <= 15 ? "low" : ""}`}
-            style={box(RACK.plaque.x, RACK.plaque.y, RACK.plaque.w, RACK.plaque.h)}
-            aria-label={turn.onEnd ? "End turn" : "Waiting"}
-            disabled={!turn.onEnd}
-            onClick={turn.onEnd}
-            {...hover(plaqueX, <Tip name={turn.onEnd ? "End your turn" : `Waiting for ${turn.waitingFor ?? "the others"}`} line={turn.seconds !== null ? `${turn.seconds} seconds left on the turn` : undefined} />)}
-          >
-            <PixelIcon rows={HOURGLASS} size={12} />
-            {turn.seconds !== null ? <span>{turn.seconds}</span> : <span>{turn.onEnd ? "End" : "…"}</span>}
-          </button>
-        ) : (
-          <button
-            className={`hud-plaque ${news ? "news" : ""}`}
-            style={box(RACK.plaque.x, RACK.plaque.y, RACK.plaque.w, RACK.plaque.h)}
-            aria-label="Logbook"
-            disabled={!onBook}
-            onClick={onBook}
-            {...hover(plaqueX, <Tip name={`${c.name}, level ${c.level}`} line={news ? "Something to spend or pick in the logbook" : "Open the logbook"} keys="L" />)}
-          >
-            <span>Lv {c.level}</span>
-          </button>
-        )}
-
-        {/* Left of the first post: weapon and shield, each with the card it has in the bag. On a map either hand can take a lit torch instead. */}
-        {handSlot("main")}
-        {handSlot("off")}
-
-        {/* Between the posts, in a fight on the tiles: what the hero can do, each a button, in two rows. */}
-        {shown.slice(0, RACK.mid.length * 2).map((s, i) => {
-          const col = i % RACK.mid.length;
-          const lower = i >= RACK.mid.length;
-          const at = box(RACK.mid[col], RACK.slotY + (lower ? RACK_ROW : 0), RACK.slot, RACK.slot);
-          const digit = (col + 1) % 10;
-          const keys = `${lower ? "Shift " : ""}${digit}`;
-          // Any slot can be dropped on, and asked to hold something else.
-          const arrange = {
-            "data-rack": i,
-            ...slotDrop,
-            onContextMenu: (e: MouseEvent) => {
-              e.preventDefault();
-              onSlotMenu?.(i);
-            },
-          };
-          if (!s) {
-            return <button key={`empty${i}`} className="hud-slot act empty" style={at} aria-label={`Empty slot ${keys}`} onClick={() => onSlotMenu?.(i)} {...arrange} {...hover(RACK.mid[col] + 7, <Tip name="Empty slot" line={onSlotMenu ? "Click to choose what goes here." : "Drag a slot here to move it."} more={onSlotMenu ? "Drag a slot onto another to swap them; right-click one to change it." : undefined} keys={keys} />)} />;
-          }
-          return (
-            <button
-              key={s.id}
-              className={`hud-slot act ${s.picked ? "picked" : ""} ${s.spent ? "spent" : ""} ${s.wait ? "cooling" : ""} ${slots ? "" : "reminder"}`}
-              style={at}
-              aria-label={s.name}
-              aria-pressed={!!s.picked}
-              aria-disabled={!s.run || !!s.spent}
-              onClick={() => !s.spent && s.run?.()}
-              {...arrange}
-              {...hover(RACK.mid[col] + 7, <Tip name={s.name} line={s.line} more={s.more} keys={keys} />)}
-              {...slotDrag(i)}
-            >
-              <Icon name={s.icon.name} color={s.icon.color} size={30} flat={s.icon.flat} />
-              {s.wait ? <span className="hud-wait" aria-label={`${s.wait} turn${s.wait === 1 ? "" : "s"} to wait`}>{s.wait}</span> : s.count !== undefined && <span className="hud-count">{s.count}</span>}
-              <span className="hud-key">{lower ? "⇧" : ""}{digit}</span>
-            </button>
-          );
-        })}
-        {/* Right of the second post: the bag. */}
-        <button
-          className="hud-slot bag"
-          style={well(RACK.bag)}
-          aria-label="Sea bag"
-          disabled={!onBag || !!bagBlocked}
-          onClick={onBag}
-          {...hover(RACK.bag + 7, <Tip name="Sea bag" line={bagBlocked ?? `${c.gold} gold${me.carry ? ` · ${me.carry.carried} of ${me.carry.limit} squares filled` : ""}`} keys="I" />)}
-        >
-          {/* The sea bag itself, as a thing: drawn in the round like everything that goes in it. */}
-          <Icon name="sea-bag" color="#e0b12e" size={40} />
-        </button>
-
-        {/* The tabs off each end: the logbook and rest (or the emote wheel) on the left, the bag's key and the menu on the right. */}
-        <button className={`hud-tab ${news ? "news" : ""}`} style={tab("left", 0)} aria-label="Logbook" disabled={!onBook} onClick={onBook} {...hover(4, <Tip name="Logbook" line={news ? "Something to spend or pick" : "Your hero, stats and skills"} keys="L" />)}>L</button>
-        {rest && (
-          <button className="hud-tab" style={tab("left", 1)} aria-label="Rest" disabled={rest.disabled} onClick={rest.run} {...hover(4, <Tip name="Rest" line={rest.hint} />)}>
-            <PixelIcon rows={FIRE} size={11} />
-          </button>
-        )}
-        {!rest && emote && (
-          <span className="hud-tab emote" style={tab("left", 1)} {...hover(4, <Tip name="Emotes" line="Wave, cheer, bow, dab, floss, dance, do the running man, breakdance or sit down. It costs nothing and takes no turn." keys="G" />)}>
-            {emote}
+      <div className="hud-rack" ref={board} onPointerLeave={() => setTip(null)}>
+        {/* Brass corners, as on the logbook's cover. */}
+        <BrassCorners />
+        {/* Left: weapon and shield. */}
+        <span className="hud-side">
+          {/* Each with the card it has in the bag. On a map either hand can take a lit torch instead. */}
+          <span className="hud-hands">
+            {handSlot("main")}
+            {handSlot("off")}
           </span>
-        )}
-        <button className="hud-tab" style={tab("right", 0)} aria-label="Sea bag" disabled={!onBag || !!bagBlocked} onClick={onBag} {...hover(RACK.w - 4, <Tip name="Sea bag" line={bagBlocked} keys="I" />)}>I</button>
-        <span className="hud-tab cog" style={tab("right", 1)} {...hover(RACK.w - 4, <Tip name="Menu" line="Settings, your account and the way out" keys="Esc" />)}>{menu}</span>
+        </span>
+
+        <span className="hud-core">
+          {/* The level on a crest of brass and wood with a ribbon behind it, standing over the board's top edge: it opens the
+              logbook (or, handed a turn, it is the turn's clock). */}
+          <span className="hud-crest">
+            <i className="hud-crest-tail l" aria-hidden />
+            <i className="hud-crest-tail r" aria-hidden />
+            {turn ? (
+              <button
+                className={`hud-plaque turn ${turn.onEnd ? "mine" : ""} ${turn.seconds !== null && turn.seconds <= 15 ? "low" : ""}`}
+                aria-label={turn.onEnd ? "End turn" : "Waiting"}
+                disabled={!turn.onEnd}
+                onClick={turn.onEnd}
+                {...hover(<Tip name={turn.onEnd ? "End your turn" : `Waiting for ${turn.waitingFor ?? "the others"}`} line={turn.seconds !== null ? `${turn.seconds} seconds left on the turn` : undefined} />)}
+              >
+                <PixelIcon rows={HOURGLASS} size={12} />
+                {turn.seconds !== null ? <span>{turn.seconds}</span> : <span>{turn.onEnd ? "End" : "…"}</span>}
+              </button>
+            ) : (
+              <button className={`hud-plaque ${news ? "news" : ""}`} aria-label="Logbook" disabled={!onBook} onClick={onBook} {...hover(<Tip name={`${c.name}, level ${c.level}`} line={news ? "Something to spend or pick in the logbook" : "Open the logbook"} keys="L" />)}>
+                <small>Lv</small>
+                <span>{c.level}</span>
+              </button>
+            )}
+          </span>
+          {/* Health and energy, end to end: tall at the outer ends, tapering to meet under the crest, each filling from its
+              outer end. Their numbers are in their tooltips. */}
+          <span className="hud-gauges">
+            <span className="hud-meter" {...hover(<Tip name="Health" line={`${nowHp} of ${maxHp} hit points${hp?.shield ? `, and a shield of ${hp.shield}` : ""}`} />)}>
+              <LiquidMeter kind="hp" now={nowHp} max={maxHp} shield={hp?.shield} w={60} h={6} />
+            </span>
+            {meter ? (
+              <span className="hud-meter" {...hover(<Tip name={meter.name} line={`${meter.now} of ${meter.max}${meter.note ? ` · ${meter.note}` : ""}`} />)}>
+                <LiquidMeter kind={meter.kind} now={meter.now} max={meter.max} w={60} h={6} />
+              </span>
+            ) : (
+              <span className="hud-meter none" aria-hidden />
+            )}
+          </span>
+
+          {/* Experience, right under the meters. */}
+          <span className="hud-xp" {...hover(<Tip name="Experience" line={`${c.xp} of ${next} to level ${c.level + 1}`} />)}>
+            <i style={{ width: `${(100 * c.xp) / next}%` }} />
+          </span>
+
+          {/* On a map: what the hero can do, two rows of ten. */}
+          {slots && <span className="hud-slots" style={{ "--cols": BAR_ROW } as CSSProperties}>{shown.slice(0, BAR_ROW * 2).map(slotButton)}</span>}
+        </span>
+
+        {/* Right: the bag, and beside it the tabs for the logbook, rest (or, in a fight, the emote wheel) and the menu. */}
+        <span className="hud-side end">
+          <button
+            className="hud-slot bag"
+            aria-label="Sea bag"
+            disabled={!onBag || !!bagBlocked}
+            onClick={onBag}
+            {...hover(<Tip name="Sea bag" line={bagBlocked ?? `${c.gold} gold${me.carry ? ` · ${me.carry.carried} of ${me.carry.limit} squares filled` : ""}`} keys="I" />)}
+          >
+            {/* The sea bag itself, as a thing: drawn in the round like everything that goes in it. */}
+            <Icon name="sea-bag" color="#e0b12e" size={40} />
+            {/* And the gold in it, under it. */}
+            <span className="hud-gold" aria-label={`${c.gold} gold`}>
+              <ThingIcon icon={GOLD_ICON} size={16} />
+              <span>{shortGold(c.gold)}</span>
+            </span>
+          </button>
+          <span className="hud-tabs">
+            <button className={`hud-tab ${news ? "news" : ""}`} aria-label="Logbook" disabled={!onBook} onClick={onBook} {...hover(<Tip name="Logbook" line={news ? "Something to spend or pick" : "Your hero, stats and skills"} keys="L" />)}>
+              <PixelIcon rows={BOOK} size={11} />
+            </button>
+            {rest && (
+              <button className="hud-tab" aria-label="Rest" disabled={rest.disabled} onClick={rest.run} {...hover(<Tip name="Rest" line={rest.hint} />)}>
+                <PixelIcon rows={FIRE} size={11} />
+              </button>
+            )}
+            {!rest && emote && (
+              <span className="hud-tab emote" {...hover(<Tip name="Emotes" line="Wave, cheer, bow, dab, floss, dance, do the running man, breakdance or sit down. It costs nothing and takes no turn." keys="G" />)}>
+                {emote}
+              </span>
+            )}
+            <span className="hud-tab cog" {...hover(<Tip name="Menu" line="Settings, your account and the way out" keys="Esc" />)}>{menu}</span>
+          </span>
+        </span>
 
         {/* What the pointer is over, explained: a card over the bar, above that thing. */}
-        {tip && <div className="hud-tip panel" style={{ left: `clamp(150px, calc(${tip.x} * var(--p)), calc(100% - 150px))` }} role="tooltip">{tip.node}</div>}
+        {tip && <div className="hud-tip panel" style={{ left: `clamp(150px, ${tip.x}px, calc(100% - 150px))` }} role="tooltip">{tip.node}</div>}
       </div>
     </div>
   );

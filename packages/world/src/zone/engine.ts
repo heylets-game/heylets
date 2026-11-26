@@ -5,7 +5,7 @@
 import { hexDistance, posKey, type StatKey } from "@gantt-quest/core";
 import { tileAt } from "../map";
 import type { Rng } from "../rng";
-import { adjacent, close, elevOf, inFight } from "./geometry";
+import { adjacent, close, elevOf, inFight, perkOf } from "./geometry";
 import { ABILITIES, EFFECT_TICK, STACK_TURNS, SUNDERED_DEFENCE, isStacking, type Inflict, type StackingEffect } from "../content";
 import { AQUEOUS, AURAS, CORAL_ARMOR, ENEMY_KIT, FORTIFY, SHIELD_SET_ASIDE, enemyDefence, enemySave, healDice } from "./kit";
 import { inDark } from "./light";
@@ -39,6 +39,8 @@ export function addCondition(ctx: Ctx, unit: Unit, kind: Condition, rounds: numb
   // Bleeding and Burning come in stacks that last as long as they always do, whatever asked for them.
   if (isStacking(kind)) return addStacks(ctx, unit, kind, amount ?? 1);
   if (unit.down || rounds <= 0) return;
+  // What gear keeps off: a Storm Crown Stunning, a Stoker's Apron Burning, Sea-Legs Slops a fall, Windrunner Leggings Slowing.
+  if (gearWards(unit, kind)) return;
   // A Wind-god's Shanty keeps everyone in it light on their feet.
   if (kind === "slowed" && windward(ctx.state, unit)) return;
   if (kind === "wet") removeCondition(unit, "burning");
@@ -69,6 +71,15 @@ export function addCondition(ctx: Ctx, unit: Unit, kind: Condition, rounds: numb
 /** Each stack of a Burning: one count of turns apiece (a Burning from before stacks had their own is read as that many of its `rounds`). */
 const burnStacks = (c: UnitCondition): { rounds: number; fresh?: boolean }[] => (c.stacks ??= Array.from({ length: c.amount ?? 1 }, () => ({ rounds: c.rounds })));
 
+/** Whether a power of a hero's gear keeps this condition off them. */
+export function gearWards(unit: Unit, kind: Condition): boolean {
+  if (kind === "stunned") return perkOf(unit, "clear_head") > 0;
+  if (kind === "burning") return perkOf(unit, "fireproof") > 0;
+  if (kind === "prone") return perkOf(unit, "steady") > 0;
+  if (kind === "slowed") return perkOf(unit, "fleet") > 0;
+  return false;
+}
+
 /**
  * Add `n` stacks of Bleeding or Burning, each lasting STACK_TURNS. A new stack of Bleeding starts the count of every
  * stack over; each stack of Burning has its own, and the others burn on as they were. Something soaked cannot be set burning.
@@ -76,6 +87,7 @@ const burnStacks = (c: UnitCondition): { rounds: number; fresh?: boolean }[] => 
 export function addStacks(ctx: Ctx, unit: Unit, kind: StackingEffect, n = 1): void {
   if (unit.down || n <= 0) return;
   if (kind === "burning" && has(unit, "wet")) return;
+  if (gearWards(unit, kind)) return;
   const enc = ctx.state.encounter;
   // Put on during its own turn, the end of that turn does not count against it.
   const fresh = !!enc && enc.acting.includes(unit.id) && !enc.done.includes(unit.id);
@@ -221,14 +233,28 @@ function passSpot(ctx: Ctx, from: Unit, spot: UnitCondition): void {
   if (laid) laid.by = spot.by;
 }
 
-/** Put a shield of `amount` points on a unit for `rounds` of its turns (Bolstered). A bigger one replaces a smaller. */
-export function shieldUnit(ctx: Ctx, unit: Unit, amount: number, rounds: number): void {
-  if (amount > 0) addCondition(ctx, unit, "bolstered", rounds, amount);
+/**
+ * A shield's condition (Bolstered) does not wear off with turns: it lasts until blows spend it or the fight ends
+ * (UNTIMED). Its `rounds` is only kept above 0, so it is not taken for spent.
+ */
+const SHIELD_KEEPS = 1;
+
+/** A shield is a thing of fights: only one in a fight can be given one. */
+const shieldable = (ctx: Ctx, unit: Unit): boolean => inFight(ctx.state, unit.id);
+
+/** Put a shield of `amount` points on a unit in a fight (Bolstered), to last the fight. A bigger one replaces a smaller. */
+export function shieldUnit(ctx: Ctx, unit: Unit, amount: number): void {
+  if (amount > 0 && shieldable(ctx, unit)) addCondition(ctx, unit, "bolstered", SHIELD_KEEPS, amount);
 }
 
-/** Add `amount` points to whatever shield a unit already has (Bulwark Strike), lasting `rounds` of its turns at least. */
-export function addShield(ctx: Ctx, unit: Unit, amount: number, rounds: number): void {
-  if (amount > 0) addCondition(ctx, unit, "bolstered", rounds, shieldOf(unit) + amount);
+/** Add `amount` points to whatever shield a unit in a fight already has (Bulwark Strike), to last the fight. */
+export function addShield(ctx: Ctx, unit: Unit, amount: number): void {
+  if (amount > 0 && shieldable(ctx, unit)) addCondition(ctx, unit, "bolstered", SHIELD_KEEPS, shieldOf(unit) + amount);
+}
+
+/** The fight is over for this unit (it ended, or they got away from it): its shield goes. */
+export function dropShield(unit: Unit): void {
+  removeCondition(unit, "bolstered");
 }
 
 /** The points of shield a unit has left (Bolstered), 0 for none. */
@@ -353,6 +379,15 @@ export function attackContext(state: ZoneState, attacker: Unit, target: Unit, op
 export function attackRoll(ctx: Ctx, attacker: Unit, target: Unit, opts: { label: string; bonus: number; melee: boolean }): Roll {
   const c = attackContext(ctx.state, attacker, target, opts);
   const roll = d20(ctx.rng, { kind: "attack", id: attacker.id, target: target.id, label: opts.label, bonus: opts.bonus + c.mods, vs: defenceOf(target, ctx.state), adv: c.adv });
+  // A Ghostsail Cloak: the first attacks against its wearer each fight pass through them, whatever was rolled.
+  const enc = ctx.state.encounter;
+  const ghostly = perkOf(target, "ghostly");
+  if (enc && ghostly > 0 && (enc.ghosted?.[target.id] ?? 0) < ghostly) {
+    (enc.ghosted ??= {})[target.id] = (enc.ghosted[target.id] ?? 0) + 1;
+    roll.ok = false;
+    roll.crit = false;
+    roll.label = `${roll.label} (Ghostly: passes through)`;
+  }
   removeCondition(attacker, "glitched");
   removeCondition(attacker, "inspired");
   spendLuck(attacker);
@@ -368,8 +403,11 @@ export function spendLuck(unit: Unit): void {
   if (luck.rounds <= 0) removeCondition(unit, "lucky");
 }
 
-/** Conditions that keep, turn after turn, until something else uses them up: Lucky, spent a roll at a time. */
-export const UNTIMED: ReadonlySet<string> = new Set(["lucky"]);
+/**
+ * Conditions that keep, turn after turn, until something else uses them up: Lucky, spent a roll at a time; and a
+ * shield (Bolstered), spent by blows, which lasts the fight and goes with it (zone.ts settle, and flee for one who gets away).
+ */
+export const UNTIMED: ReadonlySet<string> = new Set(["lucky", "bolstered"]);
 
 /** Roll a save against a difficulty and say so. */
 export function saveRoll(ctx: Ctx, unit: Unit, stat: StatKey, vs: number, label: string, disadvantage = false): Roll {

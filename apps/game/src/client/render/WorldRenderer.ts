@@ -567,6 +567,10 @@ const noise = (q: number, r: number, salt: number) => {
 };
 
 interface Unit {
+  /** Wearing Phase Treads (shown): it leaves a faint afterimage trail as it walks. */
+  phase?: boolean;
+  /** When the render clock next lets a walker in Phase Treads leave an afterimage. */
+  nextGhost?: number;
   /** How fast it walks, as a share of a hero's pace (see RenderHero.pace). */
   pace?: number;
   /** Knocked across the ground (a shove): moved this many times faster than a walk, without steps, until it arrives. */
@@ -774,6 +778,10 @@ interface Floater {
 
 /** How much of an Unseen hero is left to see. */
 const UNSEEN_FADE = 0.4;
+
+/** A walker in Phase Treads leaves an afterimage this often (seconds), in this colour. */
+const PHASE_TRAIL_EVERY = 0.22;
+const PHASE_TRAIL_COLOR = "#b98cff";
 
 /** XP motes: gold and pale blue, like the XP bar lighting up. */
 const XP_MOTES = ["#ffd23f", "#ffe98a", "#bfe6ff", "#8fd3ff"];
@@ -1209,7 +1217,8 @@ export class WorldRenderer {
    * near it only zoom and turn. Once they wander PINCH_PAN_SLACK away it is a pan, and following stops.
    */
   private panFrom: { x: number; y: number } | null = null;
-  private pointer = { x: 0, y: 0, downX: 0, downY: 0, down: false, dragged: false, dirty: false, inside: false };
+  /** `button`: which mouse button the press began with (0 the main one, as a finger or pen always is). */
+  private pointer = { x: 0, y: 0, downX: 0, downY: 0, down: false, dragged: false, dirty: false, inside: false, button: 0 };
   /** Whether a finger's tap on the map must be held to count (setHoldToTap). */
   private holdToTap = false;
   /**
@@ -1945,6 +1954,50 @@ export class WorldRenderer {
     const at = this.standAt(to).add(new THREE.Vector3(0, 0, 0.25));
     unit.root.position.copy(at);
     unit.goal.copy(at);
+  }
+
+  /**
+   * A blink through Phase Treads leaves a trail: faint copies of the unit, as it stands now, strung out along the way
+   * to `to` in one flat glowing colour, each fading a beat after the one before it, the first where it set off. Call
+   * it before blinkUnit, while the unit is still where it was.
+   */
+  afterimages(id: string, to: HexPos, color: string, count = 4) {
+    const unit = this.units.get(id);
+    if (!unit) return;
+    const from = unit.root.position.clone();
+    const end = this.standAt(to).add(new THREE.Vector3(0, 0, 0.25));
+    // The nearer it is to where they set off, the sooner it fades: the trail runs out toward where they land.
+    for (let i = 0; i < count; i++) this.ghostOf(unit, new THREE.Vector3().lerpVectors(from, end, i / count), color, 0.45, 0.7, i * 0.07);
+  }
+
+  /**
+   * A copy of a unit as it stands this moment, at `at`, in one flat glowing colour that shows through nothing: it
+   * comes up to `peak` after `delay` seconds and is gone `life` seconds after that. An afterimage.
+   */
+  private ghostOf(unit: Unit, at: THREE.Vector3, color: string, peak: number, life: number, delay = 0) {
+    const mats: THREE.MeshBasicMaterial[] = [];
+    const ghost = unit.root.clone(true);
+    ghost.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh) {
+        // Written to depth, so only its outermost surface shows: a flat tinted shape, not its parts glowing through each other.
+        const m = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, depthWrite: true });
+        (o as THREE.Mesh).material = m;
+        mats.push(m);
+      } else if ((o as THREE.Light).isLight || (o as THREE.Sprite).isSprite) o.visible = false;
+    });
+    ghost.position.copy(at);
+    this.scene.add(ghost);
+    let age = -delay;
+    const stop = this.addTicker((dt) => {
+      age += dt;
+      const t = age / life;
+      const left = t < 0 || t >= 1 ? 0 : t < 0.15 ? (t / 0.15) * peak : peak * (1 - (t - 0.15) / 0.85);
+      for (const m of mats) m.opacity = left;
+      if (t < 1) return;
+      stop();
+      this.scene.remove(ghost);
+      for (const m of mats) m.dispose();
+    });
   }
 
   /** A unit knocked off its feet where it stands, by `by` if anyone (it falls away from them). */
@@ -4541,7 +4594,7 @@ export class WorldRenderer {
       }
       // With its HP to show (in a fight, or hurt), an enemy's plate has a red bar of it under the name.
       const plate: PlateStats | undefined = u.hp !== undefined && !u.down ? { hp: u.hp } : undefined;
-      want.set(u.id, { kind: u.kind, pos, hex: key(u.pos), faceKey: u.id, size: isBoss(u.kind) ? 1.9 : isBig(u.kind) ? 1.6 : 1.4, label: u.name ?? (plate ? "" : undefined), plate, tone: "foe", ring: u.hostile ? ENEMY_RED : undefined, through: u.hostile ? ENEMY_RED : undefined, pulse: !!u.active, hp: u.hp, down: u.down, falls: true, nameless: true, prone: u.prone, effects: u.effects, stack: slot });
+      want.set(u.id, { kind: u.kind, pos, hex: key(u.pos), faceKey: u.id, size: isBoss(u.kind) ? 1.9 : isBig(u.kind) ? 1.6 : 1.4, label: u.name ?? (plate ? "" : undefined), plate, tone: "foe", ring: u.hostile && !u.down ? ENEMY_RED : undefined, through: u.hostile ? ENEMY_RED : undefined, pulse: !!u.active, hp: u.hp, down: u.down, falls: true, nameless: true, prone: u.prone, effects: u.effects, stack: slot });
     }
 
     const turned = new Map<string, number>();
@@ -4581,7 +4634,7 @@ export class WorldRenderer {
         this.unitGroup.add(figure.root);
         // New arrivals face the camera, turned a little so what they carry shows.
         const turn = turned.get(id) ?? this.yaw + 0.35;
-        unit = { figure, root: figure.root, size: w.size, turn, turnGoal: turn, lying: false, shadowAt: w.pos.clone(), shadowTurn: turn, shadowSize: 0, ring: null, label: null, labelText: "", goal: w.pos.clone(), path: [], kick: new THREE.Vector3(), lean: 0, stride: 0, bob: 0, kind: spriteKey(w.kind, w.outfit, w.asleep, w.rod), asleep: false, nextZ: 0, zCount: 0, glowUntil: 0, glowing: false, head: w.size + 0.3, stack: 0, feet: w.pos.clone() };
+        unit = { figure, root: figure.root, size: w.size, turn, turnGoal: turn, lying: false, shadowAt: w.pos.clone(), shadowTurn: turn, shadowSize: 0, ring: null, label: null, labelText: "", goal: w.pos.clone(), path: [], kick: new THREE.Vector3(), lean: 0, stride: 0, bob: 0, kind: spriteKey(w.kind, w.outfit, w.asleep, w.rod), asleep: false, nextZ: 0, zCount: 0, glowUntil: 0, glowing: false, head: w.size + 0.3, stack: 0, feet: w.pos.clone(), ...(w.outfit?.boots?.ref === "phase_treads" ? { phase: true } : {}) };
         // Someone found on a stool is found sitting.
         if (w.seat !== undefined) unit.sit = 1;
         this.units.set(id, unit);
@@ -4917,9 +4970,11 @@ export class WorldRenderer {
     // otherwise land on the ground behind. Clicking someone (other than yourself) means the hex they stand on.
     {
       this.pickedUnit = null;
-      const entries = [...this.units.entries()].filter(([id]) => id !== this.state?.you);
+      // Only figures that are shown: a ray meets hidden ones as well (three.js casts past `visible`), and one unseen
+      // must not catch a click meant for whoever is drawn there.
+      const entries = [...this.units.entries()].filter(([id, u]) => id !== this.state?.you && u.root.visible);
       const others = entries.map(([, u]) => u);
-      const onFigure = this.raycaster.intersectObjects(others.flatMap((u) => (u.label ? [u.root, u.label] : [u.root])), true)[0];
+      const onFigure = this.raycaster.intersectObjects(others.flatMap((u) => (u.label?.visible ? [u.root, u.label] : [u.root])), true)[0];
       const within = (root: THREE.Object3D, o: THREE.Object3D | null): boolean => !!o && (o === root || within(root, o.parent));
       const unit = onFigure && others.find((u) => u.label === onFigure.object || within(u.root, onFigure.object));
       if (unit) {
@@ -4997,6 +5052,7 @@ export class WorldRenderer {
       this.rotating = e.button === 2 || e.shiftKey || e.altKey;
       this.pointer.down = true;
       this.pointer.dragged = false;
+      this.pointer.button = e.button;
       this.pointer.downX = this.pointer.x = e.clientX;
       this.pointer.downY = this.pointer.y = e.clientY;
       this.press = this.holdToTap && e.pointerType === "touch" && !this.rotating ? "hold" : "tap";
@@ -5122,7 +5178,7 @@ export class WorldRenderer {
     else if (e.key === "f" || e.key === "F") this.tiltBy(-0.18, true);
     else if (e.key === "c" || e.key === "C") this.setFollow(!this.follow || this.followHeld);
     else if ((e.key === "v" || e.key === "V") && this.combat.enabled && !e.repeat) this.combat.toggle();
-    else if (import.meta.env.DEV && (e.key === "p" || e.key === "P")) this.setPost(!this.post);
+    else if (import.meta.env.DEV && (e.key === "o" || e.key === "O")) this.setPost(!this.post);
     else if (PAN_KEYS[e.key.toLowerCase()]) {
       this.heldKeys.add(e.key.toLowerCase());
       // Arrow keys would otherwise scroll whatever panel has focus.
@@ -5239,8 +5295,9 @@ export class WorldRenderer {
     }
     this.pinch = null;
     this.panFrom = null;
-    // A right-click, or a Shift/Alt click, is the start of a turn, not an order to walk.
-    const wasClick = this.pointer.down && !this.pointer.dragged && !this.rotating && e.type === "pointerup";
+    // A right-click, or a Shift/Alt click, is the start of a turn, not an order to walk; a middle click only pans.
+    // Only the main button (or a finger) gives an order: to walk, strike, aim or place.
+    const wasClick = this.pointer.down && !this.pointer.dragged && !this.rotating && this.pointer.button === 0 && e.type === "pointerup";
     this.pointer.down = false;
     const press = this.press;
     this.press = "tap";
@@ -5976,6 +6033,13 @@ export class WorldRenderer {
       puff.mesh.rotation.y += puff.spin.y * dt;
       puff.mesh.rotation.z += puff.spin.z * dt;
       puff.mesh.scale.setScalar(Math.max(s, 1e-4));
+    }
+
+    // Phase Treads leave a faint afterimage behind a walker every few strides, fading where they stepped.
+    for (const unit of this.units.values()) {
+      if (!unit.phase || unit.path.length === 0 || unit.lying || !unit.root.visible || this.clock < (unit.nextGhost ?? 0)) continue;
+      unit.nextGhost = this.clock + PHASE_TRAIL_EVERY;
+      this.ghostOf(unit, unit.root.position.clone(), PHASE_TRAIL_COLOR, 0.22, 0.4);
     }
 
     // Sleepers breathe out a z now and then: small, small, then a big one.

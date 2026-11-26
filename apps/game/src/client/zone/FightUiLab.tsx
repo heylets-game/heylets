@@ -2,7 +2,7 @@
 // turn bar, the announcement, the turn order, the combat log, the roll shown
 // large and the loot window, with made-up data and a button for every state
 // each can be in. The backdrop is a plain dark field the size of the game
-// view, with the bottom rack's own timber drawn where the real bar stands
+// view, with the bottom bar's empty board where the real bar stands
 // (and --hud-h set from it, as the real bar does), a block where the chat
 // lies and one where the crew's cards hang, so placement is judged in context.
 // The sea bag is the real one where the visitor has a hero (loot can be dragged
@@ -14,7 +14,6 @@ import type { Me } from "../api";
 import { InventoryScreen } from "../InventoryScreen";
 import { useDropTarget } from "../dragDrop";
 import { spriteDataUrl } from "../render/sprites";
-import { RACK, RACK_ROW, paintRack } from "../ui/rackArt";
 import "../ui/hud.css";
 import "./zone.css";
 import { CombatLog, RollToast, type LogEntry } from "./CombatLog";
@@ -220,7 +219,7 @@ export default function FightUiLab({ me, refresh }: { me?: Me; refresh?: () => P
     const dice = rolled(4, 2, 2);
     add({ k: "heal", id: nid(), actor: "Brann", target: "Mira Tidewright", what: "Mend", amount: dice.total, dice });
   };
-  const fall = () => add({ k: "hit", id: nid(), side: "none", target: "Bandit Cutter", what: "Burning", amount: 3 }, { k: "note", id: nid(), text: "Cave Bat falls.", tone: "bad" }, { k: "note", id: nid(), text: "Sela slips out of sight.", tone: "dim" }, { k: "note", id: nid(), text: "Mira Tidewright is Bolstered: a shield of 6.", tone: "good" });
+  const fall = () => add({ k: "hit", id: nid(), side: "none", target: "Bandit Cutter", what: "Burning", amount: 3 }, { k: "note", id: nid(), text: "Cave Bat falls.", tone: "bad" }, { k: "note", id: nid(), text: "Sela slips out of sight.", tone: "dim" }, { k: "note", id: nid(), text: "Mira Tidewright has a shield of 6.", tone: "good" });
   const fill = () => {
     const out: LogEntry[] = [];
     for (let i = 0; i < 20; i++) {
@@ -241,11 +240,9 @@ export default function FightUiLab({ me, refresh }: { me?: Me; refresh?: () => P
     return () => clearInterval(timer);
   }, [ticking]);
 
-  // The rack's timber, painted as the real bar paints it, and how much of the bottom of the view it takes.
+  // How much of the bottom of the view the bar's board takes.
   const hud = useRef<HTMLDivElement>(null);
-  const art = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
-    if (art.current) paintRack(art.current, 2);
     const el = hud.current;
     if (!el) return;
     const measure = () => document.documentElement.style.setProperty("--hud-h", `${Math.max(0, Math.round(innerHeight - el.getBoundingClientRect().top))}px`);
@@ -322,12 +319,10 @@ export default function FightUiLab({ me, refresh }: { me?: Me; refresh?: () => P
         extra={extra ? <><button className="small">♪ Join song</button><button className="small primary">Unlock the door</button></> : undefined}
       />
 
-      {/* Where the real bottom bar stands: its own timber, at its own size. */}
-      <div className="hud">
+      {/* Where the real bottom bar stands: its board, empty, at a map's size. */}
+      <div className="hud full">
         <div className="hud-points" ref={hud} />
-        <div className="hud-rack" style={{ width: `calc(${RACK.w} * var(--p))`, height: `calc(${RACK.h + RACK_ROW} * var(--p))` }}>
-          <canvas ref={art} className="hud-rack-art" aria-hidden />
-        </div>
+        <div className="hud-rack lab" />
       </div>
       {/* Where the chat lies, and where the crew's cards hang. */}
       <div className="chat panel" style={lab.chat}><span className="muted">Chat (its footprint)</span></div>

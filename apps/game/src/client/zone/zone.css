@@ -42,6 +42,24 @@
 
 /* What is under the pointer: who, what they have left, and (with an attack picked) the chance it lands. */
 .zone-tip { position: absolute; left: 10px; top: 150px; z-index: 11; max-width: min(420px, 60vw); padding: 6px 10px; font-size: 13px; pointer-events: none; }
+/* In the bottom bar's tarred timber (ui/hud.css), edged thin as the combat log is (zone/fight.css): near-black with a
+   line of brown round it. */
+.zone-tip.panel {
+  /* In from the view's edge, and the words in from the magnifying glass on the corner. */
+  left: 24px; top: 158px; padding: 7px 12px 7px 17px;
+  border: 3px solid #1c0d0e; border-image: none; box-shadow: 0 0 0 1px #6b3524, 0 8px 20px rgba(0, 0, 0, 0.5);
+  background:
+    linear-gradient(180deg, rgba(255, 214, 170, 0.08), rgba(0, 0, 0, 0) 30%, rgba(0, 0, 0, 0.32)),
+    linear-gradient(rgba(96, 30, 24, 0.34), rgba(96, 30, 24, 0.34)),
+    var(--tex-wood, none) 0 0 / 128px 128px,
+    #2a1614;
+}
+/* The magnifying glass, on a round badge of the same wood and edge, set over the card's top-left corner. */
+.zone-tip-glass {
+  position: absolute; left: -14px; top: -14px; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
+  color: #f6e2a1; background: radial-gradient(circle at 40% 35%, #4a2c24, #241210 75%);
+  border: 2px solid #1c0d0e; box-shadow: 0 0 0 1px #6b3524, 0 2px 0 rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(214, 150, 96, 0.35);
+}
 .zone-cond { margin-right: 8px; font-weight: bold; }
 .zone-chance { margin-top: 4px; padding-top: 4px; border-top: 1px dashed var(--line); }
 

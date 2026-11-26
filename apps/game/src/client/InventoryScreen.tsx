@@ -105,6 +105,7 @@ import {
   TOWN_STACK_MAX,
   TOWN_TAB_CELLS,
   gearPutProblem,
+  perkLine,
   stackPutProblem,
   stackSort,
   stoneItem,
@@ -122,6 +123,7 @@ import { SplitPrompt, StackIcon, stackName, toStacks, type Stack } from "./ui/Sl
 import { ITEM_ICON, STONE_ICON } from "./zone/actionIcons";
 import { uiZoom } from "./uiScale";
 import { useMovable } from "./DragPanel";
+import { BrassCorners } from "./ui/BrassCorners";
 import { useDropTarget } from "./dragDrop";
 import { ownLook } from "./ownLook";
 import { withLook } from "./render/sprites";
@@ -404,6 +406,7 @@ function PackGrid({ zone, name, u, rows, baseRows, stacks, decor = [], spots, he
             {s.t === "gear" ? <Icon name={s.item.icon} color={color!} size={iconPx(w, h, u)} /> : <StackIcon stack={s} size={iconPx(1, 1, u)} />}
             {s.t !== "gear" && <span className="badge br qty">{s.qty}</span>}
             {s.t === "gear" && s.item.power > 0 && w > 1 && <span className="badge br">+{s.item.power}</span>}
+            {s.t === "gear" && perkLine(s.item) && <span className="badge tr" title={perkLine(s.item)!.name}>✦</span>}
           </button>
         );
       })}
@@ -1007,6 +1010,7 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
         {item ? <Icon name={item.icon} color={RARITY_COLOR[item.rarity]} size={iconPx(at.w, at.h, bu)} /> : <Icon name={SLOT_ICON[slot]} color="#4a4336" size={iconPx(at.w, Math.min(at.h, at.w), bu)} silhouette />}
         {!item && <span className="slot-name">{SLOT_LABEL[slot]}</span>}
         {item && item.power > 0 && <span className="badge br">+{item.power}</span>}
+        {item && perkLine(item) && <span className="badge tr" title={perkLine(item)!.name}>✦</span>}
       </button>
       {/* Over the slot, not in it (a button cannot hold a button): the lit torch held in this hand. A click puts it away. */}
       {lit && (
@@ -1057,6 +1061,7 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
       {trade && (
         <div className={`bag trade-window panel window ${held ? "holding" : ""}`} role="dialog" aria-label={`Trade with ${trade.with}`} style={{ "--u": `${CU}px` } as CSSProperties} onContextMenu={putBack}>
           <span className="win-plate">Trade</span>
+          <BrassCorners />
           <button className="bag-close hud-btn" aria-label="Cancel the trade" title="Cancel the trade (Esc)" onClick={onClose}>×</button>
           <div className="trade-tabs"><span className="trade-tab">{trade.with}</span></div>
 
@@ -1138,6 +1143,7 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
       {chest && box && (
         <div className={`bag chest-window panel window ${held ? "holding" : ""}`} role="dialog" aria-label={box.label} style={{ "--u": `${CU}px` } as CSSProperties} onContextMenu={putBack}>
           <span className="win-plate">{box.label}</span>
+          <BrassCorners />
           <button className="bag-close hud-btn" aria-label={`Close the ${box.label}`} title="Close (Esc)" onClick={chest.onClose}>×</button>
           {!own ? <p className="muted chest-wait">Counting…</p> : (
             <div className="pack-wrap">
@@ -1199,6 +1205,7 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
       {town && (
         <div className={`bag chest-window town-window panel window ${held ? "holding" : ""}`} role="dialog" aria-label="The town chest" style={{ "--u": `${CU}px` } as CSSProperties} onContextMenu={putBack}>
           <span className="win-plate">Town Chest</span>
+          <BrassCorners />
           <button className="bag-close hud-btn" aria-label="Close the town chest" title="Close (Esc)" onClick={town.onClose}>×</button>
           {town.bar}
           {/* Not read yet (the Harbor reads it ahead, so this is rare): the bare squares, which fill as it comes. */}
@@ -1290,6 +1297,7 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
         {...lootDrop}
       >
         <span className="win-plate">Sea Bag</span>
+        <BrassCorners />
         {/* The close button and the one that minimizes it, and the way into the logbook beside them. Minimized, the
             bag is only this row: whatever was in hand goes back where it was. */}
         <div className="bag-top">

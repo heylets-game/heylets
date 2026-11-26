@@ -32,8 +32,8 @@ describe("the fishmonger", () => {
     expect(fishmongerTip(null)).toMatch(/Nowhere/);
     const talk = fishmongerTalk(tip, () => "Hold longer.");
     expect(talk.unit).toBe(FISHMONGER.id);
-    const said = (c: (typeof talk.choices)[number]) => c.opens ?? (typeof c.says === "function" ? c.says() : c.says) ?? (c.bye ? "bye" : "");
-    expect(talk.choices.map(said)).toEqual(["fish", "bait", tip, "Hold longer.", "bye"]);
+    const said = (c: (typeof talk.choices)[number]) => c.opens ?? (typeof c.says === "function" ? c.says() : c.says) ?? (c.bye ? "bye" : c.ask ? "ask" : "");
+    expect(talk.choices.map(said)).toEqual(["fish", "bait", tip, "Hold longer.", "ask", "bye"]);
     expect(Object.entries(TALK_VOICES).filter(([, v]) => v === TALK_VOICES[FISHMONGER.id]).length).toBe(1);
   });
 });

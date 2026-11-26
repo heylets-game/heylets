@@ -10,7 +10,7 @@ import { hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/cor
 import { tileAt } from "../map";
 import { cratesOn, hurtCrate } from "./crates";
 import { addCondition, addStacks, saveRoll, tick, type Ctx } from "./engine";
-import { flies, solid } from "./geometry";
+import { flies, hovers, perkOf, solid } from "./geometry";
 import type { GroundSurface, SurfaceKind, Unit } from "./types";
 import { TORCH_HELD_ROUNDS } from "./kit";
 
@@ -43,6 +43,9 @@ const d = (ctx: Ctx, sides: number) => ctx.rng.int(1, sides);
  */
 function act(ctx: Ctx, unit: Unit, kind: SurfaceKind, moving: boolean): boolean {
   if (unit.down || flies(unit)) return false;
+  // Cloudstep Boots float over all of it but the flames.
+  if (hovers(unit) && kind !== "fire") return false;
+  const sure = perkOf(unit, "sure_footed") > 0;
   if (kind === "poison") {
     tick(ctx, unit, "poison", d(ctx, 4));
     addCondition(ctx, unit, "poisoned", 2);
@@ -52,9 +55,9 @@ function act(ctx: Ctx, unit: Unit, kind: SurfaceKind, moving: boolean): boolean 
     addStacks(ctx, unit, "burning");
   } else if (kind === "water") {
     addCondition(ctx, unit, "wet", 2);
-  } else if (kind === "slime" && moving) {
+  } else if (kind === "slime" && moving && !sure) {
     addCondition(ctx, unit, "slowed", 1);
-  } else if (kind === "ice" && moving) {
+  } else if (kind === "ice" && moving && !sure) {
     if (!saveRoll(ctx, unit, "agi", ICE_SAVE, "Keep your feet").ok) {
       addCondition(ctx, unit, "prone", 1);
       return true;
