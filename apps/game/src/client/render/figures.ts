@@ -9348,7 +9348,7 @@ function furTuft(part: Part, color: string, spans: readonly Span[], z: number, a
 
 /**
  * A bear on all fours: heavier than the wolf, with a hump at the shoulders, round ears, a pale muzzle and
- * thick clawed legs. `mane` is the Great Bear's: tufts of darker fur lying back round its neck and shoulders. `claw` is the colour of its claws (a Snow Bear's are dark against its white).
+ * thick clawed legs. `mane` is the Great Bear's: tufts of slightly darker fur lying back along its body, from the shoulders to the rump. `claw` is the colour of its claws (a Snow Bear's are dark against its white).
  */
 function bear(top: THREE.Group, fur = "#7a5232", dark = "#4f3420", muzzle = "#b98a5a", eye = "#f2a33a", mane?: string, claw: string = GEAR.paper): Rig {
   const parts: Part[] = [];
@@ -9359,11 +9359,13 @@ function bear(top: THREE.Group, fur = "#7a5232", dark = "#4f3420", muzzle = "#b9
   lengthwise(body, fur, trunk);
   pelt(body, dark, trunk, -4.6, 3.2, Math.PI - 0.75, Math.PI + 0.75, 0.12);
   body.ball(dark, 1, 0, 8.8, -6, 0);
-  // The mane: rows of tufts from the front of the shoulders back over the hump, over the top and down the sides.
+  // The mane: rows of tufts from the front of the shoulders all the way back to the rump (not on it), over the top
+  // and down the sides.
   if (mane) {
-    [4.4, 3.5, 2.6, 1.7].forEach((z, row) => {
+    for (let row = 0; row < 9; row++) {
+      const z = 4.4 - row * 0.9;
       for (let i = 0; i < 9; i++) furTuft(body, mane, trunk, z, -1.75 + (3.5 * (i + (row % 2) * 0.5)) / 9, 1.1 + ((i + row) % 3) * 0.2);
-    });
+    }
   }
   const head = part(top, 0, 9.4, 4.2);
   const skull: Span[] = [[-0.6, 2.5, 2.45, 0.8], [0.5, 3.1, 2.9, 0.75], [2.2, 3.05, 2.75, 0.6], [3.5, 2.4, 2.1, 0.25], [4.1, 1.45, 1.3, 0]];
@@ -9373,12 +9375,6 @@ function bear(top: THREE.Group, fur = "#7a5232", dark = "#4f3420", muzzle = "#b9
   for (const s of [-1, 1]) {
     head.ball(dark, 1.1, s * 2.4, 3.7, 1.1, 0, [1, 1, 0.7]);
     head.glowBall(eye, 0.44, s * 1.6, 1.6, 3.4);
-  }
-  // And a ruff round the back of its head, lying back into the mane.
-  if (mane) {
-    [0.6, -0.1].forEach((z, row) => {
-      for (let i = 0; i < 9; i++) furTuft(head, mane, skull, z, -1.9 + (3.8 * (i + (row % 2) * 0.5)) / 9, 0.9 + ((i + row) % 3) * 0.15);
-    });
   }
   const legs = [[-2.3, 3.2], [2.3, 3.2], [-2.3, -4], [2.3, -4]].map(([x, z]) => {
     const leg = part(top, x, 4.8, z);
@@ -9836,7 +9832,7 @@ function rigFor(kind: string, top: THREE.Group, look: Look, outfit: Outfit | und
     case "bear":
       return bear(top);
     case "great_bear":
-      return bear(top, "#4a3426", "#2a1d15", "#8a7a6a", "#ff4d4d", "#24180f");
+      return bear(top, "#4a3426", "#2a1d15", "#8a7a6a", "#ff4d4d", "#3b291d");
     case "dummy":
       return dummy(top);
     case "shade":
