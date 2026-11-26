@@ -1,5 +1,6 @@
-// The dev toolbox: a small spanner in the top-right corner of every screen,
-// there only on a development deployment (the worker's ENVIRONMENT is "dev":
+// The dev toolbox: a small spanner at the foot of the camera's buttons on the
+// right edge of a map (in the bottom-right corner where there is none), there
+// only on a development deployment (the worker's ENVIRONMENT is "dev":
 // local and staging; see devTools.ts). It opens a window with a tab for each
 // kind of tool:
 //
@@ -21,7 +22,8 @@
 // Open or shut, and the tab it was on, it stays that way from view to view
 // and across a reload.
 
-import { Suspense, lazy, useState, type ReactNode } from "react";
+import { Suspense, lazy, useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { GEAR_BASES, HERO_CLASSES, RARITIES, RESOURCE_KINDS, SLOTS, SLOT_LABEL, WEAPONS, slotOfRef, type Rarity, type ResourceKind, type Slot } from "@gantt-quest/world";
 import { api, type Me } from "./api";
 import { SkyAndSound } from "./audio/SoundButton";
@@ -62,7 +64,36 @@ const remember = (key: string, value: string | null) => {
   }
 };
 
+/**
+ * The camera's column of buttons on the right edge of the map on screen (render/WorldRenderer.ts builds it, outside
+ * React), so the spanner can sit at its foot. Null on a screen with no map. A window's view in a hut is drawn by a
+ * renderer of its own, with a column nobody sees, so only one that is laid out counts.
+ */
+function useCameraColumn(): HTMLElement | null {
+  const [column, setColumn] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    const find = () => {
+      const shown = [...document.querySelectorAll<HTMLElement>(".camera-rotate")].filter((el) => el.getClientRects().length > 0);
+      const next = shown[shown.length - 1] ?? null;
+      setColumn((prev) => (prev === next ? prev : next));
+    };
+    find();
+    // Looked for again once a frame at most, however much of the page changes in it.
+    let frame = 0;
+    const watch = new MutationObserver(() => {
+      if (!frame) frame = requestAnimationFrame(() => ((frame = 0), find()));
+    });
+    watch.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      watch.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }, []);
+  return column;
+}
+
 export function DevToolbox({ me, refresh }: { me: Me; refresh(): Promise<void> }) {
+  const column = useCameraColumn();
   const [open, setOpen] = useState(() => recall(OPEN_KEY) === "1");
   const [tab, setTab] = useState<Tab>(() => TABS.find(([id]) => id === recall(TAB_KEY))?.[0] ?? "sky");
   const [lab, setLab] = useState(false);
@@ -74,11 +105,14 @@ export function DevToolbox({ me, refresh }: { me: Me; refresh(): Promise<void> }
     remember(TAB_KEY, id);
     setTab(id);
   };
+  const spanner = (
+    <button type="button" className={`dev-corner ${column ? "in-column" : ""} ${open ? "selected" : ""}`} title="Dev toolbox" aria-label="Dev toolbox" aria-pressed={open} onClick={() => show(!open)}>
+      <PixelIcon rows={WRENCH} size={column ? 18 : 14} />
+    </button>
+  );
   return (
     <>
-      <button className={`dev-corner ${open ? "selected" : ""}`} title="Dev toolbox" aria-label="Dev toolbox" aria-pressed={open} onClick={() => show(!open)}>
-        <PixelIcon rows={WRENCH} size={14} />
-      </button>
+      {column ? createPortal(spanner, column) : spanner}
       {open && (
         <DragPanel id="dev.readout" title="Dev toolbox" compact resizable className="sound-readout panel">
           <div className="sound-readout-head">

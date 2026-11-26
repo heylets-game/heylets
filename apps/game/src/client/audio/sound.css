@@ -16,6 +16,10 @@
 /* The dev toolbox (DevToolbox.tsx), on a development deployment only: a small spanner in the top-right corner of every screen. What else sits in that corner moves over for it. */
 .dev-corner { position: fixed; bottom: 6px; right: 6px; z-index: 75; width: 26px; height: 26px; padding: 0; display: grid; place-items: center; opacity: 0.6; }
 .dev-corner:hover, .dev-corner.selected { opacity: 1; }
+/* On a map, at the foot of the camera's buttons (render/camera.css), as big as they are and a little apart from them. */
+.camera-rotate .dev-corner.in-column { position: static; width: 34px; height: 34px; margin-top: 6px; opacity: 1; color: var(--brass-hi, #c9c3e6); }
+.camera-rotate .dev-corner.in-column.selected { color: var(--gold, #ffd23f); border-color: var(--gold, #ffd23f); background: #4a4320; }
+@media (pointer: coarse) { .camera-rotate .dev-corner.in-column { width: 44px; height: 44px; } }
 .dev-tools .sound-corner { right: 40px; }
 .dev-tools .hud-corner { right: 40px; max-width: calc(100% - 54px); }
 /* Its window: tabs across the top, for the sky and the engine readout, and for seeding gold and items. */
