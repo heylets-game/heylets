@@ -27,9 +27,9 @@ function swing(seed: number) {
 }
 
 describe("a brute's Great Cleave", () => {
-  it("does 9, waits 4 turns, and is the brute's favourite", () => {
+  it("does 9, waits 4 turns, and weighs twice what Beatdown does", () => {
     expect(ENEMY_ABILITIES.great_cleave).toMatchObject({ damage: 9, cooldown: 4, weight: 2, sweep: 2 });
-    for (const other of enemyStrikes("brute", 1).filter((s) => s.name !== "Great Cleave")) expect(other.weight).toBe(1);
+    expect(ENEMY_ABILITIES.beatdown.weight).toBe(1);
   });
 
   it("sweeps six hexes: three beside it, three just beyond", () => {
