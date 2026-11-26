@@ -1577,7 +1577,7 @@ const GET_UP_HIPS = -1;
  * `n` counts the figure's actions, so two flinches in a row need not be the same.
  */
 interface Act {
-  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "slam" | "drop" | "pound" | "claw" | "flurry" | "howl" | "rake" | "roar" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
+  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "slam" | "drop" | "pound" | "channel" | "claw" | "flurry" | "howl" | "rake" | "roar" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
   t: number;
   n: number;
   /** A jump's seconds off the ground (see JUMP). */
@@ -1707,6 +1707,21 @@ const POUND = {
   crouch: [[0, 0], [0.38, 0], [0.5, 0.85], [0.85, 0.75], [1.2, 0]] as Keys,
   lean: [[0, 0], [0.3, -0.25], [0.38, -0.25], [0.5, 0.75], [0.85, 0.65], [1.2, 0]] as Keys,
   jolt: [[0, 0], [0.5, 0], [0.56, 1], [0.72, 0.2], [0.9, 0]] as Keys,
+};
+
+/**
+ * Channelling (a Guardian's Slowing Field): the arms opened out wide to either side and a little up, hands open, the
+ * chest thrown out and the head lifted, held there as something is drawn through it, trembling with it; let go at
+ * `hit` with a jolt, held a moment more, and back. Keys by seconds in: `open` the arms out, `lift` the chest and head,
+ * `shiver` the tremble while it is held, `jolt` the letting go.
+ */
+const CHANNEL = {
+  hit: 1.05,
+  over: 1.9,
+  open: [[0, 0], [0.35, 1], [1.05, 1.05], [1.15, 1.15], [1.5, 1], [1.9, 0]] as Keys,
+  lift: [[0, 0], [0.35, 0.7], [1.0, 0.85], [1.12, 1.1], [1.5, 0.8], [1.9, 0]] as Keys,
+  shiver: [[0, 0], [0.3, 0], [0.5, 0.6], [1.0, 1], [1.08, 0], [1.9, 0]] as Keys,
+  jolt: [[0, 0], [1.05, 0], [1.11, 1], [1.3, 0.2], [1.5, 0]] as Keys,
 };
 
 const SEAT_DROP = {
@@ -2419,7 +2434,7 @@ const RECORDER_LENGTH = 6.4;
 const HAMMER = { hit: 0.4, over: 0.86, up: [[0, 0.25], [0.3, 1], [0.4, 0], [0.48, 0.18], [0.86, 0.25]] as Keys };
 const STIR = { over: 30, turns: 25 };
 /** How long each kind of action lasts. */
-const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, slam: SLAM.over, drop: SEAT_DROP.over, pound: POUND.over, claw: CLAW.over, flurry: FLURRY.over, howl: HOWL.over, rake: RAKE.over, roar: ROAR.over, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
+const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, slam: SLAM.over, drop: SEAT_DROP.over, pound: POUND.over, channel: CHANNEL.over, claw: CLAW.over, flurry: FLURRY.over, howl: HOWL.over, rake: RAKE.over, roar: ROAR.over, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
 /** When each kind of blow lands. */
 const ACT_HIT = { strike: SWING.hit, stab: THRUST.hit, slices: SLICES.hit, slam: SLAM.hit, pounce: POUNCE.hit, heavy: SWEEP.hit, twin: TWIN.hit };
 /**
@@ -2847,6 +2862,29 @@ function biped(top: THREE.Group, parts: Part[], drawnElbow = ELBOW) {
       armR.joint.rotation.z -= wide * right;
       heldR.joint.rotation.x -= lift * right;
       if (levels.length === 0) heldL.joint.rotation.x -= lift * left;
+      return;
+    }
+    if (act.kind === "channel") {
+      const c = CHANNEL;
+      const open = along(c.open, t);
+      const lift = along(c.lift, t);
+      const shiver = along(c.shiver, t) * Math.sin(t * 55) * 0.035;
+      const jolt = along(c.jolt, t);
+      // Leant back, the chest out to what it is drawing in; the head lifted with it.
+      bow(-0.28 * lift + shiver, 0);
+      head.joint.rotation.x -= 0.35 * lift;
+      // Both arms swung out wide to the sides and a little up and forward, the elbows nearly straight, the hands open
+      // to the front; trembling while it is held, and thrown a little wider as it is let go.
+      const wide = 1.25 * open + 0.25 * jolt;
+      armL.joint.rotation.z += wide + shiver;
+      armR.joint.rotation.z -= wide + shiver;
+      armL.joint.rotation.x -= 0.35 * open;
+      armR.joint.rotation.x -= 0.35 * open;
+      foreL.joint.rotation.x *= 1 - 0.85 * open;
+      foreR.joint.rotation.x *= 1 - 0.85 * open;
+      // Feet set apart and planted: a little down into the knees.
+      knees(0.18 * open);
+      top.position.y -= 0.25 * jolt;
       return;
     }
     if (act.kind === "pound") {
@@ -10482,7 +10520,12 @@ export interface Figure {
    * returns the seconds until the blow lands, for whatever it hits to wait; a creature lunges at once, as it always
    * did, and this returns 0.
    */
-  strike(how?: "light" | "stab" | "heavy" | "slices" | "slam" | "drop" | "pound" | "claw" | "flurry" | "rake" | "roar"): number;
+  strike(how?: "light" | "stab" | "heavy" | "slices" | "slam" | "drop" | "pound" | "channel" | "claw" | "flurry" | "rake" | "roar"): number;
+  /**
+   * How bright what glows on it is (eyes, gems, lamps), as a share of its own: 1 as made, more to flare it up (a
+   * Guardian channelling). Greyed when down all the same.
+   */
+  setGlow(k: number): void;
   /**
    * Cast a spell, or throw something: the casting hand swings round overhead and comes down to point at the mark.
    * Returns the seconds until it points, which is when what is cast should leave; 0 for a creature, which only
@@ -10615,6 +10658,9 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
   const hovers = outfit?.boots?.ref === "cloudsteps" && !!rig.hands;
   const cloud = hovers ? hoverCloud(top) : null;
   const fade = { value: 1 };
+  // Greyed while down (setDim), and how bright its glow is turned up (setGlow).
+  let dim = false;
+  let glowK = 1;
   const mats: Mats = {
     body: fadeable(bodyMaterial(), fade, "gq-figure-body"),
     outline: inkLine(fadeable(new THREE.MeshBasicMaterial({ color: OUTLINE, side: THREE.BackSide }), fade, "gq-figure-line")),
@@ -10849,6 +10895,11 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
         asked = "pound";
         return POUND.hit;
       }
+      if (how === "channel") {
+        if (!rig.acts) return 0;
+        asked = "channel";
+        return CHANNEL.hit;
+      }
       if (how === "claw" || how === "flurry" || how === "rake") how = "light";
       const kind = how === "heavy" ? (rig.twin ? "twin" : "heavy") : how === "stab" || how === "slices" || how === "slam" ? how : (rig.light ?? "strike");
       asked = kind;
@@ -10930,9 +10981,14 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
       fallen = { doll: ragdoll(top, allParts, dir), moving: true, onDown };
     },
     setDim(on) {
+      dim = on;
       mats.body.color.setScalar(on ? 0.5 : 1);
-      mats.glow.color.setScalar(on ? 0.4 : 1);
+      mats.glow.color.setScalar((on ? 0.4 : 1) * glowK);
       mats.ink.color.setScalar(on ? 0.5 : 1);
+    },
+    setGlow(k) {
+      glowK = Math.max(0, k);
+      mats.glow.color.setScalar((dim ? 0.4 : 1) * glowK);
     },
     setFade(left) {
       const was = fade.value;

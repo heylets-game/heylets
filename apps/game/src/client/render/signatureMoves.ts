@@ -1217,28 +1217,60 @@ function earthquakeHeave(stage: MoveStage, { figure, hitAt, crit, onImpact, echo
 /** A Slowing Field going up: how far it reaches from the middle of a Guardian (two hexes past its own), and its slow rings. */
 export const SLOWING_FIELD = { reach: HEX * 2.75, rings: 3, life: 1.3, apart: 0.32 };
 
+/** How bright a Guardian's eyes and the gem in its chest flare as it channels a Slowing Field (Figure.setGlow): built up to `held`, flashed to `flash` as it lets go, and back to its own over `fade` seconds. */
+export const CHANNEL_GLOW = { held: 2.2, flash: 3.4, fade: 0.9 };
+
 /**
- * A Guardian's Slowing Field: it lifts a hand overhead and holds it there (figures.ts cast), and the cyan light in it
- * gathers, motes drawn in round its body; as the hand comes down, the field goes out from it: a pale flash about it and
- * three slow cyan rings rolling out over the ground one after another to the edge of its reach, the air in it thick
- * with motes drifting lazily up. (What stays round it while it lasts is the map's: ZoneView, SpellFx.aura.)
+ * A Guardian's Slowing Field: it opens its arms out wide, chest thrown out and head lifted, and holds there, trembling,
+ * as it draws the field up through itself (figures.ts CHANNEL). Its eyes and the gem in its chest burn brighter and
+ * brighter (Figure.setGlow), flickers of cyan light coming off them, and motes of it are drawn in from all round to its
+ * chest. As it lets go, the glow flashes white-bright and the field goes out from it: a flash at its chest, three slow
+ * cyan rings rolling out over the ground one after another to the edge of its reach, and the air in it thick with motes
+ * drifting lazily up; its glow settles back as they go. (What stays round it while it lasts is the map's: ZoneView,
+ * SpellFx.aura.)
  */
 function slowingField(stage: MoveStage, { figure, crit, onImpact, alone, hitAt }: MoveCtx) {
   const feet = figure.root.getWorldPosition(new THREE.Vector3());
   const ground = feet.clone().setY(feet.y + 0.07);
   const { reach, rings, life, apart } = SLOWING_FIELD;
   const color = crit ? GOLD : GUARDIAN_GLOW;
-  const wait = Math.max(0.35, figure.cast());
-  // Gathering: motes drawn in toward it, and up.
+  // Where its eyes and its chest are, from how tall it stands: its head sunk low near the top, the gem well up its front.
+  const box = new THREE.Box3().setFromObject(figure.root);
+  const tall = Math.max(0.5, box.max.y - box.min.y);
+  const at = (up: number) => {
+    const base = figure.root.getWorldPosition(new THREE.Vector3());
+    return base.setY(box.min.y + tall * up);
+  };
+  const eyes = () => at(0.8);
+  const chest = () => at(0.58);
+  const wait = figure.strike("channel") || Math.max(0.35, figure.cast());
+  const { held, flash, fade } = CHANNEL_GLOW;
+  // The glow building as it draws the field in: eased up to `held` over the channelling.
+  for (let s = 0; s <= wait; s += 0.03) {
+    const k = s / wait;
+    stage.later(() => figure.setGlow(1 + (held - 1) * k * k * (3 - 2 * k)), s);
+  }
+  // Drawn in: motes of light coming in from all round to its chest, and flickers off its eyes and its gem.
   for (let s = 0; s < wait; s += 0.05) {
     stage.later(() => {
+      const to = chest();
       const a = Math.random() * Math.PI * 2;
-      const from = offset(feet, Math.cos(a) * 1.6, 0.4 + Math.random() * 1.2, Math.sin(a) * 1.6);
-      stage.spawnFx("mote", color, Math.cos(a) < 0, { from, to: offset(feet, Math.cos(a) * 0.4, 1.6 + Math.random() * 0.6, Math.sin(a) * 0.4), life: 0.35, size: [0.35, 0.15], spin: 0, fade: true });
+      const from = offset(to, Math.cos(a) * 2.2, -0.6 + Math.random() * 1.6, Math.sin(a) * 2.2);
+      stage.spawnFx("mote", color, Math.cos(a) < 0, { from, to, life: 0.4, size: [0.35, 0.15], spin: 0, fade: true });
+      if (Math.random() < 0.6) {
+        const at = Math.random() < 0.5 ? eyes() : to;
+        stage.spawnFx("spark", color, Math.random() < 0.5, { from: at, to: offset(at, (Math.random() - 0.5) * 0.5, 0.3 + Math.random() * 0.3, (Math.random() - 0.5) * 0.5), life: 0.25, size: [0.35, 0.12], spin: 2, fade: true });
+      }
     }, s);
   }
   stage.later(() => {
-    stage.spawnFx("burst", color, false, { from: offset(feet, 0, 1.4, 0), to: offset(feet, 0, 1.4, 0), life: 0.4, size: [1.2, 3.4], spin: 0.3, fade: true });
+    // Let go: the glow flashes, and settles back to its own as the field goes out.
+    for (let s = 0; s <= fade; s += 0.03) stage.later(() => figure.setGlow(1 + (flash - 1) * (1 - s / fade) ** 2), s);
+    stage.later(() => figure.setGlow(1), fade + 0.05);
+    const heart = chest();
+    stage.spawnFx("burst", "#f4feff", false, { from: heart, to: heart, life: 0.3, size: [0.8, 2.6], spin: 0.3, fade: true });
+    stage.spawnFx("burst", color, false, { from: heart, to: heart, life: 0.45, size: [1.2, 3.6], spin: -0.3, fade: true });
+    stage.spawnFx("burst", color, true, { from: eyes(), to: eyes(), life: 0.3, size: [0.5, 1.4], spin: 0.4, fade: true });
     for (let n = 0; n < rings; n++) stage.later(() => stage.wave({ at: ground, radius: reach * (1 - n * 0.04), life, color, width: n ? 0.06 : 0.1 }), n * apart);
     // The air in it thickening: motes drifting slowly up all over it.
     for (let k = 0; k < 18; k++) {
@@ -1256,7 +1288,7 @@ function slowingField(stage: MoveStage, { figure, crit, onImpact, alone, hitAt }
 }
 
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
-  "Slowing Field": { who: "guardian", blurb: "Lifts a hand overhead as motes of cyan light are drawn in round it, then brings it down: a pale flash, three slow cyan rings rolling out over the ground two hexes past it, and motes drifting lazily up all over the field.", play: slowingField },
+  "Slowing Field": { who: "guardian", blurb: "Opens its arms out wide, chest out and head lifted, and holds there trembling as its eyes and chest gem burn brighter and motes of cyan light are drawn in to it; then lets go: the glow flashes, three slow cyan rings roll out over the ground two hexes past it, and motes drift lazily up all over the field.", play: slowingField },
   "Stone Fist": { who: "guardian", blurb: "Heaves its fist up overhead and brings it straight down: a pale stone flash and a cyan glint, a pulse at the target's feet, shock lines and chips of stone driven on past them, and the view jolted.", play: stoneFist },
   Earthquake: {
     who: "guardian",
