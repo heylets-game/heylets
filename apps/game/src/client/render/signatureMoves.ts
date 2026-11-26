@@ -74,6 +74,42 @@ function cheapShot(stage: MoveStage, { figure, onImpact }: MoveCtx) {
   }, first + (first > 0 ? SLICES_APART : 0.2));
 }
 
+const LUNGE_TEETH = "#f4efe2";
+/** Seconds into the spring that the wolf is driven on in, still airborne, and that its jaws close. */
+const LUNGE_DRIVE = 0.07;
+const LUNGE_SNAP = 0.1;
+
+/**
+ * A wolf's lunge: it springs at the target and is driven on in, its whole weight behind it, and its jaws close on
+ * them: two white arches, the upper and the lower, snapping together. The target is jolted and dust is thrown up
+ * at its feet as it is borne down. The blow is told when the jaws meet.
+ */
+function wolfLunge(stage: MoveStage, { hitAt, dir, perfect, onImpact }: MoveCtx) {
+  const color = perfect ? "#ffd23f" : LUNGE_TEETH;
+  // The swipe is drawn as a quarter circle; turned an eighth it lies flat as an arch, and half a turn more turns it over.
+  const flat = dir < 0 ? -Math.PI / 4 : Math.PI / 4;
+  stage.lunge();
+  stage.later(() => stage.lunge(), LUNGE_DRIVE);
+  stage.later(() => {
+    const jaw = (upper: boolean, onEnd?: () => void) => {
+      const side = upper ? 1 : -1;
+      const from = hitAt.clone().setY(hitAt.y + side * 0.4);
+      const to = hitAt.clone().setY(hitAt.y + side * 0.06);
+      stage.spawnFx("slash", color, dir < 0, { from, to, life: 0.1, size: [1.5, 1.2], turn: upper ? flat : flat + Math.PI, spin: 0, fade: false, onEnd });
+    };
+    jaw(false);
+    jaw(true, () => {
+      stage.spawnFx("burst", color, false, { from: hitAt, to: hitAt, life: 0.22, size: [0.7, 1.7], spin: 0.5, fade: true });
+      const feet = hitAt.clone().setY(hitAt.y - 0.45);
+      for (const side of [-1, 1]) stage.spawnFx("dust", "#c9b994", side > 0, { from: feet, to: feet.clone().setX(feet.x + side * 0.55).setY(feet.y + 0.3), life: 0.4, size: [0.6, 1.1], spin: 0, fade: true });
+      stage.jolt();
+      stage.later(() => stage.jolt(), 0.05);
+      onImpact();
+    });
+  }, LUNGE_SNAP);
+}
+
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
   "Cheap Shot": { who: "bandit", blurb: "Two quick side slashes, a forehand then a backhand, the sword leaving a red trail.", play: cheapShot },
+  Lunge: { who: "wolf", blurb: "A spring driven right in, jaws snapping shut on the target as two white arches, and dust thrown up at its feet.", play: wolfLunge },
 };

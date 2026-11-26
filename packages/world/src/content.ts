@@ -359,7 +359,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   },
   wolf: {
     kind: "wolf", name: "Dire Wolf", hp: 13, defence: 12, move: 3, save: 0, init: 2, xp: 10,
-    abilities: ["wolf_bite"],
+    abilities: ["wolf_bite", "wolf_lunge"],
   },
   // A beast bruiser: slow and thick-hided, and every blow lands like a falling tree.
   // Where the Brute stuns with a club, the bear tears (bleeding) and only its roar stuns.

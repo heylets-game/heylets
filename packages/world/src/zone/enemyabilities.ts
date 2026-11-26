@@ -63,7 +63,10 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   wobble: { id: "wobble", name: "Wobble", damage: 1, potency: 0, weight: 1 },
   slash: { id: "slash", name: "Slash", damage: 6, potency: 3, weight: 1 },
   cheap_shot: { id: "cheap_shot", name: "Cheap Shot", damage: 6, potency: 3, perfect: { effect: "bleeding" }, cooldown: 3, weight: 3 },
-  wolf_bite: { id: "wolf_bite", name: "Bite", damage: 5, potency: 5, perfect: { effect: "bleeding" }, weight: 1 },
+  wolf_bite: { id: "wolf_bite", name: "Bite", damage: 5, potency: 3, weight: 1 },
+  // A dire wolf's opener: it throws its whole weight at one hero, jaws first, to bring them down. It springs again
+  // once it has its breath back, and bites in between.
+  wolf_lunge: { id: "wolf_lunge", name: "Lunge", damage: 5, potency: 3, perfect: { effect: "prone", turns: 1 }, cooldown: 2, weight: 3 },
   mauling_swipe: { id: "mauling_swipe", name: "Mauling Swipe", damage: 12, potency: 4, perfect: { effect: "bleeding" }, weight: 3 },
   roar: { id: "roar", name: "Roar", damage: 4, potency: 3, perfect: { effect: "stunned", turns: 1 }, weight: 1 },
   club_smash: { id: "club_smash", name: "Club Smash", damage: 13, potency: 3, perfect: { effect: "stunned", turns: 1 }, weight: 3 },
