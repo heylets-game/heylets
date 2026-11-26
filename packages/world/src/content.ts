@@ -2,6 +2,7 @@
 // enemies. Data only; the fights on the tiles (zone/) give it meaning.
 
 import type { StatKey } from "@gantt-quest/core";
+import type { ScaleRate } from "./zone/rules";
 
 /** What an ability or an enemy's attack can leave on whoever it lands on. A fight on the tiles has more conditions of its own (zone/types.ts). */
 export type EffectKind = "bleeding" | "burning" | "stunned" | "guarded" | "taunting" | "slowed" | "hasted" | "fumbling" | "exposed" | "prone" | "sundered" | "reeling" | "memento_mori";
@@ -369,6 +370,20 @@ export interface EnemyDef {
   abilities: string[];
   /** Grows back `amount` HP at the start of each of its turns, unless it has the effect `unless` on it (a troll and fire). */
   regen?: { amount: number; unless: EffectKind; name: string };
+  /** What hurts whoever lands a blow on it up close (a slime's Acid Armor; combat.ts thorns). */
+  retort?: Retort;
+}
+
+/**
+ * A passive that bites back: whoever lands a blow on its bearer up close takes `damage` (at level 1, grown with the
+ * bearer's level at `scale`, rules.ts SCALE_RATES, then turned into dice as an ability's is), told as `name`.
+ */
+export interface Retort {
+  name: string;
+  damage: number;
+  scale?: ScaleRate;
+  /** What it says on the enemy's card. */
+  blurb: string;
 }
 
 /** HP a troll grows back at the start of each of its turns, when it is not Burning. */
@@ -453,11 +468,12 @@ export const ENEMIES: Record<string, EnemyDef> = {
     kind: "skeleton", name: "Skeleton", hp: 22, defence: 11, move: 2, save: 0, init: 0, xp: 14,
     abilities: ["rusted_cutlass", "memento_mori", "shove"],
   },
-  // A cave slime: very slow and very tough, and its acid leaves its prey exposed (taking more from every hit). The acid
-  // burns and is spent: it leaves no poison lying about (enemyabilities.ts).
+  // A cave slime: very slow and very tough. Its spat acid eats into armor, and its body burns whoever strikes it by hand.
+  // The acid is spent as it burns: it leaves no poison lying about (enemyabilities.ts).
   slime: {
     kind: "slime", name: "Cave Slime", hp: 29, defence: 10, move: 2, save: 2, init: -2, xp: 13,
     abilities: ["engulf", "acid_splash"],
+    retort: { name: "Acid Armor", damage: 2, blurb: "Whoever hits it in melee is burned by its acid." },
   },
   // What is bound in the caverns' deepest chamber, guarding the hoard.
   haunt: {

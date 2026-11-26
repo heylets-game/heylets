@@ -14,7 +14,7 @@ import { ALERT_RANGE, DEFAULT_ZONE_OPTIONS, JOIN_RANGE, generateZone, zoneOption
 import { HEX_ROOM, adjacent, blast, blockerAt, flies, isDead, sameHex, seesFor, solid, stepCost, unitAt, zoneReach } from "./geometry";
 import { propOf } from "./props";
 import { SITE_IDS, backdropOf, siteInside, type SiteId } from "./sites";
-import { ACTION_AP, AP_MAX, AP_TURN, AQUEOUS, RALLY, SUMMON_AP_TURN, AURAS, CHART, COMMON_ACTIONS, BLOCK, BONUS_AP, BOLSTER, AGAINST_WAVES, ENDURE, STAND_STRONG, STURDY, ENEMY_BURST, ENEMY_KIT, ENEMY_MOVE_AP, EXPLORE_ROUND_MS, FLEE_RANGE, LIGHT_RADIUS, SHIELD_SET_ASIDE, TACTICS, TORCH_GROUND_ROUNDS, TORCH_HELD_ROUNDS, TORCH_ROUND_MS, abilityDice as abilityDiceFor, commonCost, enemyHp, DEFAULT_MIND, abilityStrikes, enemyMove, enemyStrikes, mindOf, tacticOf, unitStrikes } from "./kit";
+import { ACTION_AP, AP_MAX, AP_TURN, AQUEOUS, RALLY, SUMMON_AP_TURN, AURAS, CHART, COMMON_ACTIONS, BLOCK, BONUS_AP, BOLSTER, AGAINST_WAVES, ENDURE, STAND_STRONG, STURDY, ENEMY_BURST, ENEMY_KIT, ENEMY_MOVE_AP, EXPLORE_ROUND_MS, FLEE_RANGE, LIGHT_RADIUS, SHIELD_SET_ASIDE, TACTICS, TORCH_GROUND_ROUNDS, TORCH_HELD_ROUNDS, TORCH_ROUND_MS, abilityDice as abilityDiceFor, commonCost, enemyHp, DEFAULT_MIND, abilityStrikes, enemyMove, enemyStrikes, mindOf, retortDice, tacticOf, unitStrikes } from "./kit";
 import { MAX_CATCHUP_ROUNDS, nextTick } from "./clock";
 import { clusterHexes } from "./weather";
 import { d20, diceAverage, diceFor, heroMove, hitChance } from "./rules";
@@ -2962,6 +2962,30 @@ describe("a troll", () => {
     unit(state, foe).conditions.push({ kind: "burning", rounds: 3 });
     const lit = must(state, { type: "end_turn", by: "ann", unit: "ann" });
     expect(unit(lit, foe).hp).toBeLessThan(5);
+  });
+});
+
+describe("a cave slime", () => {
+  it("Acid Armor: whoever lands a blow on it up close is burned, for about a d4 at level 1", () => {
+    let burned = 0;
+    for (let seed = 1; seed <= 12; seed++) {
+      let { state, foe } = duel("slime", "qa_paladin", at(5, 6), at(7, 6));
+      unit(state, "ann").abilities = ["branding_strike"];
+      state.rng = seed;
+      const events: ZoneEvent[] = [];
+      state = must(state, use("branding_strike", { target: foe }), events);
+      const landed = events.some((e) => e.t === "hit" && e.actor === "ann" && e.target === foe);
+      const acid = events.filter((e) => e.t === "hit" && e.what === "Acid Armor" && e.target === "ann");
+      expect(acid.length).toBe(landed ? 1 : 0);
+      for (const e of acid) {
+        expect(e.t === "hit" && e.actor).toBe(foe);
+        expect(e.t === "hit" && e.amount).toBeGreaterThanOrEqual(1);
+        expect(e.t === "hit" && e.amount).toBeLessThanOrEqual(4);
+      }
+      if (landed) burned++;
+    }
+    expect(burned).toBeGreaterThan(0);
+    expect(retortDice(ENEMIES.slime.retort!, 1)).toEqual({ n: 1, d: 4, plus: 0 });
   });
 });
 

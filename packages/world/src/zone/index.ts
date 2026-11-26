@@ -80,6 +80,7 @@ export {
   ENEMY_BURST,
   abilityStrikes,
   enemyStrikes,
+  retortDice,
   unitStrikes,
   unitStrike,
   mindOf,

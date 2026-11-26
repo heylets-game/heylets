@@ -42,6 +42,8 @@ import {
   CRATE_HP,
   ENEMIES,
   ENEMY_ABILITIES,
+  retortDice,
+  modsOf,
   checkStrike,
   strikeAim,
   strikeHexes,
@@ -163,7 +165,7 @@ import { useZone, type ZoneSend } from "./useZone";
 import { Icon } from "./items";
 import { label } from "./labels";
 import { FLOURISH, GUARDS, SONG_MOOD, SOUND_KIND, SUMMONS, THROW_COLOR, aimKind, fxFor } from "./zone/abilityFx";
-import { ownRoute } from "./zone/ownMoves";
+import { RETORTS, ownRoute } from "./zone/ownMoves";
 import { COMMON_ICON, ITEM_ICON, abilityIcon } from "./zone/actionIcons";
 import { BAR_SLOTS, assignSlot, barChoices, loadBar, moveSlot, saveBar } from "./zone/hotbar";
 import { believe, foreseeWalk, giveUp, settle, standing, type Ahead } from "./zone/ahead";
@@ -1324,7 +1326,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         // whatever its usual look (WorldRenderer.attack plays it); one round its user or at a spot was played as it was
         // used, and whoever it catches just flinches.
         const own = ev.actor && !(hit && ev.splash) && actor?.side === "enemy" && view?.ownsMove(ev.actor, ev.what) ? ownRoute(ev.what) : null;
-        const passive = (!mine && (ev.what === "coral_field" || ev.what === "coral_armor")) || (hit && !!ev.splash) || own === "burst" || own === "at" || own === "dash";
+        // A retort (a slime's Acid Armor) from one that cannot play it (it has just been killed): the victim just flinches.
+        const passive = (!mine && (ev.what === "coral_field" || ev.what === "coral_armor")) || (!own && RETORTS.has(ev.what)) || (hit && !!ev.splash) || own === "burst" || own === "at" || own === "dash";
         const kind = passive ? "ground" : own === "blow" ? "melee" : !ev.actor || ev.actor === ev.target || ev.what.startsWith("throw:") || ev.what === "shove" || ev.what === "fall" ? "none" : (mine?.look.kind ?? "melee");
         // The log's line for it: the roll that decided it (if it has a card), then what it did.
         const logged = () => {
@@ -3213,6 +3216,11 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
                 </div>
               ))}
               {under.side === "enemy" && <div className="muted">{under.abilities.map((id) => ENEMY_ABILITIES[id]?.name ?? id).join(", ")}</div>}
+              {/* Its passive that bites back (EnemyDef retort), with what it hurts for at its level. */}
+              {under.side === "enemy" && ENEMIES[under.kind]?.retort && (() => {
+                const retort = ENEMIES[under.kind]!.retort!;
+                return <div className="muted"><strong>{retort.name}</strong>: {retort.blurb} ({diceText(retortDice(retort, under.level, modsOf(asState(state).options).edge))})</div>;
+              })()}
               {alsoHere.map((u) => <div key={u.id} className="zone-tip-also"><span className="muted">Sharing the hex:</span> <strong>{u.name}</strong> <span className="muted">· {u.hp}/{u.maxHp} HP{u.down ? " · down" : ""}</span></div>)}
               {/* Where a shove would send them: over an edge, into a pit, or only back a hex. */}
               {/* One that stands on more than one hex: nothing moves it. */}

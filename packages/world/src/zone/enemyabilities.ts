@@ -180,8 +180,9 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   // (Memento Mori, engine.ts ON_HURT). No harm of its own: those beside it save against the condition, not for half.
   memento_mori: { id: "memento_mori", name: "Memento Mori", damage: 0, potency: 3, shape: "burst", range: 1, saveOr: { effect: "memento_mori", turns: 4 }, cooldown: 4, weight: 3 },
   engulf: { id: "engulf", name: "Engulf", damage: 6, potency: 3, saveOr: { effect: "slowed", turns: 2 }, weight: 2 },
-  // Acid eats into whoever it hits and is spent: it leaves no pool behind (that is poison's way).
-  acid_splash: { id: "acid_splash", name: "Acid Splash", damage: 4, potency: 3, range: 3, saveOr: { effect: "exposed", turns: 2 }, weight: 2 },
+  // A slime's gob of acid, spat onto a clump of 3 hexes: it eats into the armor of whoever fails to get clear (2 less
+  // Defence), and is spent: it leaves no pool behind (that is poison's way).
+  acid_splash: { id: "acid_splash", name: "Acid Splash", damage: 4, potency: 3, range: 3, area: 3, saveOr: { effect: "sundered", turns: 2 }, cooldown: 3, weight: 2 },
   grave_grasp: { id: "grave_grasp", name: "Grave Grasp", damage: 9, potency: 5, saveOr: { effect: "stunned", turns: 1 }, weight: 2 },
   keening: { id: "keening", name: "Keening", damage: 5, potency: 3, shape: "burst", saveOr: { effect: "slowed", turns: 2 }, weight: 2 },
   venomous_bite: { id: "venomous_bite", name: "Venomous Bite", damage: 5, potency: 4, surface: { kind: "poison", rounds: 2 }, weight: 2 },
