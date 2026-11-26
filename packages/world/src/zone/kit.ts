@@ -8,6 +8,7 @@ import type { StatKey, Stats } from "@gantt-quest/core";
 import { ABILITIES, EFFECT_INFO, ENEMIES, SUNDERED_DEFENCE, type AbilityDef, type EffectKind } from "../content";
 import type { BehaviourId } from "./behaviours";
 import { ENEMY_ABILITIES, type EnemyAbilityDef } from "./enemyabilities";
+import { BLINK_AP } from "../gear";
 import { modsOf } from "./mods";
 import { diceFor, type Dice } from "./rules";
 import type { CommonAction, Condition, ShantyKind, SurfaceKind, Throwable, Unit, WeatherKind, ZoneState } from "./types";
@@ -666,8 +667,22 @@ export function cleanItems(raw: Partial<Record<string, number>> | undefined): Pa
 
 /** How far a hero can throw: 5 hexes, further for the strong, never under 3. */
 export const throwRange = (strMod: number): number => Math.max(3, 5 + strMod);
-/** How far anyone can jump, in hexes, whatever their Strength. */
+/** How far anyone can jump, in hexes, whatever their Strength (further in Springheel Boots: jumpRange). */
 export const JUMP_RANGE = 2;
+/** How far this unit can jump: Springheel Boots add their reach. */
+export const jumpRange = (unit: Pick<Unit, "perks">): number => JUMP_RANGE + (unit.perks?.long_jump ?? 0);
+/** How far this unit can blink in place of a jump (Phase Treads), or 0. */
+export const blinkRange = (unit: Pick<Unit, "perks">): number => unit.perks?.blink ?? 0;
+
+/**
+ * The AP a common action costs this unit: as commonCost, but a Jump is 1 AP less in Springheel Boots, and a blink
+ * (`blink`: a Jump made as one in Phase Treads, isBlink) is BLINK_AP.
+ */
+export function commonCostFor(unit: Pick<Unit, "kind" | "perks">, what: CommonAction, blink = false): number {
+  if (what !== "jump") return commonCost(what, unit.kind);
+  if (blink) return BLINK_AP;
+  return COMMON_ACTIONS.jump.cost - (unit.perks?.long_jump ? 1 : 0);
+}
 
 // ---------- enemies ----------
 

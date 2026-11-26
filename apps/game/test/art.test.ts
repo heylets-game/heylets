@@ -39,3 +39,14 @@ describe("markerColour", () => {
     expect(markerColour(254, 0, 255, "#3b82f6", "#2655a0")).toBe("#fe00ff");
   });
 });
+
+describe("every piece of gear has a picture of its own", () => {
+  it("a pixel icon and a little model for each base: none falls back to another's", async () => {
+    const { GEAR_BASES } = await import("@gantt-quest/world");
+    const { ITEM_ART_NAMES } = await import("../src/client/itemArt");
+    const { LOW_POLY } = await import("../src/client/render/gearModels");
+    const art = new Set(ITEM_ART_NAMES);
+    expect(GEAR_BASES.filter((b) => !art.has(b.icon)).map((b) => b.icon)).toEqual([]);
+    expect(GEAR_BASES.filter((b) => !LOW_POLY[b.icon]).map((b) => b.icon)).toEqual([]);
+  });
+});

@@ -2,7 +2,7 @@
 // (zone/zone.ts builds its heroes from a HeroSheet).
 
 import type { Stats } from "@gantt-quest/core";
-import { isLanternHelm, loadoutOf, outfitOf, type ItemDef, type Outfit } from "./gear";
+import { isLanternHelm, loadoutOf, outfitOf, perksOf, type ItemDef, type Outfit, type Perks } from "./gear";
 
 /** The parts of a hero that decide how they fight. */
 export interface HeroSheet {
@@ -23,6 +23,8 @@ export interface HeroSheet {
   outfit?: Outfit;
   /** A lantern helm on the head, shown or hidden (isLanternHelm): it lights the dark round them in the caves. */
   lantern?: boolean;
+  /** Powers from what the hero wears, shown or hidden, each with its strength (gear.ts perksOf). Absent when there are none. */
+  perks?: Perks;
   /** The class abilities chosen for the hero's slots (classabilities.ts). Fought with on top of the weapon's. They are changed only in the Harbor. */
   abilityLoadout?: (string | null)[];
 }
@@ -34,16 +36,19 @@ export interface HeroInit extends HeroSheet {
 }
 
 /** What equipped items contribute to a hero. With no weapon in hand the hero is unarmed (`weapon` is ""), and fights with bare hands. */
-export function gearSheet(classId: string, worn: ItemDef[]): Pick<HeroSheet, "bonus" | "weapon" | "weaponPower" | "armor" | "outfit" | "lantern"> {
+export function gearSheet(classId: string, worn: ItemDef[]): Pick<HeroSheet, "bonus" | "weapon" | "weaponPower" | "armor" | "outfit" | "lantern" | "perks"> {
   const loadout = loadoutOf(worn);
   // The hat as worn, hidden or not: a hidden lantern helm is not drawn, but still lights the way.
   const hat = worn.find((i) => i.slot === "helmet");
+  const perks = perksOf(worn);
   return {
     bonus: loadout.bonus,
     weapon: loadout.weapon ?? "",
     weaponPower: loadout.weaponPower,
     armor: loadout.armor,
     outfit: outfitOf(worn),
-    ...(hat && isLanternHelm(classId, hat) ? { lantern: true } : {}),
+    // A Miner's Lamp lights the way as a lantern helm does.
+    ...((hat && isLanternHelm(classId, hat)) || perks.lamp ? { lantern: true } : {}),
+    ...(Object.keys(perks).length > 0 ? { perks } : {}),
   };
 }
