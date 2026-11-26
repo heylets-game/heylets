@@ -789,7 +789,7 @@ export interface EnemyStrike {
  * How far an enemy's fancy sways what it does: each time it picks an attack, what each ability on each target is worth
  * to it is taken up or down by as much as this share, at random, so it does not do the same thing every time.
  */
-export const ENEMY_WHIM = 0.25;
+export const ENEMY_WHIM = 0.35;
 
 /** What every enemy adds to the damage and the to-hit of its abilities, and to the saves against what it does. */
 export const ENEMY_EDGE = 0;
