@@ -248,7 +248,7 @@ export const SUMMONS = new Set(["summon_sea_turtle", "summon_sunken_sailors"]);
 /** What enemies shoot and cast, by the attack's own name. Anything not here is a blow up close, or (an attack on every hero) a ring. */
 const ENEMY_FX: Record<string, Fx> = {
   Volley: fx("arrow", "#e8dcc0"),
-  "Barbed Arrow": fx("arrow", "#e8dcc0"),
+  "Rain of Arrows": fx("arrow", "#e8dcc0"),
   "Dark Bolt": fx("bolt", "#a78bfa"),
   Immolate: fx("lob", "#ff7a2a"),
   "Acid Splash": fx("bolt", "#f0e44a"),

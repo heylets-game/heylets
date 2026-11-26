@@ -55,7 +55,7 @@ export interface EnemyAbilityDef {
   splash?: boolean;
   /**
    * Thrown at the target's hex, it lands on this many hexes together round it (weather.ts clusterHexes), not on the
-   * target alone: no roll to hit, but everyone on them makes an Agility save, taking half on a success and suffering
+   * target alone (7: that hex and the whole ring round it): no roll to hit, but everyone on them makes an Agility save, taking half on a success and suffering
    * `saveOr` on a failure. Its `surface` is left on all of them.
    */
   area?: number;
@@ -111,8 +111,11 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   beatdown: { id: "beatdown", name: "Beatdown", damage: 11, potency: 3, saveOr: { effect: "prone", turns: 1 }, weight: 1 },
   great_cleave: { id: "great_cleave", name: "Great Cleave", damage: 9, potency: 3, sweep: 2, cooldown: 4, weight: 2 },
   battering_ram: { id: "battering_ram", name: "Battering Ram", damage: 6, potency: 4, push: 3, cooldown: 2, weight: 2 },
-  volley: { id: "volley", name: "Volley", damage: 6, potency: 4, range: 6, weight: 2 },
-  barbed_arrow: { id: "barbed_arrow", name: "Barbed Arrow", damage: 5, potency: 3, range: 6, saveOr: { effect: "bleeding" }, weight: 2 },
+  volley: { id: "volley", name: "Volley", damage: 6, potency: 4, range: 6, weight: 1 },
+  // An archer's favourite: a sheaf of arrows loosed high, to come down on a hex and every hex round it. Nobody is
+  // aimed at, so there is no roll to hit: everyone under it makes an Agility save for half. It takes all a turn's
+  // AP, and a few turns to ready again.
+  rain_of_arrows: { id: "rain_of_arrows", name: "Rain of Arrows", damage: 5, potency: 3, range: 6, area: 7, cost: 4, cooldown: 3, weight: 2 },
   savage_bite: { id: "savage_bite", name: "Savage Bite", damage: 9, potency: 5, saveOr: { effect: "bleeding" }, weight: 2 },
   pounce: { id: "pounce", name: "Pounce", damage: 8, potency: 4, saveOr: { effect: "stunned", turns: 1 }, weight: 2 },
   rending_howl: { id: "rending_howl", name: "Rending Howl", damage: 5, potency: 3, shape: "burst", weight: 1 },

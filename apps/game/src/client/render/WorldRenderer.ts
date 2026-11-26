@@ -79,7 +79,7 @@ const SPELL_COLOR: Record<string, string> = {
   "Dark Bolt": "#b06cff",
   Immolate: "#ff6a3c",
 };
-const ARROW_ABILITIES = new Set(["Shot", "Volley", "Barbed Arrow"]);
+const ARROW_ABILITIES = new Set(["Shot", "Volley"]);
 /** Thrown things: a rock lobbed in an arc, tumbling, that bursts into dust where it lands. */
 const THROWN: Record<string, string> = { "Hurl Rock": "#77726a" };
 /** Melee blows heavy enough to knock the target back and raise dust at its feet. */

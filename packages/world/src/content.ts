@@ -394,9 +394,10 @@ export const ENEMIES: Record<string, EnemyDef> = {
     kind: "brute", name: "Brute", hp: 26, defence: 11, move: 2, save: 2, init: -1, xp: 18,
     abilities: ["beatdown", "battering_ram", "great_cleave"],
   },
+  // An archer keeps its distance and shoots; every few turns it looses a rain of arrows over a hex and the ring round it.
   archer: {
     kind: "archer", name: "Archer", hp: 13, defence: 12, move: 2, save: 0, init: 1, xp: 13,
-    abilities: ["volley", "barbed_arrow"],
+    abilities: ["volley", "rain_of_arrows"],
   },
   // A beast boss: fast, and it makes its victims bleed.
   alpha: {

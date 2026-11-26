@@ -699,9 +699,68 @@ function batteringRam(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: 
   }, lands);
 }
 
+const SHAFT = "#e8dcc0";
+/**
+ * A Rain of Arrows: how many arrows go up off the string, how many come down, how far out from the hex aimed at they
+ * fall (in world units: past the ring of hexes round it, just), how high they start, how long each falls, how long
+ * the whole shower takes to come down, and how long the ones that land stay standing in the ground.
+ */
+export const RAIN_OF_ARROWS = { up: 3, down: 18, spread: HEX * 1.25, height: 5.5, fall: 0.3, over: 0.45, stand: 0.7 };
+
+/**
+ * An Archer's Rain of Arrows: it draws and looses (figures.ts shoot), and a sheaf of arrows goes up off the string,
+ * out of sight. A moment later they come down slanting on the hex aimed at and all round it, one after another:
+ * each lands with a puff of dust and stays standing in the ground a moment, and a pale ring pulses out over the
+ * hexes as the first of them hit. `hitAt` is over the hex it is aimed at; the blow (on all it catches) is told as
+ * the thick of it lands.
+ */
+function rainOfArrows(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const { up, down, spread, height, fall, over, stand } = RAIN_OF_ARROWS;
+  const color = crit ? GOLD : SHAFT;
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const ground = hitAt.clone().setY(hitAt.y - 0.45);
+  const wait = Math.max(0, figure.loose() || figure.cast());
+  // Up off the string, steeply, toward the mark, and gone.
+  stage.later(() => {
+    const from = feet.clone().setY(feet.y + 1.1);
+    for (let i = 0; i < up; i++) {
+      const tilt = 0.25 + i * 0.12;
+      const to = offset(from, dir * (0.9 + i * 0.25), height - 1, 0);
+      stage.spawnFx("arrow", color, false, { from: offset(from, 0, i * 0.1, 0), to, life: 0.3, size: [0.9, 0.9], turn: Math.PI / 2 - dir * tilt, spin: 0, fade: true });
+    }
+  }, wait);
+  // Down on the hex and all round it, slanting the way they were shot.
+  const slant = 0.5;
+  const start = wait + 0.35;
+  for (let i = 0; i < down; i++) {
+    // The first few on the hex aimed at, the rest spread out over the ring round it.
+    const a = Math.random() * Math.PI * 2;
+    const far = i < 3 ? Math.random() * 0.4 : (0.35 + 0.65 * Math.sqrt(Math.random())) * spread;
+    const lands = offset(ground, Math.cos(a) * far, 0.15, Math.sin(a) * far);
+    const from = offset(lands, -dir * slant * height * 0.35, height, 0);
+    const turn = -Math.PI / 2 + dir * slant * 0.6;
+    stage.later(() => {
+      stage.spawnFx("arrow", color, false, { from, to: lands, life: fall, size: [0.85, 0.85], turn, spin: 0, fade: false, onEnd: () => {
+        // It stands in the ground a moment, a puff of dust kicked up round it.
+        stage.spawnFx("arrow", color, false, { from: lands, to: lands, life: stand, size: [0.85, 0.85], turn, spin: 0, fade: true });
+        stage.spawnFx("dust", DUST, Math.random() < 0.5, { from: lands, to: offset(lands, (Math.random() - 0.5) * 0.4, 0.3, 0), life: 0.35, size: [0.35, 0.8], spin: 0, fade: true });
+        if (Math.random() < 0.4) stage.spawnFx("fleck", ROCK_PALE, Math.random() < 0.5, { from: lands, to: offset(lands, (Math.random() - 0.5) * 0.6, 0, (Math.random() - 0.5) * 0.4), life: 0.3, size: [0.3, 0.2], spin: 0, fade: true, arc: 0.3 });
+      } });
+    }, start + (over * i) / down);
+  }
+  // As the first hit: a pale ring over the hexes it covers.
+  stage.later(() => stage.wave({ at: ground.clone().setY(ground.y + 0.05), radius: spread, life: 0.5, color: crit ? GOLD : "#f3e7c8", width: 0.1 }), start + fall);
+  // The thick of it: everyone caught is told.
+  stage.later(() => {
+    stage.jolt();
+    onImpact();
+  }, start + fall + over / 2);
+}
+
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
   "Great Cleave": { who: "brute", sweeps: true, blurb: "A great two-handed sweep from side to side: a wide white swoosh runs across both rows of hexes in front of it, dust kicked up under it and grit flung past the far edge, and everyone caught takes a heavy slash with a red burst.", play: greatCleave },
   "Battering Ram": { who: "brute", blurb: "Drops its shoulder and charges in, dust kicked off its heels and speed lines streaming off it: a big flash, a shock pulsing over the ground, grit and shock lines bursting out ahead as it hits, then dust driven up along the ground for the three hexes the target is shoved back.", play: batteringRam },
+  "Rain of Arrows": { who: "archer", blurb: "Draws and looses a sheaf of arrows straight up, then they come down slanting on the hex and all round it, one after another, each landing with a puff of dust and standing in the ground a moment, a pale ring pulsing out as the first hit.", play: rainOfArrows },
   Immolate: { who: "cultist", blurb: "Sparks swirl round its staff as it winds up, then a fireball goes up in a high arc trailing embers and bursts where it lands: a ring of flame rolling out over the hexes round it, flames licking up, embers flung out and smoke rising.", play: immolate },
   Slam: { who: "ogre", blurb: "Crouches, springs up into the air and lands on its backside: a wave pulses out over the ground from its feet, clouds of dust rolling out after it, and each hero is jolted as it reaches them.", play: seatSlam },
   "Club Smash": { who: "ogre", blurb: "Heaves its club right up over its head and brings it straight down: the ground bursts where it lands, a pulse rolling out to the hexes round it, dust thrown out all round and chunks of rock flung every way.", play: clubSmash },
