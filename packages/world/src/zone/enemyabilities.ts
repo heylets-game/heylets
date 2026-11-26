@@ -186,7 +186,7 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   grave_grasp: { id: "grave_grasp", name: "Grave Grasp", damage: 9, potency: 5, saveOr: { effect: "stunned", turns: 1 }, weight: 2 },
   keening: { id: "keening", name: "Keening", damage: 5, potency: 3, shape: "burst", saveOr: { effect: "slowed", turns: 2 }, weight: 2 },
   venomous_bite: { id: "venomous_bite", name: "Venomous Bite", damage: 5, potency: 4, surface: { kind: "poison", rounds: 2 }, weight: 2 },
-  spider_web_spit: { id: "spider_web_spit", name: "Web Spit", damage: 3, potency: 3, range: 4, saveOr: { effect: "slowed", turns: 2 }, surface: { kind: "slime", rounds: 2 }, weight: 2 },
+  spider_web_spit: { id: "spider_web_spit", name: "Web Spit", damage: 3, potency: 3, range: 4, area: 3, saveOr: { effect: "slowed", turns: 2 }, surface: { kind: "slime", rounds: 2 }, cooldown: 3, weight: 3 },
   impaling_fang: { id: "impaling_fang", name: "Impaling Fang", damage: 11, potency: 5, saveOr: { effect: "bleeding" }, weight: 2 },
   brood_web_spit: { id: "brood_web_spit", name: "Web Spit", damage: 5, potency: 4, range: 5, saveOr: { effect: "slowed", turns: 2 }, surface: { kind: "slime", rounds: 2 }, weight: 2 },
   brood_swarm: { id: "brood_swarm", name: "Brood Swarm", damage: 5, potency: 3, shape: "burst", saveOr: { effect: "slowed", turns: 1 }, weight: 1 },

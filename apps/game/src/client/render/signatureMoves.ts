@@ -1830,7 +1830,204 @@ function acidArmor(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Mov
   }, flight + 0.06);
 }
 
+
+const VENOM = "#9dff5a";
+const VENOM_DEEP = "#3f7d3c";
+const VENOM_PALE = "#e2ffc4";
+const FANG_BONE = "#f1ead2";
+const SILK = "#f4f1e6";
+const SILK_DIM = "#c9c4b4";
+
+/** Where a figure's fangs are as it strikes: a little way from it toward the target, low on it. */
+function fangsOf(figure: Figure, hitAt: THREE.Vector3): THREE.Vector3 {
+  return upFigure(figure, 0.4).lerp(hitAt.clone().setY(upFigure(figure, 0.4).y), 0.35);
+}
+
+/**
+ * A Giant Spider's Venomous Bite: it rears up, front legs thrown wide and fangs spread (figures.ts FANG), venom beading
+ * and dripping off them, then plunges and drives them in: two pale fang streaks stabbing down into the target, a green
+ * flash, venom splashing out either side, then green bubbles rising off them and drops running down to a green ring at
+ * their feet, for the venom it leaves on the ground. The blow is told as the fangs go in.
+ */
+function venomousBite(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const wait = figure.strike("fang");
+  // Anything that is not a spider springs at the target, and the fangs go in as it does.
+  if (wait <= 0) stage.lunge();
+  const lands = Math.max(0.12, wait);
+  const green = crit ? GOLD : VENOM;
+  // Rearing up: venom beading on the fangs and dripping off them.
+  for (let s = 0.04; s < lands - 0.06; s += 0.05) {
+    stage.later(() => {
+      const from = offset(fangsOf(figure, hitAt), (Math.random() - 0.5) * 0.3, (Math.random() - 0.5) * 0.15, 0.05);
+      stage.spawnFx("fleck", Math.random() < 0.6 ? VENOM : VENOM_DEEP, Math.random() < 0.5, { from, to: offset(from, 0, -0.55, 0), life: 0.28, size: [0.28, 0.16], spin: 0, fade: true });
+    }, s);
+  }
+  // The fangs: two pale streaks stabbing down into the target, a little apart, just before they meet it.
+  const stab = 0.08;
+  stage.later(() => {
+    for (const side of [-1, 1]) {
+      const from = offset(hitAt, side * 0.26 * dir, 0.6, 0.06);
+      stage.spawnFx("streak", crit ? GOLD : FANG_BONE, dir < 0, { from, to: offset(hitAt, side * 0.1 * dir, -0.08, 0.06), life: stab, size: [0.5, 0.9], turn: Math.PI / 2 - side * 0.3, spin: 0, fade: false });
+    }
+  }, lands - stab);
+  stage.later(() => {
+    const feet = figure.root.getWorldPosition(new THREE.Vector3());
+    const floor = hitAt.clone().setY(feet.y + 0.06);
+    stage.spawnFx("burst", crit ? GOLD : VENOM_PALE, false, { from: hitAt, to: hitAt, life: 0.18, size: [0.6, 1.7], spin: 0.5, fade: true });
+    stage.spawnFx("burst", VENOM_DEEP, true, { from: hitAt, to: hitAt, life: 0.32, size: [0.7, 1.9], spin: -0.4, fade: true });
+    // Venom splashed out either side of the fangs.
+    for (const side of [-1, 1]) for (const up of [0.05, 0.3]) stage.spawnFx("splash", green, side < 0, { from: hitAt, to: offset(hitAt, side * 0.6, up, 0), life: 0.28, size: [0.5, 1], spin: 0, fade: true });
+    stage.jolt();
+    onImpact();
+    // The venom working in: green bubbles rising off them, and drops running down to the ground.
+    for (let s = 0.05; s < 0.6; s += 0.05) {
+      stage.later(() => {
+        const from = offset(hitAt, (Math.random() - 0.5) * 0.55, (Math.random() - 0.5) * 0.4, 0.06);
+        stage.spawnFx("mote", Math.random() < 0.5 ? VENOM : VENOM_PALE, Math.random() < 0.5, { from, to: offset(from, (Math.random() - 0.5) * 0.15, 0.5 + Math.random() * 0.3, 0), life: 0.4, size: [0.18, 0.32], spin: 0, fade: true });
+      }, s);
+    }
+    for (let i = 0; i < 4; i++) {
+      stage.later(() => {
+        const from = offset(hitAt, (Math.random() - 0.5) * 0.4, -0.1 - Math.random() * 0.15, 0.05);
+        stage.spawnFx("fleck", VENOM, Math.random() < 0.5, { from, to: from.clone().setY(floor.y), life: 0.3, size: [0.26, 0.15], spin: 0, fade: true });
+      }, 0.08 + i * 0.07);
+    }
+    stage.later(() => {
+      stage.wave({ at: floor, radius: 1.1, life: 0.55, color: green, width: 0.22 });
+      stage.later(() => stage.wave({ at: floor, radius: 0.8, life: 0.7, color: VENOM_DEEP, width: 0.45 }), 0.08);
+    }, 0.3);
+  }, lands);
+}
+
+/** A thrown web, laid flat on the ground (groundWeb): how many spokes and rings, how thick its threads, and its seconds. */
+export const WEB_LAID = { spokes: 9, rings: 4, thread: 0.05, grow: 0.2, hold: 0.7, fade: 0.55 };
+
+/**
+ * A web laid flat on the ground at `at`, `radius` out (see WEB_LAID): spokes out from the middle and rings of thread
+ * across them, each sagging in a little between spokes, thrown out from small to full size and then fading. Always on
+ * the plane of the ground. Lay it with MoveStage.lay.
+ */
+export function groundWeb(at: THREE.Vector3, radius: number, color: string): (group: THREE.Object3D) => (dt: number) => boolean {
+  return (group) => {
+    const { spokes, rings, thread, grow, hold, fade } = WEB_LAID;
+    const positions: number[] = [];
+    const index: number[] = [];
+    /** One thread from a to b (x, z on the ground), as a thin flat strip. */
+    const strand = (ax: number, az: number, bx: number, bz: number, w: number) => {
+      const len = Math.hypot(bx - ax, bz - az) || 1;
+      const [nx, nz] = [(-(bz - az) / len) * (w / 2), ((bx - ax) / len) * (w / 2)];
+      const n = positions.length / 3;
+      positions.push(ax + nx, 0, az + nz, ax - nx, 0, az - nz, bx + nx, 0, bz + nz, bx - nx, 0, bz - nz);
+      index.push(n, n + 1, n + 2, n + 1, n + 3, n + 2);
+    };
+    // Each spoke a little off even, so it looks spun, not drawn.
+    const angles = Array.from({ length: spokes }, (_, i) => ((i + (Math.random() - 0.5) * 0.35) / spokes) * Math.PI * 2);
+    const reach = angles.map(() => radius * (0.88 + Math.random() * 0.14));
+    angles.forEach((a, i) => strand(0, 0, Math.cos(a) * reach[i], Math.sin(a) * reach[i], thread * 1.2));
+    for (let r = 1; r <= rings; r++) {
+      const share = r / rings;
+      for (let i = 0; i < spokes; i++) {
+        const [a, b] = [angles[i], angles[(i + 1) % spokes]];
+        const [ra, rb] = [reach[i] * share, reach[(i + 1) % spokes] * share];
+        const [ax, az, bx, bz] = [Math.cos(a) * ra, Math.sin(a) * ra, Math.cos(b) * rb, Math.sin(b) * rb];
+        // Sagging in toward the middle between the two spokes it is strung across.
+        const sag = 0.86;
+        const [mx, mz] = [((ax + bx) / 2) * sag, ((az + bz) / 2) * sag];
+        strand(ax, az, mx, mz, thread);
+        strand(mx, mz, bx, bz, thread);
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setIndex(index);
+    const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.copy(at);
+    mesh.rotation.y = Math.random() * Math.PI * 2;
+    mesh.renderOrder = 8;
+    group.add(mesh);
+    let age = 0;
+    return (dt) => {
+      age += dt;
+      const g = Math.min(1, age / grow);
+      const size = 0.25 + 0.75 * (1 - (1 - g) * (1 - g));
+      mesh.scale.set(size, 1, size);
+      const k = Math.max(0, (age - grow - hold) / fade);
+      material.opacity = 0.95 * (1 - k * k);
+      if (k < 1) return true;
+      group.remove(mesh);
+      geometry.dispose();
+      material.dispose();
+      return false;
+    };
+  };
+}
+
+/** A Web Spit's ball of silk: seconds in the air, how high it arcs, and how far the web it bursts into spreads. */
+export const WEB_SPIT = { flight: 0.42, arc: 1.5, spread: 1.6 };
+
+/**
+ * A Giant Spider's Web Spit: it sinks on braced legs and arches its abdomen up over its back (figures.ts WEB), silk
+ * drawn in to its spinnerets, then throws a spinning ball of silk in a high arc, a thread trailing behind it; it
+ * bursts where it lands into a web thrown out flat over the hexes it covers, a pale ring rolling out under it,
+ * threads flung out round the edge, and wisps of silk drifting down over it.
+ */
+function webSpit(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const ground = hitAt.clone().setY(hitAt.y - 0.45);
+  const wait = Math.max(0, figure.strike("web") || figure.cast());
+  const silk = crit ? GOLD : SILK;
+  // Gathering silk at its spinnerets, high over its back.
+  for (let s = 0; s < wait; s += 0.05) {
+    stage.later(() => {
+      const tip = upFigure(figure, 0.95);
+      const a = Math.random() * Math.PI * 2;
+      stage.spawnFx("mote", Math.random() < 0.6 ? SILK : SILK_DIM, Math.cos(a) < 0, { from: offset(tip, Math.cos(a) * 0.4, -0.3, Math.sin(a) * 0.3), to: tip, life: 0.2, size: [0.25, 0.12], spin: 0, fade: true });
+    }, s);
+  }
+  stage.later(() => {
+    const from = upFigure(figure, 0.95);
+    const { flight, arc, spread } = WEB_SPIT;
+    stage.spawnFx("burst", SILK, dir < 0, { from, to: offset(from, 0, 0.2, 0), life: 0.16, size: [0.5, 1], spin: 0.4, fade: true });
+    stage.spawnFx("burst", silk, dir < 0, { from, to: ground, life: flight, size: [0.7, 0.9], spin: dir * 6, fade: false, arc, onEnd: () => land() });
+    // The thread trailing behind it, hanging a moment along the arc.
+    for (let s = 0.02; s < flight; s += 0.025) {
+      stage.later(() => {
+        const k = s / flight;
+        const at = from.clone().lerp(ground, k);
+        at.y += arc * 4 * k * (1 - k);
+        stage.spawnFx("mote", Math.random() < 0.7 ? SILK : SILK_DIM, false, { from: at, to: offset(at, 0, -0.08, 0), life: 0.35, size: [0.16, 0.1], spin: 0, fade: true });
+      }, s);
+    }
+    const land = () => {
+      stage.sound();
+      const floor = ground.clone().setY(ground.y + 0.05);
+      stage.spawnFx("burst", silk, false, { from: ground, to: ground, life: 0.2, size: [1, 2.6], spin: 0.5, fade: true });
+      stage.lay(groundWeb(floor, spread, silk));
+      stage.wave({ at: floor, radius: spread * 1.1, life: 0.45, color: SILK, width: 0.12 });
+      // Threads flung out round its edge as it spreads.
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2 + Math.random() * 0.3;
+        const to = offset(floor, Math.cos(a) * spread, 0.05, Math.sin(a) * spread * 0.7);
+        stage.spawnFx("streak", SILK, Math.cos(a) < 0, { from: floor, to, life: 0.2, size: [0.4, 0.9], turn: -a, spin: 0, fade: true });
+      }
+      // Wisps of silk drifting down over it after.
+      for (let i = 0; i < 10; i++) {
+        stage.later(() => {
+          const a = Math.random() * Math.PI * 2;
+          const far = Math.sqrt(Math.random()) * spread * 0.8;
+          const to = offset(floor, Math.cos(a) * far, 0.02, Math.sin(a) * far * 0.7);
+          stage.spawnFx("mote", Math.random() < 0.5 ? SILK : SILK_DIM, Math.random() < 0.5, { from: offset(to, (Math.random() - 0.5) * 0.3, 0.7, 0), to, life: 0.6, size: [0.22, 0.14], spin: 1, fade: true });
+        }, 0.05 + i * 0.05);
+      }
+      stage.jolt();
+      onImpact();
+    };
+  }, wait);
+}
+
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
+  "Venomous Bite": { who: "spider", blurb: "Rears up, front legs thrown up wide and fangs spread, venom dripping off them, then plunges and drives its fangs in: two pale fang streaks stab down, a green flash, venom splashes out either side, green bubbles rise off the target and drops run down to a green ring at their feet.", play: venomousBite },
+  "Web Spit@spider": { who: "spider", blurb: "Sinks on braced legs and arches its abdomen up over its back, then throws a spinning ball of silk in a high arc, a thread trailing behind it: it bursts where it lands into a web thrown out flat over the hexes, a pale ring rolling out under it, threads flung out round the edge and wisps of silk drifting down.", play: webSpit },
   Engulf: { who: "slime", blurb: "Draws itself up tall and thin, ooze running off it, then pours itself forward over the target, flattened and spread wide: a green flash, a ring of slime spreading at their feet, bubbles rising through it as it churns them about; then it lets go with a wet splat, gobs flung off every way, and slime dripping off them.", play: engulf },
   "Acid Splash": { who: "slime", blurb: "Squashes down low and springs up tall, tipping forward to spit a gob of acid in an arc from its crown, dripping as it flies: it bursts on the hexes where it lands, green rings rolling out, acid splashed up and flung out every way, and the ground left hissing and steaming.", play: acidSplash },
   "Acid Armor": { who: "slime", blurb: "Biting back at whoever struck it by hand: acid spurts off its body at them, splashing on them in green, and they are left hissing with steam rising off them.", play: acidArmor },
