@@ -8,3 +8,5 @@ line off once it is done.
 
 - Adjust scaling for enemy abilities: how each one's numbers grow with level (`scales` in
   `packages/world/src/zone/enemyabilities.ts`, rates in `rules.ts` SCALE_RATES).
+- The Villain boss never spawns: nothing on the atlas or in delves places it (lairs pick theirs from LAIR_BEAST /
+  CLIME_BEAST in `packages/world/src/atlas.ts`). Give it a home.
