@@ -6,7 +6,7 @@
 // blows, blasts and bombs reach crates too (crates.ts).
 
 import { hexDistance, hexNeighbors, hexSegment, posKey, type HexPos } from "@gantt-quest/core";
-import { ABILITIES, BARD_AURA, ENEMIES, type AbilityDef, type EffectKind } from "../content";
+import { ABILITIES, BARD_AURA, ENEMIES, onlyInFights, type AbilityDef, type EffectKind } from "../content";
 import { tileAt, type Poi } from "../map";
 import { DEBUFFS, UNTIMED_KEEPS, attackMade, addCondition, addUses, addShield, addStacks, inflict, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, removeCondition, saveBonus, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
 import { cratesOn, crateById, hurtCrate, isCrateId } from "./crates";
@@ -547,6 +547,8 @@ export function dashWay(state: ZoneState, unit: Unit, from: HexPos, toward: HexP
 export function checkAbility(state: ZoneState, unit: Unit, ability: string, aim: Aim): string | null {
   const def = ABILITIES[ability];
   if (!def || !unit.abilities.includes(ability)) return "You do not have that ability.";
+  // Out of a fight, one for fights alone (onlyInFights) can still go to a friend in one, and so join it (zone.ts reachIn).
+  if (onlyInFights(def) && !inFight(state, unit.id) && !(aim.target && inFight(state, aim.target))) return FIGHTS_ONLY;
   const tactic = tacticOf(ability);
   // A big one is in reach if any of its hexes is: said for the nearest of them if none is.
   const reachUnit = (target: Unit): string | null => {
@@ -646,6 +648,9 @@ function damageBonus(state: ZoneState, unit: Unit, def: AbilityDef): number {
 }
 
 const saveDc = (unit: Unit, def: AbilityDef): number => 8 + proficiency(unit.level) + mod(statOf(unit, def.stat));
+
+/** Why an ability for fights alone (onlyInFights) cannot be used out of one. */
+export const FIGHTS_ONLY = "That is for a fight.";
 
 /** The conditions an ability leaves on a target it has got through to. */
 function afflict(ctx: Ctx, unit: Unit, def: AbilityDef, target: Unit, save: boolean): void {

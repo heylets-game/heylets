@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { at, flatBoard, standEnemy } from "../test/zoneBoard";
+import { at, flatBoard, inAFight, standEnemy } from "../test/zoneBoard";
 import { ABILITIES, EFFECT_TICK, STACK_TURNS, isStacking, type Inflict } from "../content";
 import { makeRng } from "../rng";
 import { addCondition, addStacks, burnOf, countDown, heal, tickStacks, type Ctx } from "./engine";
@@ -11,6 +11,7 @@ describe("stacking Bleeding and Burning", () => {
   const setUp = () => {
     const state = flatBoard({ rng: 1, start: at(1, 1), options: { party: 1 }, flags: { aiOff: true } });
     const foe = standEnemy(state, "dummy", at(6, 6), "g1", { hp: 500, maxHp: 500 });
+    inAFight(state, foe.id);
     const ctx: Ctx = { state, rng: makeRng(1), events: [], effects: [] };
     return { ctx, foe };
   };

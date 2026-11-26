@@ -776,7 +776,8 @@ describe("a jump", () => {
       checkDice(hit.dice!, `${levels} levels`);
       expect(hit.amount).toBe(hit.dice!.total);
       expect(unit(state, "ann").hp).toBe(unit(state, "ann").maxHp - hit.amount);
-      expect(has(state, "ann", "prone")).toBe(true);
+      // Out of a fight, a fall hurts but leaves nobody flat: no condition takes hold out of one but Lucky.
+      expect(has(state, "ann", "prone")).toBe(false);
     }
   });
 

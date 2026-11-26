@@ -66,3 +66,17 @@ export const fails = (state: ZoneState, action: ZoneAction): string => {
 };
 export const unit = (state: ZoneState, id: string) => state.units.find((u) => u.id === id)!;
 export const has = (state: ZoneState, id: string, kind: string) => unit(state, id).conditions.some((c) => c.kind === kind);
+
+/**
+ * Put these units in a fight, as it stands (one with nobody's turn yet, if none is on), so what is left on them takes
+ * hold: out of a fight no condition does but Lucky (engine.ts OUTLASTS_FIGHT). Returns the state.
+ */
+export function inAFight(state: ZoneState, ...ids: string[]): ZoneState {
+  const enc = (state.encounter ??= { round: 1, order: [], init: {}, acting: [], done: [], budgets: {}, reacted: [], turnNo: 0, deadline: null });
+  for (const id of ids) {
+    if (enc.order.includes(id)) continue;
+    enc.order.push(id);
+    enc.init[id] = 0;
+  }
+  return state;
+}
