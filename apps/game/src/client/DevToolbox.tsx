@@ -179,9 +179,9 @@ export function DevToolbox({ me, refresh }: { me: Me; refresh(): Promise<void> }
     <>
       {column ? createPortal(spanner, column) : spanner}
       {open && (
-        <aside className={`dev-dock ${folded ? "folded" : ""}`} role="dialog" aria-label="Dev toolbox" style={width ? { width } : undefined}>
+        <aside className={`dev-dock timber ${folded ? "folded" : ""}`} role="dialog" aria-label="Dev toolbox" style={width ? { width } : undefined}>
           {/* Stays put while the tab under it scrolls. */}
-          <div className="dev-dock-top">
+          <div className="dev-dock-top timber-head">
             <strong className="dev-dock-title">Dev toolbox</strong>
             {/* Minimized, the name and the two buttons are all there is. */}
             {folded ? <span className="dev-dock-gap" /> : (

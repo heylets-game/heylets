@@ -481,7 +481,7 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
         </span>
 
         {/* What the pointer is over, explained: a card over the bar, above that thing. */}
-        {tip && <div className="hud-tip panel" style={{ left: `clamp(150px, ${tip.x}px, calc(100% - 150px))` }} role="tooltip">{tip.node}</div>}
+        {tip && <div className="hud-tip timber" style={{ left: `clamp(150px, ${tip.x}px, calc(100% - 150px))` }} role="tooltip">{tip.node}</div>}
       </div>
     </div>
   );

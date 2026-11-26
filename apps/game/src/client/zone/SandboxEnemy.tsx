@@ -61,7 +61,7 @@ export function SandboxLevel({ foe, onClose }: { foe: Unit; onClose(): void }) {
     setLevel(String(to));
   };
   return (
-    <div className="zone-barmenu panel zone-sandbox-level" role="dialog" aria-label={`${foe.name}'s level`}>
+    <div className="zone-barmenu timber zone-sandbox-level" role="dialog" aria-label={`${foe.name}'s level`}>
       <div className="zone-barmenu-head">
         <strong>{foe.name}</strong>
         <span className="muted">level {foe.level} · {foe.hp}/{foe.maxHp} HP</span>
