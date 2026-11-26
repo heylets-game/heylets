@@ -1506,29 +1506,24 @@ const BAT_FANG = "#f4efe2";
 const SWOOP_RED = "#e0313f";
 
 /**
- * A Cave Bat's Bite: it flicks up and back a little, then darts in, and two needle fangs snap shut on the target twice
- * over, quick as a sting, each nip with a small pale flash; on the second, violet sparks spit out either side and the
- * target is jolted. The blow is told as the second nip lands.
+ * A Cave Bat's Bite: it flicks up and back a little, then darts in, and its needle fangs snap shut on the target once,
+ * quick as a sting: a small pale flash, violet sparks spitting out either side, and the target jolted. The blow is told
+ * as the fangs meet.
  */
 function batBite(stage: MoveStage, ctx: MoveCtx) {
   const { hitAt, dir, crit, onImpact } = ctx;
-  const flash = crit ? GOLD : BAT_FANG;
   // A flick up and back before the dart: a little puff of violet off its wings.
   const wings = hitAt.clone().setY(hitAt.y + 0.35);
   stage.spawnFx("streak", crit ? GOLD : BAT_VIOLET, dir < 0, { from: wings, to: wings.clone().setY(wings.y + 0.3), life: 0.14, size: [0.6, 0.9], turn: Math.PI / 2, spin: 0, fade: true });
-  const nip = (second: boolean) => {
+  stage.later(() => {
     stage.lunge();
-    jaws(stage, ctx, QUICK_BITE * 0.75, second ? 0.2 : 0.16, () => {
-      stage.spawnFx("burst", flash, false, { from: hitAt, to: hitAt, life: 0.14, size: [0.35, second ? 1 : 0.7], spin: 0.5, fade: true });
-      stage.jolt();
-      if (!second) return;
-      stage.sound();
+    jaws(stage, ctx, QUICK_BITE * 0.75, 0.2, () => {
+      stage.spawnFx("burst", crit ? GOLD : BAT_FANG, false, { from: hitAt, to: hitAt, life: 0.16, size: [0.35, 1], spin: 0.5, fade: true });
       for (const side of [false, true]) for (const turn of [-0.35, 0.3]) stage.spawnFx("streak", crit ? GOLD : BAT_VIOLET, side, { from: hitAt, to: hitAt, life: 0.18, size: [0.4, 1.2], turn: side ? -turn : turn, spin: 0, fade: true });
+      stage.jolt();
       onImpact();
     }, BAT_FANG);
-  };
-  stage.later(() => nip(false), 0.08);
-  stage.later(() => nip(true), 0.26);
+  }, 0.08);
 }
 
 /** Seconds between each set of speed lines thrown off a swooping bat. */
@@ -1588,7 +1583,7 @@ function fellSwoop(stage: MoveStage, ctx: MoveCtx) {
 }
 
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
-  "Bite@bat": { who: "bat", blurb: "Flicks up and back, then darts in: two needle fangs snap shut twice, quick as a sting, a small pale flash with each nip, and violet sparks spitting out either side of the second.", play: batBite },
+  "Bite@bat": { who: "bat", blurb: "Flicks up and back, then darts in: its needle fangs snap shut once, quick as a sting, with a small pale flash and violet sparks spitting out either side.", play: batBite },
   "Fell Swoop": { who: "bat", blurb: "Its wings snap back in a burst of violet and it tears in a straight line, low and fast, dark speed lines streaming off it: each hero it passes through is raked with three red claw lines, a white slash and a flash, and where it comes to rest its wings flare out.", play: fellSwoop },
   "Chill Touch": { who: "shade", blurb: "Draws up and back, then surges in with its arms stretching out long, wisps streaming off it: a cold flash where its hands land, three pale finger marks drawn down the target, frost glinting and drifting down, a ring of frost at their feet, and wisps of their warmth curling back to it.", play: chillTouch },
   Wail: { who: "shade", blurb: "Huddles in, drawing breath in wisps, then flings itself up and back and screams, arms wide, swelling and trembling: rings roll out over the ground two hexes all round, pale then violet, a ring goes out through the air, sound lines burst from its head and wisps swirl out every way; each hero is jolted as the first ring reaches them, with violet wisps circling their head.", play: shadeWail },

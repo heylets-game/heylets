@@ -1229,13 +1229,12 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
     return;
   }
   // A dash: straight through everyone in the way, to the far end of the line. Everyone it passes (in the fight) saves
-  // for half, as from a sweep; it comes to rest beyond, meeting the ground there as a leap does.
+  // for half, as from a sweep; it comes to rest beyond, meeting the ground there as a leap does. Nobody strikes at it on the way.
   if (attack.kit.dash && aim) {
     const way = dashWay(state, enemy, enemy.pos, aim, attack.range);
     if (!way) return;
+    // Too quick to be struck at as it goes: it draws no blows from whoever it leaves the reach of.
     const from = enemy.pos;
-    provoke(ctx, enemy, way.land, null, () => {});
-    if (enemy.down) return;
     enemy.pos = way.land;
     ctx.events.push({ t: "jumped", id: enemy.id, from, to: way.land, dash: { name: attack.name, through: way.through } });
     const dice = rollShown(ctx.rng, attack.dice);

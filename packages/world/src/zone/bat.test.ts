@@ -75,6 +75,15 @@ describe("a Cave Bat", () => {
     expect(events.some((e) => e.t === "hit")).toBe(false);
   });
 
+  it("draws no blows as it dashes away from a hero beside it", () => {
+    const { state, bat } = board([["eve", at(0, 6)]]);
+    const events: ZoneEvent[] = [];
+    const ctx: Ctx = { state: structuredClone(state), rng: makeRng(5), events, effects: [] };
+    enemyAct(ctx, unit(ctx.state, bat), swoop(), null, at(5, 6));
+    expect(events.some((e) => e.t === "reaction")).toBe(false);
+    expect(unit(ctx.state, bat).pos).toEqual(at(5, 6));
+  });
+
   it("is aimed by hand at a hex, and shows the line it would take", () => {
     const { state, bat } = board();
     const b = unit(state, bat);

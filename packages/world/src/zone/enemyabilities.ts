@@ -82,7 +82,7 @@ export interface EnemyAbilityDef {
    * A dash: its user throws itself straight at the hex it is aimed at, up to `range` hexes (combat.ts dashWay), on
    * through whoever is in the way, and comes to rest on the furthest hex of that line it can stand on. Nobody is
    * singled out, so there is no roll to hit: every one of the other side it passes through makes an Agility save,
-   * taking half and nothing of `saveOr` on a success. It draws blows from whoever it leaves the reach of, as a Jump does.
+   * taking half and nothing of `saveOr` on a success. It is too quick to draw blows from whoever it leaves the reach of.
    */
   dash?: boolean;
   /**
