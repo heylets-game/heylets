@@ -3008,6 +3008,11 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const preview = under && z && pick?.kind === "ability" && under.side !== act.side ? previewAttack(z, act, pick.id, under) : null;
   const surface = hover ? state.surfaces[posKey(hover)] : undefined;
   const weather = hover ? (state.weather ?? []).filter((w) => w.hexes.some((p) => p.q === hover.q && p.r === hover.r)) : [];
+  // Weather and a surface on the hovered hex, in one shape for the hover card (rounds left, unless it lasts).
+  const hexEffects: { key: string; name: string; color: string; rounds?: number; blurb: string }[] = [
+    ...weather.map((w, i) => ({ key: `w${i}`, name: WEATHER_INFO[w.kind].name, color: WEATHER_INFO[w.kind].color, rounds: w.rounds, blurb: WEATHER_INFO[w.kind].blurb })),
+    ...(surface ? [{ key: "s", name: SURFACE_INFO[surface.kind].name, color: SURFACE_INFO[surface.kind].color, rounds: surface.lasting ? undefined : surface.rounds, blurb: SURFACE_INFO[surface.kind].blurb }] : []),
+  ];
 
   // The shanties an ally is singing that the hero stands in and has not joined: each a call of its own over the turn bar.
   const joinCost = commonCost("join", act.kind);
@@ -3300,8 +3305,27 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
               {hover && act && !under && edgeBelow(hover) > 0 && <div className="muted">An edge: {edgeBelow(hover)} levels down on one side. Whoever is shoved off it falls.</div>}
             </>
           )}
-          {weather.map((w, i) => <div key={i} style={{ color: WEATHER_INFO[w.kind].color }}>{WEATHER_INFO[w.kind].name} <span className="muted">· {w.rounds} round{w.rounds === 1 ? "" : "s"} · {WEATHER_INFO[w.kind].blurb}</span></div>)}
-          {surface && <div style={{ color: SURFACE_INFO[surface.kind].color }}>{SURFACE_INFO[surface.kind].name} <span className="muted">{surface.lasting ? "" : ` · ${surface.rounds} round${surface.rounds === 1 ? "" : "s"}`} · {SURFACE_INFO[surface.kind].blurb}</span></div>}
+          {/* What lies on the hex itself (weather, a surface), under its own divider: shown like a creature's effects,
+              names and rounds left, and what each does only while Alt is held. */}
+          {hexEffects.length > 0 && (
+            <div className="zone-tip-also">
+              {closer ? (
+                <div className="zone-conds-full">
+                  {hexEffects.map((e) => (
+                    <div key={e.key} className="zone-cond-full">
+                      <span className="zone-cond" style={{ color: e.color }}>{e.name}{e.rounds !== undefined && <> <span className="zone-cond-time">⌛{e.rounds}</span></>}</span>
+                      <span className="muted">{e.blurb}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div>
+                  {hexEffects.map((e) => <span key={e.key} className="zone-cond" style={{ color: e.color }} title={e.blurb}>{e.name}{e.rounds !== undefined && <> <span className="zone-cond-time">⌛{e.rounds}</span></>}</span>)}
+                  {hintFor === undefined && <span className="zone-cond-hint muted">hold {altName} for more</span>}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
