@@ -1584,7 +1584,88 @@ function fellSwoop(stage: MoveStage, ctx: MoveCtx) {
   }, Math.max(0.1, way.over));
 }
 
+/** Death's colours, for a Skeleton's Memento Mori: near black, a deep violet shadow under it, and the pale of the mark it leaves (content.ts EFFECT_INFO). */
+const MORI_BLACK = "#0b0810";
+const MORI_SHADE = "#2b1d3a";
+const MORI_PALE = "#c4b5fd";
+/** Memento Mori's dark rings: as far as they roll (past every hero beside it, its reach of 1), how long each takes, the seconds between them, and how many. */
+export const MEMENTO_MORI = { radius: 2.2, life: 1.05, apart: 0.16, rings: 5 };
+
+/**
+ * A Skeleton's Memento Mori: it throws its arms out wide and lifts its skull (figures.ts CHANNEL), and shadow gathers
+ * into it from all round in black motes as its hollow eyes glint pale violet. As it lets go: a black burst at its chest
+ * with deep violet behind it, slow black rings rolling out over the ground one hex all round, one after another, each
+ * thinner and more violet than the last, a dark ring through the air at its middle, and dark wisps creeping out low
+ * over the ground. Each hero the first ring reaches is caught by it: black wisps circle their head with a pale flicker,
+ * and they shiver. It does no harm, so there is no blow to tell, only the mark it leaves.
+ */
+function mementoMori(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alone }: MoveCtx) {
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const ground = feet.clone().setY(feet.y + 0.07);
+  const { radius, life, apart, rings } = MEMENTO_MORI;
+  const black = MORI_BLACK;
+  const shade = crit ? GOLD : MORI_SHADE;
+  const pale = crit ? GOLD : MORI_PALE;
+  // Only the first plays the gathering: by the time the others are told, it has already gone out.
+  const peak = echo ? 0 : Math.max(0.35, figure.strike("channel") || figure.cast());
+  if (!echo) {
+    // Shadow gathering into it from all round, low and wide, as its arms open.
+    for (let s = 0; s < peak; s += 0.04) {
+      stage.later(() => {
+        const to = upFigure(figure, 0.55 + Math.random() * 0.2);
+        const a = Math.random() * Math.PI * 2;
+        const from = offset(ground, Math.cos(a) * 2, 0.1 + Math.random() * 0.8, Math.sin(a) * 2);
+        stage.spawnFx("mote", Math.random() < 0.7 ? black : shade, Math.cos(a) < 0, { from, to, life: 0.42, size: [0.55, 0.2], spin: 0, fade: false });
+      }, s);
+    }
+    // Its hollow eyes glinting pale as it draws it in, quicker toward the end.
+    for (let s = peak * 0.3; s < peak; s += 0.18 - 0.1 * (s / peak)) {
+      stage.later(() => {
+        const at = upFigure(figure, 0.86);
+        stage.spawnFx("spark", pale, false, { from: at, to: offset(at, 0, 0.12, 0), life: 0.16, size: [0.3, 0.1], spin: 1.5, fade: true });
+      }, s);
+    }
+    stage.later(() => {
+      const middle = upFigure(figure, 0.55);
+      stage.spawnFx("burst", black, false, { from: middle, to: middle, life: 0.5, size: [0.9, 3], spin: 0.25, fade: true });
+      stage.later(() => stage.spawnFx("burst", shade, true, { from: middle, to: middle, life: 0.45, size: [0.6, 2.2], spin: -0.4, fade: true }), 0.06);
+      // Slow black rings rolling out over the ground, each thinner and more violet than the last.
+      for (let n = 0; n < rings; n++) {
+        stage.later(() => stage.wave({ at: ground, radius: radius * (1 - n * 0.07), life, color: n < 2 ? black : n < 4 ? shade : pale, width: 0.16 - n * 0.025 }), n * apart);
+      }
+      // A dark ring going out level through the air at its middle.
+      stage.wave({ at: middle, radius: radius * 0.85, life: life * 0.9, color: black, width: 0.06 });
+      // Dark wisps creeping out low over the ground every way, curling as they go.
+      for (let i = 0; i < 14; i++) {
+        const a = (i / 14) * Math.PI * 2 + Math.random() * 0.3;
+        const far = radius * (0.6 + Math.random() * 0.3);
+        const from = offset(ground, Math.cos(a) * 0.3, 0.15 + Math.random() * 0.3, Math.sin(a) * 0.3);
+        const to = offset(ground, Math.cos(a) * far, 0.1 + Math.random() * 0.35, Math.sin(a) * far);
+        stage.later(() => wisp(stage, from, to, 0.3, i % 3 ? black : shade, 0.8 + Math.random() * 0.2, [0.55, 0.3]), Math.random() * 0.2);
+      }
+      stage.shake?.(0.02, 0.5);
+    }, peak);
+  }
+  if (alone) return stage.later(onImpact, peak);
+  // Whoever it reaches is caught as the first ring passes under them: black wisps round their head, a pale flicker.
+  const far = Math.hypot(hitAt.x - feet.x, hitAt.z - feet.z);
+  stage.later(() => {
+    const at = offset(hitAt, 0, 0.3, 0);
+    stage.spawnFx("burst", black, false, { from: at, to: at, life: 0.4, size: [0.5, 1.7], spin: 0.4, fade: true });
+    stage.spawnFx("spark", pale, true, { from: at, to: offset(at, 0, 0.2, 0), life: 0.2, size: [0.35, 0.12], spin: 2, fade: true });
+    for (let k = 0; k < 5; k++) {
+      const a = (k / 5) * Math.PI * 2;
+      const from = offset(at, Math.cos(a) * 0.45, 0.05, Math.sin(a) * 0.3);
+      const to = offset(at, Math.cos(a + Math.PI * 0.8) * 0.45, 0.3, Math.sin(a + Math.PI * 0.8) * 0.3);
+      wisp(stage, from, to, 0.5, k % 2 ? shade : black, 0.7, [0.4, 0.22]);
+    }
+    stage.jolt();
+    onImpact();
+  }, peak + waveReaches(far, radius, life));
+}
+
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
+  "Memento Mori": { who: "skeleton", blurb: "Throws its arms out wide and lifts its skull as black shadow gathers into it from all round and its hollow eyes glint pale violet; then lets go: a black burst at its chest, slow black rings rolling out over the ground one hex all round, then deep violet ones, a dark ring through the air and dark wisps creeping out low; each hero beside it gets black wisps circling their head and a shiver.", play: mementoMori },
   "Bite@bat": { who: "bat", blurb: "Flicks up and back, then darts in: its needle fangs snap shut once, quick as a sting, with a small pale flash and violet sparks spitting out either side.", play: batBite },
   "Fell Swoop": { who: "bat", blurb: "Its wings snap back in a burst of violet and it dives in a straight line, nose-down and low, wings swept back along its sides, dark speed lines streaming off it: each hero it passes through is raked with three red claw lines, a white slash and a flash, and where it comes to rest it throws its wings out wide to brake, and hovers again.", play: fellSwoop },
   "Chill Touch": { who: "shade", blurb: "Draws up and back, then surges in with its arms stretching out long, wisps streaming off it: a cold flash where its hands land, three pale finger marks drawn down the target, frost glinting and drifting down, a ring of frost at their feet, and wisps of their warmth curling back to it.", play: chillTouch },
