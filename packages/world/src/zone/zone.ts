@@ -30,7 +30,7 @@ import { enemyTurn } from "./ai";
 import { pickBellGoer, placeBell } from "./bell";
 import { abilityArea, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, doCommon, drinkItem, enemyAct, fieldSlows, isBlink, moveLeft, resolveAbility, throwItem, walk } from "./combat";
 import { checkStrike } from "./strikes";
-import { UNTIMED_KEEPS, countDown, dropShield, has, heal, regrow, removeCondition, tick, tickStacks, unseen, usesLeft, type Ctx } from "./engine";
+import { UNTIMED_KEEPS, countDown, has, leaveFight, heal, regrow, removeCondition, tick, tickStacks, unseen, usesLeft, type Ctx } from "./engine";
 import { ALERT_RANGE, JOIN_RANGE, freeHexNear, generateZone } from "./gen";
 import { generateDelve } from "./delve";
 import { checkLoot, checkOpen, leaveBody, look, lootFor, openChest, payBounty, take } from "./loot";
@@ -406,8 +406,8 @@ function flee(ctx: Ctx, unit: Unit): void {
   if (acting && enc.acting.length === 0) enc.resume = enc.order[at] ?? null;
   enc.fled = [...(enc.fled ?? []), unit.id];
   enc.waits = [...(enc.waits ?? []), unit.id];
-  // Out of the fight, out from behind their shield: it does not come with them.
-  dropShield(unit);
+  // Out of the fight: what it left on them does not come with them (bar their luck).
+  leaveFight(unit);
   endTurn(ctx, unit);
   ctx.events.push({ t: "fled", id: unit.id });
 }
@@ -659,8 +659,8 @@ function settle(ctx: Ctx): boolean {
   // What was called into it goes with it.
   for (const u of state.units.filter((x) => x.summon)) dismiss(ctx, u);
   state.encounter = null;
-  // A shield lasts the fight and no longer: it goes from everyone, those who fled it and the enemy too.
-  for (const u of state.units) dropShield(u);
+  // Nothing it left on anyone outlasts it (bar luck): it goes from everyone who was in it, those who fled it too.
+  for (const u of state.units) if (fighters.includes(u) || enc.fled?.includes(u.id)) leaveFight(u);
   // However it ended, every hero who was in it is whole again: the fallen get up, and nobody carries a wound out.
   for (const h of heroes) {
     if (h.down) {
@@ -668,7 +668,6 @@ function settle(ctx: Ctx): boolean {
       ctx.events.push({ t: "up", id: h.id });
     }
     h.hp = h.maxHp;
-    h.conditions = [];
     h.cooldowns = {};
   }
   // Those who got away took part too: what they were waiting on in it is over with it, and they are whole again too.
@@ -698,7 +697,7 @@ function settle(ctx: Ctx): boolean {
     // Off the board for a moment, so each finds its own post, or the nearest free hex if a hero stands on it.
     for (const f of back) {
       f.hp = f.maxHp;
-      f.conditions = [];
+      leaveFight(f);
       f.pos = { q: -99, r: -99 };
     }
     for (const f of back) {
@@ -717,7 +716,7 @@ function settle(ctx: Ctx): boolean {
     for (const f of band) {
       f.down = false;
       f.hp = f.maxHp;
-      f.conditions = [];
+      leaveFight(f);
       f.pos = { q: -99, r: -99 };
     }
     for (const h of heroes) h.pos = { q: -99, r: -99 };

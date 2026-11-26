@@ -1936,17 +1936,13 @@ describe("fleeing", () => {
     expect(state.encounter!.waits).toBeUndefined();
   });
 
-  it("still burns, and runs down what is on them, while a hero who fled is out of a fight that goes on", () => {
+  it("a hero who fled leaves what the fight put on them behind, all but Lucky, though the fight goes on", () => {
     let { state } = shared();
-    unit(state, "ann").conditions.push({ kind: "burning", rounds: 3 }, { kind: "slowed", rounds: 2 });
+    unit(state, "ann").conditions.push({ kind: "burning", rounds: 3 }, { kind: "slowed", rounds: 2 }, { kind: "lucky", rounds: 1, amount: 1 });
     state = must(state, flee());
-    const hp = unit(state, "ann").hp;
-    // A round of the fight goes by (Bo ends the turn, the wolf does nothing): the same as a round out of one.
-    state = must(state, { type: "end_turn", by: "bo", unit: "bo" });
     expect(state.encounter).not.toBeNull();
     expect(state.encounter!.order).not.toContain("ann");
-    expect(unit(state, "ann").hp).toBeLessThan(hp);
-    expect(unit(state, "ann").conditions.find((c) => c.kind === "slowed")?.rounds ?? 0).toBeLessThan(2);
+    expect(unit(state, "ann").conditions).toEqual([{ kind: "lucky", rounds: 1, amount: 1 }]);
   });
 
   it("hands the turn on to whoever came after a hero who fled on a turn of their own", () => {

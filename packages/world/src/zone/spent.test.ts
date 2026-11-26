@@ -3,7 +3,7 @@ import { at, flatBoard, must, standEnemy as enemy, standHero, unit } from "../te
 import { makeRng } from "../rng";
 import { ABILITIES } from "../content";
 import { ENEMY_ABILITIES } from "./enemyabilities";
-import { addUses, attackContext, attackRoll, countDown, dropShield, inflict, usesLeft, type Ctx } from "./engine";
+import { addUses, attackContext, attackRoll, countDown, inflict, leaveFight, usesLeft, type Ctx } from "./engine";
 import { loadZone } from "./zone";
 import type { Condition, ZoneState } from "./types";
 
@@ -55,10 +55,31 @@ describe("Fumbling and Inspired", () => {
       addUses(ctx, ann, kind, 2);
       for (let i = 0; i < 5; i++) countDown(ann);
       expect(stacks(ctx.state, "ann", kind)).toBe(2);
-      dropShield(ann);
+      leaveFight(ann);
       expect(stacks(ctx.state, "ann", kind)).toBe(0);
     });
   }
+
+  it("a fight's end takes every condition off those in it but Lucky, and leaves those not in it alone", () => {
+    let state = flatBoard({ rng: 12345, start: at(1, 6), options: { party: 2 } });
+    state.aiOff = true;
+    standHero(state, "ann", at(5, 6), hero);
+    standHero(state, "bob", at(1, 1), hero);
+    enemy(state, "dummy", at(6, 6));
+    state = must(state, { type: "dev", by: "ann", dev: { op: "start_fight" } });
+    expect(state.encounter!.order).not.toContain("bob");
+    unit(state, "ann").conditions.push(
+      { kind: "lucky", rounds: 1, amount: 2 },
+      { kind: "inspired", rounds: 1, amount: 1 },
+      { kind: "guarded", rounds: 1 },
+      { kind: "burning", rounds: 2, amount: 1 },
+    );
+    unit(state, "bob").conditions.push({ kind: "wet", rounds: 2 });
+    state = must(state, { type: "dev", by: "ann", dev: { op: "end_fight" } });
+    expect(state.encounter).toBeNull();
+    expect(unit(state, "ann").conditions).toEqual([{ kind: "lucky", rounds: 1, amount: 2 }]);
+    expect(unit(state, "bob").conditions.map((c) => c.kind)).toEqual(["wet"]);
+  });
 
   it("a fight saved with the old name for Fumbling loads with it as Fumbling", () => {
     const { ctx } = fight();

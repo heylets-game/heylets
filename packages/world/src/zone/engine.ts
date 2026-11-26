@@ -276,12 +276,12 @@ export function addShield(ctx: Ctx, unit: Unit, amount: number): void {
   if (amount > 0 && shieldable(ctx, unit)) addCondition(ctx, unit, "bolstered", SHIELD_KEEPS, shieldOf(unit) + amount);
 }
 
-/** Untimed conditions (UNTIMED) that last a fight at most: a shield, a Frenzy, Fumbling and Inspired. */
-export const FIGHT_LONG: readonly Condition[] = ["bolstered", "frenzied", "fumbling", "inspired"];
+/** The only conditions a unit takes with it out of a fight: Lucky, a coin's worth of luck from the town well. */
+export const OUTLASTS_FIGHT: ReadonlySet<Condition> = new Set(["lucky"]);
 
-/** The fight is over for this unit (it ended, or they got away from it): what lasts a fight at most goes (FIGHT_LONG). */
-export function dropShield(unit: Unit): void {
-  for (const kind of FIGHT_LONG) removeCondition(unit, kind);
+/** The fight is over for this unit (it ended, or they got away from it): every condition on it goes, bar OUTLASTS_FIGHT. */
+export function leaveFight(unit: Unit): void {
+  unit.conditions = unit.conditions.filter((c) => OUTLASTS_FIGHT.has(c.kind));
 }
 
 /** The points of shield a unit has left (Bolstered), 0 for none. */
@@ -471,8 +471,8 @@ export function spendLuck(ctx: Ctx, unit: Unit): void {
 /**
  * Conditions that keep, turn after turn, until something else uses them up: Lucky, Fumbling and Inspired, spent a roll
  * to hit at a time (attackRoll); Frenzied, spent an attack at a time (combat.ts enemyAct); and a shield (Bolstered),
- * spent by blows. What each has left is its `amount`, shown as stacks, never as turns (usesLeft). All but Lucky last the
- * fight at most and go with it (FIGHT_LONG: zone.ts settle, and flee for one who gets away).
+ * spent by blows. What each has left is its `amount`, shown as stacks, never as turns (usesLeft). All but Lucky go when
+ * the fight does, as every condition does (leaveFight: zone.ts settle, and flee for one who gets away).
  */
 export const UNTIMED: ReadonlySet<string> = new Set(["lucky", "bolstered", "frenzied", "fumbling", "inspired"]);
 
