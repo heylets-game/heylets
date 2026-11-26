@@ -165,10 +165,13 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
   /** What the pointer is over on the bar, and where along it (in the board's own pixels), for the card that explains it. */
   const [tip, setTip] = useState<{ x: number; node: ReactNode } | null>(null);
   const board = useRef<HTMLDivElement>(null);
+  // React passes pointer events up out of a portal as if it were inside the thing that drew it (the menu's window is
+  // the cog's), though on screen it is not: over one of those, the pointer is not over the thing at all.
+  const inside = (e: ReactPointerEvent<HTMLElement>) => e.currentTarget.contains(e.target as Node);
   const hover = (node: ReactNode) => ({
     onPointerEnter: (e: ReactPointerEvent<HTMLElement>) => {
       const el = board.current;
-      if (!el) return;
+      if (!el || !inside(e)) return;
       const at = el.getBoundingClientRect();
       const thing = e.currentTarget.getBoundingClientRect();
       // The view may be zoomed (the UI scale): measured on the screen, placed in the board's own pixels.
@@ -177,6 +180,8 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
     },
     onPointerLeave: () => setTip(null),
     onPointerDown: () => setTip(null),
+    // Onto the menu's window (or anything else it drew elsewhere): gone, as it would be on leaving.
+    onPointerOver: (e: ReactPointerEvent<HTMLElement>) => !inside(e) && setTip(null),
   });
 
   // Energy (gathering outings left today) is always on the right. A view that keeps its own count (the Harbor, a
