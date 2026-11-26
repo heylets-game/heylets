@@ -6,7 +6,7 @@
 // figure lab (FigureLab.tsx), where each one has a button of its own. A new one added here shows in both.
 
 import * as THREE from "three";
-import { FLURRY_BLOWS, SLICES_APART, type Figure } from "./figures";
+import { ENGULF, FLURRY_BLOWS, SLICES_APART, type Figure } from "./figures";
 import type { FxKind } from "./sprites";
 import { CRACK_DARK, CRACK_EDGE, crackGeometry, crackPaths, type CrackOpts } from "./cracks";
 
@@ -1665,7 +1665,175 @@ function mementoMori(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, al
   }, peak + waveReaches(far, radius, life));
 }
 
+// ---------- a Cave Slime's ----------
+
+const ACID = "#a6f04a";
+const ACID_PALE = "#e4ffb0";
+const ACID_DEEP = "#4f9e2a";
+/** The pale steam acid gives off as it eats in. */
+const ACID_STEAM = "#dcefc8";
+
+/** Acid eating into whatever it is on, at `at`: little pale-green spits popping and steam curling up off it, `n` of each over `seconds`. */
+function sizzle(stage: MoveStage, at: THREE.Vector3, n: number, seconds: number, spread = 0.35) {
+  for (let i = 0; i < n; i++) {
+    stage.later(() => {
+      const from = offset(at, (Math.random() - 0.5) * spread * 2, (Math.random() - 0.5) * spread, 0.04);
+      stage.spawnFx("spark", Math.random() < 0.5 ? ACID : ACID_PALE, Math.random() < 0.5, { from, to: offset(from, (Math.random() - 0.5) * 0.2, 0.18, 0), life: 0.22, size: [0.3, 0.1], spin: 2, fade: true });
+      stage.spawnFx("dust", ACID_STEAM, Math.random() < 0.5, { from, to: offset(from, (Math.random() - 0.5) * 0.25, 0.6 + Math.random() * 0.3, 0), life: 0.6, size: [0.3, 0.8], spin: 0, fade: true });
+    }, (i / n) * seconds);
+  }
+}
+
+/**
+ * A Cave Slime's Engulf: it draws itself up tall and thin, ooze dripping off it, then pours itself over the target
+ * (figures.ts ENGULF): a green flash as it lands, a ring of slime spreading over the ground at their feet, and them
+ * held inside it while bubbles rise and they are jolted as it churns; then it lets go with a wet splat, gobs flung off
+ * every way, and slime dripping off them. The blow is told as it lands.
+ */
+function engulf(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const wait = figure.strike("engulf");
+  // Anything that is not an ooze springs at the target, and it lands as it does.
+  if (wait <= 0) stage.lunge();
+  const lands = Math.max(0, wait);
+  const green = crit ? GOLD : ACID;
+  // Drawing itself up: ooze running down off it.
+  for (let s = 0; s < lands; s += 0.06) {
+    stage.later(() => {
+      const from = upFigure(figure, 0.5 + Math.random() * 0.4);
+      from.x += (Math.random() - 0.5) * 0.5;
+      stage.spawnFx("fleck", Math.random() < 0.5 ? ACID : ACID_DEEP, Math.random() < 0.5, { from, to: offset(from, 0, -0.7, 0), life: 0.3, size: [0.3, 0.2], spin: 0, fade: true });
+    }, s);
+  }
+  stage.later(() => {
+    const feet = figure.root.getWorldPosition(new THREE.Vector3());
+    const floor = hitAt.clone().setY(feet.y + 0.06);
+    stage.spawnFx("burst", crit ? GOLD : ACID_PALE, false, { from: hitAt, to: hitAt, life: 0.2, size: [1, 2.6], spin: 0.4, fade: true });
+    // The slime round them: a deep green swell held over them a while, as it churns.
+    const held = ENGULF.over - ENGULF.hit - 0.4;
+    stage.spawnFx("burst", ACID_DEEP, true, { from: hitAt, to: hitAt, life: held + 0.1, size: [2.2, 2.6], spin: -0.3, fade: true });
+    stage.wave({ at: floor, radius: 1.2, life: 0.5, color: green, width: 0.3 });
+    stage.later(() => stage.wave({ at: floor, radius: 0.9, life: 0.6, color: ACID_DEEP, width: 0.5 }), 0.06);
+    // Splashed out sideways as it lands on them.
+    for (const side of [-1, 1]) for (const up of [0.1, 0.35]) stage.spawnFx("splash", green, side < 0, { from: hitAt, to: offset(hitAt, side * 0.7, up, 0), life: 0.3, size: [0.6, 1.1], spin: 0, fade: true });
+    stage.jolt();
+    onImpact();
+    // Held inside it: bubbles rising up through it, and a jolt now and then as it churns.
+    for (let s = 0.04; s < held; s += 0.045) {
+      stage.later(() => {
+        const from = offset(hitAt, (Math.random() - 0.5) * 0.7, -0.35 + Math.random() * 0.2, 0.06);
+        stage.spawnFx("mote", Math.random() < 0.5 ? ACID_PALE : ACID, Math.random() < 0.5, { from, to: offset(from, (Math.random() - 0.5) * 0.15, 0.6 + Math.random() * 0.3, 0), life: 0.4, size: [0.2, 0.35], spin: 0, fade: true });
+      }, s);
+    }
+    stage.later(() => stage.jolt(), held * 0.4);
+    stage.later(() => stage.jolt(), held * 0.8);
+    // Let go: a wet splat, gobs flung out in arcs, and slime dripping off them after.
+    stage.later(() => {
+      stage.spawnFx("burst", ACID, false, { from: hitAt, to: hitAt, life: 0.18, size: [1.2, 2], spin: 0.3, fade: true });
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2 + Math.random() * 0.4;
+        const far = 0.6 + Math.random() * 0.6;
+        stage.spawnFx("fleck", i % 2 ? ACID : ACID_DEEP, Math.cos(a) < 0, { from: hitAt, to: offset(floor, Math.cos(a) * far, 0, Math.sin(a) * far * 0.6), life: 0.4 + Math.random() * 0.15, size: [0.4, 0.25], spin: 0, fade: true, arc: 0.4 + Math.random() * 0.3 });
+      }
+      for (let k = 0; k < 5; k++) {
+        stage.later(() => {
+          const from = offset(hitAt, (Math.random() - 0.5) * 0.5 * dir, (Math.random() - 0.2) * 0.3, 0.05);
+          stage.spawnFx("fleck", ACID, Math.random() < 0.5, { from, to: from.clone().setY(floor.y), life: 0.35, size: [0.25, 0.15], spin: 0, fade: true });
+        }, 0.1 + k * 0.08);
+      }
+    }, held);
+  }, lands);
+}
+
+/** An Acid Splash's gob: seconds in the air, how high it arcs, and how far its splash spreads over the 3 hexes it lands on. */
+export const ACID_SPLASH = { flight: 0.45, arc: 1.3, spread: 1.6 };
+
+/**
+ * A Cave Slime's Acid Splash: it squashes down and springs up to spit (figures.ts SPIT), a gob of acid going up in an arc
+ * from its crown, dripping as it flies, and bursting where it lands: green rings rolling out over the 3 hexes, acid
+ * splashed up and flung out, and the ground left hissing and steaming a moment.
+ */
+function acidSplash(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const ground = hitAt.clone().setY(hitAt.y - 0.45);
+  const wait = Math.max(0, figure.strike("spit") || figure.cast());
+  // Gathering itself: acid beading up and drawn in to its crown.
+  for (let s = 0; s < wait; s += 0.05) {
+    stage.later(() => {
+      const crown = upFigure(figure, 0.95);
+      const a = Math.random() * Math.PI * 2;
+      stage.spawnFx("mote", Math.random() < 0.5 ? ACID : ACID_PALE, Math.cos(a) < 0, { from: offset(crown, Math.cos(a) * 0.45, -0.35, Math.sin(a) * 0.3), to: crown, life: 0.2, size: [0.3, 0.15], spin: 0, fade: true });
+    }, s);
+  }
+  stage.later(() => {
+    const from = upFigure(figure, 0.95);
+    const { flight, arc, spread } = ACID_SPLASH;
+    stage.spawnFx("splash", ACID, dir < 0, { from, to: offset(from, 0, 0.25, 0), life: 0.18, size: [0.5, 0.9], spin: 0, fade: true });
+    stage.spawnFx("burst", crit ? GOLD : ACID, dir < 0, { from, to: ground, life: flight, size: [0.8, 1], spin: dir * 5, fade: false, arc, onEnd: () => land() });
+    // Drips falling off it all the way, along the same arc.
+    for (let s = 0.03; s < flight; s += 0.04) {
+      stage.later(() => {
+        const k = s / flight;
+        const at = from.clone().lerp(ground, k);
+        at.y += arc * 4 * k * (1 - k);
+        stage.spawnFx("fleck", Math.random() < 0.5 ? ACID : ACID_DEEP, Math.random() < 0.5, { from: at, to: offset(at, (Math.random() - 0.5) * 0.2, -0.45, 0), life: 0.3, size: [0.3, 0.18], spin: 0, fade: true });
+      }, s);
+    }
+    const land = () => {
+      stage.sound();
+      const floor = ground.clone().setY(ground.y + 0.05);
+      stage.spawnFx("burst", crit ? GOLD : ACID_PALE, false, { from: ground, to: ground, life: 0.2, size: [1.1, 3], spin: 0.5, fade: true });
+      stage.spawnFx("burst", ACID_DEEP, true, { from: ground, to: ground.clone().setY(ground.y + 0.25), life: 0.4, size: [1, 2.6], spin: -0.4, fade: true });
+      stage.wave({ at: floor, radius: spread, life: 0.45, color: ACID, width: 0.16 });
+      stage.later(() => stage.wave({ at: floor, radius: spread * 0.85, life: 0.6, color: ACID_DEEP, width: 0.35 }), 0.06);
+      // Splashed up all over the hexes it lands on.
+      for (let i = 0; i < 10; i++) {
+        stage.later(() => {
+          const a = Math.random() * Math.PI * 2;
+          const far = Math.sqrt(Math.random()) * spread * 0.6;
+          const at = offset(ground, Math.cos(a) * far, 0.05, Math.sin(a) * far * 0.7);
+          stage.spawnFx("splash", Math.random() < 0.5 ? ACID : ACID_PALE, Math.random() < 0.5, { from: at, to: offset(at, 0, 0.45, 0), life: 0.3, size: [0.4, 0.8], spin: 0, fade: true });
+        }, i * 0.03);
+      }
+      // Gobs flung out every way in arcs.
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2 + Math.random() * 0.4;
+        const far = 0.6 + Math.random() * 0.8;
+        stage.spawnFx("fleck", i % 2 ? ACID : ACID_DEEP, Math.cos(a) < 0, { from: ground, to: offset(ground, Math.cos(a) * far, 0, Math.sin(a) * far * 0.6), life: 0.42 + Math.random() * 0.2, size: [0.38, 0.22], spin: 0, fade: true, arc: 0.4 + Math.random() * 0.4 });
+      }
+      // And the ground hissing after, steam rising off it.
+      stage.later(() => sizzle(stage, ground.clone().setY(ground.y + 0.1), 14, 0.8, spread * 0.4), 0.12);
+      stage.jolt();
+      onImpact();
+    };
+  }, wait);
+}
+
+/**
+ * A Cave Slime's Acid Armor, biting back at whoever struck it by hand: acid spurts off its body at them, a few gobs
+ * that splash on them in green, and they are left hissing, steam rising off them. Told as the acid lands.
+ */
+function acidArmor(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const flip = dir < 0;
+  const flight = 0.16;
+  for (let i = 0; i < 4; i++) {
+    stage.later(() => {
+      const from = upFigure(figure, 0.35 + Math.random() * 0.35);
+      const to = offset(hitAt, (Math.random() - 0.5) * 0.35, (Math.random() - 0.5) * 0.35, 0.05);
+      stage.spawnFx("fleck", i % 2 ? ACID : ACID_DEEP, flip, { from, to, life: flight, size: [0.35, 0.3], spin: 0, fade: false, arc: 0.25 + Math.random() * 0.2 });
+    }, i * 0.03);
+  }
+  stage.later(() => {
+    stage.spawnFx("splash", crit ? GOLD : ACID, flip, { from: hitAt, to: offset(hitAt, dir * 0.25, 0.15, 0), life: 0.26, size: [0.7, 1.4], spin: 0, fade: true });
+    stage.spawnFx("burst", ACID_PALE, false, { from: hitAt, to: hitAt, life: 0.18, size: [0.6, 1.5], spin: 0.4, fade: true });
+    sizzle(stage, hitAt, 8, 0.45, 0.3);
+    stage.jolt();
+    onImpact();
+  }, flight + 0.06);
+}
+
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
+  Engulf: { who: "slime", blurb: "Draws itself up tall and thin, ooze running off it, then pours itself forward over the target, flattened and spread wide: a green flash, a ring of slime spreading at their feet, bubbles rising through it as it churns them about; then it lets go with a wet splat, gobs flung off every way, and slime dripping off them.", play: engulf },
+  "Acid Splash": { who: "slime", blurb: "Squashes down low and springs up tall, tipping forward to spit a gob of acid in an arc from its crown, dripping as it flies: it bursts on the hexes where it lands, green rings rolling out, acid splashed up and flung out every way, and the ground left hissing and steaming.", play: acidSplash },
+  "Acid Armor": { who: "slime", blurb: "Biting back at whoever struck it by hand: acid spurts off its body at them, splashing on them in green, and they are left hissing with steam rising off them.", play: acidArmor },
   "Memento Mori": { who: "skeleton", blurb: "Tips its skull slowly over to one side and starts to twitch, jerking this way and that worse and worse, as black shadow gathers into it from all round and its hollow eyes glint pale violet; at its worst, still twitching: a black burst at its chest, slow black rings rolling out over the ground one hex all round, then deep violet ones, a dark ring through the air and dark wisps creeping out low; each hero beside it gets black wisps circling their head and a shiver.", play: mementoMori },
   "Bite@bat": { who: "bat", blurb: "Flicks up and back, then darts in: its needle fangs snap shut once, quick as a sting, with a small pale flash and violet sparks spitting out either side.", play: batBite },
   "Fell Swoop": { who: "bat", blurb: "Its wings snap back in a burst of violet and it dives in a straight line, nose-down and low, wings swept back along its sides, dark speed lines streaming off it: each hero it passes through is raked with three red claw lines, a white slash and a flash, and where it comes to rest it throws its wings out wide to brake, and hovers again.", play: fellSwoop },

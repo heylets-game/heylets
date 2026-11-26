@@ -5,7 +5,7 @@
 // puts them on a map. A test fails if an ability or an enemy has no entry.
 
 import type { StatKey, Stats } from "@gantt-quest/core";
-import { ABILITIES, EFFECT_INFO, EFFECT_TICK, ENEMIES, STACK_TURNS, SUNDERED_DEFENCE, REELING_AP, type AbilityDef, type EffectKind, type Inflict } from "../content";
+import { ABILITIES, EFFECT_INFO, EFFECT_TICK, ENEMIES, STACK_TURNS, SUNDERED_DEFENCE, REELING_AP, type AbilityDef, type EffectKind, type Inflict, type Retort } from "../content";
 import type { BehaviourId } from "./behaviours";
 import { ENEMY_ABILITIES, type EnemyAbilityDef } from "./enemyabilities";
 import { BLINK_AP } from "../gear";
@@ -842,6 +842,9 @@ export function abilityStrikes(ids: readonly string[], level: number, more = 0):
     ];
   });
 }
+
+/** The dice an enemy's retort (EnemyDef `retort`: a slime's Acid Armor) hurts with at this level, with the map's `more` and the edge added, as an ability's damage is. */
+export const retortDice = (retort: Retort, level: number, more = 0): Dice => diceFor(scaled(retort.damage, retort.scale ?? DEFAULT_SCALE, level) + ENEMY_EDGE + more);
 
 /** What an enemy kind starts with, as abilityStrikes makes them. */
 export const enemyStrikes = (kind: string, level: number, more = 0): EnemyStrike[] => abilityStrikes(ENEMIES[kind]?.abilities ?? [], level, more);

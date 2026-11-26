@@ -11,17 +11,22 @@
 //   Cleave) is a "blow" instead.
 // - "dash": straight through a line of heroes to the far end of it (a Cave Bat's Fell Swoop). Played as its user is
 //   seen to go (WorldRenderer.dashUnit, from the dash it is told by); each hero it passes just flinches.
-// - "blow": at one target, by hand or from afar. Played as each blow is told (WorldRenderer.blow, attack).
+// - "blow": at one target, by hand or from afar. Played as each blow is told (WorldRenderer.blow, attack). An enemy's
+//   retort (a slime's Acid Armor, biting back at whoever struck it) is one too, at whoever struck it.
 
-import { ENEMY_ABILITIES } from "@gantt-quest/world";
+import { ENEMIES, ENEMY_ABILITIES } from "@gantt-quest/world";
 import { SIGNATURE_MOVES, type SignatureMove } from "../render/signatureMoves";
 
 export type OwnRoute = "burst" | "at" | "dash" | "blow";
 
 const BY_NAME = new Map(Object.values(ENEMY_ABILITIES).map((a) => [a.name, a]));
 
+/** The names enemies' retorts are told by (EnemyDef `retort`): a hurt from one of them is its bearer's doing, not a swing. */
+export const RETORTS: ReadonlySet<string> = new Set(Object.values(ENEMIES).flatMap((e) => (e.retort ? [e.retort.name] : [])));
+
 /** How the enemy ability called `name` reaches the fight's picture as a move of its own, or null if there is none by that name. */
 export function ownRoute(name: string): OwnRoute | null {
+  if (RETORTS.has(name)) return "blow";
   const def = BY_NAME.get(name);
   if (!def) return null;
   if (def.shape === "burst" || def.rally || def.field) return "burst";
