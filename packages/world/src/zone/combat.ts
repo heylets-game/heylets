@@ -1101,20 +1101,14 @@ export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Uni
     if (attack.kit.surface) placeSurface(ctx, hexes, attack.kit.surface.kind, attack.kit.surface.rounds, enemy.id);
     return;
   }
-  // A sweep: one great swing through rows of hexes, an attack roll for every hero in it.
+  // A sweep: one great swing through rows of hexes. Everyone in it (in the fight) saves for half, as from a burst.
   if (attack.kit.sweep) {
     const hexes = sweepHexes(state, enemy.pos, target.pos, attack.kit.sweep);
+    const dice = rollShown(ctx.rng, attack.dice);
     for (const victim of state.units.filter((u) => u.side !== enemy.side && !u.down && !unseen(u) && inFight(state, u.id) && hexes.some((p) => sameHex(p, u.pos)))) {
-      const roll = attackRoll(ctx, enemy, victim, { label: attack.name, bonus: attack.potency, melee: true });
-      if (!roll.ok) {
-        ctx.events.push({ t: "miss", actor: enemy.id, target: victim.id, what: attack.name });
-        continue;
-      }
-      const rolled = rollShown(ctx.rng, attack.dice, 0, roll.crit);
-      damage(ctx, victim, rolled.total, { actor: enemy.id, what: attack.name, crit: roll.crit, dice: rolled });
-      if (hexDistance(victim.pos, enemy.pos) === 1) thorns(ctx, enemy, victim);
-      if (enemy.down) return;
-      leave(victim, true);
+      const saved = saveRoll(ctx, victim, "agi", dc, attack.name).ok;
+      damage(ctx, victim, saved ? Math.floor(dice.total / 2) : dice.total, { actor: enemy.id, what: attack.name, dice, halved: saved });
+      if (!saved) leave(victim, false);
     }
     return;
   }

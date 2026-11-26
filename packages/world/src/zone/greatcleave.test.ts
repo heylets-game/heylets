@@ -8,7 +8,8 @@ import { ENEMY_ABILITIES } from "./enemyabilities";
 import type { Ctx } from "./engine";
 import type { ZoneEvent } from "./types";
 
-// A brute's Great Cleave: one swing through two arcs of three hexes, the one beside it and the one beyond.
+// A brute's Great Cleave: one swing through two arcs of three hexes, the one beside it and the one beyond, that
+// everyone in them saves against for half.
 
 const cleave = enemyStrikes("brute", 1).find((s) => s.name === "Great Cleave")!;
 const hero = { classId: "qa_paladin", level: 1, armor: 0, power: 1, abilities: ["bash"], items: {} };
@@ -40,10 +41,11 @@ describe("a brute's Great Cleave", () => {
     expect(hexes.filter((p) => hexDistance(p, from) === 2)).toHaveLength(3);
   });
 
-  it("swings at every hero in its two rows, and no further", () => {
+  it("has every hero in its two rows save for half, and no one further", () => {
     for (let seed = 1; seed <= 10; seed++) {
       const { events } = swing(seed);
-      const tried = (id: string) => events.some((e) => (e.t === "hit" || e.t === "miss") && e.target === id);
+      expect(events.some((e) => e.t === "miss"), `seed ${seed}`).toBe(false);
+      const tried = (id: string) => events.some((e) => e.t === "hit" && e.target === id);
       expect(tried("ann"), `seed ${seed}`).toBe(true);
       expect(tried("bob"), `seed ${seed}`).toBe(true);
       expect(tried("cal"), `seed ${seed}`).toBe(false);

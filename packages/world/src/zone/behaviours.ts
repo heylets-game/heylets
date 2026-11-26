@@ -86,12 +86,12 @@ const strike: Behaviour = {
       const beside = attack.kit.splash ? targets.filter((h) => h !== hero && hexDistance(h.pos, hero.pos) === 1).length : 0;
       // One thrown onto a clump of hexes is worth what a burst is to each hero on them: about half save for half.
       const area = attack.kit.area ? clusterHexes(look.state, from, hero.pos, attack.kit.area) : null;
-      // A sweep is worth a whole blow to every hero in its rows.
+      // A sweep is worth what a burst is to every hero in its rows: about half save for half.
       const swept = attack.kit.sweep ? sweepHexes(look.state, from, hero.pos, attack.kit.sweep) : null;
       const share = area
         ? 0.75 * targets.filter((h) => area.some((p) => hexDistance(p, h.pos) === 0)).length
         : swept
-          ? targets.filter((h) => swept.some((p) => hexDistance(p, h.pos) === 0)).length
+          ? 0.75 * targets.filter((h) => swept.some((p) => hexDistance(p, h.pos) === 0)).length
           : 1 + beside * SPLASH_SHARE;
       let worth = average * share * (look.whim?.(attack, hero) ?? 1);
       if (leaps(attack)) worth *= leapRisk(look.state, look.enemy, from, lungeLanding(look.state, look.enemy, from, attack, hero)!);

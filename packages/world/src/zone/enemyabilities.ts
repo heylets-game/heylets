@@ -61,7 +61,8 @@ export interface EnemyAbilityDef {
   area?: number;
   /**
    * A wide swing at the hero beside it that carries on through this many rows of three hexes, each an arc one hex
-   * further out (combat.ts sweepHexes): an attack roll for every hero in them, as a hero's Cleave.
+   * further out (combat.ts sweepHexes): no roll to hit, but everyone in them makes an Agility save, taking half on
+   * a success and suffering `saveOr` on a failure.
    */
   sweep?: number;
   /** Freezes water under the target. */

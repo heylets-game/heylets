@@ -123,6 +123,11 @@ export interface SignatureMove {
    * bear's): any other strikes as usual. None: whoever uses it.
    */
   only?: readonly string[];
+  /**
+   * One swing that catches several at once, each told as a hit of its own (a Brute's Great Cleave): played in full
+   * for the first, and as an `echo` for the rest, which are told once it has landed.
+   */
+  sweeps?: boolean;
   play(stage: MoveStage, ctx: MoveCtx): void;
 }
 
@@ -582,7 +587,109 @@ function immolate(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Move
   }, wait);
 }
 
+/** A hex's width on the map, in world units (places/placing.ts hexToWorld). */
+const HEX = Math.sqrt(3);
+const STEEL = "#dfe9ff";
+/** A Great Cleave's swing: how wide its arc is either side of straight ahead, in radians, and the seconds it takes to cross. */
+export const GREAT_CLEAVE = { half: Math.PI / 3, across: 0.16 };
+
+/** The swing landing on one caught by a Great Cleave: a heavy slash across them, a red burst, and a jolt. */
+function cleaveHit(stage: MoveStage, { hitAt, dir, crit, onImpact }: MoveCtx) {
+  stage.spawnFx("slash", crit ? GOLD : STEEL, dir < 0, { from: hitAt, to: hitAt, life: 0.3, size: [1.7, 3], spin: -dir * 1.6, fade: true });
+  stage.spawnFx("burst", crit ? GOLD : CHEAP_SHOT_RED, dir < 0, { from: hitAt, to: hitAt, life: 0.22, size: [0.7, 1.6], spin: 0.5, fade: true });
+  stage.jolt();
+  onImpact();
+}
+
+/**
+ * A Brute's Great Cleave: its great two-handed sweep from side to side (figures.ts SWEEP), carried right round
+ * through both rows of hexes in front of it. As it comes across, a wide white swoosh runs over the near row and the
+ * far one together, from one side to the other, dust kicked up off the ground under it and grit flung out past the
+ * far edge. Everyone it catches takes a heavy slash with a red burst, and is jolted, as it lands.
+ */
+function greatCleave(stage: MoveStage, ctx: MoveCtx) {
+  const { figure, hitAt, dir, crit, echo } = ctx;
+  if (echo) return cleaveHit(stage, ctx);
+  const wait = figure.strike("heavy");
+  // A creature has no swing of its own: it springs at the target, and the sweep runs as it lands.
+  if (wait <= 0) stage.lunge();
+  const lands = Math.max(0, wait);
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const ahead = Math.atan2(hitAt.z - feet.z, hitAt.x - feet.x);
+  const color = crit ? GOLD : STEEL;
+  const { half, across } = GREAT_CLEAVE;
+  const steps = 7;
+  for (let i = 0; i < steps; i++) {
+    const k = i / (steps - 1);
+    const a = ahead + half * (1 - 2 * k) * -dir;
+    stage.later(() => {
+      const out = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+      const flip = out.x < 0;
+      for (const row of [1, 2]) {
+        const at = new THREE.Vector3(feet.x, hitAt.y, feet.z).addScaledVector(out, HEX * row * 0.92);
+        stage.spawnFx("slash", color, flip, { from: at, to: at, life: 0.24, size: row === 1 ? [1.2, 2] : [1.4, 2.4], spin: -dir * 1.2, fade: true });
+        stage.spawnFx("streak", color, dir < 0, { from: at, to: at, life: 0.18, size: [0.9, 0.6], spin: 0, fade: true });
+        const ground = at.clone().setY(feet.y + 0.12);
+        stage.spawnFx("dust", DUST, flip, { from: ground, to: ground.clone().addScaledVector(out, 0.5).setY(ground.y + 0.35), life: 0.45, size: [0.6, 1.3], spin: 0, fade: true });
+        // Grit flung on out past the far edge.
+        if (row === 2) stage.spawnFx("fleck", ROCK_PALE, flip, { from: ground, to: ground.clone().addScaledVector(out, 0.9).setY(ground.y + 0.5), life: 0.3, size: [0.4, 0.3], spin: 0, fade: true });
+      }
+    }, Math.max(0, lands - across / 2 + across * k));
+  }
+  stage.later(() => cleaveHit(stage, ctx), lands);
+}
+
+/** A Battering Ram's charge: the least it gathers itself for, in seconds, how many hexes of dust it drives up after, and the seconds between puffs. */
+export const BATTERING_RAM = { gather: 0.18, trail: 3, every: 0.07 };
+
+/**
+ * A Brute's Battering Ram: it drops its shoulder and drives in at the target (figures.ts THRUST, then a spring at
+ * them), dust kicked back off its heels and speed lines streaming off it. It hits like a door caving in: a big flash,
+ * shock lines bursting out ahead, and the target jolted hard; then dust is driven up along the ground for the three
+ * hexes the target is shoved back, one puff after another.
+ */
+function batteringRam(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const flip = dir < 0;
+  const color = crit ? GOLD : "#fff3d6";
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  // Toward the target and on past it, along the ground: the way it charges, and the way the target is driven.
+  const on = hitAt.clone().sub(feet).setY(0).normalize();
+  const lands = Math.max(BATTERING_RAM.gather, figure.strike("stab"));
+  const heels = feet.clone().setY(feet.y + 0.12);
+  for (const lift of [0.15, 0.35]) stage.spawnFx("dust", DUST, !flip, { from: heels, to: heels.clone().addScaledVector(on, -0.8).setY(heels.y + lift), life: 0.4, size: [0.8, 1.5], spin: 0, fade: true });
+  stage.later(() => stage.lunge(), Math.max(0, lands - 0.12));
+  for (let s = 0; s < lands; s += STREAK_EVERY) {
+    stage.later(() => {
+      const at = figure.root.getWorldPosition(new THREE.Vector3());
+      for (let i = 0; i < 2; i++) {
+        const from = at.clone().setY(at.y + 0.3 + Math.random() * 0.7).addScaledVector(on, -(0.2 + Math.random() * 0.3));
+        stage.spawnFx("streak", crit ? GOLD : STREAK_PALE, flip, { from, to: from.clone().addScaledVector(on, -0.6), life: 0.16, size: [1.1, 0.7], spin: 0, fade: true });
+      }
+    }, s);
+  }
+  stage.later(() => {
+    stage.spawnFx("bang", color, flip, { from: hitAt, to: hitAt, life: 0.24, size: [1, 2.6], spin: 0.4, fade: true });
+    stage.spawnFx("burst", color, false, { from: hitAt, to: hitAt, life: 0.26, size: [1, 2.8], spin: 0.6, fade: true });
+    for (const turn of [-0.5, -0.2, 0.1, 0.4]) stage.spawnFx("streak", color, flip, { from: hitAt, to: hitAt.clone().addScaledVector(on, 0.8), life: 0.22, size: [0.8, 2], turn, spin: 0, fade: true });
+    stage.jolt();
+    stage.later(() => stage.jolt(), 0.06);
+    onImpact();
+    const ground = hitAt.clone().setY(feet.y + 0.12);
+    for (let i = 0; i < BATTERING_RAM.trail * 2; i++) {
+      stage.later(() => {
+        const at = ground.clone().addScaledVector(on, (HEX * (i + 1)) / 2);
+        for (const side of [-1, 1]) {
+          const out = new THREE.Vector3(-on.z * side, 0, on.x * side);
+          stage.spawnFx("dust", DUST, side > 0, { from: at, to: at.clone().addScaledVector(out, 0.5).setY(at.y + 0.35), life: 0.45, size: [0.6, 1.3], spin: 0, fade: true });
+        }
+      }, BATTERING_RAM.every * (i + 1));
+    }
+  }, lands);
+}
+
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
+  "Great Cleave": { who: "brute", sweeps: true, blurb: "A great two-handed sweep from side to side: a wide white swoosh runs across both rows of hexes in front of it, dust kicked up under it and grit flung past the far edge, and everyone caught takes a heavy slash with a red burst.", play: greatCleave },
+  "Battering Ram": { who: "brute", blurb: "Drops its shoulder and charges in, dust kicked off its heels and speed lines streaming off it: a flash and shock lines bursting out ahead as it hits, then dust driven up along the ground for the three hexes the target is shoved back.", play: batteringRam },
   Immolate: { who: "cultist", blurb: "Sparks swirl round its staff as it winds up, then a fireball goes up in a high arc trailing embers and bursts where it lands: a ring of flame rolling out over the hexes round it, flames licking up, embers flung out and smoke rising.", play: immolate },
   Slam: { who: "ogre", blurb: "Crouches, springs up into the air and lands on its backside: a wave pulses out over the ground from its feet, clouds of dust rolling out after it, and each hero is jolted as it reaches them.", play: seatSlam },
   "Club Smash": { who: "ogre", blurb: "Heaves its club right up over its head and brings it straight down: the ground bursts where it lands, a pulse rolling out to the hexes round it, dust thrown out all round and chunks of rock flung every way.", play: clubSmash },
