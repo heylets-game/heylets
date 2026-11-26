@@ -263,6 +263,10 @@ export const roomAt = (state: Pick<ZoneState, "units">, pos: HexPos, who?: Pick<
 export const roomFor = (state: Pick<ZoneState, "units" | "map">, who: Unit, at: HexPos): boolean =>
   span(who, at).every((p) => !solid(tileAt(state.map, p)) && roomAt(state, p, who));
 
+/** Why a unit bigger than a hex cannot stand with its anchor at `to` (not all of it has room there), in words; null if it can, or is no bigger than a hex. */
+export const noRoomThere = (state: Pick<ZoneState, "units" | "map">, unit: Unit, to: HexPos): string | null =>
+  big(unit) && !!tileAt(state.map, to) && !roomFor(state, unit, to) ? `There is no room for all of ${unit.name} there.` : null;
+
 export const unitById = (state: ZoneState, id: string): Unit | undefined => state.units.find((u) => u.id === id);
 
 export const flies = (unit: Unit): boolean => unit.side === "enemy" && !!ENEMY_KIT[unit.kind]?.fly;

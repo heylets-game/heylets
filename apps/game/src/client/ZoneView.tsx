@@ -103,6 +103,8 @@ import {
   gapTo,
   nearOf,
   span,
+  big,
+  noRoomThere,
   unopened,
   unlooted,
   lootIn,
@@ -1937,6 +1939,12 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   /** A unit as the picture shows it now: its health moves as each blow and heal lands, not ahead of them. */
   const seen = (u: Unit) => picture?.units.find((x) => x.id === u.id) ?? u;
   const budget = act && enc ? enc.budgets[act.id] : undefined;
+  // The enemy the combat sandbox has the dev playing, if any (zone/SandboxEnemy.tsx): it is who walks, and whose way is shown.
+  const foe = sandboxFoe(state ? asState(state) : null, dev);
+  const mover = foe ?? act;
+  const moverBudget = foe ? enc?.budgets[foe.id] : budget;
+  // Whether the one who walks may walk now: the enemy being played always may.
+  const moverTurn = foe ? true : myTurn;
   // The turn bar keeps what it last showed on your turn while what came after it is watched through: the fresh AP of
   // your next turn go up when that turn is seen to start, not the moment the server has dealt them.
   const heldBudget = useRef<{ id: string; budget: Budget } | null>(null);
@@ -2001,9 +2009,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
 
   const picking = !!pick || !!dev.tool;
   const reach = useMemo(() => {
-    if (!state || !act || act.down || picking || (fighting && !myTurn)) return new Map();
-    return zoneReach(asState(state), act, budget ? moveLeft(budget) : FREE_WALK, undefined, courseFor(asState(state), act, budget));
-  }, [state, act, picking, fighting, myTurn, budget]);
+    if (!state || !mover || mover.down || picking || (fighting && !moverTurn)) return new Map();
+    return zoneReach(asState(state), mover, moverBudget ? moveLeft(moverBudget) : FREE_WALK, undefined, courseFor(asState(state), mover, moverBudget));
+  }, [state, mover, picking, fighting, moverTurn, moverBudget]);
   // The course charted for this turn's walk (Chart a Course), and the hexes only it brings within reach: shown apart, in the mark's red.
   const course = state && act && budget ? courseFor(asState(state), act, budget) : undefined;
   const courseOnly = useMemo(() => {
@@ -2067,7 +2075,6 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
 
   const z = state ? asState(state) : null;
   // The enemy the combat sandbox has the dev playing, if any (zone/SandboxEnemy.tsx).
-  const foe = sandboxFoe(z, dev);
   // Your hero looks toward the pointer only while it is them being played.
   const elsewhere = !!foe || (!!act && !!state && act.id !== state.you);
   useEffect(() => renderer.current?.setGazeHeld(elsewhere), [elsewhere]);
@@ -2133,6 +2140,10 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     }
     if (dev.tool?.tool === "paint" && hover) out.push({ hexes: dev.tool.wide ? zoneBlast(state.map, hover, 1) : [hover], color: dev.tool.surface ? SURFACE_INFO[dev.tool.surface].color : "#ffffff", fill: 0.35, line: 0.9 });
     if (dev.tool?.tool === "spawn" && hover) out.push({ hexes: [hover], color: "#ff3b3b", fill: 0.35, line: 0.9 });
+    // Walking one bigger than a hex: all the ground it would stand on there, light if it can, red if it cannot.
+    if (mover && hover && big(mover) && !picking && reach.size > 0 && !mover.down && !state.units.some((u) => u.id !== mover.id && u.side !== mover.side && !u.down && covers(u, hover))) {
+      out.push({ hexes: span(mover, hover), color: reach.get(posKey(hover))?.stop ? "#eaf6ff" : "#ff4d4d", fill: 0.18, line: 0.8 });
+    }
     // The enemy the sandbox has the dev playing: ringed.
     const picked = foe;
     if (picked) out.push({ hexes: span(picked), color: "#ffd84a", line: 1, march: true });
@@ -2231,7 +2242,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       if (to && to.id !== act.id && inArm().some((t) => covers(to, t))) out.push({ hexes: span(to), color: pick.what === "help" ? "#7dff9a" : "#ff6b6b", fill: 0.3, line: 0.9 });
     }
     return out;
-  }, [state, z, act, pick, hover, dev.tool, foe, dev.anywhere, courseOnly, fighting]);
+  }, [state, z, act, pick, hover, dev.tool, foe, dev.anywhere, courseOnly, fighting, mover, reach, picking]);
   useEffect(() => layer.current?.setOverlays(overlays), [overlays]);
 
   // ---------- what a move would cost, at the pointer ----------
@@ -2240,42 +2251,42 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   // It is the same from every hex out there, so it is worked out when the pointer leaves the reach, not for each hex it then crosses.
   const hoverBeyond = !!hover && !reach.has(posKey(hover));
   const far = useMemo(() => {
-    if (!z || !act || !budget || !myTurn || picking || !hoverBeyond) return null;
-    return zoneReach(z, act, moveLeft(budget) + 18, undefined, courseFor(z, act, budget));
-  }, [z, act, budget, myTurn, picking, hoverBeyond, reach]);
+    if (!z || !mover || !moverBudget || !moverTurn || picking || !hoverBeyond) return null;
+    return zoneReach(z, mover, moveLeft(moverBudget) + 18, undefined, courseFor(z, mover, moverBudget));
+  }, [z, mover, moverBudget, moverTurn, picking, hoverBeyond, reach]);
   const moveTip = useMemo(() => {
-    if (!state || !enc || !act || !budget || !myTurn || picking || !hover) return null;
+    if (!state || !enc || !mover || !moverBudget || !moverTurn || picking || !hover) return null;
     const near = reach.get(posKey(hover));
     const got = near ?? far?.get(posKey(hover));
     // An enemy's own hex is nowhere to walk to (a click on it walks up beside it): no walk is priced over it, and it is not called "no way" either.
-    if (!got) return state.units.some((u) => u.side !== act.side && !u.down && covers(u, hover)) ? null : { none: true as const };
+    if (!got) return state.units.some((u) => u.side !== mover.side && !u.down && covers(u, hover)) ? null : { none: true as const, why: noRoomThere(asState(state), mover, hover) };
     if (got.cost === 0) return null;
     const from = near ? reach : far!;
     const path = pathIn(from, hover) ?? [];
     // Enemies whose reach the way out of here leaves, and who still have a blow to answer it with. Unseen, nobody strikes.
     const drawn = new Set<string>();
-    let at = act.pos;
-    if (!budget.disengaged && !act.conditions.some((c) => c.kind === "invisible")) {
+    let at = mover.pos;
+    if (!moverBudget.disengaged && !mover.conditions.some((c) => c.kind === "invisible")) {
       for (const step of path) {
         for (const u of state.units) {
-          if (u.side !== act.side && !u.down && enc.order.includes(u.id) && !enc.reacted.includes(u.id) && leavesReach(state, u, act, at, step)) drawn.add(u.id);
+          if (u.side !== mover.side && !u.down && enc.order.includes(u.id) && !enc.reacted.includes(u.id) && leavesReach(state, u, mover, at, step)) drawn.add(u.id);
         }
         at = step;
       }
     }
     const ground = [...new Set(path.map((p) => state.surfaces[posKey(p)]?.kind).filter((k): k is "poison" | "fire" | "ice" => k === "poison" || k === "fire" || k === "ice"))];
     // A course charted: what of the way its movement pays for (steps toward the mark), and what it has left.
-    const courseLeft = courseFor(asState(state), act, budget)?.left ?? 0;
+    const courseLeft = courseFor(asState(state), mover, moverBudget)?.left ?? 0;
     const courseUsed = got.courseLeft !== undefined ? courseLeft - got.courseLeft : 0;
-    const left = moveLeft(budget);
+    const left = moveLeft(moverBudget);
     // What AP the way would buy: none while movement already bought covers it.
-    const ap = got.cost <= left ? apForMove(budget, got.cost) : null;
+    const ap = got.cost <= left ? apForMove(moverBudget, got.cost) : null;
     return {
       none: false as const,
       cost: got.cost,
       left,
       ap,
-      apLeft: ap === null ? 0 : budget.ap - ap,
+      apLeft: ap === null ? 0 : moverBudget.ap - ap,
       courseLeft,
       courseUsed,
       // Out of reach, or somebody is standing there.
@@ -2285,7 +2296,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       ground,
       steps: near ? [] : path.map((pos) => ({ pos, ok: (from.get(posKey(pos))?.cost ?? Infinity) <= left })),
     };
-  }, [state, enc, act, budget, myTurn, picking, hover, reach, far]);
+  }, [state, enc, mover, moverBudget, moverTurn, picking, hover, reach, far]);
   useEffect(() => layer.current?.setPath(moveTip && !moveTip.none ? moveTip.steps : []), [moveTip]);
   /** What to click next, for an ability aimed in two clicks (a blink). */
   const aimHint = (() => {
@@ -3044,7 +3055,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
 
       <div ref={cursor} className={`zone-cursor ${moveTip || aimHint ? "" : "off"} ${moveTip && (moveTip.none || moveTip.beyond || moveTip.taken) ? "bad" : ""}`} aria-hidden>
         {moveTip && (moveTip.none ? (
-          <strong>No way there</strong>
+          <><strong>No way there</strong>{moveTip.why && <span className="zone-cursor-note">{moveTip.why}</span>}</>
         ) : (
           <>
             {/* Your own movement, and beside it (a course charted) the course's: what of each the way takes. */}

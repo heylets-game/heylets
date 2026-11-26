@@ -35,7 +35,7 @@ import { ALERT_RANGE, JOIN_RANGE, freeHexNear, generateZone } from "./gen";
 import { generateDelve } from "./delve";
 import { checkLoot, checkOpen, leaveBody, look, lootFor, openChest, payBounty, take } from "./loot";
 import { PARTY_SIZES, siteOpen, spaced } from "./sites";
-import { FREE_WALK, big, blast, blockerAt, caught, covers, gap, inFight, isDead, meet, pathIn, perkOf, roomAt, sameHex, sees, solid, span, unitAt, unitById, zoneReach } from "./geometry";
+import { FREE_WALK, big, blast, blockerAt, caught, covers, gap, inFight, isDead, meet, noRoomThere, pathIn, perkOf, roomAt, sameHex, sees, solid, span, unitAt, unitById, zoneReach } from "./geometry";
 import { AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, ENEMY_MOVE_AP, FLEE_RANGE, ITEM_AP, STROLL_GRACE_MS, STROLL_STEP_MS, SUMMONS, STARTING_ITEMS, THROWABLES, THROWABLE_KINDS, cleanItems, unitStrike, commonCostFor, enemyHp, enemyMove, tacticOf } from "./kit";
 import { d20, heroMove, mod, rollDice, statOf } from "./rules";
 import { hiddenEnemies, sentToClient } from "./light";
@@ -1158,7 +1158,7 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
     // Only the hex asked for and the way to it are read, so the flood stops at it (zoneReach `enough`).
     const reach = zoneReach(state, unit, budget ? moveLeft(budget) : FREE_WALK, undefined, courseFor(state, unit, budget), (r) => sameHex(r.pos, action.to));
     const end = reach.get(posKey(action.to));
-    if (!end) return budget ? "You cannot get there with the AP you have left." : "You cannot get there.";
+    if (!end) return noRoomThere(state, unit, action.to) ?? (budget ? "You cannot get there with the AP you have left." : "You cannot get there.");
     if (!end.stop) return "Someone is standing there.";
     walk(ctx, unit, pathIn(reach, action.to) ?? [], budget);
     if (cut) {

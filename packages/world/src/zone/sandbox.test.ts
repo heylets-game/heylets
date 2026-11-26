@@ -210,3 +210,16 @@ describe("setting the turn in the combat sandbox", () => {
     expect(stepZone(state, { type: "dev", by: "ann", dev: { op: "set_turn", unit: state.encounter!.order[0] } }).ok).toBe(false);
   });
 });
+
+describe("why a walk cannot be made", () => {
+  it("says a big one has no room, not that it lacks the AP", () => {
+    let state = board();
+    const guardian = enemy(state, "guardian", at(9, 6)).id;
+    // A wall of wolves round a hex: one fits there, the Guardian's three do not.
+    for (const p of [at(12, 3), at(13, 3), at(12, 4)].slice(1)) enemy(state, "wolf", p, "g2");
+    state = dev(dev(state, { op: "sandbox", on: true }), { op: "start_fight" });
+    const step = stepZone(state, { type: "move", by: "ann", unit: guardian, to: at(12, 3) });
+    expect(step.ok).toBe(false);
+    expect(!step.ok && step.error).toMatch(/no room/);
+  });
+});
