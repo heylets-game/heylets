@@ -9263,11 +9263,23 @@ function wolf(top: THREE.Group, fur = "#7d8793", dark = "#59616c", eye = "#ffd23
 }
 
 /**
- * A bear on all fours: heavier than the wolf, with a hump at the shoulders, round ears, a pale muzzle and
- * thick clawed legs. `frost` greys the hump and brow for the old Great Bear; `claw` is the colour of its claws
- * (a Snow Bear's are dark against its white).
+ * A tuft of fur lying back over a lengthwise loft (see Span): a short wedge rooted at `z`, `a` round it (radians from
+ * straight up, toward +x), its point `long` further back toward -z, raised only a little off the fur.
  */
-function bear(top: THREE.Group, fur = "#7a5232", dark = "#4f3420", muzzle = "#b98a5a", eye = "#f2a33a", frost?: string, claw: string = GEAR.paper): Rig {
+function tuft(part: Part, color: string, spans: readonly Span[], z: number, a: number, long: number) {
+  const on = (turn: number, by: number, along: number): Pt => {
+    const r = ringAt(spans as readonly Ring[], along);
+    return [Math.sin(turn) * (r.rx + by), r.dz + Math.cos(turn) * (r.rz + by), along];
+  };
+  part.shape(color, [on(a - 0.14, -0.1, z), on(a + 0.14, -0.1, z), on(a, 0.3, z - long * 0.35), on(a, 0.1, z - long)]);
+}
+
+/**
+ * A bear on all fours: heavier than the wolf, with a hump at the shoulders, round ears, a pale muzzle and
+ * thick clawed legs. `mane` is the Great Bear's: tufts of darker fur lying back round its neck and shoulders, and the
+ * tops of its legs rounded into its body. `claw` is the colour of its claws (a Snow Bear's are dark against its white).
+ */
+function bear(top: THREE.Group, fur = "#7a5232", dark = "#4f3420", muzzle = "#b98a5a", eye = "#f2a33a", mane?: string, claw: string = GEAR.paper): Rig {
   const parts: Part[] = [];
   const part = (parent: THREE.Object3D, x: number, y: number, z: number) => (parts[parts.length] = new Part(parent, x, y, z));
   const body = part(top, 0, 0, 0);
@@ -9276,7 +9288,12 @@ function bear(top: THREE.Group, fur = "#7a5232", dark = "#4f3420", muzzle = "#b9
   lengthwise(body, fur, trunk);
   pelt(body, dark, trunk, -4.6, 3.2, Math.PI - 0.75, Math.PI + 0.75, 0.12);
   body.ball(dark, 1, 0, 8.8, -6, 0);
-  if (frost) pelt(body, frost, trunk, -1, 3.8, -0.8, 0.8, 0.14);
+  // The mane: rows of tufts from the front of the shoulders back over the hump, over the top and down the sides.
+  if (mane) {
+    [4.4, 3.5, 2.6, 1.7].forEach((z, row) => {
+      for (let i = 0; i < 9; i++) tuft(body, mane, trunk, z, -1.75 + (3.5 * (i + (row % 2) * 0.5)) / 9, 1.1 + ((i + row) % 3) * 0.2);
+    });
+  }
   const head = part(top, 0, 9.4, 4.2);
   const skull: Span[] = [[-0.6, 2.5, 2.45, 0.8], [0.5, 3.1, 2.9, 0.75], [2.2, 3.05, 2.75, 0.6], [3.5, 2.4, 2.1, 0.25], [4.1, 1.45, 1.3, 0]];
   lengthwise(head, fur, skull);
@@ -9286,11 +9303,21 @@ function bear(top: THREE.Group, fur = "#7a5232", dark = "#4f3420", muzzle = "#b9
     head.ball(dark, 1.1, s * 2.4, 3.7, 1.1, 0, [1, 1, 0.7]);
     head.glowBall(eye, 0.44, s * 1.6, 1.6, 3.4);
   }
-  if (frost) pelt(head, frost, skull, 0, 3, -0.85, 0.85, 0.13);
+  // And a ruff round the back of its head, lying back into the mane.
+  if (mane) {
+    [0.6, -0.1].forEach((z, row) => {
+      for (let i = 0; i < 9; i++) tuft(head, mane, skull, z, -1.9 + (3.8 * (i + (row % 2) * 0.5)) / 9, 0.9 + ((i + row) % 3) * 0.15);
+    });
+  }
   const legs = [[-2.3, 3.2], [2.3, 3.2], [-2.3, -4], [2.3, -4]].map(([x, z]) => {
     const leg = part(top, x, 4.8, z);
     const rings: Ring[] = z > 0 ? [[1.5, 1.55, 1.75], [-0.8, 1.35, 1.55, 0.1], [-3, 1.25, 1.45, 0.2], [-4.2, 1.35, 1.6, 0.35]] : [[1.8, 1.75, 2.2, -0.3], [-0.6, 1.45, 1.7, -0.3], [-2.8, 1.25, 1.45, -0.05], [-4.2, 1.35, 1.6, 0.25]];
     leg.loft(dark, rings, 8);
+    // The Great Bear's legs are rounded off at the top, into its body, not cut flat.
+    if (mane) {
+      const [y, rx, rz, dz = 0] = rings[0];
+      leg.ball(dark, 1, 0, y, dz, 1, [rx, Math.min(rx, rz) * 0.75, rz]);
+    }
     leg.shape(tone(dark, -0.05), sym([[1.4, -4.8, -1.25], [1.5, -4.8, 1], [1.1, -4.8, 1.85], [0, -4.8, 2.05], [1.35, -3.9, -1.15], [1.4, -3.9, 0.9], [0, -3.9, 1.7]]));
     for (const cx of [-0.8, 0, 0.8]) leg.shape(claw, [[cx - 0.25, -4.8, 1.55], [cx + 0.25, -4.8, 1.55], [cx, -4.25, 1.6], [cx, -4.75, 2.55]]);
     return leg;
@@ -9743,7 +9770,7 @@ function rigFor(kind: string, top: THREE.Group, look: Look, outfit: Outfit | und
     case "bear":
       return bear(top);
     case "great_bear":
-      return bear(top, "#4a3426", "#2a1d15", "#8a7a6a", "#ff4d4d", "#9a8f86");
+      return bear(top, "#4a3426", "#2a1d15", "#8a7a6a", "#ff4d4d", "#24180f");
     case "dummy":
       return dummy(top);
     case "shade":
