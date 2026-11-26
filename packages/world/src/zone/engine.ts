@@ -274,8 +274,9 @@ function soak(unit: Unit, amount: number): number {
  * Deal damage from a blow or a blast. Guarded halves it (rounding up) unless it goes through a guard;
  * a hit that lands always does at least 1. A shield (Bolstered) takes what it can before HP does.
  * Returns the HP it cost. `dice`: what was rolled for it, told with the hit (`halved`: the target saved for half).
+ * `splash`: the shock of a blow on someone beside the target, not a blow at it (see the hit event).
  */
-export function damage(ctx: Ctx, target: Unit, amount: number, opts: { actor: string | null; what: string; crit?: boolean; dice?: Rolled; halved?: boolean }): number {
+export function damage(ctx: Ctx, target: Unit, amount: number, opts: { actor: string | null; what: string; crit?: boolean; dice?: Rolled; halved?: boolean; splash?: boolean }): number {
   if (target.down) return 0;
   let dealt = Math.max(1, Math.round(amount));
   if (has(target, "guarded")) dealt = Math.ceil(dealt / 2);
@@ -283,7 +284,7 @@ export function damage(ctx: Ctx, target: Unit, amount: number, opts: { actor: st
   dealt = Math.min(dealt - blocked, target.hp);
   target.hp -= dealt;
   const dice = opts.dice ? { ...opts.dice, ...(opts.halved ? { halved: true } : {}) } : undefined;
-  ctx.events.push({ t: "hit", actor: opts.actor, target: target.id, amount: dealt, what: opts.what, crit: !!opts.crit, ...(blocked > 0 ? { blocked } : {}), ...(dice ? { dice } : {}) });
+  ctx.events.push({ t: "hit", actor: opts.actor, target: target.id, amount: dealt, what: opts.what, crit: !!opts.crit, ...(blocked > 0 ? { blocked } : {}), ...(dice ? { dice } : {}), ...(opts.splash ? { splash: true } : {}) });
   if (target.hp <= 0) fall(ctx, target);
   // North Star: whatever its bearer strikes on the other side catches fire.
   const by = opts.actor ? ctx.state.units.find((u) => u.id === opts.actor) : undefined;

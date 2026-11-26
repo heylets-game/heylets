@@ -1085,11 +1085,13 @@ export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Uni
     const rolled = rollShown(ctx.rng, attack.dice, 0, roll.crit);
     damage(ctx, target, rolled.total, { actor: enemy.id, what: attack.name, crit: roll.crit, dice: rolled });
     if (melee) thorns(ctx, enemy, target);
-    // A splash: every other hero in the fight beside the target is battered by a share of the same blow.
+    // A splash: the shock of the blow pulses out, and every other hero in the fight beside the target is battered by
+    // a share of it, or by half that if they get clear (an Agility save).
     if (attack.kit.splash) {
       const share = Math.floor(rolled.total * SPLASH_SHARE);
       for (const near of state.units.filter((u) => u.side !== enemy.side && u.id !== target.id && !u.down && inFight(state, u.id) && hexDistance(u.pos, target.pos) === 1)) {
-        damage(ctx, near, share, { actor: enemy.id, what: attack.name });
+        const saved = saveRoll(ctx, near, "agi", dc, attack.name).ok;
+        damage(ctx, near, saved ? Math.floor(share / 2) : share, { actor: enemy.id, what: attack.name, splash: true });
       }
     }
   }

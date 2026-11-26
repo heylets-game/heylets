@@ -519,8 +519,11 @@ export type ZoneEvent =
   /** Something done, said before its rolls: an ability, a common action, a throw, an enemy's attack by name. */
   | { t: "used"; id: string; what: string; name: string; target?: string; at?: HexPos }
   | { t: "reaction"; id: string; target: string }
-  /** `dice`: what was rolled for it, where dice were. */
-  | { t: "hit"; actor: string | null; target: string; amount: number; what: string; crit: boolean; blocked?: number; dice?: Rolled }
+  /**
+   * `dice`: what was rolled for it, where dice were. `splash`: not struck itself, but caught by the shock of the same
+   * blow landing on someone beside it (EnemyAbilityDef `splash`).
+   */
+  | { t: "hit"; actor: string | null; target: string; amount: number; what: string; crit: boolean; blocked?: number; dice?: Rolled; splash?: boolean }
   | { t: "miss"; actor: string; target: string; what: string }
   | { t: "heal"; actor: string | null; target: string; amount: number; what: string; dice?: Rolled }
   /** Someone drops off a height (shoved off it, or leaping from too high): how many levels. The harm follows as a `hit` by "fall". */

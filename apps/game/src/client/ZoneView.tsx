@@ -1245,7 +1245,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         const mine = use && use.id === ev.actor ? use : null;
         // Coral cutting whoever is in it or strikes it is the coral's doing, not a blow by whoever grew it: the victim
         // flinches, and nobody swings (when the field is first grown, the cast's own look plays as usual).
-        const passive = !mine && (ev.what === "coral_field" || ev.what === "coral_armor");
+        // And the shock of a blow on someone beside them (a Club Smash's pulse) is that one blow's doing: they are
+        // jolted as it reaches them, and it is not swung again for each.
+        const passive = (!mine && (ev.what === "coral_field" || ev.what === "coral_armor")) || (hit && !!ev.splash);
         const kind = passive ? "ground" : !ev.actor || ev.actor === ev.target || ev.what.startsWith("throw:") || ev.what === "shove" || ev.what === "fall" ? "none" : (mine?.look.kind ?? "melee");
         // The log's line for it: the roll that decided it (if it has a card), then what it did.
         const logged = () => {
