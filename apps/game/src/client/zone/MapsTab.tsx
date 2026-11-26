@@ -147,7 +147,7 @@ export function MapsTab() {
                   <button className="small" onClick={() => send({ op: "next_turn" })}>Next turn</button>
                   <button className="small" onClick={() => send({ op: "next_turn", round: true })}>Next round</button>
                   <button className={`small ${dev.tool?.tool === "place" ? "selected" : ""}`} onClick={() => setZoneDev({ tool: dev.tool?.tool === "place" ? null : { tool: "place" } })}>
-                    {dev.tool?.tool === "place" ? "Done placing" : "Put whoever you play anywhere: click the map"}
+                    {dev.tool?.tool === "place" ? "Done teleporting" : "Teleport currently selected unit"}
                   </button>
                 </>
               )}
