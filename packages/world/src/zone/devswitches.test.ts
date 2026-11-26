@@ -32,6 +32,12 @@ describe("dev switches", () => {
     expect(state.undying).toBe(true);
     const ctx = hurt(state, 999);
     expect(unit(ctx.state, "ann")).toMatchObject({ hp: 0, down: false });
+    // The blow still counts in full, though there was less HP to take.
+    expect(ctx.events.find((e) => e.t === "hit")).toMatchObject({ amount: 999 });
+    // And again at 0: still hit for the whole of it, still standing.
+    const again = hurt(ctx.state, 7);
+    expect(again.events.find((e) => e.t === "hit")).toMatchObject({ amount: 7 });
+    expect(unit(again.state, "ann")).toMatchObject({ hp: 0, down: false });
     expect(ctx.events.some((e) => e.t === "down")).toBe(false);
     expect(must(state, { type: "dev", by: "ann", dev: { op: "undying", on: false } }).undying).toBeUndefined();
   });

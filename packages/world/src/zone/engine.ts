@@ -209,12 +209,18 @@ export function strikeDown(ctx: Ctx, unit: Unit): void {
   fall(ctx, unit);
 }
 
+/** Dev switch (DevOp "undying"): a hero who cannot go down. Blows on them still count in full; their HP stops at 0. */
+const undying = (ctx: Ctx, unit: Unit): boolean => !!ctx.state.undying && unit.side === "hero" && !unit.summon;
+
+/** Take `dealt` off a unit's HP, never below 0, and say how much of it counts: no more than they had, unless they cannot go down. */
+function wound(ctx: Ctx, unit: Unit, dealt: number): number {
+  const counts = undying(ctx, unit) ? dealt : Math.min(dealt, unit.hp);
+  unit.hp = Math.max(0, unit.hp - counts);
+  return counts;
+}
+
 function fall(ctx: Ctx, unit: Unit): void {
-  // Dev switch (DevOp "undying"): a hero stays up at 0 HP.
-  if (ctx.state.undying && unit.side === "hero" && !unit.summon) {
-    unit.hp = 0;
-    return;
-  }
+  if (undying(ctx, unit)) return;
   const spot = unit.conditions.find((c) => c.kind === "black_spot");
   unit.hp = 0;
   unit.down = true;
@@ -287,8 +293,7 @@ export function damage(ctx: Ctx, target: Unit, amount: number, opts: { actor: st
   let dealt = Math.max(1, Math.round(amount));
   if (has(target, "guarded")) dealt = Math.ceil(dealt / 2);
   const blocked = soak(target, dealt);
-  dealt = Math.min(dealt - blocked, target.hp);
-  target.hp -= dealt;
+  dealt = wound(ctx, target, dealt - blocked);
   const dice = opts.dice ? { ...opts.dice, ...(opts.halved ? { halved: true } : {}) } : undefined;
   ctx.events.push({ t: "hit", actor: opts.actor, target: target.id, amount: dealt, what: opts.what, crit: !!opts.crit, ...(blocked > 0 ? { blocked } : {}), ...(dice ? { dice } : {}), ...(opts.splash ? { splash: true } : {}) });
   if (target.hp <= 0) fall(ctx, target);
@@ -303,8 +308,7 @@ export function damage(ctx: Ctx, target: Unit, amount: number, opts: { actor: st
 /** Damage from a condition or from the ground: no guard against it. */
 export function tick(ctx: Ctx, target: Unit, kind: Condition | "poison" | "fire" | "oil" | "water" | "ice", amount: number): void {
   if (target.down || amount <= 0) return;
-  const dealt = Math.min(amount, target.hp);
-  target.hp -= dealt;
+  const dealt = wound(ctx, target, amount);
   ctx.events.push({ t: "tick", target: target.id, kind, amount: dealt });
   if (target.hp <= 0) fall(ctx, target);
 }
