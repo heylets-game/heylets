@@ -119,6 +119,11 @@ export interface MoveCtx {
    * by it here, and `onImpact` runs as it lands. Whoever it catches flinches as their own hit is told.
    */
   alone?: boolean;
+  /**
+   * Where on the ground it goes off from, when not from its user's feet: an Earthquake's heave comes up out of the
+   * cracked ground, from the middle of it, wherever the Guardian stands now.
+   */
+  ground?: THREE.Vector3;
 }
 
 export interface SignatureMove {
@@ -1171,18 +1176,19 @@ function earthquake(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alo
 }
 
 /**
- * A Guardian's Earthquake on its next turn, as the cracked ground heaves: it pounds the ground again, and this time the
- * whole of it goes. The view is shaken hard; wide cracks tear out across the ground all round, a bright flash and a
+ * A Guardian's Earthquake on its next turn, as the cracked ground heaves: no blow is struck for it (the Guardian does
+ * nothing), the ground itself goes, all of it, from the middle of the cracked ground (`ground`), wherever it is now. The view is shaken hard; wide cracks tear out across the ground all round, a bright flash and a
  * heavy wave burst out from its fists with broad rolling ones of dust behind, and all over the cracked ground dust
  * bursts up in columns and chunks of rock are thrown into the air, the ground rumbling on in further ripples and a
  * second jolt of the view. Each hero is jolted as the first wave reaches them, and the blow on them is told then.
  */
-function earthquakeHeave(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alone }: MoveCtx) {
-  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+function earthquakeHeave(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alone, ground: from }: MoveCtx) {
+  // Out of the cracked ground itself: no blow struck for it, the Guardian does nothing.
+  const feet = from?.clone() ?? figure.root.getWorldPosition(new THREE.Vector3());
   const ground = feet.clone().setY(feet.y + 0.06);
   const { reach } = EARTHQUAKE;
   const h = EARTHQUAKE.heave;
-  const lands = echo ? 0 : Math.max(0, figure.strike("pound"));
+  const lands = 0;
   if (!echo) stage.later(() => {
     stage.shake?.(h.shake, 1.4);
     stage.later(() => stage.shake?.(h.shake * 0.6, 0.9), 0.55);
@@ -1233,7 +1239,7 @@ export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
     who: "guardian",
     blurb: "Heaves both fists overhead and drives them into the ground: thin cracks run out over the ground two hexes all round, small ripples of dust follow each other out, little puffs of dust and hopping pebbles all over, and the view trembles.",
     play: earthquake,
-    again: { blurb: "Its next turn, as the cracked ground heaves: it pounds the ground again, the view shakes hard, wide cracks tear out all round, a bright flash and a heavy wave with rolling dust behind, columns of dust and chunks of rock thrown up all over it, and a second jolt.", play: earthquakeHeave },
+    again: { blurb: "Its next turn, as the cracked ground heaves on its own, out of the middle of it (the Guardian does nothing): the view shakes hard, wide cracks tear out all round, a bright flash and a heavy wave with rolling dust behind, columns of dust and chunks of rock thrown up all over it, and a second jolt.", play: earthquakeHeave },
   },
   "Great Cleave": { who: "brute", sweeps: true, blurb: "A great two-handed sweep from side to side: a wide white swoosh runs across both rows of hexes in front of it, dust kicked up under it and grit flung past the far edge, and everyone caught takes a heavy slash with a red burst.", play: greatCleave },
   "Battering Ram": { who: "brute", blurb: "Drops its shoulder and charges in, dust kicked off its heels and speed lines streaming off it: a big flash, a shock pulsing over the ground, grit and shock lines bursting out ahead as it hits, then dust driven up along the ground for the three hexes the target is shoved back.", play: batteringRam },

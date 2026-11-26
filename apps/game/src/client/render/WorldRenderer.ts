@@ -2169,7 +2169,7 @@ export class WorldRenderer {
    * (an Ogre's Slam). `then` runs as the blow lands. Returns whether it played its own move, which draws the
    * ground shaking round it itself (so whoever asked draws no ring of their own).
    */
-  burst(actorId: string, name: string, sung: boolean, then: () => void, again = false): boolean {
+  burst(actorId: string, name: string, sung: boolean, then: () => void, again = false, ground?: THREE.Vector3): boolean {
     const unit = this.units.get(actorId);
     let wait = 0;
     if (unit && !unit.lying) {
@@ -2181,7 +2181,7 @@ export class WorldRenderer {
         // Should a hit on someone come through attack after all, it is not played a second time.
         this.quakeAt.set(actorId, this.clock);
         const play = (again && own.again?.play) || own.play;
-        play(this.moveStage(actorId, actorId, name, unit, 1, false), { figure: unit.figure, hitAt: unit.goal.clone(), dir: 1, crit: false, onImpact: then, alone: true });
+        play(this.moveStage(actorId, actorId, name, unit, 1, false), { figure: unit.figure, hitAt: unit.goal.clone(), dir: 1, crit: false, onImpact: then, alone: true, ...(ground ? { ground } : {}) });
         return true;
       }
       if (QUAKES.has(name)) unit.lean = -0.9;

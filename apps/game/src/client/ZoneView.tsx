@@ -990,7 +990,10 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           // An enemy ability with a move of its own is played as that, whatever its usual look (zone/ownMoves.ts): round
           // its user, or at the spot it is thrown at, now; one at a single target, as the blow is told (see hit).
           const own = ev.what === "attack" && view?.ownsMove(ev.id, ev.name) ? ownRoute(ev.name) : null;
-          if (own === "burst" && view) return void view.burst(ev.id, ev.name, false, thenOn(() => {}), !!ev.again);
+          // Its second part (an Earthquake's heave) goes off from the middle of where its user stood when it was first
+          // used: from the ground it cracked, not from wherever it is now.
+          const centre = ev.again && ev.at && user ? span(user, ev.at).map((p) => point(p)).reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(span(user, ev.at).length) : undefined;
+          if (own === "burst" && view) return void view.burst(ev.id, ev.name, false, thenOn(() => {}), !!ev.again, centre);
           if (own === "at" && view && aim) return view.moveAt(ev.id, ev.name, aim, landing());
           if (own === "blow") return;
           if (links.length > 0) {

@@ -32,8 +32,8 @@ function setUp(guardAt: HexPos, heroes: HexPos[]) {
 const ctxOf = (state: ZoneState, seed: number): Ctx => ({ state: structuredClone(state), rng: makeRng(seed), events: [] as ZoneEvent[], effects: [] });
 
 describe("a Guardian's kit", () => {
-  it("is Stone Fist, Earthquake and Shove", () => {
-    expect(ENEMIES.guardian.abilities).toEqual(["stone_fist", "earthquake", "shove"]);
+  it("is Stone Fist and Earthquake, and no Shove: it pushes nobody about but by its fist", () => {
+    expect(ENEMIES.guardian.abilities).toEqual(["stone_fist", "earthquake"]);
   });
 });
 
@@ -96,7 +96,8 @@ describe("a Guardian's Earthquake", () => {
     const before = { ann: unit(ctx.state, "ann").hp, bo: unit(ctx.state, "bo").hp };
     ctx.events.length = 0;
     quakeAtTurn(ctx, unit(ctx.state, guardian));
-    expect(ctx.events.some((e) => e.t === "used" && e.again && e.name === "Earthquake")).toBe(true);
+    // Told as going off from where it stood when it cracked the ground.
+    expect(ctx.events.find((e) => e.t === "used" && e.again && e.name === "Earthquake")).toMatchObject({ at: at(8, 6) });
     expect(unit(ctx.state, "ann").hp).toBeLessThan(before.ann);
     expect(unit(ctx.state, "bo").hp).toBe(before.bo);
     expect(ctx.state.weather?.some((w) => w.kind === "quake")).toBe(false);

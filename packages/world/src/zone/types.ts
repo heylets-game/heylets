@@ -138,9 +138,10 @@ export interface Weather {
   touched: Record<string, number>;
   /**
    * A quake: the shaking still to come as its maker's next turn begins (weather.ts quakeAtTurn), as the ability that
-   * made it (its name, for the log) rolls it, and the DC of the Agility save against it.
+   * made it (its name, for the log) rolls it, the DC of the Agility save against it, and where its maker stood (its
+   * anchor) as it cracked the ground: the middle of it, where the heave is drawn from.
    */
-  shock?: { name: string; dice: Dice; dc: number; saveOr?: Inflict };
+  shock?: { name: string; dice: Dice; dc: number; saveOr?: Inflict; from: HexPos };
 }
 
 export type SurfaceKind = "poison" | "fire" | "oil" | "water" | "ice" | "slime";
@@ -555,7 +556,10 @@ export type ZoneEvent =
   /** Something done, said before its rolls: an ability, a common action, a throw, an enemy's attack by name. */
   /** Something tried to move a big unit by force (a shove, a pull, a wave), and it was too heavy to budge. */
   | { t: "heavy"; id: string }
-  /** `again`: the second part of something used on an earlier turn (an Earthquake's heave), not a new use of it. */
+  /**
+   * `again`: the second part of something used on an earlier turn (an Earthquake's heave), not a new use of it; `at`
+   * then is where its user stood (its anchor) when it was first used, where it goes off from.
+   */
   | { t: "used"; id: string; what: string; name: string; target?: string; at?: HexPos; again?: true }
   | { t: "reaction"; id: string; target: string }
   /**
