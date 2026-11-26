@@ -96,8 +96,8 @@ const attackStyle = (ability: string): AttackStyle => (SPELL_COLOR[ability] ? "m
 const isBoss = (kind: string) => !!ENEMIES[kind]?.boss;
 /** Rank-and-file drawn a size up: the heavy hitters. */
 const isBig = (kind: string) => kind === "brute" || kind === "bear" || kind === "snow_bear" || kind === "ogre" || kind === "troll";
-/** How tall an enemy is drawn. The Pack Leader is drawn larger than the other bosses, so it towers over its wolves. */
-const enemySize = (kind: string) => (kind === "alpha" ? 2.8 : isBoss(kind) ? 1.9 : isBig(kind) ? 1.6 : 1.4);
+/** How tall an enemy is drawn. The Pack Leader is half as big again as the wolves it leads. */
+const enemySize = (kind: string) => (kind === "alpha" ? 2.1 : isBoss(kind) ? 1.9 : isBig(kind) ? 1.6 : 1.4);
 
 /** Seconds between one pickup told over a hero's head and the next. */
 const PICKUP_GAP = 0.55;
