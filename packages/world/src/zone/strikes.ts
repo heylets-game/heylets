@@ -45,7 +45,7 @@ export function strikeHexes(state: ZoneState, enemy: Unit, attack: EnemyStrike, 
   if (attack.kit.aftershock) return quakeHexes(state, span(enemy), ENEMY_BURST);
   if (attack.kit.field) return quakeHexes(state, span(enemy), attack.kit.field.radius);
   if (strikeAim(attack) === "self") {
-    const all = new Map(span(enemy).flatMap((p) => blast(state.map, p, ENEMY_BURST)).map((p) => [`${p.q},${p.r}`, p]));
+    const all = new Map(span(enemy).flatMap((p) => blast(state.map, p, attack.range)).map((p) => [`${p.q},${p.r}`, p]));
     return [...all.values()].filter((p) => !covers(enemy, p));
   }
   if (!at) return [];

@@ -13,7 +13,7 @@ import { tileAt } from "../map";
 import { alliesReached, dashWay, leaps, leavesReach, lungeLanding, shiftInto, shoveDest, sweepHexes } from "./combat";
 import { has } from "./engine";
 import { HIGH_REACH, blast, covers, gap, inFight, meet, nearOf, reachFrom, reaches, sameHex, seesFor, span, strikes } from "./geometry";
-import { ENEMY_BURST, SPLASH_SHARE, type EnemyStrike, type Mind } from "./kit";
+import { SPLASH_SHARE, type EnemyStrike, type Mind } from "./kit";
 import { diceAverage } from "./rules";
 import { clusterHexes } from "./weather";
 import { HARMFUL } from "./surfaces";
@@ -134,9 +134,15 @@ export function leapRisk(state: ZoneState, enemy: Unit, from: HexPos, land: HexP
   return 0.5 ** strikers * (kind && HARMFUL.has(kind) ? 0.5 : 1);
 }
 
-/** The heroes a burst from `pos` catches: everyone within ENEMY_BURST it can see. */
-const caughtBy = (look: Look, pos: HexPos, targets: readonly Unit[]): Unit[] =>
-  targets.filter((h) => gap(look.enemy, h, pos) <= ENEMY_BURST && seesFor(look.state, look.enemy.side, ...meet(look.enemy, h, pos)));
+/** The heroes a burst from `pos` catches: everyone within its reach (`range`) it can see. */
+const caughtBy = (look: Look, pos: HexPos, attack: EnemyStrike, targets: readonly Unit[]): Unit[] =>
+  targets.filter((h) => gap(look.enemy, h, pos) <= attack.range && seesFor(look.state, look.enemy.side, ...meet(look.enemy, h, pos)));
+
+/**
+ * What a burst that does no harm (Memento Mori) is worth for each hero it would leave its condition on: about a blow,
+ * for what it spoils of theirs after. One who has it already is worth nothing to it.
+ */
+export const CURSE_WORTH = 6;
 
 /**
  * One hero: the damage it does. Neither how likely it is to land nor how hurt they are comes into it: it picks no one
@@ -179,11 +185,19 @@ const strike: Behaviour = {
   },
 };
 
-/** Everyone round it at once: about half save for half, so three quarters of the damage, to each one caught. */
+/**
+ * Everyone round it at once: about half save for half, so three quarters of the damage, to each one caught. One that
+ * does no harm is worth CURSE_WORTH for each it would catch who does not have what it leaves already.
+ */
 const burst: Behaviour = {
-  reaches: (look, from, _attack, targets) => caughtBy(look, from, targets).length > 0,
+  reaches: (look, from, attack, targets) => caughtBy(look, from, attack, targets).length > 0,
   value(look, from, attack, targets) {
-    const caught = caughtBy(look, from, targets);
+    if (attack.harmless) {
+      const effect = attack.saveOr?.effect;
+      const fresh = caughtBy(look, from, attack, targets).filter((h) => !effect || !has(h, effect)).length;
+      return fresh > 0 ? { attack, target: null, worth: fresh * CURSE_WORTH * (look.whim?.(attack, null) ?? 1) } : null;
+    }
+    const caught = caughtBy(look, from, attack, targets);
     // An Earthquake's heave on its next turn counts for half: some will have got off the cracked ground by then.
     const heave = attack.kit.aftershock ? diceAverage(attack.kit.aftershock.dice) * 0.5 : 0;
     return caught.length > 0 ? { attack, target: null, worth: caught.length * (diceAverage(attack.dice) + heave) * 0.75 * (look.whim?.(attack, null) ?? 1) } : null;

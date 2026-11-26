@@ -503,6 +503,7 @@ export const SAVE_STAT: Record<Condition, StatKey> = {
   fumbling: "int_stat",
   exposed: "agi",
   sundered: "str",
+  memento_mori: "int_stat",
   reeling: "vit",
   poisoned: "vit",
   prone: "agi",
@@ -551,6 +552,7 @@ export const CONDITION_INFO: Record<Condition, { name: string; blurb: string; co
   poisoned: { name: "Poisoned", blurb: "Its attacks are rolled with disadvantage.", color: "#a3e635" },
   prone: info("prone", "Flat on the ground: standing up costs 1 AP. Melee attacks against it have advantage, ranged attacks disadvantage."),
   sundered: info("sundered", `Its armor is dented: ${SUNDERED_DEFENCE} less Defence.`),
+  memento_mori: info("memento_mori", "Each time it takes damage it starts Fumbling, unless it is Fumbling already."),
   reeling: info("reeling", `Shaken by a heavy blow: as much less AP on its next turn as its number says (${REELING_AP} unless said).`),
   wet: { name: "Wet", blurb: "Soaked through: lightning hits harder, and it cannot burn.", color: "#7dd3fc" },
   beacon: { name: "Beacon", blurb: `Gives light, and it and allies within 2 hexes get +${AURAS.beaconHit} to hit.`, color: "#fff7d6" },
@@ -773,14 +775,14 @@ export function mindOf(kind: string): Mind {
   return mind;
 }
 
-/** How far an attack on every hero reaches out from the enemy making it. */
+/** How far an attack on every hero reaches out from the enemy making it, unless it says (EnemyAbilityDef `range`). */
 export const ENEMY_BURST = 2;
 
 export interface EnemyStrike {
   /** The ability's id (enemyabilities.ts). */
   id: string;
   name: string;
-  /** 1 for a blow; more needs a clear line. An attack on every hero is a burst around the enemy. */
+  /** 1 for a blow; more needs a clear line. An attack on every hero is a burst around the enemy, reaching this far. */
   range: number;
   burst: boolean;
   dice: Dice;
@@ -822,7 +824,7 @@ export function abilityStrikes(ids: readonly string[], level: number, more = 0):
       {
         id,
         name: a.name,
-        range: burst ? ENEMY_BURST : (a.range ?? 1),
+        range: burst ? (a.range ?? ENEMY_BURST) : (a.range ?? 1),
         burst,
         dice: diceFor(scaled(a.damage, a.scales?.damage ?? DEFAULT_SCALE, level) + edge),
         harmless: a.damage <= 0,
