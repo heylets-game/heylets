@@ -984,14 +984,32 @@ function dev(ctx: Ctx, by: string, op: DevOp): string | null {
     const from = u.pos;
     u.pos = { q: op.at.q, r: op.at.r };
     ctx.events.push({ t: "blinked", id: u.id, from, to: u.pos });
+  } else if (op.op === "set_turn") {
+    const enc = state.encounter;
+    const u = unitById(state, op.unit);
+    if (!enc || !state.sandbox || !u || !enc.order.includes(u.id)) return "Pick someone in the fight, in the sandbox.";
+    if (u.down) return `${u.name} is down.`;
+    if (enc.acting.includes(u.id)) return null;
+    // Their turns over, and the fight moved on from just before this one (Encounter.resume), so theirs is the next.
+    for (const id of enc.acting) {
+      const was = unitById(state, id);
+      if (was) endTurn(ctx, was);
+    }
+    enc.acting = [];
+    enc.done = [];
+    enc.budgets = {};
+    enc.resume = u.id;
+    advance(ctx);
   } else if (op.op === "next_turn") {
     const enc = state.encounter;
     if (!enc) return "There is no fight on.";
+    // A round: on until the turn comes back round to whoever has it now (or, theirs passed over, to whoever is next after them).
     const round = enc.round;
-    for (let turns = 0; state.encounter === enc && turns < (op.round ? enc.order.length + 1 : 1); turns++) {
+    const from = enc.order.indexOf(enc.acting[0]);
+    for (let turns = 0; state.encounter === enc && turns < (op.round ? enc.order.length * 2 : 1); turns++) {
       enc.done = [...enc.acting];
       advance(ctx);
-      if (op.round && enc.round !== round) break;
+      if (op.round && enc.round > round && (enc.round > round + 1 || enc.order.indexOf(enc.acting[0]) >= from)) break;
     }
   } else if (op.op === "undying") {
     if (op.on) state.undying = true;

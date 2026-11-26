@@ -160,7 +160,7 @@ import { BAR_SLOTS, assignSlot, barChoices, loadBar, moveSlot, saveBar } from ".
 import { believe, foreseeWalk, giveUp, settle, standing, type Ahead } from "./zone/ahead";
 import { playback, type Playback } from "./zone/playback";
 import { NO_FLAGS, setZoneDev, useZoneDev } from "./zone/zoneDev";
-import { SandboxEnemy, sandboxFoe } from "./zone/SandboxEnemy";
+import { SandboxEnemy, sandboxFoe, sandboxSlots } from "./zone/SandboxEnemy";
 import "./zone/zone.css";
 import { CombatLog, RollToast, type LogEntry } from "./zone/CombatLog";
 import { TimedTurnBar, type SongCall } from "./zone/TurnBar";
@@ -2062,6 +2062,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const z = state ? asState(state) : null;
   // The enemy the combat sandbox has the dev playing, if any (zone/SandboxEnemy.tsx).
   const foe = sandboxFoe(z, dev);
+  // Your hero looks toward the pointer only while it is them being played.
+  const elsewhere = !!foe || (!!act && !!state && act.id !== state.you);
+  useEffect(() => renderer.current?.setGazeHeld(elsewhere), [elsewhere]);
   /** Who is on this hex: whoever stands on it or, with nobody standing there, a dead enemy lying on it. */
   const unitOn = (pos: HexPos | null) => (pos && z ? (unitAt(z, pos) ?? z.units.find((u) => covers(u, pos))) : undefined);
   /** A crate still whole on this hex. */
@@ -2796,7 +2799,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       run: () => setPick((p) => (p?.kind === "item" && p.item === item ? null : { kind: "item", item })),
     };
   }
-  const slots = Array.from({ length: BAR_SLOTS }, (_, i) => entries[bar[i] ?? ""] ?? null);
+  // Playing an enemy in the combat sandbox: its abilities are the bar, in its own order.
+  const foeSlots = foe && z ? sandboxSlots(z, foe, dev) : null;
+  const slots = foeSlots ? Array.from({ length: BAR_SLOTS }, (_, i) => foeSlots[i] ?? null) : Array.from({ length: BAR_SLOTS }, (_, i) => entries[bar[i] ?? ""] ?? null);
 
   // Whoever is being shown acting, while the enemy's turn plays out; otherwise whoever the server waits on.
   // (Those sharing the turn who have ended theirs are not waited on; with nobody left, the turn is passing on.)
@@ -3042,7 +3047,17 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
               turn: spot ? id === spot : enc.acting.includes(id) && !enc.done.includes(id), spent: !spot && enc.acting.includes(id) && enc.done.includes(id), down: u.down, mine: mine.some((m) => m.id === id), ...(hidden ? { hidden } : {}),
             }];
           })}
-          onPick={(id) => { const u = state.units.find((x) => x.id === id); if (u) renderer.current?.lookAt(u.pos); }}
+          onPick={(id) => {
+            const u = state.units.find((x) => x.id === id);
+            if (!u) return;
+            renderer.current?.lookAt(u.pos);
+            // In the combat sandbox: their turn, now, and theirs to play.
+            if (!state.sandbox || u.down) return;
+            dev.open?.send({ op: "set_turn", unit: id });
+            if (u.side === "enemy") return setZoneDev({ picked: id, tool: null });
+            setZoneDev({ picked: null, tool: dev.tool?.tool === "strike" ? null : dev.tool });
+            if (mine.some((m) => m.id === id)) pickHero(id);
+          }}
         />
       )}
 
@@ -3270,7 +3285,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       )}
 
       {/* The combat sandbox: the enemy picked, to play. */}
-      {foe && state && <SandboxEnemy state={asState(state)} foe={foe} />}
+      {foe && <SandboxEnemy foe={foe} />}
 
       {/* In a fight: the turn's Action Points and movement, whose turn it is, and the way to end it, over the bar. */}
       {enc && fighting && (
@@ -3297,12 +3312,12 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       <HudBar
         me={me}
         place={enc && fighting ? undefined : place}
-        hp={{ now: seen(act).hp, max: act.maxHp, shield: shieldOf(seen(act)) }}
+        hp={foe ? { now: seen(foe).hp, max: foe.maxHp, shield: shieldOf(seen(foe)) } : { now: seen(act).hp, max: act.maxHp, shield: shieldOf(seen(act)) }}
         // The keys the party has found, on its one ring.
         chips={keys > 0 ? <span className="hud-chip" title="Keys to locked doors: any key opens any door">{keysText}</span> : undefined}
         slots={slots}
-        onSlotMove={(from, to) => arrange(moveSlot(bar, from, to))}
-        onSlotMenu={(index) => setBarMenu((open) => (open === index ? null : index))}
+        onSlotMove={foe ? undefined : (from, to) => arrange(moveSlot(bar, from, to))}
+        onSlotMenu={foe ? undefined : (index) => setBarMenu((open) => (open === index ? null : index))}
         // Either hand takes a lit torch: put one there to light it. In the main hand it is swung as a weapon.
         torch={{
           rounds: act.torch ?? null,

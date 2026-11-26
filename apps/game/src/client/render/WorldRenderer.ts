@@ -942,6 +942,8 @@ export class WorldRenderer {
   private gaze: THREE.Vector3 | null = null;
   /** Your hero faces the camera rather than the pointer. */
   private faceFront = false;
+  /** Your hero keeps looking where they last looked, not toward the pointer: someone else is being played. */
+  private gazeHeld = false;
   /** Which way everyone else's hero is looking (a turn about y), as their players' pointers have it; gone once they walk. */
   private looks = new Map<string, number>();
   private unhearLooks: (() => void) | null = null;
@@ -3568,6 +3570,11 @@ export class WorldRenderer {
     this.faceFront = on;
   }
 
+  /** Have your hero stop looking toward the pointer and keep looking where they are (someone else is being played), or look toward it again. */
+  setGazeHeld(on: boolean) {
+    this.gazeHeld = on;
+  }
+
   /** The hex the camera is looking at: the one under the middle of the view. */
   focus(): HexPos {
     return worldToHex(this.target.x, this.target.z);
@@ -6070,7 +6077,7 @@ export class WorldRenderer {
       // Your own hero, standing idle, looks toward the pointer; with the bag open they turn to face you.
       if (id === this.state?.you && unit.path.length === 0 && !unit.asleep && !flat && !this.minigame) {
         if (this.faceFront) unit.turnGoal = this.yaw;
-        else if (this.gaze && this.pointer.inside) {
+        else if (this.gaze && this.pointer.inside && !this.gazeHeld) {
           const dx = this.gaze.x - p.x;
           const dz = this.gaze.z - p.z;
           if (dx * dx + dz * dz > 0.09) {

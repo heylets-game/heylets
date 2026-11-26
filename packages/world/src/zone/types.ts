@@ -440,7 +440,9 @@ export type DevOp =
   | { op: "strike"; unit: string; ability: string; target?: string; at?: HexPos; anywhere?: boolean }
   /** Put anyone standing straight on a hex (one they would have room on), with no walk to it. */
   | { op: "place"; unit: string; at: HexPos }
-  /** In a fight: end whoever's turn it is and start the next one's (`round`: every turn to the end of the round). */
+  /** In the combat sandbox: end whoever's turn it is and start `unit`'s, there and then (those between are passed over, not played). */
+  | { op: "set_turn"; unit: string }
+  /** In a fight: end whoever's turn it is and start the next one's (`round`: every turn, round to theirs again). */
   | { op: "next_turn"; round?: boolean }
   /** Heroes cannot go down: 0 HP does nothing. */
   | { op: "undying"; on: boolean }

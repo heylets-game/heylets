@@ -43,6 +43,16 @@ describe("the combat sandbox", () => {
     expect(state.encounter!.acting).toEqual([order[0]]);
   });
 
+  it("moves on a whole round from an enemy's turn, back round to that enemy's", () => {
+    let state = dev(dev(board(), { op: "sandbox", on: true }), { op: "start_fight" });
+    while (sideOfTurn(state) !== "enemy") state = dev(state, { op: "next_turn" });
+    const foe = state.encounter!.acting[0];
+    const round = state.encounter!.round;
+    state = dev(state, { op: "next_turn", round: true });
+    expect(state.encounter!.round).toBe(round + 1);
+    expect(state.encounter!.acting).toEqual([foe]);
+  });
+
   it("moves on a whole round at once", () => {
     let state = dev(dev(board(), { op: "sandbox", on: true }), { op: "start_fight" });
     const first = state.encounter!.acting;
@@ -175,5 +185,28 @@ describe("an enemy's ability, aimed by hand in the combat sandbox", () => {
     const state = dev(board(), { op: "start_fight" });
     const bandit = state.units.find((u) => u.kind === "bandit")!.id;
     expect(strike(state, { unit: bandit, ability: "slash", target: "ann" }).step.ok).toBe(false);
+  });
+});
+
+describe("setting the turn in the combat sandbox", () => {
+  it("makes it the turn of whoever is picked, at once, with nobody between playing", () => {
+    let state = dev(dev(board(), { op: "sandbox", on: true }), { op: "start_fight" });
+    const order = state.encounter!.order;
+    const last = order[order.length - 1];
+    const round = state.encounter!.round;
+    const events: ZoneEvent[] = [];
+    state = dev(state, { op: "set_turn", unit: last }, events);
+    expect(state.encounter!.acting).toEqual([last]);
+    expect(state.encounter!.round).toBe(round);
+    expect(events.filter((e) => e.t === "used" || e.t === "hit")).toEqual([]);
+    // And back to the first: the round does not turn over.
+    state = dev(state, { op: "set_turn", unit: order[0] });
+    expect(state.encounter!.acting).toEqual([order[0]]);
+    expect(state.encounter!.round).toBe(round);
+  });
+
+  it("is only for the sandbox", () => {
+    const state = dev(board(), { op: "start_fight" });
+    expect(stepZone(state, { type: "dev", by: "ann", dev: { op: "set_turn", unit: state.encounter!.order[0] } }).ok).toBe(false);
   });
 });

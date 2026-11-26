@@ -95,6 +95,7 @@ export function zoneActionFrom(raw: unknown, by: string, dev: boolean): ZoneActi
       return { type: "dev", by, dev: { op: "strike", unit: d.unit, ability: d.ability, ...(text(d.target) ? { target: d.target } : {}), ...(isHex(d.at) ? { at: hex(d.at)! } : {}), ...(d.anywhere ? { anywhere: true } : {}) } };
     }
     if (d.op === "place" && text(d.unit) && isHex(d.at)) return { type: "dev", by, dev: { op: "place", unit: d.unit, at: hex(d.at)! } };
+    if (d.op === "set_turn" && text(d.unit)) return { type: "dev", by, dev: { op: "set_turn", unit: d.unit } };
     if (d.op === "sandbox") return { type: "dev", by, dev: { op: "sandbox", on: !!d.on } };
     if (d.op === "next_turn") return { type: "dev", by, dev: { op: "next_turn", ...(d.round ? { round: true } : {}) } };
     if (d.op === "undying") return { type: "dev", by, dev: { op: "undying", on: !!d.on } };
