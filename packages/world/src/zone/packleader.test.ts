@@ -4,6 +4,8 @@ import { hexDistance, type HexPos } from "@gantt-quest/core";
 import { makeRng } from "../rng";
 import { enemyAct } from "./combat";
 import { attackContext, has } from "./engine";
+import { RALLY_WORTH, behaviourOf } from "./behaviours";
+import { mindOf } from "./kit";
 import { enemyStrikes } from "./kit";
 import type { Ctx } from "./engine";
 import type { ZoneEvent, ZoneState } from "./types";
@@ -46,14 +48,34 @@ describe("a Pack Leader's Howl", () => {
     expect(howl.weight).toBeGreaterThan(Math.max(savageBite.weight, greatLunge.weight));
   });
 
-  it("Frenzies every ally in the fight for 2 attacks, and not itself nor the heroes, with no roll and no harm", () => {
-    const { state, leader, pack } = setUp(at(9, 6), [at(6, 6), at(9, 2)]);
+  it("Frenzies every ally within 3 hexes for 2 attacks, and not itself nor the heroes, with no roll and no harm", () => {
+    const { state, leader, pack } = setUp(at(9, 6), [at(6, 6), at(9, 3), at(9, 2), at(2, 6)]);
     const { after, events } = act(state, leader, howl, null);
-    for (const wolf of pack) expect(frenzy(after, wolf)?.rounds).toBe(2);
+    for (const wolf of pack) {
+      const far = hexDistance(unit(state, wolf).pos, at(9, 6));
+      expect(frenzy(after, wolf)?.rounds, `${far} hexes off`).toBe(far <= 3 ? 2 : undefined);
+    }
+    // Some in reach and some not, or the test says nothing.
+    expect(pack.filter((w) => frenzy(after, w)).length).toBeGreaterThan(0);
+    expect(pack.filter((w) => !frenzy(after, w)).length).toBeGreaterThan(0);
     expect(frenzy(after, leader)).toBeUndefined();
     expect(frenzy(after, "ann")).toBeUndefined();
     expect(events.some((e) => e.t === "roll" || e.t === "hit")).toBe(false);
     expect(unit(after, "ann").hp).toBe(900);
+  });
+
+  it("is worth more to it the more allies it would stir from where it stands, and nothing with none in reach", () => {
+    const { state, leader, pack } = setUp(at(9, 6), [at(9, 4), at(9, 8), at(2, 6)]);
+    const look = { state, enemy: unit(state, leader), mind: mindOf("alpha") };
+    const worth = (from: HexPos) => behaviourOf(howl).value(look, from, howl, [unit(state, "ann")])?.worth ?? 0;
+    const reached = (from: HexPos) => pack.filter((w) => hexDistance(unit(state, w).pos, from) <= 3).length;
+    expect(reached(at(9, 6))).toBe(2);
+    expect(worth(at(9, 6))).toBe(2 * RALLY_WORTH);
+    expect(worth(at(15, 6))).toBe(RALLY_WORTH * reached(at(15, 6)));
+    expect(worth(at(15, 1))).toBe(RALLY_WORTH * reached(at(15, 1)));
+    // One already Frenzied is not counted.
+    unit(state, pack[0]).conditions.push({ kind: "frenzied", rounds: 2 });
+    expect(worth(at(9, 6))).toBe(RALLY_WORTH);
   });
 
   it("does not wear off with the turns", () => {
@@ -139,7 +161,7 @@ describe("a Pack Leader's turn", () => {
   }
 
   it("howls first when it has its pack in the fight", () => {
-    for (let seed = 1; seed <= 6; seed++) expect(firstTurn([at(4, 3), at(4, 9)], seed)[0], `seed ${seed}`).toBe("Howl");
+    for (let seed = 1; seed <= 6; seed++) expect(firstTurn([at(9, 4), at(9, 8)], seed)[0], `seed ${seed}`).toBe("Howl");
   });
 
   it("never howls with no pack to stir", () => {
