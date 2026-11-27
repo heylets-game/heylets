@@ -3067,7 +3067,10 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const hintFor = under ? [under, ...alsoHere].find((u) => shownConditions(u).length > 0)?.id : undefined;
   // One creature's part of the hover card: name and numbers, its effects (each in full while Alt is held),
   // an enemy's moves and its passive. Used for the one under the pointer and for anyone sharing its hex.
-  const unitCard = (u: NonNullable<typeof under>) => (
+  const unitCard = (u: NonNullable<typeof under>) => u.down && u.side === "enemy" ? (
+    // A fallen enemy is out of it: nothing about it matters now but that it is down.
+    <><strong>{u.name}</strong> <span className="muted">· down</span></>
+  ) : (
     <>
       <strong>{u.name}</strong> <span className="muted">{u.side === "enemy" ? ` · Level ${u.level}` : ""} · {u.hp}/{u.maxHp} HP{shieldOf(u) > 0 ? ` + ${shieldOf(u)} shield` : ""} · Defence {defenceOf(u, state)}{u.down ? " · down" : ""}</span>
       {shownConditions(u).length > 0 && (closer ? (
