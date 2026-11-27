@@ -164,7 +164,7 @@ export function walk(ctx: Ctx, unit: Unit, path: HexPos[], budget: Budget | null
     if (course && share > 0) course.left = budget!.course = course.left - share;
     taken.push(next);
     if (enterSurface(ctx, unit, flush) || unit.down) break;
-    enterWeather(ctx, unit);
+    enterWeather(ctx, unit, flush);
     if (ctx.onStep?.(unit, flush)) break;
   }
   flush();
