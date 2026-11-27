@@ -342,6 +342,14 @@ describe("ZoneRoom", () => {
     expect(hero(ann.state, "ann").items).toEqual({ healing: 2, poison: 2, fire: 1, oil: 1, water: 1, torch: 2 });
   });
 
+  it("writes the enemies a hero is in a fight with into their bestiary", async () => {
+    const { zone, ann } = await arrive();
+    expect(sql.prepare("SELECT COUNT(*) AS n FROM bestiary").get()).toEqual({ n: 0 });
+    await pickFight(zone, ann);
+    const wolves = ann.state.encounter!.order.filter((id) => hero(ann.state, id).side === "enemy").length;
+    expect(sql.prepare("SELECT owner, kind, faced, kills FROM bestiary").all()).toEqual([{ owner: "ann", kind: "wolf", faced: wolves, kills: 0 }]);
+  });
+
   it("pays a won fight's XP and materials to the hero, and marks a map with no enemy left as cleared", async () => {
     const { code, zone, ann } = await arrive();
     const xpBefore = (sql.prepare("SELECT xp, level FROM characters WHERE player_id = 'ann'").get() as { xp: number; level: number });

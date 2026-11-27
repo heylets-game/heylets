@@ -131,3 +131,23 @@
 .logbook-btn { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .logbook-btn.wide { display: flex; justify-content: center; width: 100%; margin: 4px 0 2px; }
 .news-diamond { display: inline-block; width: 7px; height: 7px; rotate: 45deg; background: var(--gold); border: 1px solid #000; }
+
+/* The bestiary (Bestiary.tsx): a slot a kind, a dark shape until it is met; and one kind written up. */
+.beast-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 6px; margin-top: 10px; }
+.book .beast-slot {
+  position: relative; display: grid; justify-items: center; gap: 2px; padding: 6px 2px 5px; color: #2a1810; font-size: 12px; line-height: 1.15;
+  background: rgba(255, 250, 232, 0.35); border: 1px solid #9a7a3a; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(255, 250, 232, 0.5);
+}
+.book .beast-slot:hover:not(:disabled) { background: rgba(255, 250, 232, 0.75); border-color: #1f4f86; box-shadow: inset 0 0 0 1px #c29a4c; }
+.beast-slot img { width: 44px; height: 54px; object-fit: contain; image-rendering: pixelated; filter: drop-shadow(0 2px 1px rgba(60, 38, 10, 0.45)); }
+.beast-slot span { min-height: 2.3em; display: grid; place-items: center; text-align: center; font-family: var(--font-head); }
+.book .beast-slot.unmet { opacity: 1; cursor: default; color: #8a744a; background: rgba(120, 92, 48, 0.12); border-style: dashed; }
+.beast-slot.unmet img { filter: brightness(0); opacity: 0.4; }
+.beast-slot b { position: absolute; top: 2px; right: 3px; min-width: 16px; padding: 0 3px; font-size: 11px; font-weight: normal; color: #fbeab4; background: #1c4576; border: 1px solid #c29a4c; border-radius: 8px; }
+.book .beast-back { display: block; margin: -4px 0 8px; }
+.beast-head { display: grid; grid-template-columns: 96px 1fr; gap: 14px; align-items: center; }
+.beast-portrait { display: grid; place-items: end center; height: 104px; border-radius: 50%; background: radial-gradient(circle at 50% 60%, rgba(63, 127, 192, 0.3), rgba(63, 127, 192, 0) 66%); border-bottom: 3px double #9a7a3a; }
+.beast-portrait img { width: 76px; height: 92px; object-fit: contain; image-rendering: pixelated; filter: drop-shadow(0 3px 2px rgba(60, 38, 10, 0.5)); }
+.book-totals.beast-stats { grid-template-columns: 1fr; margin: 0; gap: 3px; }
+.book-totals.beast-stats dd { font-size: 17px; }
+.book-totals.beast-record { margin: 14px 0 4px; }

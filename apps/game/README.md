@@ -82,6 +82,7 @@ A tab left open on an older build is told when a newer one is out (`src/client/N
 | `…/gear.ts`, `carry.ts` | Slots, rarities, item generation, armor, gear powers (`PERK_INFO`, `perksOf`), prices and the stall's stock; the pack and what fits in it |
 | `…/hut.ts`, `…/hutroom.ts` | Hut materials, furnishings and tiers; the walk-in room, placement and its message types |
 | `…/drops.ts` | What a searched cache gives for the hut |
+| `…/bestiary.ts` | The logbook's bestiary: every enemy kind written up from the enemy tables (`bestiaryEntry`), and what a step of a map adds to whose book (`bestiaryMarks`: faced and killed). `apps/game/src/server/bestiary.ts` keeps it in D1, one book to an account; `client/Bestiary.tsx` is the page |
 | `…/gather.ts` | Fishing, felling and the quarry: outings, timing, payouts, stamina and resting |
 | `…/fishing.ts`, `fishingholes.ts`, `fishfight.ts`, `sitting.ts`, `fishcatalog.ts`, `fishmarket.ts`, `catchbook.ts`, `fishmonger.ts` | Fishing: a sitting anywhere along the shore or afloat, bait (what it does, what it costs, when it is used up), the crew's fishing holes (where the fish are, by the clock and the weather), the fight with one fish, the catalogue of what can be caught, selling it, the Catch Book, and Bram the fishmonger at the shack, who buys the catch and sells the bait |
 | `…/felling.ts`, `mine.ts` | Felling's two rounds, and the quarry's rock face |
