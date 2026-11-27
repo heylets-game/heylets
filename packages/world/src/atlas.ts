@@ -29,6 +29,12 @@
 //              environment is decided anywhere else. Open sand is a desert
 //              wherever it lies: its climate is the dunes, even in a small
 //              stretch of it in the middle of the greenwood.
+//   islands    the world is an ocean, and every place is an island in it
+//              (`isleOf`): land reaches only so far from a place, by what
+//              the place is, with a strand round its edge and open sea
+//              beyond. What the land of an island is, hex by hex, is still
+//              the slow noise's to say (`groundLie`); the island only says
+//              where it stops. A crew sails from one to the next.
 //   sea caves  now and then a node is a cave: a delve (zone/delve.ts), with
 //              chests and a hoard, cleared when the last chest is open.
 //   lookouts   high ground, craggy to fight on. From one the crew has
@@ -96,17 +102,25 @@ export const ATLAS_HOME = "0,0";
 export const ATLAS_REACH = 500;
 /** The share of pairs of neighbours joined by a route, besides the one route every node has toward the Harbor. */
 const EXTRA_ROUTES = 0.42;
-/** How many hexes of the world lie between one cell's middle and the next: about how far apart two places are. */
-export const ATLAS_SPACING = 5;
 /**
- * How far the lattice of cells is bent out of true, in hexes, so the places do not lie in rows. The bend is
+ * The lattice the places were first laid on, five hexes to a cell, and how far the world has since been spread
+ * out to put open sea between them. A place stands on the hex it always did, times `SPREAD`: so the noise under
+ * it (which is reckoned in cells, not hexes) is the very same, and with it the place's land, climate, name and
+ * routes. Spread by a whole number or not at all: anything else moves a place off the hex its lie was read from.
+ */
+const GRAIN = 5;
+const SPREAD = 2;
+/** How many hexes of the world lie between one cell's middle and the next: about how far apart two places are. */
+export const ATLAS_SPACING = GRAIN * SPREAD;
+/**
+ * How far the lattice of cells is bent out of true, in hexes of the first lattice, so the places do not lie in rows. The bend is
  * slow (neighbours are carried the same way, and stay apart), and each place is nudged a little on its own besides.
  */
 const WARP = 1.7;
 const WARP_SCALE = 2.2;
 const NUDGE = 0.7;
 /** Two places are joined by a route of the second kind (not the one each has toward the Harbor) only if they lie this near. */
-const ROUTE_REACH = ATLAS_SPACING + 1;
+const ROUTE_REACH = (GRAIN + 1) * SPREAD;
 /** One node in so many, from the second ring out, is a sea cave; one in so many more a lookout; and from the third ring, a lair. */
 const SEACAVE_CHANCE = 0.16;
 const LOOKOUT_CHANCE = 0.07;
@@ -156,11 +170,12 @@ export function atlasHex(seed: string, cell: AtlasCell): HexPos {
   const mid: HexPos = { q: cell.q * ATLAS_SPACING, r: cell.r * ATLAS_SPACING };
   if (ringOf(cell) === 0) return mid;
   const id = idOf(cell);
-  // Across the page and down it, in hexes; then back into the hexes' own two directions.
+  // Across the page and down it, in hexes of the first lattice; then back into the hexes' own two directions.
   const dx = (atlasNoise(seed, "bend-x", mid, WARP_SCALE) - 0.5) * 2 * WARP + (roll(seed, "nudge-x", id) - 0.5) * 2 * NUDGE;
   const dy = (atlasNoise(seed, "bend-y", mid, WARP_SCALE) - 0.5) * 2 * WARP + (roll(seed, "nudge-y", id) - 0.5) * 2 * NUDGE;
   const dr = dy / (Math.sqrt(3) / 2);
-  return hexRound(mid.q + dx - dr / 2, mid.r + dr);
+  const first = hexRound(cell.q * GRAIN + dx - dr / 2, cell.r * GRAIN + dr);
+  return { q: first.q * SPREAD, r: first.r * SPREAD };
 }
 
 /** The neighbour a ring nearer the Harbor that a node's own route runs to. Every node but the Harbor has one. */
@@ -275,16 +290,26 @@ export interface AtlasLie {
   up: number;
   /** Open grass in the middle of a meadow: where the tall grass grows. */
   lea: boolean;
+  /**
+   * For the sea: this is the open ocean between the islands, which is water whatever climate it lies in. (Sea
+   * without it is low ground on an island: a pool in the mire, molten rock in the ashlands; or the rock a
+   * place out in the sea stands on.)
+   */
+  open?: true;
 }
 
-/** The lie of the land at a hex of the world, before anything is put on it. `memo` saves working the same noise out twice. */
-export function atlasLie(seed: string, hex: HexPos, memo?: Map<string, number>): AtlasLie {
+/**
+ * What the ground at a hex of the world would be were it all one country, with seas only where it lies low:
+ * the slow noise's own reckoning, before the ocean is let in round the islands (`atlasLie`). A place is the
+ * land this says is under it. `memo` saves working the same noise out twice.
+ */
+function groundLie(seed: string, hex: HexPos, memo?: Map<string, number>): AtlasLie & { pool?: true } {
   const at = (tag: string, scale: number) => atlasNoise(seed, tag, hex, scale, memo);
   const tract = atlasClime(seed, hex, memo);
   const lie = LIE[tract];
   const sea = at("sea", 3.1);
   const fine = at("fine", 0.34);
-  const is = (land: AtlasLand, more: Partial<AtlasLie> = {}): AtlasLie => ({ land, clime: land === "sand" ? "dunes" : tract, tract, fine, up: 0, lea: false, ...more });
+  const is = (land: AtlasLand, more: Partial<AtlasLie> & { pool?: true } = {}): AtlasLie & { pool?: true } => ({ land, clime: land === "sand" ? "dunes" : tract, tract, fine, up: 0, lea: false, ...more });
   if (sea < lie.sea) return is("sea");
   // Ridges: hills that climb into mountains along their spine.
   const ridge = at("ridge", 1.25);
@@ -292,13 +317,95 @@ export function atlasLie(seed: string, hex: HexPos, memo?: Map<string, number>):
   // The strand: wherever the sea is near.
   if (sea < lie.sea + lie.strand) return is("strand");
   // The mire is pocked with pools.
-  if (tract === "mire" && fine < 0.2) return is("sea");
+  if (tract === "mire" && fine < 0.2) return is("sea", { pool: true });
   const region = atlasRegion(seed, hex, memo);
   const wooded = (share: number) => fine < share * lie.woods;
   // A run of shore country is open sand in the greenwood and the dunes, with a green patch here and there.
   if (region === "shore") return tract === "greenwood" || tract === "dunes" ? is(fine > 0.8 ? "grass" : "sand") : is(wooded(0.25) ? "forest" : "grass");
   if (region === "woods") return is(wooded(0.7) ? "forest" : "grass");
   return fine > 1 - 0.26 * lie.woods ? is("forest") : is("grass", { lea: true });
+}
+
+/**
+ * How far an island's land reaches from the place on it, in hexes, by what the place is: `base`, and up to
+ * `more` besides (each island its own). The Harbor's is the broadest; a place that stands in the sea itself
+ * (`sea`, whatever kind of place it is) is a skerry, hardly more than the rock it is on.
+ */
+const ISLE_REACH: Record<AtlasNodeKind | "sea", { base: number; more: number }> = {
+  harbor: { base: 3.8, more: 0 },
+  landfall: { base: 2.4, more: 1.2 },
+  seacave: { base: 2.2, more: 0.7 },
+  lookout: { base: 2.8, more: 0.8 },
+  lair: { base: 3.2, more: 1 },
+  sea: { base: 1.4, more: 0.5 },
+};
+/** How far a coast wanders in and out of its island's round, in hexes, and how fine the wandering is (in cells). */
+const COAST_WANDER = 0.9;
+const COAST_SCALE = 0.17;
+/** How wide the strand at an island's edge is, in hexes. */
+const COAST_STRAND = 0.55;
+/** In the ashlands low ground this fine or finer is still molten, even on an island: pools of fire, as the mire has pools of water. */
+const FIRE_POOLS = 0.3;
+
+/** The island a place stands on: where the place is, the lie of the land under it, and how far its land reaches. */
+interface Isle {
+  hex: HexPos;
+  lie: AtlasLie;
+  reach: number;
+}
+/** Islands already worked out, by seed and cell: a whole map asks for the same few thousands of times. */
+const isles = new Map<string, Isle>();
+
+/** The island in a cell of a chart. The same seed and cell always give the same island. */
+function isleOf(seed: string, cell: AtlasCell): Isle {
+  const key = `${seed}|${idOf(cell)}`;
+  let isle = isles.get(key);
+  if (!isle) {
+    const hex = atlasHex(seed, cell);
+    const ring = ringOf(cell);
+    // Home: a green by the water, whatever the lie of the land was before the town was built on it.
+    const lie: AtlasLie = ring === 0 ? { land: "grass", clime: "greenwood", tract: "greenwood", fine: 0.5, up: 0, lea: false } : plain(groundLie(seed, hex));
+    const { base, more } = ISLE_REACH[ring === 0 ? "harbor" : lie.land === "sea" ? "sea" : kindOf(ring, rngFor(seed, "node", idOf(cell)).next())];
+    isle = { hex, lie, reach: base + more * roll(seed, "isle", idOf(cell)) };
+    if (isles.size > 4096) isles.clear();
+    isles.set(key, isle);
+  }
+  return isle;
+}
+const plain = ({ pool: _pool, ...lie }: AtlasLie & { pool?: true }): AtlasLie => lie;
+
+/**
+ * The lie of the land at a hex of the world: what the atlas draws there (atlasMap.ts), and so what a place
+ * standing on it is. Open sea, unless an island reaches this far: then the ground the slow noise says
+ * (`groundLie`), with a strand round the island's edge, and its low ground dry land like the rest of it (the
+ * mire's pools and the ashlands' fire excepted). The hex a place stands on is the place's own lie exactly.
+ * `memo` saves working the same noise out twice.
+ */
+export function atlasLie(seed: string, hex: HexPos, memo?: Map<string, number>): AtlasLie {
+  const { x, y } = page(hex);
+  // The island of the cell this hex lies in, or of one beside it: no island reaches further than that.
+  const mid = hexRound(hex.q / ATLAS_SPACING, hex.r / ATLAS_SPACING);
+  let on: Isle | null = null;
+  let within = 0;
+  for (const cell of [mid, ...around(mid)]) {
+    const isle = isleOf(seed, cell);
+    if (isle.hex.q === hex.q && isle.hex.r === hex.r) return isle.lie;
+    const at = page(isle.hex);
+    const inside = isle.reach - Math.hypot(x - at.x, y - at.y) * ATLAS_SPACING;
+    if (inside > within - COAST_WANDER && (!on || inside > within)) [on, within] = [isle, inside];
+  }
+  const ground = groundLie(seed, hex, memo);
+  const open: AtlasLie = { land: "sea", clime: ground.tract === "ash" ? "greenwood" : ground.tract, tract: ground.tract, fine: ground.fine, up: 0, lea: false, open: true };
+  if (!on) return open;
+  within += (atlasNoise(seed, "coast", hex, COAST_SCALE, memo) - 0.5) * 2 * COAST_WANDER;
+  if (within < 0) return open;
+  const strand: AtlasLie = { land: "strand", clime: ground.tract, tract: ground.tract, fine: ground.fine, up: 0, lea: false };
+  if (within < COAST_STRAND) return strand;
+  if (ground.land !== "sea") return plain(ground);
+  if (ground.pool || (ground.tract === "ash" && ground.fine < FIRE_POOLS)) return plain(ground);
+  // Low ground on an island is the island's own land: what the place on it stands on (sand, by the sea).
+  const land = on.lie.land === "sea" || on.lie.land === "strand" ? "strand" : on.lie.land;
+  return land === "strand" ? strand : { land, clime: land === "sand" ? "dunes" : ground.tract, tract: ground.tract, fine: ground.fine, up: land === "hills" ? 0.02 : 0, lea: false };
 }
 
 /** The ground a place's map is laid on (zone/sites.ts), by the land it stands on: the shore for the sea and its strand, high ground for the hills. */
@@ -380,6 +487,14 @@ function rollMods(rng: Rng, ring: number, kind: AtlasNodeKind): ZoneMod[] {
   return cleanMods(picked);
 }
 
+/** What a place is, by its ring and the one throw that decides it: a sea cave, a lookout, a lair, or (most of them) a landfall. */
+const kindOf = (ring: number, what: number): AtlasNodeKind =>
+  ring === 0 ? "harbor"
+  : ring >= 2 && what < SEACAVE_CHANCE ? "seacave"
+  : ring >= 2 && what < SEACAVE_CHANCE + LOOKOUT_CHANCE ? "lookout"
+  : ring >= 3 && what < SEACAVE_CHANCE + LOOKOUT_CHANCE + LAIR_CHANCE ? "lair"
+  : "landfall";
+
 /** The node in a cell of a chart. The same seed and cell always give the same node. */
 export function atlasNode(seed: string, cell: AtlasCell): AtlasNode {
   const id = idOf(cell);
@@ -389,13 +504,8 @@ export function atlasNode(seed: string, cell: AtlasCell): AtlasNode {
   // Home: a green by the water, whatever the lie of the land was before the town was built on it.
   if (ring === 0) return { id, cell, hex, name: "The Harbor", kind: "harbor", land: "grass", clime: "greenwood", biome: "meadow", ring: 0, level: 1, mods: [], links };
   const rng = rngFor(seed, "node", id);
-  // One throw decides what it is: a sea cave, a lookout, a lair, or (most of them) a landfall.
-  const what = rng.next();
-  const kind: AtlasNodeKind =
-    ring >= 2 && what < SEACAVE_CHANCE ? "seacave"
-    : ring >= 2 && what < SEACAVE_CHANCE + LOOKOUT_CHANCE ? "lookout"
-    : ring >= 3 && what < SEACAVE_CHANCE + LOOKOUT_CHANCE + LAIR_CHANCE ? "lair"
-    : "landfall";
+  // One throw decides what it is (`kindOf`).
+  const kind = kindOf(ring, rng.next());
   // Where it is decides what it is like: the land under it and that land's climate, as the atlas draws them.
   const { land, clime } = atlasLie(seed, hex);
   const biome: ZoneBiome = kind === "seacave" ? "caves" : groundBiome(LAND_GROUND[land]);
