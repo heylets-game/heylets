@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { at, flatBoard, must, standEnemy as enemy, standHero, unit } from "../test/zoneBoard";
 import { makeRng } from "../rng";
 import { damage, type Ctx } from "./engine";
+import type { ZoneEvent } from "./types";
 
 // The Maps tab's dev switches: heroes who cannot go down, and clearing every enemy off the map.
 
@@ -55,6 +56,36 @@ describe("dev switches", () => {
     const off = must(board(), { type: "dev", by: "ann", dev: { op: "timer", off: true } });
     expect(off.timerOff).toBe(true);
     expect(must(off, { type: "dev", by: "ann", dev: { op: "timer", off: false } }).timerOff).toBeUndefined();
+  });
+
+  it("passes the heroes' turns over while heroes take no turns, a round at a time", () => {
+    let state = board();
+    state.aiOff = false;
+    state.undying = true;
+    // Ann's turn, if it is hers now, ends with the switch.
+    const events: ZoneEvent[] = [];
+    const round = state.encounter!.round;
+    state = must(state, { type: "dev", by: "ann", dev: { op: "heroes_idle", on: true } }, events);
+    expect(state.heroesIdle).toBe(true);
+    const enc = state.encounter!;
+    // The wolf played: it bit her, and it is her turn again only in the next round, waiting as ever.
+    expect(events.some((e) => e.t === "hit")).toBe(true);
+    expect(enc.round).toBe(round + 1);
+    expect(enc.acting).toEqual(["ann"]);
+    expect(enc.done).toEqual([]);
+    // Ending it plays one round more.
+    const again = must(state, { type: "end_turn", by: "ann", unit: "ann" });
+    expect(again.encounter!.round).toBe(round + 2);
+    expect(again.encounter!.acting).toEqual(["ann"]);
+    expect(must(state, { type: "dev", by: "ann", dev: { op: "heroes_idle", on: false } }).heroesIdle).toBeUndefined();
+  });
+
+  it("leaves a hero's turn waiting with heroes taking no turns while the enemy takes none either", () => {
+    let state = must(board(), { type: "dev", by: "ann", dev: { op: "heroes_idle", on: true } });
+    const enc = state.encounter!;
+    if (enc.acting[0] !== "ann") state = must(state, { type: "dev", by: "ann", dev: { op: "next_turn" } });
+    expect(state.encounter!.acting).toEqual(["ann"]);
+    expect(state.encounter!.done).toEqual([]);
   });
 
   it("takes every enemy off the map, ending the fight they were in, with no bodies", () => {
