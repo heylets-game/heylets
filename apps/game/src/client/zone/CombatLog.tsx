@@ -27,7 +27,7 @@
 // came out. It is the roll's card: it takes the same `Roll` the view already
 // shows as a blow lands (ZoneView's `roll`), so it stands in that card's place.
 
-import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { swingsOf, type Roll, type Rolled, type Swing } from "@gantt-quest/world";
 import { ChatInput } from "../ChatInput";
 import "./fight.css";
@@ -304,16 +304,13 @@ export const CombatLog = memo(function CombatLog({ entries, open, onToggle, clas
 // ---------- the roll, large ----------
 
 export interface RollToastProps {
-  /** The roll to show; null for none. A new roll (a new object) plays it again. */
+  /** A roll to show: a new one (a new object) plays, or waits its turn behind the one up. Null adds nothing. */
   roll: Roll | null;
   /** Who rolled. */
   who?: string;
   /** The damage or healing dice that followed it, shown under the outcome. */
   dice?: Rolled | null;
-  /**
-   * How long it stays before it fades by itself, in milliseconds (the view may take it away sooner by passing null).
-   * The default has it faded out just inside the 2.6 seconds the view keeps a roll's card up for.
-   */
+  /** How long a card stays before it fades by itself, in milliseconds, when nothing is waiting behind it. */
   hold?: number;
 }
 
@@ -336,20 +333,50 @@ function BigD20({ n, cls }: { n: number; cls: string }) {
   );
 }
 
+/**
+ * The least a card is up before a roll waiting behind it takes its place (RollToast), in milliseconds: the die lands,
+ * the outcome stamps down, and there is a moment to read it; longer with a line on what made the difference.
+ */
+const minShown = (roll: Roll) => TUMBLE_MS + (swingsOf(roll).length > 0 ? 1400 : 800);
+/** How many rolls may wait to be shown. More than that, and the oldest waiting is skipped (it is in the log). */
+const QUEUE_MAX = 2;
+
+interface Shown { roll: Roll; who?: string; dice?: Rolled | null }
+
+/**
+ * The roll, large, one at a time. A roll that comes while another is up waits its turn rather than cutting it off:
+ * the one up stays its least (minShown), then the next plays. With none waiting, each stays its full `hold`.
+ */
 export function RollToast({ roll, who, dice, hold = 2200 }: RollToastProps) {
-  /** The faces the dice show while they tumble, then what they rolled. */
-  const [faces, setFaces] = useState<number[]>(roll?.d20 ?? []);
-  const [phase, setPhase] = useState<"roll" | "landed" | "out" | "gone">("roll");
-  /** The roll being shown, and how many there have been: each new one plays from the start. */
-  const [play, setPlay] = useState({ roll, n: 0 });
-  if (play.roll !== roll) {
-    setPlay({ roll, n: play.n + 1 });
-    setPhase("roll");
-    setFaces(roll?.d20 ?? []);
+  const [s, setS] = useState<{ now: (Shown & { at: number }) | null; queue: Shown[]; n: number }>({ now: null, queue: [], n: 0 });
+  const [came, setCame] = useState<Roll | null>(null);
+  if (roll !== came) {
+    setCame(roll);
+    if (roll) {
+      const entry = { roll, who, dice };
+      setS((p) => (p.now ? { ...p, queue: [...p.queue, entry].slice(-QUEUE_MAX) } : { now: { ...entry, at: performance.now() }, queue: [], n: p.n + 1 }));
+    }
   }
+  const next = useCallback(() => setS((p) => (p.queue.length > 0 ? { now: { ...p.queue[0], at: performance.now() }, queue: p.queue.slice(1), n: p.n + 1 } : { ...p, now: null })), []);
+  // Something is waiting: the one up gives way once it has been up its least.
+  const waiting = s.queue.length > 0;
+  useEffect(() => {
+    if (!s.now || !waiting) return;
+    const t = setTimeout(next, Math.max(0, s.now.at + minShown(s.now.roll) - performance.now()));
+    return () => clearTimeout(t);
+  }, [s.now, waiting, next]);
+  if (!s.now) return null;
+  return <RollCard key={s.n} roll={s.now.roll} who={s.now.who} dice={s.now.dice} hold={hold} onGone={next} />;
+}
+
+/** One roll's card: the die tumbles and lands, then the sum, the outcome and the rest; it fades by itself, then says so (`onGone`). */
+function RollCard({ roll, who, dice, hold, onGone }: { roll: Roll; who?: string; dice?: Rolled | null; hold: number; onGone(): void }) {
+  /** The faces the dice show while they tumble, then what they rolled. */
+  // (Made afresh for each roll, keyed by RollToast: each plays from the start.)
+  const [faces, setFaces] = useState<number[]>(roll.d20);
+  const [phase, setPhase] = useState<"roll" | "landed" | "out" | "gone">("roll");
 
   useEffect(() => {
-    if (!roll) return;
     const still = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
     const timers: ReturnType<typeof setTimeout>[] = [];
     let spin: ReturnType<typeof setInterval> | undefined;
@@ -367,14 +394,14 @@ export function RollToast({ roll, who, dice, hold = 2200 }: RollToastProps) {
     }
     // A roll with something that made the difference stays a little longer: there is a line more to read.
     const stay = hold + (swingsOf(roll).length > 0 ? SWING_READ_MS : 0);
-    timers.push(setTimeout(() => setPhase("out"), stay), setTimeout(() => setPhase("gone"), stay + 360));
+    timers.push(setTimeout(() => setPhase("out"), stay), setTimeout(() => (setPhase("gone"), onGone()), stay + 360));
     return () => {
       if (spin) clearInterval(spin);
       timers.forEach(clearTimeout);
     };
-  }, [roll, hold]);
+  }, [roll, hold, onGone]);
 
-  if (!roll || phase === "gone") return null;
+  if (phase === "gone") return null;
   const out = rollOutcome(roll);
   const kept = keptIndex(roll);
   const botch = roll.kind === "attack" && roll.kept === 1;
@@ -382,7 +409,7 @@ export function RollToast({ roll, who, dice, hold = 2200 }: RollToastProps) {
   const swings = swingsOf(roll);
   const parts = partsOf(roll, swings);
   return (
-    <div key={play.n} className={`fight-ui fight-roll ${out.tone} ${botch ? "botch" : ""} ${phase === "roll" ? "" : "landed"} ${phase === "out" ? "out" : ""}`} role="status">
+    <div className={`fight-ui fight-roll ${out.tone} ${botch ? "botch" : ""} ${phase === "roll" ? "" : "landed"} ${phase === "out" ? "out" : ""}`} role="status">
       <div className="fr-dice">
         {roll.d20.map((_, i) => <BigD20 key={i} n={faces[i] ?? roll.d20[i]} cls={i === kept ? "kept" : "dropped"} />)}
       </div>

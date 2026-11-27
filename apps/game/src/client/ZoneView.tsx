@@ -2871,11 +2871,6 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     const t = setTimeout(zone.clearError, 3500);
     return () => clearTimeout(t);
   }, [zone.error, zone.clearError]);
-  useEffect(() => {
-    if (!roll) return;
-    const t = setTimeout(() => setRoll(null), 2600);
-    return () => clearTimeout(t);
-  }, [roll]);
 
   /** Back up to the Harbor: out of a cave, standing at its mouth. From a place on the atlas, back to the atlas. */
   const leave = () => {

@@ -248,6 +248,18 @@ export default function FightUiLab({ me, refresh }: { me?: Me; refresh?: () => P
     add(...out);
     setToast({ roll: r, dice: dmg });
   };
+  /** A blow that lands, and the save it forces coming in behind it as soon as a fight would send it: the card's queue. */
+  const hitThenSave = () => {
+    const blow = roll({ kind: "attack", label: "Shock · attack", d20: [14], bonus: 5, vs: 13, adv: 0, target: "e1", mods: [HIGH] });
+    const dmg = rolled(8, 1, 3);
+    add({ k: "roll", id: nid(), who: "Mira Tidewright", side: "hero", roll: blow, target: "Dire Wolf" }, { k: "hit", id: nid(), actor: "Mira Tidewright", side: "hero", target: "Dire Wolf", what: "Shock", amount: dmg.total, dice: dmg });
+    setToast({ roll: blow, dice: dmg });
+    setTimeout(() => {
+      const resist = roll({ kind: "save", label: "Resist Shock", d20: [9], bonus: 1, vs: 12, adv: 0, id: "e1", mods: [{ name: "Weakened", n: -2 }] });
+      add({ k: "roll", id: nid(), who: "Dire Wolf", side: "enemy", roll: resist });
+      setToast({ roll: resist });
+    }, 380);
+  };
   const shove = () => {
     const r = roll({ kind: "shove", label: "Shove · Strength", d20: [d20()], bonus: 3, vs: 11, adv: 0, target: "e4" });
     add({ k: "roll", id: nid(), who: "Mira Tidewright", side: "hero", roll: r, target: "Ogre" }, { k: "note", id: nid(), text: r.ok ? "The Ogre is knocked back a hex." : "The Ogre does not budge.", tone: r.ok ? "good" : "dim" });
@@ -443,6 +455,7 @@ export default function FightUiLab({ me, refresh }: { me?: Me; refresh?: () => P
             <B press={enemyAttack}>Enemy (blocked)</B>
             <B press={() => save(true)}>Save (halved)</B>
             <B press={() => save(false)}>Save failed</B>
+            <B press={hitThenSave}>Hit, then save</B>
             <B press={shove}>Shove</B>
             <B press={initiative}>Initiative</B>
             <B press={heal}>Heal</B>
