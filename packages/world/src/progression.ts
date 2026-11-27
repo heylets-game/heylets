@@ -23,11 +23,18 @@ export const STAT_LABEL: Record<StatKey, string> = {
   dex: "Dexterity",
 };
 
+/** Hit points every hero has before Vitality and level. */
+export const HP_BASE = 20;
+/** Hit points each point of Vitality gives a hero. */
+export const HP_PER_VIT = 3;
+/** Hit points each level gives a hero. */
+export const HP_PER_LEVEL = 3;
+
 /** What each stat does in this game, in a line. Shown wherever stats are listed. */
 export const STAT_BLURB: Record<StatKey, string> = {
   str: "Heavy weapon abilities (Paladins and Wardens): Bash, Cleave, Strike, Sturdy Blow, Disarming Chop, Goading Strike, Throw Pike, Bulwark Strike, Taunt.",
   int_stat: "Every spell, song and heal (Mages, Druids, Bards, Sages, Warlocks), and persuading islanders.",
-  vit: "+2 max HP per point. Also powers Recover, Block, Guard and Stand Strong.",
+  vit: `+${HP_PER_VIT} max HP per point. Also powers Recover, Block, Guard and Stand Strong.`,
   agi: "Movement each turn, acting first in a fight, and fleeing.",
   dex: "Dagger and bow abilities, and searching caches.",
 };
@@ -84,13 +91,6 @@ export function applyXp(p: Progress, amount: number): Progress & { levelsGained:
   }
   return { ...out, levelsGained };
 }
-
-/** Hit points every hero has before Vitality and level. */
-export const HP_BASE = 20;
-/** Hit points each point of Vitality gives a hero. */
-export const HP_PER_VIT = 3;
-/** Hit points each level gives a hero. */
-export const HP_PER_LEVEL = 3;
 
 /** A hero's hit points: 20, 3 a point of Vitality and 3 a level. (The old game keeps its own formula in packages/core.) */
 export function maxHpFor(stats: Stats, level: number): number {
