@@ -278,6 +278,4 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   icy_bomb: { id: "icy_bomb", name: "Icy Bomb", damage: 8, potency: 4, range: 5, area: 3, surface: { kind: "ice", rounds: 3 }, cooldown: 3, weight: 2 },
   thorn_hex: { id: "thorn_hex", name: "Thorn Hex", damage: 6, potency: 4, range: 5, saveOr: { effect: "bleeding" }, weight: 2 },
   evil_eye: { id: "evil_eye", name: "Evil Eye", damage: 4, potency: 3, range: 5, saveOr: { effect: "exposed", turns: 2 }, weight: 2 },
-  crushing_strike: { id: "crushing_strike", name: "Crushing Strike", damage: 9, potency: 5, saveOr: { effect: "stunned", turns: 1 }, weight: 2 },
-  sweeping_ruin: { id: "sweeping_ruin", name: "Sweeping Ruin", damage: 6, potency: 3, shape: "burst", weight: 2 },
 };

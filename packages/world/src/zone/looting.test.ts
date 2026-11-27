@@ -880,7 +880,7 @@ describe("what a body holds", () => {
 
   it("a boss always has gold on it, more of everything its kind has, gear more often than not, and on the atlas sometimes a lodestone", () => {
     const BOSSES = KINDS.filter((k) => ENEMIES[k].boss);
-    expect(BOSSES).toEqual(expect.arrayContaining(["alpha", "great_bear", "broodmother", "villain", "haunt", "guardian"]));
+    expect(BOSSES).toEqual(expect.arrayContaining(["alpha", "great_bear", "broodmother", "haunt", "guardian"]));
     for (const kind of BOSSES) {
       const level = 5;
       const all = bodies(kind, { tier: 6 }, level);

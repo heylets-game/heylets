@@ -37,7 +37,7 @@ export const ENEMY_FAMILY: Record<string, Family> = {
   wolf: "beast", alpha: "beast", bear: "beast", great_bear: "beast", bat: "beast", frost_wolf: "beast", ember_hound: "beast", snow_bear: "beast",
   spider: "bug", broodmother: "bug", spiderling: "bug",
   witch: "wild",
-  bandit: "raider", archer: "raider", brute: "raider", villain: "raider",
+  bandit: "raider", archer: "raider", brute: "raider",
   cultist: "cult",
   shade: "dead", skeleton: "dead", haunt: "dead", wraith: "dead",
   slime: "ooze",

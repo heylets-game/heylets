@@ -815,7 +815,6 @@ export const ENEMY_KIT: Record<string, EnemyKit> = {
   skeleton: {},
   slime: {},
   haunt: {},
-  villain: {},
   spider: { pack: true },
   broodmother: {},
   // A Broodmother's young: they keep off the hexes round her, so she has room to call more.
