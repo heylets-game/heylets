@@ -213,6 +213,18 @@ describe("release summaries", () => {
     expect(r.summary).toBe("From the overrides.");
   });
 
+  it("takes a summary written for the newest of its commits that has one, before and after the tag", () => {
+    const list = [
+      { ...pr("Hut: x", "Release-summary: From the trailer"), hash: "aaa" },
+      { ...pr("Pub: y"), hash: "bbb" },
+      { ...pr("Menu: z"), hash: "ccc" },
+    ];
+    const written = { aaa: "Older.", bbb: "Newer." };
+    expect(releaseFrom(list, undefined, written).summary).toBe("Newer.");
+    expect(releaseFrom(list, "game-v1", written).summary).toBe("Newer.");
+    expect(releaseFrom(list, "game-v1", { ...written, "game-v1": "For the tag." }).summary).toBe("For the tag.");
+  });
+
   it("puts the summary over the list in the GitHub release, and keeps it through another build's answer", () => {
     const r: Release = { id: "game-v1", date: "", notes: [{ area: "Hut", text: "Leave is up top" }], summary: "A refit." };
     expect(releaseMarkdown(r)).toBe("A refit.\n\n- **Hut:** Leave is up top\n");

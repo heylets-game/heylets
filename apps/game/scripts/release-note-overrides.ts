@@ -177,11 +177,16 @@ export const OVERRIDES: Record<string, string[]> = {
   ],
 };
 
-// Summaries for releases already tagged: the short seafaring paragraph shown
-// above a release's lines. Keyed by tag. A summary here replaces the one the
+// Summaries for releases: the short seafaring paragraph shown above a
+// release's lines. Keyed by tag, or, for a release not tagged yet, by the full
+// hash of its newest commit on main (it still applies once the tag is cut, and
+// "Coming next" shows it before then). A summary here replaces the one the
 // release's Release-summary: trailers would make, so it also mends one that
 // reads badly. How to write one is in AGENTS.md ("Release notes").
 export const SUMMARIES: Record<string, string> = {
+  // The release after game-v2026.11.27.2: the pub's top bar (#653), the wooden menus (#654) and these summaries (#656).
+  "e194c45fc8cc817390b466ffa227d15f4527c7a8":
+    "The menus have had a refit in fine new timber, with Sound, Graphics, Interface and Keys pages, and the crew chat can be hauled anywhere by its title. The pub hangs its name and Leave in a bar along the top, and on a phone the camera buttons fold away and your party shows as round portraits. Every notice on this board now opens with a word from the harbormaster.",
   "game-v2026.11.27.2":
     "The hut's had a refit: Decorate, the lamp and Leave hang from a bar along the top, with Craft and Storage stowed beneath it. Escape now shuts a panel without hauling up the game menu besides.",
   "game-v2026.11.27":
