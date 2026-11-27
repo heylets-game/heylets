@@ -261,8 +261,8 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   ghastly_fetter: { id: "ghastly_fetter", name: "Ghastly Fetter", damage: 5, potency: 4, range: 5, cost: 1, cooldown: 3, saves: true, saveOr: { effect: "reeling", turns: 3, amount: 1 }, tether: { reach: 1, turns: 3 }, weight: 2 },
   // The dread round a Haunt: every hero within 2 hexes of it makes every save with disadvantage. Always on, never used.
   terror_aura: { id: "terror_aura", name: "Terror Aura", damage: 0, potency: 0, aura: { radius: 2, saves: "disadvantage" }, weight: 0 },
-  venomous_bite: { id: "venomous_bite", name: "Venomous Bite", damage: 5, potency: 4, surface: { kind: "poison", rounds: 2 }, weight: 2 },
-  spider_web_spit: { id: "spider_web_spit", name: "Web Spit", damage: 3, potency: 3, range: 4, area: 3, saveOr: { effect: "slowed", turns: 2 }, surface: { kind: "slime", rounds: 2 }, cooldown: 3, weight: 3 },
+  venomous_bite: { id: "venomous_bite", name: "Venomous Bite", damage: 7, potency: 4, surface: { kind: "poison", rounds: 2 }, weight: 2 },
+  spider_web_spit: { id: "spider_web_spit", name: "Web Spit", damage: 6, potency: 3, range: 4, area: 3, saveOr: { effect: "slowed", turns: 2 }, surface: { kind: "slime", rounds: 2 }, cooldown: 3, weight: 3 },
   impaling_fang: { id: "impaling_fang", name: "Impaling Fang", damage: 11, potency: 5, saveOr: { effect: "sundered", turns: 2 }, weight: 2 },
   // Silk thrown over a wide patch of ground, hurting nobody: the web it leaves slows whoever is not a spider and speeds
   // whoever is (surfaces.ts).
