@@ -135,6 +135,7 @@ import {
   type GroundSurface,
   type Poi,
   type Roll,
+  type RollMod,
   type Throwable,
   type Budget,
   type Unit,
@@ -609,6 +610,13 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   /** The update being played out (zone/playback.ts): its clock stops while a blow is on its way. */
   const playing = useRef<Playback | null>(null);
   const settled = useRef<Picture | null>(null);
+  /** An update is being played out, its last step (the picture it ends on) still to come. */
+  const replaying = useRef(false);
+  /**
+   * The fight as it was, held while an update that ends it is played out: the fight's UI (the turn bar, the order,
+   * the log) stays up until the end is shown, not from the moment the answer comes. Null: the state's own is shown.
+   */
+  const [heldFight, setHeldFight] = useState<ZoneState["encounter"]>(null);
   /** Units with a move still to be shown from the update being played out: nothing is shown ahead for them until it has been. */
   const owed = useRef(new Set<string>());
   /**
@@ -666,6 +674,13 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     mapNow.current = next.map;
     youNow.current = next.you;
     const name = (id: string | null | undefined) => (id ? (names.current.get(id) ?? (isCrateId(next, id) ? "the crate" : "Someone")) : "Something");
+    // An update with nothing to show (a pack sent again, someone away or back) does not cut short one being shown:
+    // it is where the picture ends up once that one has played out (its last step takes settled.current).
+    if (events.length === 0 && ack === undefined && replaying.current) {
+      settled.current = { units: next.units, surfaces: next.surfaces, pois: next.map.pois };
+      return;
+    }
+    setHeldFight(prev && asState(prev).encounter && !next.encounter && events.some((ev) => ev.t === "fight_end") ? asState(prev).encounter : null);
     // Anything still playing from the last update is finished at once.
     for (const t of timers.current) clearTimeout(t);
     timers.current = [];
@@ -704,10 +719,12 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     let named = told?.entry?.kind === "act" && told.entry.named ? told.entry.unit : null;
     if (!prev || !from || events.length === 0) {
       // Nothing to play out: whatever was being shown is over.
+      replaying.current = false;
       setSpot(null);
       setWatching(false);
       return setPicture(end);
     }
+    replaying.current = true;
     const yours = (id: string) => next.units.some((u) => u.id === id && (ownHero(next, u.id) || ownHero(next, u.controller)));
     /** One of yours is in the fight: the view follows whoever's turn it is, and frames their shots (render/fightCamera.ts). */
     const inFight = !!next.encounter && next.encounter.order.some(yours);
@@ -797,7 +814,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       let afterShown: (() => void) | null = null;
       /** A shot of this event's that the view has drawn back to frame (shotFrom): let go once it is all seen. */
       let framed: (() => void) | undefined;
-      const say = (line: string, tone?: "good" | "bad" | "dim") => later(() => logAdd({ k: "note", text: line, ...(tone ? { tone } : {}) }));
+      const say = (line: string, tone?: "good" | "bad" | "dim", mods?: RollMod[]) => later(() => logAdd({ k: "note", text: line, ...(tone ? { tone } : {}), ...(mods?.length ? { mods } : {}) }));
       const sideOf = (id: string | null | undefined): "hero" | "enemy" | "none" => (id ? (find(id)?.side ?? next.units.find((u) => u.id === id)?.side ?? "none") : "none");
       const view = renderer.current;
       /** The unit makes its gesture (a cast, or a bow drawn), and `go`, what leaves its hand, runs as the gesture ends: at once with no view to draw it. */
@@ -1624,7 +1641,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         // A shield is no condition to be named: it goes up on the HP bars (and the ward's own effect plays), and the log says how big.
         if (ev.kind === "bolstered") {
           later(() => sounds.effect(ev.kind, view?.whereIs(ev.target)));
-          say(`${name(ev.target)} has a shield of ${ev.amount ?? 0}.`);
+          say(`${name(ev.target)} has a shield of ${ev.amount ?? 0}.`, undefined, ev.mods);
         } else {
           const count = stacksOf({ kind: ev.kind, rounds: ev.rounds, amount: ev.amount });
           const stacks = count > 1 ? ` ×${count}` : "";
@@ -1741,6 +1758,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         say(`${name(ev.id)} gets away from the fight.`);
       } else if (ev.t === "fight_end") {
         later(() => {
+          // The fight's UI goes now, as the end is shown (heldFight).
+          setHeldFight(null);
           // Nobody's turn is followed now (following your own hero, if it is on, takes over).
           view?.watch(null);
           // Getting away was heard as it happened: no stinger for a fight nobody won.
@@ -1943,7 +1962,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     void lines;
     if (marchEnd > at) at = marchEnd;
     later(() => {
-      setPicture(end);
+      // Where it all stands now: this update's end, or a later one's that had nothing to show (see the top).
+      setPicture(settled.current ?? end);
+      replaying.current = false;
       setSpot(null);
       setWatching(false);
     });
@@ -1977,7 +1998,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
 
   // The state as it is believed to be: the server's last, with what has been done since and not yet answered.
   const state = useMemo(() => (zone.state ? believe(zone.state, ahead) : null), [zone.state, ahead]);
-  const enc = state?.encounter ?? null;
+  // The fight as shown: the one just ended, held till its end has been played out (heldFight), else the state's.
+  const enc = heldFight ?? state?.encounter ?? null;
   // Which of your own you are playing: your hero, one of your party, or a stand-in or creature whose turn it is.
   // In the combat sandbox (dev toolbox), every hero in the fight is yours to play too.
   const sandboxed = (u: Unit) => !!state?.sandbox && !!state.encounter?.order.includes(u.id);
@@ -2871,11 +2893,6 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     const t = setTimeout(zone.clearError, 3500);
     return () => clearTimeout(t);
   }, [zone.error, zone.clearError]);
-  useEffect(() => {
-    if (!roll) return;
-    const t = setTimeout(() => setRoll(null), 2600);
-    return () => clearTimeout(t);
-  }, [roll]);
 
   /** Back up to the Harbor: out of a cave, standing at its mouth. From a place on the atlas, back to the atlas. */
   const leave = () => {

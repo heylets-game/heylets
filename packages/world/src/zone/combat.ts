@@ -8,7 +8,7 @@
 import { hexDistance, hexNeighbors, hexSegment, posKey, type HexPos } from "@gantt-quest/core";
 import { ABILITIES, BARD_AURA, ENEMIES, onlyInFights, type AbilityDef, type EffectKind } from "../content";
 import { tileAt, type Poi } from "../map";
-import { DEBUFFS, UNTIMED_KEEPS, attackMade, addCondition, addUses, addShield, addStacks, inflict, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, removeCondition, saveBonus, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
+import { DEBUFFS, UNTIMED_KEEPS, attackMade, addCondition, addUses, addShield, addStacks, inflict, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, removeCondition, momentOf, saveBonus, saveMods, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
 import { cratesOn, crateById, hurtCrate, isCrateId } from "./crates";
 import { ENEMY_ABILITIES } from "./enemyabilities";
 import { bearing, big, caught, close, blast, blockerAt, courseShare, covers, directionToward, gap, gapTo, meet, nearOf, reaches, ringToward, elevOf, fetterBars, flies, heldAgainst, inFight, lineFrom, pathIn, perkOf, pitAt, reachFrom, roomAt, roomFor, sameHex, sees, seesFor, solid, span, stepCost, strikes, unitById, zoneReach, type Course, type Lean, type Pit } from "./geometry";
@@ -17,7 +17,7 @@ import { modsOf } from "./mods";
 import { d20, diceFor, hitChance, mod, proficiency, rollDice, rollShown, statOf, type Dice } from "./rules";
 import { seenByHeroes } from "./light";
 import { HINDERING, harms, chill, clearSurfaces, dropTorch, enterSurface, ignite, letGoTorch, placeSurface } from "./surfaces";
-import { FIELD_KINDS, type Budget, type CommonAction, type FieldKind, type Throwable, type Unit, type ZoneState } from "./types";
+import { FIELD_KINDS, type Budget, type CommonAction, type FieldKind, type RollMod, type Rolled, type Throwable, type Unit, type ZoneState } from "./types";
 import { clusterHexes, enterWeather, makeQuake, makeWeather, quakeHexes, rainHexes, wallHexes } from "./weather";
 import { callKin, summonCall, summonSpots } from "./summon";
 import { layCurse, drown } from "./drowning";
@@ -164,7 +164,7 @@ export function walk(ctx: Ctx, unit: Unit, path: HexPos[], budget: Budget | null
     if (course && share > 0) course.left = budget!.course = course.left - share;
     taken.push(next);
     if (enterSurface(ctx, unit, flush) || unit.down) break;
-    enterWeather(ctx, unit);
+    enterWeather(ctx, unit, flush);
     if (ctx.onStep?.(unit, flush)) break;
   }
   flush();
@@ -252,7 +252,9 @@ export function shift(ctx: Ctx, target: Unit, dest: HexPos, by: string, dc?: num
   if (into.how !== "open") {
     const boss = target.side === "enemy" && !!ENEMIES[target.kind]?.boss;
     const vs = dc ?? edgeDc(unitById(state, by));
-    const roll = d20(ctx.rng, { kind: "save", id: target.id, label: "Catch the edge", bonus: saveBonus(target, "agi"), vs, adv: has(target, "prone") || has(target, "stunned") ? (boss ? 0 : -1) : boss ? 1 : 0 });
+    const down = [has(target, "prone") && "Prone", has(target, "stunned") && "Stunned"].filter((w): w is string => !!w);
+    const adv = down.length > 0 ? (boss ? 0 : -1) : boss ? 1 : 0;
+    const roll = d20(ctx.rng, { kind: "save", id: target.id, label: "Catch the edge", bonus: saveBonus(target, "agi"), vs, adv, ...momentOf({ mods: saveMods(target), advWhy: adv > 0 ? ["Boss"] : adv < 0 ? down : [], cancelled: boss && down.length > 0 ? { adv: ["Boss"], dis: down } : undefined }) });
     ctx.events.push({ t: "roll", roll });
     if (roll.ok) {
       ctx.events.push({ t: "held", id: target.id, at: dest });
@@ -665,13 +667,46 @@ export function wayBetween(state: ZoneState, unit: Unit, to: HexPos): HexPos[] {
 
 /** What a hero adds to an ability's damage: their stat, their weapon, half their level, and a Bard's tune if one is near. */
 function damageBonus(state: ZoneState, unit: Unit, def: AbilityDef): number {
-  const tune = state.units.some((u) => u.id !== unit.id && u.side === unit.side && u.kind === "frontend_bard" && !u.down && hexDistance(u.pos, unit.pos) <= BARD_AURA_RANGE) ? BARD_AURA : 0;
   // A torch swung in the hand hits with the torch, not the weapon put away for it.
-  return mod(statOf(unit, def.stat)) + (def.id === "torch_swing" ? 0 : unit.power) + Math.floor(unit.level / 2) + tune + songDamage(state, unit) + (has(unit, "rallied") ? RALLY.damage : 0);
+  return mod(statOf(unit, def.stat)) + (def.id === "torch_swing" ? 0 : unit.power) + Math.floor(unit.level / 2) + damageMods(state, unit).reduce((n, m) => n + m.n, 0);
 }
+
+/**
+ * What of a hero's damage bonus (damageBonus) comes from the moment, a short name each, to be shown with the dice
+ * (Rolled `mods`): a Bard's tune near, a Lively Shanty, Rallied. Only those there are.
+ */
+function damageMods(state: ZoneState, unit: Unit): RollMod[] {
+  const out: RollMod[] = [];
+  if (state.units.some((u) => u.id !== unit.id && u.side === unit.side && u.kind === "frontend_bard" && !u.down && hexDistance(u.pos, unit.pos) <= BARD_AURA_RANGE)) out.push({ name: "Bard's tune", n: BARD_AURA });
+  const song = songDamage(state, unit);
+  if (song) out.push({ name: "Lively Shanty", n: song });
+  if (has(unit, "rallied")) out.push({ name: "Rallied", n: RALLY.damage });
+  return out;
+}
+
+/** An ability's damage dice as `unit` rolls them, with all it adds on top (damageBonus) and `more` besides (`also`: what that is). */
+const rollDamage = (ctx: Ctx, unit: Unit, def: AbilityDef, dice: Dice, also: RollMod[] = [], crit = false): Rolled =>
+  rollShown(ctx.rng, dice, damageBonus(ctx.state, unit, def) + also.reduce((n, m) => n + m.n, 0), crit, [...damageMods(ctx.state, unit), ...also]);
 
 /** What a heal adds on top of its dice: the user's stat (never less than nothing) and half their level. */
 const healBonus = (unit: Unit, def: AbilityDef): number => Math.max(0, mod(statOf(unit, def.stat))) + Math.floor(unit.level / 2);
+
+/**
+ * What a healer's heals add or lose for the moment, over their own (healBonus), a short name each, shown with the dice
+ * (Rolled `mods`) as damageMods are. None yet: a bonus or penalty to healing of the moment is an entry here.
+ */
+function healMods(_state: ZoneState, _unit: Unit): RollMod[] {
+  return [];
+}
+
+/**
+ * Healing dice as `unit` rolls them with an ability: its own bonus (healBonus), what of the moment it has (healMods),
+ * and `also`, what this heal adds besides (a Druid's heal on one standing in water).
+ */
+const rollHeal = (ctx: Ctx, unit: Unit, def: AbilityDef, dice: Dice, also: RollMod[] = []): Rolled => {
+  const mods = [...healMods(ctx.state, unit), ...also];
+  return rollShown(ctx.rng, dice, healBonus(unit, def) + mods.reduce((n, m) => n + m.n, 0), false, mods);
+};
 
 /** An ability's damage as `unit` would roll it now: its dice, and all it adds on top (damageBonus) in `plus`. What its tooltip shows. */
 export const damageRoll = (state: ZoneState, unit: Unit, def: AbilityDef): Dice => {
@@ -708,18 +743,20 @@ function strike(ctx: Ctx, unit: Unit, def: AbilityDef, tactic: Tactic, target: U
     ctx.events.push({ t: "miss", actor: unit.id, target: target.id, what: def.id });
     return false;
   }
-  let more = damageBonus(ctx.state, unit, def);
-  if (tactic.vsWet && has(target, "wet")) more += tactic.vsWet;
-  if (tactic.edge && roll.adv === 1) more += tactic.edge;
-  if (tactic.wading && inWater(ctx.state, unit)) more += tactic.wading;
-  const rolled = rollShown(ctx.rng, abilityDice(def), more, roll.crit);
+  // What this blow adds for the moment, over what every blow of the user's does.
+  const also: RollMod[] = [];
+  if (tactic.vsWet && has(target, "wet")) also.push({ name: "Wet", n: tactic.vsWet });
+  if (tactic.edge && roll.adv === 1) also.push({ name: "Advantage", n: tactic.edge });
+  if (tactic.wading && inWater(ctx.state, unit)) also.push({ name: "In water", n: tactic.wading });
+  const rolled = rollDamage(ctx, unit, def, abilityDice(def), also, roll.crit);
   // Bulwark Strike: harder for the shield carried, but by no more than the most the blow could roll without it (no crit).
   if (tactic.bulwark) {
     const dice = abilityDice(def);
-    const most = dice.n * dice.d + dice.plus + more;
+    const most = dice.n * dice.d + rolled.plus;
     const extra = Math.min(Math.floor(shieldOf(unit) * tactic.bulwark.perShield), Math.max(0, Math.floor(most * tactic.bulwark.upTo)));
     rolled.plus += extra;
     rolled.total += extra;
+    if (extra > 0) rolled.mods = [...(rolled.mods ?? []), { name: "Shield", n: extra }];
   }
   const dealt = damage(ctx, target, rolled.total, { actor: unit.id, what: def.id, crit: roll.crit, dice: rolled });
   if (def.drain && dealt > 0 && !unit.down) heal(ctx, unit, Math.max(1, Math.round(dealt * def.drain)), { actor: unit.id, what: def.id });
@@ -739,7 +776,7 @@ function strike(ctx: Ctx, unit: Unit, def: AbilityDef, tactic: Tactic, target: U
   // Water Burst: the drench reaches whoever stands beside the target, no roll to hit.
   if (tactic.spray) {
     for (const foe of ctx.state.units.filter((u) => u.id !== target.id && u.side !== unit.side && !u.down && gap(u, target) <= 1)) {
-      const splash = rollShown(ctx.rng, diceFor(Math.max(2, tactic.spray - 2)), damageBonus(ctx.state, unit, def));
+      const splash = rollDamage(ctx, unit, def, diceFor(Math.max(2, tactic.spray - 2)));
       damage(ctx, foe, splash.total, { actor: unit.id, what: def.id, dice: splash });
     }
   }
@@ -844,8 +881,8 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
     // Healing for the caster's side alone, the fallen got up with it; then the water, which soaks whoever is there.
     const area = abilityArea(state, unit, ability, aim.at, undefined, aim.lean);
     const keys = new Set(area.map(posKey));
-    const amount = rollDice(ctx.rng, healDice(def)) + healBonus(unit, def);
-    for (const u of state.units.filter((x) => x.side === unit.side && caught(x, keys))) heal(ctx, u, amount, { actor: unit.id, what: def.id });
+    const mended = rollHeal(ctx, unit, def, healDice(def));
+    for (const u of state.units.filter((x) => x.side === unit.side && caught(x, keys))) heal(ctx, u, mended.total, { actor: unit.id, what: def.id, dice: mended });
     placeSurface(ctx, area, "water", tactic.splash.water, unit.id);
     landed = true;
   } else if (tactic.summon) {
@@ -862,7 +899,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
   } else if (tactic.constellation) {
     // The links pass harmlessly over the user's side; every enemy on one is struck once and lit, however many cross it.
     const keys = new Set(abilityArea(state, unit, ability).map(posKey));
-    const rolled = rollShown(ctx.rng, abilityDice(def), damageBonus(state, unit, def));
+    const rolled = rollDamage(ctx, unit, def, abilityDice(def));
     for (const victim of foes().filter((u) => caught(u, keys))) {
       damage(ctx, victim, rolled.total, { actor: unit.id, what: def.id, dice: rolled });
       if (!victim.down) addCondition(ctx, victim, "guiding_light", tactic.guide ?? 0);
@@ -871,7 +908,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
   } else if (tactic.newMoon) {
     // Every light put out at once, each for a blow that cannot be dodged.
     const lit = litFoes(state, unit);
-    const rolled = rollShown(ctx.rng, abilityDice(def), damageBonus(state, unit, def));
+    const rolled = rollDamage(ctx, unit, def, abilityDice(def));
     for (const victim of lit) removeCondition(victim, "guiding_light");
     for (const victim of lit) damage(ctx, victim, rolled.total, { actor: unit.id, what: def.id, dice: rolled });
     landed = true;
@@ -901,7 +938,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
     else if (tactic.bind) landed = bind(ctx, unit, def, target, tactic.bind);
     else if (tactic.sure) {
       if (def.damage) {
-        const rolled = rollShown(ctx.rng, abilityDice(def), damageBonus(state, unit, def));
+        const rolled = rollDamage(ctx, unit, def, abilityDice(def));
         damage(ctx, target, rolled.total, { actor: unit.id, what: def.id, dice: rolled });
       }
       // It lands without a roll to hit, but what it would leave on the target can still be saved against (Roar of Thunder's Stun).
@@ -927,7 +964,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
     const line = abilityArea(state, unit, ability, aim.at, undefined, aim.lean);
     const along = (u: Unit) => line.findIndex((p) => covers(u, p));
     const swept = foes().filter((u) => along(u) >= 0).sort((a, b) => along(b) - along(a));
-    const dice = rollShown(ctx.rng, abilityDice(def), damageBonus(state, unit, def));
+    const dice = rollDamage(ctx, unit, def, abilityDice(def));
     const rolled = dice.total;
     for (const victim of swept) {
       const saved = saveRoll(ctx, victim, "agi", saveDc(unit, def), def.name).ok;
@@ -980,7 +1017,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
     const inIt = state.units.filter((u) => !u.down && caught(u, keys) && ((tactic.shape !== "burst" && tactic.shape !== "cone" && !tactic.chorus && !tactic.foesOnly) || u.side !== unit.side));
     // A chorus swells with every voice of the user's side caught up in it (the user's own aside).
     const voices = tactic.chorus ? state.units.filter((u) => u.side === unit.side && u.id !== unit.id && !u.down && caught(u, keys)).length : 0;
-    const dice = rollShown(ctx.rng, abilityDice(def), damageBonus(state, unit, def) + (tactic.chorus ?? 0) * voices);
+    const dice = rollDamage(ctx, unit, def, abilityDice(def), [{ name: "Chorus", n: (tactic.chorus ?? 0) * voices }]);
     const rolled = dice.total;
     for (const victim of inIt) {
       const saved = saveRoll(ctx, victim, "agi", saveDc(unit, def), def.name).ok;
@@ -1013,21 +1050,21 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
     const soaked = tactic.regen && inWater(state, target) ? tactic.regen.water : 0;
     if (def.heal && !tactic.soothe) {
       const bonus = healBonus(unit, def);
-      const mended = rollShown(ctx.rng, healDice(def), bonus + soaked);
+      const mended = rollHeal(ctx, unit, def, healDice(def), soaked ? [{ name: "In water", n: soaked }] : []);
       heal(ctx, target, mended.total, { actor: unit.id, what: def.id, dice: mended });
       // The same heal again as their next turn starts (Rejuvenate): the bonus kept on the condition, the dice rolled then.
       if (tactic.echo) addCondition(ctx, target, "rejuvenating", tactic.echo, bonus);
     }
     // A heal that spreads: to every ally beside the one it is aimed at (Clarion Call), or round the user (Soothing Tone).
     const healed = (u: Unit, base: number) => {
-      const mended = rollShown(ctx.rng, diceFor(Math.max(2, base - 1)), Math.max(0, mod(statOf(unit, def.stat))) + Math.floor(unit.level / 2));
+      const mended = rollHeal(ctx, unit, def, diceFor(Math.max(2, base - 1)));
       return heal(ctx, u, mended.total, { actor: unit.id, what: def.id, dice: mended });
     };
     if (tactic.ripple) for (const u of state.units) if (u.side === unit.side && !u.down && u.id !== target.id && gap(u, target) <= 1) healed(u, tactic.ripple);
     if (tactic.soothe) for (const u of state.units) if (u.side === unit.side && !u.down && gap(u, unit) <= tactic.soothe.range) healed(u, def.heal ?? 0);
     if (tactic.northStar) {
       // The blow round the ally first, then the star: what it strikes now is not set alight by it.
-      const rolled = rollShown(ctx.rng, abilityDice(def), damageBonus(state, unit, def));
+      const rolled = rollDamage(ctx, unit, def, abilityDice(def));
       for (const foe of foes().filter((u) => gap(u, target) <= 1)) {
         damage(ctx, foe, rolled.total, { actor: unit.id, what: def.id, dice: rolled });
         if (!foe.down) addCondition(ctx, foe, "guiding_light", tactic.guide ?? 0);
@@ -1039,7 +1076,8 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
     if (tactic.sicken) addCondition(ctx, unit, "poisoned", tactic.sicken);
     if (tactic.standStrong) {
       const { shield, perFoe } = tactic.standStrong;
-      addShield(ctx, unit, shield + unit.level + perFoe * foes().filter((u) => gap(u, unit) <= 1).length);
+      const beside = perFoe * foes().filter((u) => gap(u, unit) <= 1).length;
+      addShield(ctx, unit, shield + unit.level + beside, [{ name: "Foes beside", n: beside }]);
     }
     if (tactic.armor) addCondition(ctx, target, "coral_armor", tactic.armor.rounds);
     if (tactic.shanty) {
@@ -1061,7 +1099,11 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
     }
     if (tactic.shield) {
       const { range, shield, water } = tactic.shield;
-      for (const u of state.units) if (u.side === unit.side && !u.down && gap(u, unit) <= range) shieldUnit(ctx, u, shield + unit.level + (water && inWater(state, u) ? water : 0));
+      for (const u of state.units) {
+        if (u.side !== unit.side || u.down || gap(u, unit) > range) continue;
+        const soaked = water && inWater(state, u) ? water : 0;
+        shieldUnit(ctx, u, shield + unit.level + soaked, [{ name: "In water", n: soaked }]);
+      }
     }
     if (tactic.cleanse) for (const kind of DEBUFFS) removeCondition(target, kind);
     if (tactic.clearWay) {

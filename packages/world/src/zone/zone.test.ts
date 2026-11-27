@@ -3828,6 +3828,23 @@ describe("the Druid's class abilities", () => {
     expect(state.weather).toHaveLength(0);
   });
 
+  it("Coral Field: one walking into it is told to step in before it cuts them, and to walk on after", () => {
+    let { state, dummy } = party();
+    // The other side's coral on the second hex of Ann's way.
+    state.weather = [{ kind: "coral", hexes: [at(7, 6)], rounds: 4, fresh: false, by: dummy, side: "enemy", touched: {} }];
+    state.encounter!.budgets.ann.move = 99;
+    const events: ZoneEvent[] = [];
+    state = must(state, { type: "move", by: "ann", unit: "ann", to: at(9, 6) }, events);
+    const cut = events.findIndex((e) => e.t === "hit" && e.what === "coral_field" && e.target === "ann");
+    const walks = events.flatMap((e, i) => (e.t === "moved" && e.id === "ann" ? [{ i, to: e.path[e.path.length - 1] }] : []));
+    expect(cut).toBeGreaterThan(-1);
+    // Into the coral, then the cut, then on.
+    expect(walks[0].i).toBeLessThan(cut);
+    expect(walks[0].to).toEqual(at(7, 6));
+    expect(walks[walks.length - 1].i).toBeGreaterThan(cut);
+    expect(unit(state, "ann").pos).toEqual(at(9, 6));
+  });
+
   it("Coral Field: the enemy steers round it if it can", () => {
     let state = board();
     hero(state, "ann", "backend_druid", at(5, 6)).abilities = [...ALL];

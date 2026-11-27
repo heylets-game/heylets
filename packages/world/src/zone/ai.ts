@@ -36,7 +36,7 @@
 // (behaviours.ts); how it likes to fight is its kind's Mind (kit.ts).
 
 import { hexDistance, posKey, type HexPos } from "@gantt-quest/core";
-import { behaviourOf, type Look } from "./behaviours";
+import { behaviourOf, maxReach, type Look } from "./behaviours";
 import { BELL_AP, goesForBell, liveBell, ringBell, somethingToRouse } from "./bell";
 import { apForMove, checkCommon, doCommon, enemyAct, leavesReach, walk, walkAp } from "./combat";
 import { has, unseen, type Ctx } from "./engine";
@@ -66,7 +66,17 @@ type Whim = NonNullable<Look["whim"]>;
  */
 function rollWhim(ctx: Ctx): Whim {
   const seed = Math.floor(ctx.rng.next() * 4294967296);
-  return (attack, target) => 1 - ENEMY_WHIM + (2 * ENEMY_WHIM * seedFromString(`${seed}|${attack.id}|${target?.id ?? ""}`)) / 4294967296;
+  // Asked again and again for the same ability and target as it weighs hex after hex: worked out once each.
+  const kept = new Map<string, number>();
+  return (attack, target) => {
+    const key = `${attack.id}|${target?.id ?? ""}`;
+    let factor = kept.get(key);
+    if (factor === undefined) {
+      factor = 1 - ENEMY_WHIM + (2 * ENEMY_WHIM * seedFromString(`${seed}|${key}`)) / 4294967296;
+      kept.set(key, factor);
+    }
+    return factor;
+  };
 }
 
 /**
@@ -79,7 +89,11 @@ function rollWhim(ctx: Ctx): Whim {
 function bestAttack(state: ZoneState, enemy: Unit, pos: HexPos, blows: EnemyStrike[], heroes: Unit[], heaviest: number, whim?: Whim): Option | null {
   const look = { state, enemy, mind: mindOf(enemy.kind), whim };
   let best: Option | null = null;
+  // How near the nearest hero is, asked once: an ability that reaches no further than that is not worth looking at.
+  const nearest = Math.min(...heroes.map((h) => gap(enemy, h, pos)));
   for (const attack of blows) {
+    const reach = maxReach(attack);
+    if (reach !== null && nearest > reach) continue;
     const use = behaviourOf(attack).value(look, pos, attack, heroes);
     if (!use) continue;
     // A shove is worth something only with a drop or a pit behind someone: then it is taken on that alone, favourite or not.
@@ -179,6 +193,17 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
    */
   const chooseAmong = (targets: Unit[], strike: boolean): Plan | null => {
     const nearest = (pos: HexPos) => Math.min(...targets.map((h) => gap(enemy, h, pos)));
+    // Whether a hero would strike at it for walking from `from` to `step`: the same answer for every path that shares the step, and nothing changes while it looks.
+    const leaves = new Map<string, boolean>();
+    const leavesFor = (h: Unit, from: HexPos, step: HexPos): boolean => {
+      const key = `${h.id}|${posKey(from)}|${posKey(step)}`;
+      let left = leaves.get(key);
+      if (left === undefined) {
+        left = leavesReach(state, h, enemy, from, step);
+        leaves.set(key, left);
+      }
+      return left;
+    };
     // How far it can walk and still have `keep` AP left: each ability keeps back its own cost (and a jump's, to leap first).
     const reach = (keep: number) => budget.move + walkAp(budget, keep) * budget.stride;
     const usable = strike ? t.blows.filter((b) => b.cost <= budget.ap) : [];
@@ -201,7 +226,7 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
       if (!budget.disengaged) {
         let from = enemy.pos;
         for (const step of path) {
-          for (const h of t.heroes) if (leavesReach(state, h, enemy, from, step) && !state.encounter?.reacted.includes(h.id) && !has(h, "stunned") && !has(h, "prone")) drawn.add(h.id);
+          for (const h of t.heroes) if (leavesFor(h, from, step) && !state.encounter?.reacted.includes(h.id) && !has(h, "stunned") && !has(h, "prone")) drawn.add(h.id);
           from = step;
         }
         score -= mind.caution * 3 * drawn.size;
@@ -242,6 +267,8 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
         // The way to where it would leap from is the same wherever it would land: found once, when first wanted.
         let path: HexPos[] | undefined;
         for (const land of blast(state.map, reached.pos, range)) {
+          // Where no blow of any it could still use would reach anyone from, there is nothing to find.
+          if (!fitting(reached.cost, jumpAp).some((b) => { const r = maxReach(b); return r === null || targets.some((h) => gap(enemy, h, land) <= r); })) continue;
           if (clean.has(posKey(land)) || checkCommon(state, from, "jump", { at: land }, budget)) continue;
           path ??= pathIn(clean, reached.pos) ?? [];
           const w = weigh(land, path, reached.cost + 2, reached.cost, jumpAp);

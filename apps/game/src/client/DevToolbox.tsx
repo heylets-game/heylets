@@ -11,7 +11,8 @@
 //
 //   Audio/visual  open the model preview, a stage for trying any figure's
 //                 animations (FigureLab.tsx), or the sound lab, every sound
-//                 in the game to search and play (SoundLab.tsx); hold the time of day and the
+//                 in the game to search and play (SoundLab.tsx), or (local dev only)
+//                 go to the fight UI lab (zone/FightUiLab.tsx); hold the time of day and the
 //                 weather where you want them, and see what the audio engine
 //                 is doing. Your own tab only.
 //   Items         add gold to your hero's purse, or take it away; put a
@@ -211,6 +212,15 @@ export function DevToolbox({ me, refresh }: { me: Me; refresh(): Promise<void> }
                   <button className="small primary" onClick={() => setLab(true)}>Open the model preview</button>
                 </div>
               </DevSection>
+              {/* The lab is built into local dev alone (App.tsx), not staging, where this toolbox is too. */}
+              {import.meta.env.DEV && (
+                <DevSection id="av.fightui" title="Fight interface" open>
+                  <p className="muted">The turn bar, turn order, combat log, roll card and loot window with made-up data, and a button for each state they can be in.</p>
+                  <div className="dev-row">
+                    <button className="small primary" onClick={() => (location.hash = "#lab/fightui")}>Open the fight UI lab</button>
+                  </div>
+                </DevSection>
+              )}
               <DevSection id="av.sound" title="Sound" open>
                 <p className="muted">Every sound in the game, to search and play at will: each event as the game plays it, each of its takes, and all the music and atmosphere.</p>
                 <div className="dev-row">
