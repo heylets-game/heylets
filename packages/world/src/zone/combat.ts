@@ -5,7 +5,7 @@
 // reducer's business (zone.ts); nothing here spends AP but walking. A hero's
 // blows, blasts and bombs reach crates too (crates.ts).
 
-import { hexDistance, hexNeighbors, hexSegment, posKey, type HexPos } from "@gantt-quest/core";
+import { hexDistance, hexNeighbors, hexSegment, posKey, type HexPos, type StatKey } from "@gantt-quest/core";
 import { ABILITIES, BARD_AURA, ENEMIES, onlyInFights, type AbilityDef, type EffectKind } from "../content";
 import { tileAt, type Poi } from "../map";
 import { DEBUFFS, advantageOf, UNTIMED_KEEPS, attackMade, addCondition, addUses, addShield, addStacks, inflict, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, removeCondition, liveBudget, momentOf, saveBonus, saveMods, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
@@ -292,6 +292,35 @@ export function sink(ctx: Ctx, unit: Unit, into: HexPos, pit: Pit, by: string | 
 export function shoveDest(from: HexPos, at: HexPos): HexPos {
   const dir = directionToward(from, at);
   return { q: at.q + dir.q, r: at.r + dir.r };
+}
+
+/** One attack that everyone it catches saves against for half (see saveForHalf). */
+interface HalfSave {
+  /** The stat they save with: Agility for most. */
+  stat: StatKey;
+  dc: number;
+  label: string;
+  /** What it would do to this one on a failed save, before halving. */
+  amount: (victim: Unit) => number;
+  /** What is passed to `damage` for the log: who did it, with what, and the dice when there were dice (the very object, with the parts of the moment it carries). */
+  hurt: { actor: string; what: string; dice?: Rolled; splash?: boolean };
+  /** After the damage, for one who failed the save, or for one who made it. */
+  onFail?: (victim: Unit) => void;
+  onSave?: (victim: Unit) => void;
+}
+
+/**
+ * Each of `victims` saves against the attack: a success takes half (rounded down), a failure all of it and whatever
+ * `onFail` leaves on them. In the order given, one at a time, as each save is rolled.
+ */
+function saveForHalf(ctx: Ctx, victims: readonly Unit[], o: HalfSave): void {
+  for (const victim of victims) {
+    const saved = saveRoll(ctx, victim, o.stat, o.dc, o.label).ok;
+    const full = o.amount(victim);
+    damage(ctx, victim, saved ? Math.floor(full / 2) : full, { ...o.hurt, halved: saved });
+    if (saved) o.onSave?.(victim);
+    else o.onFail?.(victim);
+  }
 }
 
 /**
@@ -986,13 +1015,14 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
     const swept = foes().filter((u) => along(u) >= 0).sort((a, b) => along(b) - along(a));
     const dice = rollDamage(ctx, unit, def, abilityDice(def));
     const rolled = dice.total;
-    for (const victim of swept) {
-      const saved = saveRoll(ctx, victim, "agi", saveDc(unit, def), def.name).ok;
-      let amount = rolled;
-      if (tactic.vsWet && has(victim, "wet")) amount += tactic.vsWet;
-      damage(ctx, victim, saved ? Math.floor(amount / 2) : amount, { actor: unit.id, what: def.id, dice, halved: saved });
-      if (!saved && !victim.down) sweepAlong(ctx, victim, line, unit.id);
-    }
+    saveForHalf(ctx, swept, {
+      stat: "agi", dc: saveDc(unit, def), label: def.name,
+      amount: (victim) => rolled + (tactic.vsWet && has(victim, "wet") ? tactic.vsWet : 0),
+      hurt: { actor: unit.id, what: def.id, dice },
+      onFail: (victim) => {
+        if (!victim.down) sweepAlong(ctx, victim, line, unit.id);
+      },
+    });
     if (unit.side === "hero" && def.damage) for (const box of cratesOn(state, line)) hurtCrate(ctx, box, rolled, { actor: unit.id, what: def.id });
     // It leaves the line awash: whoever ends up on it is soaked.
     if (tactic.surface) placeSurface(ctx, line, tactic.surface.kind, tactic.surface.rounds, unit.id);
@@ -1039,19 +1069,20 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
     const voices = tactic.chorus ? state.units.filter((u) => u.side === unit.side && u.id !== unit.id && !u.down && caught(u, keys)).length : 0;
     const dice = rollDamage(ctx, unit, def, abilityDice(def), [{ name: "Chorus", n: (tactic.chorus ?? 0) * voices }]);
     const rolled = dice.total;
-    for (const victim of inIt) {
-      const saved = saveRoll(ctx, victim, "agi", saveDc(unit, def), def.name).ok;
-      let amount = rolled;
-      if (tactic.vsWet && has(victim, "wet")) amount += tactic.vsWet;
-      damage(ctx, victim, saved ? Math.floor(amount / 2) : amount, { actor: unit.id, what: def.id, dice, halved: saved });
-      if (!saved) afflict(ctx, unit, def, victim, false);
-      // Moonlight: whoever fails to brace is lit.
-      if (!saved && tactic.guide && !victim.down) addCondition(ctx, victim, "guiding_light", tactic.guide);
-      // Pull of the Deep: whoever fails to brace is dragged under.
-      if (!saved && tactic.drowns) drown(ctx, victim, tactic.drowns);
-      // Bellows Blast: whoever fails to brace is blown back, away from the user.
-      for (let k = 0; !saved && k < (tactic.knockback ?? 0) && !victim.down; k++) push(ctx, unit.pos, victim, unit.id);
-    }
+    saveForHalf(ctx, inIt, {
+      stat: "agi", dc: saveDc(unit, def), label: def.name,
+      amount: (victim) => rolled + (tactic.vsWet && has(victim, "wet") ? tactic.vsWet : 0),
+      hurt: { actor: unit.id, what: def.id, dice },
+      onFail: (victim) => {
+        afflict(ctx, unit, def, victim, false);
+        // Moonlight: whoever fails to brace is lit.
+        if (tactic.guide && !victim.down) addCondition(ctx, victim, "guiding_light", tactic.guide);
+        // Pull of the Deep: whoever fails to brace is dragged under.
+        if (tactic.drowns) drown(ctx, victim, tactic.drowns);
+        // Bellows Blast: whoever fails to brace is blown back, away from the user.
+        for (let k = 0; k < (tactic.knockback ?? 0) && !victim.down; k++) push(ctx, unit.pos, victim, unit.id);
+      },
+    });
     // A crate in it takes the lot: it cannot get out of the way.
     if (unit.side === "hero" && def.damage) for (const box of cratesOn(state, area)) hurtCrate(ctx, box, rolled, { actor: unit.id, what: def.id });
     landed = true;
@@ -1406,11 +1437,7 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
     }
     const dice = rollShown(ctx.rng, attack.dice);
     const rolled = dice.total;
-    for (const victim of caught) {
-      const saved = saveRoll(ctx, victim, "agi", dc, attack.name).ok;
-      damage(ctx, victim, saved ? Math.floor(rolled / 2) : rolled, { actor: enemy.id, what: attack.name, dice, halved: saved });
-      if (!saved) leave(victim, false);
-    }
+    saveForHalf(ctx, caught, { stat: "agi", dc, label: attack.name, amount: () => rolled, hurt: { actor: enemy.id, what: attack.name, dice }, onFail: (victim) => leave(victim, false) });
     return;
   }
   // One that lands on several hexes at once (spreadHexes): thrown onto a clump round its aim or every hex within its
@@ -1421,15 +1448,9 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
   const spread = aim && spreadHexes(state, attack.kit, enemy.pos, aim);
   if (spread) {
     const dice = attack.harmless ? null : rollShown(ctx.rng, attack.dice);
-    for (const victim of state.units.filter((u) => u.side !== enemy.side && !u.down && !unseen(u) && inFight(state, u.id) && spread.some((p) => covers(u, p)))) {
-      if (!dice) {
-        leave(victim, true);
-        continue;
-      }
-      const saved = saveRoll(ctx, victim, "agi", dc, attack.name).ok;
-      damage(ctx, victim, saved ? Math.floor(dice.total / 2) : dice.total, { actor: enemy.id, what: attack.name, dice, halved: saved });
-      if (!saved) leave(victim, false);
-    }
+    const victims = state.units.filter((u) => u.side !== enemy.side && !u.down && !unseen(u) && inFight(state, u.id) && spread.some((p) => covers(u, p)));
+    if (!dice) for (const victim of victims) leave(victim, true);
+    else saveForHalf(ctx, victims, { stat: "agi", dc, label: attack.name, amount: () => dice.total, hurt: { actor: enemy.id, what: attack.name, dice }, onFail: (victim) => leave(victim, false) });
     if (attack.kit.surface) placeSurface(ctx, spread, attack.kit.surface.kind, attack.kit.surface.rounds, enemy.id);
     return;
   }
@@ -1443,11 +1464,8 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
     enemy.pos = way.land;
     ctx.events.push({ t: "jumped", id: enemy.id, from, to: way.land, dash: { name: attack.name, through: way.through } });
     const dice = rollShown(ctx.rng, attack.dice);
-    for (const victim of state.units.filter((u) => u.side !== enemy.side && !u.down && !unseen(u) && inFight(state, u.id) && way.through.some((p) => covers(u, p)))) {
-      const saved = saveRoll(ctx, victim, "agi", dc, attack.name).ok;
-      damage(ctx, victim, saved ? Math.floor(dice.total / 2) : dice.total, { actor: enemy.id, what: attack.name, dice, halved: saved });
-      if (!saved) leave(victim, false);
-    }
+    const through = state.units.filter((u) => u.side !== enemy.side && !u.down && !unseen(u) && inFight(state, u.id) && way.through.some((p) => covers(u, p)));
+    saveForHalf(ctx, through, { stat: "agi", dc, label: attack.name, amount: () => dice.total, hurt: { actor: enemy.id, what: attack.name, dice }, onFail: (victim) => leave(victim, false) });
     tumble(ctx, enemy, from, null, JUMP_DOWN);
     arrive(ctx, enemy);
     return;
@@ -1484,10 +1502,8 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
     // a share of it, or by half that if they get clear (an Agility save).
     if (attack.kit.splash) {
       const share = Math.floor(rolled.total * SPLASH_SHARE);
-      for (const near of state.units.filter((u) => u.side !== enemy.side && u.id !== target.id && !u.down && inFight(state, u.id) && gap(u, target) === 1)) {
-        const saved = saveRoll(ctx, near, "agi", dc, attack.name).ok;
-        damage(ctx, near, saved ? Math.floor(share / 2) : share, { actor: enemy.id, what: attack.name, splash: true });
-      }
+      const beside = state.units.filter((u) => u.side !== enemy.side && u.id !== target.id && !u.down && inFight(state, u.id) && gap(u, target) === 1);
+      saveForHalf(ctx, beside, { stat: "agi", dc, label: attack.name, amount: () => share, hurt: { actor: enemy.id, what: attack.name, splash: true } });
     }
   }
   leave(target, true);
@@ -1699,12 +1715,14 @@ export function throwItem(ctx: Ctx, unit: Unit, item: Throwable, at: HexPos): vo
   if (def.damage) {
     const dice = rollShown(ctx.rng, def.damage);
     const rolled = dice.total;
-    for (const u of inIt.filter((c) => !c.down)) {
-      const saved = saveRoll(ctx, u, "agi", THROW_SAVE, def.name).ok;
-      damage(ctx, u, saved ? Math.floor(rolled / 2) : rolled, { actor: unit.id, what: `throw:${item}`, dice, halved: saved });
+    saveForHalf(ctx, inIt.filter((c) => !c.down), {
+      stat: "agi", dc: THROW_SAVE, label: def.name, amount: () => rolled,
+      hurt: { actor: unit.id, what: `throw:${item}`, dice },
       // What it leaves on them (acid's holes) only sticks to those who did not dodge it.
-      if (def.condition && !saved && !u.down) addCondition(ctx, u, def.condition.kind, def.condition.rounds);
-    }
+      onFail: (u) => {
+        if (def.condition && !u.down) addCondition(ctx, u, def.condition.kind, def.condition.rounds);
+      },
+    });
     for (const box of cratesOn(ctx.state, area)) hurtCrate(ctx, box, rolled, { actor: unit.id, what: `throw:${item}` });
   }
   if (def.surface) placeSurface(ctx, area, def.surface.kind, def.surface.rounds, unit.id);
