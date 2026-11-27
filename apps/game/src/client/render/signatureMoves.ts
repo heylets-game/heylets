@@ -2940,7 +2940,275 @@ function broodSwarm(stage: MoveStage, { figure, hitAt, crit, onImpact, calls }: 
   }, wait);
 }
 
+/**
+ * A Frost Mote: how big it is, how long it takes to fly a world unit (with the least and most it takes), and how far
+ * it wobbles off the straight line as it drifts.
+ */
+export const FROST_MOTE = { size: 0.15, perUnit: 0.07, least: 0.28, most: 0.62, wobble: 0.22 };
+
+/**
+ * A Rime Wraith's Frost Mote: it draws up and back as cold motes swirl in to a point before its chest, where a little
+ * mote of frost forms, glowing; then it thrusts its hands out (figures.ts GRASP) and sends the mote drifting at the
+ * target, wobbling and turning as it goes, glints and pale motes falling off it. Where it lands: a cold flash with a
+ * deeper blue behind it, frost glinting off and drifting down, and a ring of frost at their feet. The blow is told as
+ * it lands.
+ */
+function frostMote(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const { size, perUnit, least, most, wobble } = FROST_MOTE;
+  const wait = figure.strike("grasp");
+  if (wait <= 0) stage.lunge();
+  const lands = Math.max(0, wait);
+  const flip = dir < 0;
+  const cold = crit ? GOLD : ICE;
+  const core = crit ? GOLD : ICE_CORE;
+  const { feet, ahead } = aheadOf(figure, hitAt);
+  const across = new THREE.Vector3(-ahead.z, 0, ahead.x);
+  /** Where it forms: just before its chest, toward the target. */
+  const palm = () => upFigure(figure, 0.6).addScaledVector(ahead, 0.45);
+  const fly = Math.min(most, Math.max(least, perUnit * feet.distanceTo(hitAt)));
+  // Cold motes swirling in to where it forms.
+  for (let s = 0; s < lands; s += 0.035) {
+    stage.later(() => {
+      const at = palm();
+      const a = Math.random() * Math.PI * 2;
+      const from = offset(at, Math.cos(a) * 0.6, Math.sin(a) * 0.45, (Math.random() - 0.5) * 0.4);
+      wisp(stage, from, at, (Math.random() < 0.5 ? 1 : -1) * 0.15, Math.random() < 0.5 ? core : cold, 0.26, [0.28, 0.1]);
+    }, s);
+  }
+  stage.lay((group) => {
+    // The mote: a bright faceted bead of ice inside a pale glow.
+    const shapes = [new THREE.IcosahedronGeometry(size, 0), new THREE.IcosahedronGeometry(size * 1.9, 1)];
+    const beadMaterial = new THREE.MeshLambertMaterial({ color: core, emissive: crit ? GOLD : ICE, emissiveIntensity: 0.8, flatShading: true });
+    const glowMaterial = iceMaterial(cold, 0.35);
+    const bead = new THREE.Mesh(shapes[0], beadMaterial);
+    const glow = new THREE.Mesh(shapes[1], glowMaterial);
+    const mote = new THREE.Group();
+    mote.add(bead, glow);
+    group.add(mote);
+    let from: THREE.Vector3 | null = null;
+    let age = 0;
+    let trail = 0;
+    return (dt) => {
+      age += dt;
+      if (age < lands) {
+        // Forming: growing out of nothing, turning.
+        mote.position.copy(palm());
+        mote.scale.setScalar(Math.max(0.05, age / Math.max(lands, 1e-3)));
+      } else if (age < lands + fly) {
+        from ??= palm();
+        const k = (age - lands) / fly;
+        // Drifting at them, wobbling off the straight line and back, and a little up over it.
+        const at = from.clone().lerp(hitAt, k).addScaledVector(across, Math.sin(k * Math.PI * 2) * wobble * (1 - k));
+        at.y += Math.sin(k * Math.PI) * 0.25;
+        mote.position.copy(at);
+        mote.scale.setScalar(1 + Math.sin(age * 30) * 0.08);
+        if (age >= trail) {
+          trail = age + 0.025;
+          stage.spawnFx(Math.random() < 0.5 ? "spark" : "mote", Math.random() < 0.5 ? core : cold, flip, { from: at, to: offset(at, (Math.random() - 0.5) * 0.25, -0.3 - Math.random() * 0.2, (Math.random() - 0.5) * 0.2), life: 0.4, size: [0.26, 0.08], spin: 2, fade: true });
+        }
+      } else mote.visible = false;
+      bead.rotation.set(age * 5, age * 7, 0);
+      glow.rotation.set(-age * 3, age * 2, 0);
+      if (age < lands + fly) return true;
+      group.remove(mote);
+      for (const g of shapes) g.dispose();
+      beadMaterial.dispose();
+      glowMaterial.dispose();
+      return false;
+    };
+  });
+  stage.later(() => {
+    stage.spawnFx("burst", core, false, { from: hitAt, to: hitAt, life: 0.2, size: [0.7, 2.1], spin: 0.4, fade: true });
+    stage.later(() => stage.spawnFx("burst", crit ? GOLD : ICE_DEEP, true, { from: hitAt, to: hitAt, life: 0.36, size: [0.8, 2.3], spin: -0.4, fade: true }), 0.05);
+    // Frost glinting off them, then drifting slowly down.
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 + Math.random() * 0.4;
+      const to = offset(hitAt, Math.cos(a) * (0.4 + Math.random() * 0.35), Math.sin(a) * 0.4 - 0.25, 0.05);
+      stage.spawnFx(i % 3 ? "spark" : "fleck", i % 2 ? core : cold, Math.cos(a) < 0, { from: hitAt, to, life: 0.5 + Math.random() * 0.3, size: [0.36, 0.14], spin: 2, fade: true });
+    }
+    stage.wave({ at: hitAt.clone().setY(hitAt.y - 0.39), radius: 1.2, life: 0.5, color: cold, width: 0.14 });
+    stage.jolt();
+    onImpact();
+  }, lands + fly);
+}
+
+/**
+ * An Icy Bomb: how long it is in the air, how high it goes over the straight line, how big the ball is, how far its
+ * ice spreads (over the 3 hexes it lands on), how many crystals jut up out of it, and how long the ice it lays holds
+ * and fades (by then the ice left on the ground is drawn by the map's own surfaces).
+ */
+export const ICY_BOMB = { flight: 0.6, arc: 1.9, ball: 0.34, spread: 1.7, spikes: 8, hold: 0.8, fade: 0.7 };
+
+/**
+ * Crystals of ice jutting up out of the ground round `at`, within `spread` of it, leaning out from the middle: each
+ * grows up out of it quickly, holds, and sinks back into it as it fades. Their step, for MoveStage.lay.
+ */
+export function iceSpikes(at: THREE.Vector3, o: { spread: number; count: number; color: string; grow: number; hold: number; fade: number }) {
+  return (group: THREE.Object3D) => {
+    const material = new THREE.MeshLambertMaterial({ color: o.color, emissive: ICE_DEEP, emissiveIntensity: 0.45, transparent: true, opacity: 0.9, flatShading: true });
+    const spikes = Array.from({ length: o.count }, (_, i) => {
+      const tall = 0.35 + Math.random() * 0.45;
+      const spike = new THREE.Mesh(new THREE.ConeGeometry(0.09 + Math.random() * 0.07, tall, 5).translate(0, tall / 2, 0), material);
+      const a = (i / o.count) * Math.PI * 2 + Math.random() * 0.5;
+      const far = (0.25 + Math.random() * 0.75) * o.spread * 0.6;
+      spike.position.copy(offset(at, Math.cos(a) * far, 0, Math.sin(a) * far * 0.8));
+      spike.rotation.set(Math.sin(a) * 0.35, 0, -Math.cos(a) * 0.35);
+      spike.scale.set(1, 0.01, 1);
+      group.add(spike);
+      return { spike, late: Math.random() * 0.08 };
+    });
+    let age = 0;
+    return (dt: number) => {
+      age += dt;
+      const gone = Math.max(0, age - o.grow - o.hold) / o.fade;
+      for (const { spike, late } of spikes) {
+        const k = Math.min(1, Math.max(0, (age - late) / o.grow));
+        spike.scale.set(1, Math.max(0.01, (1 - (1 - k) * (1 - k)) * (1 - gone * 0.6)), 1);
+      }
+      material.opacity = 0.9 * Math.max(0, 1 - gone);
+      if (gone < 1) return true;
+      for (const { spike } of spikes) {
+        group.remove(spike);
+        spike.geometry.dispose();
+      }
+      material.dispose();
+      return false;
+    };
+  };
+}
+
+/**
+ * A sheet of ice laid flat over the ground round `at`, out to `radius`: it spreads out over `grow` seconds, holds, and
+ * fades. Its step, for MoveStage.lay.
+ */
+export function iceSheet(at: THREE.Vector3, o: { radius: number; color: string; grow: number; hold: number; fade: number }) {
+  return (group: THREE.Object3D) => {
+    const material = new THREE.MeshBasicMaterial({ color: o.color, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false });
+    // Seven-sided, turned at random: a rough, cracked-off edge rather than a neat circle.
+    const sheet = new THREE.Mesh(new THREE.CircleGeometry(1, 7).rotateX(-Math.PI / 2), material);
+    sheet.rotation.y = Math.random() * Math.PI;
+    sheet.position.copy(at);
+    sheet.renderOrder = 7;
+    group.add(sheet);
+    let age = 0;
+    return (dt: number) => {
+      age += dt;
+      const k = Math.min(1, age / o.grow);
+      const r = 0.2 + (o.radius - 0.2) * (1 - (1 - k) * (1 - k));
+      sheet.scale.set(r, 1, r * 0.8);
+      const gone = Math.max(0, age - o.grow - o.hold) / o.fade;
+      material.opacity = 0.55 * Math.min(1, k * 2) * Math.max(0, 1 - gone);
+      if (gone < 1) return true;
+      group.remove(sheet);
+      sheet.geometry.dispose();
+      material.dispose();
+      return false;
+    };
+  };
+}
+
+/**
+ * A Rime Wraith's Icy Bomb: it rises and leans back with its arms raised high (figures.ts HURL), and a ball of ice grows
+ * between its hands over its head, turning, as cold motes are drawn in to it; then it flings it in a high arc, frost
+ * and snow falling off it the whole way. Where it lands it bursts: a white flash and a deep blue one, shards of ice
+ * flung out every way, frost rings rolling out over the 3 hexes, a sheet of ice spreading over the ground there with
+ * crystals of ice jutting up out of it, and cold mist rising after. `hitAt` is over the hex it is thrown at; the blow
+ * (on all it catches) is told as it lands.
+ */
+function icyBomb(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const { flight, arc, ball, spread, spikes, hold, fade } = ICY_BOMB;
+  const wait = Math.max(0, figure.strike("hurl") || figure.cast());
+  const cold = crit ? GOLD : ICE;
+  const core = crit ? GOLD : ICE_CORE;
+  const deep = crit ? GOLD : ICE_DEEP;
+  const ground = hitAt.clone().setY(hitAt.y - 0.45);
+  const above = () => {
+    const top = upFigure(figure, 1);
+    return top.setY(top.y + ball + 0.15);
+  };
+  // Cold motes drawn in to it as it forms.
+  for (let s = 0; s < wait; s += 0.035) {
+    stage.later(() => {
+      const at = above();
+      const a = Math.random() * Math.PI * 2;
+      const from = offset(at, Math.cos(a) * 1, (Math.random() - 0.5) * 0.8, Math.sin(a) * 1);
+      stage.spawnFx("mote", Math.random() < 0.5 ? core : cold, Math.cos(a) < 0, { from, to: at, life: 0.3, size: [0.35, 0.12], spin: 0, fade: true });
+    }, s);
+  }
+  stage.lay((group) => {
+    // The bomb: a faceted ball of ice inside a pale, see-through shell.
+    const shapes = [new THREE.IcosahedronGeometry(ball, 0), new THREE.IcosahedronGeometry(ball * 1.45, 1)];
+    const innerMaterial = new THREE.MeshLambertMaterial({ color: cold, emissive: ICE_DEEP, emissiveIntensity: 0.5, flatShading: true });
+    const shellMaterial = iceMaterial(core, 0.3);
+    const inner = new THREE.Mesh(shapes[0], innerMaterial);
+    const shell = new THREE.Mesh(shapes[1], shellMaterial);
+    const bomb = new THREE.Group();
+    bomb.add(inner, shell);
+    group.add(bomb);
+    let from: THREE.Vector3 | null = null;
+    let age = 0;
+    let trail = 0;
+    return (dt) => {
+      age += dt;
+      if (age < wait) {
+        bomb.position.copy(above());
+        bomb.scale.setScalar(Math.max(0.05, age / Math.max(wait, 1e-3)));
+      } else if (age < wait + flight) {
+        from ??= above();
+        // Along the same arc as any lobbed fx (WorldRenderer's: up by arc·4k(1−k)).
+        const k = (age - wait) / flight;
+        const at = from.clone().lerp(ground, k);
+        at.y += arc * 4 * k * (1 - k);
+        bomb.position.copy(at);
+        bomb.scale.setScalar(1);
+        if (age >= trail) {
+          trail = age + 0.03;
+          stage.spawnFx(Math.random() < 0.5 ? "fleck" : "mote", Math.random() < 0.5 ? core : cold, Math.random() < 0.5, { from: at, to: offset(at, (Math.random() - 0.5) * 0.35, -0.35, (Math.random() - 0.5) * 0.2), life: 0.4, size: [0.3, 0.12], spin: 2, fade: true });
+        }
+      } else bomb.visible = false;
+      inner.rotation.set(age * 3, age * dir * 5, 0);
+      shell.rotation.set(-age * 2, age * 3, 0);
+      if (age < wait + flight) return true;
+      group.remove(bomb);
+      for (const g of shapes) g.dispose();
+      innerMaterial.dispose();
+      shellMaterial.dispose();
+      return false;
+    };
+  });
+  stage.later(() => {
+    const floor = ground.clone().setY(ground.y + 0.05);
+    stage.spawnFx("burst", core, false, { from: ground, to: ground, life: 0.22, size: [1.2, 3.4], spin: 0.6, fade: true });
+    stage.spawnFx("burst", deep, true, { from: ground, to: ground.clone().setY(ground.y + 0.3), life: 0.42, size: [1, 2.8], spin: -0.5, fade: true });
+    stage.wave({ at: floor, radius: spread, life: 0.45, color: core, width: 0.14 });
+    stage.later(() => stage.wave({ at: floor, radius: spread * 0.85, life: 0.6, color: deep, width: 0.3 }), 0.06);
+    // The ice it leaves, spread over the ground, with crystals jutting up out of it.
+    stage.lay(iceSheet(ground.clone().setY(ground.y + 0.04), { radius: spread, color: cold, grow: 0.25, hold, fade }));
+    stage.lay(iceSpikes(ground, { spread, count: spikes, color: cold, grow: 0.14, hold: hold * 0.6, fade }));
+    // Shock lines out from where it struck.
+    for (const side of [false, true]) for (const turn of [-0.6, -0.2, 0.2, 0.6]) stage.spawnFx("streak", core, side, { from: ground, to: ground, life: 0.2, size: [0.7, 2], turn: side ? -turn : turn, spin: 0, fade: true });
+    // Shards of ice flung out every way in arcs.
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2 + Math.random() * 0.4;
+      const far = 0.7 + Math.random() * 0.9;
+      stage.spawnFx(i % 3 ? "fleck" : "spark", i % 2 ? core : cold, Math.cos(a) < 0, { from: ground, to: offset(ground, Math.cos(a) * far, 0, Math.sin(a) * far * 0.6), life: 0.45 + Math.random() * 0.2, size: [0.4, 0.22], spin: 3, fade: true, arc: 0.4 + Math.random() * 0.5 });
+    }
+    // And cold mist rising off it after, slow.
+    stage.later(() => {
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + Math.random() * 0.5;
+        const at = offset(ground, Math.cos(a) * 0.6, 0.15, Math.sin(a) * 0.4);
+        stage.spawnFx("dust", WISP, Math.cos(a) < 0, { from: at, to: offset(at, Math.cos(a) * 0.3, 0.8, 0), life: 1, size: [0.9, 2], spin: 0, fade: true });
+      }
+    }, 0.15);
+    stage.jolt();
+    onImpact();
+  }, wait + flight);
+}
+
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
+  "Frost Mote": { who: "wraith", blurb: "Draws up and back as cold motes swirl in to a point before its chest, where a little glowing mote of frost forms; then it thrusts its hands out and sends it drifting at the target, wobbling and turning, glints falling off it: a cold flash and a deeper blue one where it lands, frost glinting off and drifting down, and a ring of frost at their feet.", play: frostMote },
+  "Icy Bomb": { who: "wraith", blurb: "Rises with its arms raised high as a ball of ice grows between its hands over its head, cold motes drawn in to it; then it flings it in a high arc, frost and snow falling off it: it bursts where it lands in a white flash and a deep blue one, shards of ice flung out every way, frost rings rolling out over the hexes, a sheet of ice spreading over the ground with crystals jutting up out of it, and cold mist rising after.", play: icyBomb },
   "Grave Grasp": { who: "haunt", blurb: "Draws up and back and surges in with its arms out, and a great hand of ice reaches out low over the ground: it slams down on the far row with a cold flash and a ring of frost, closes into a fist and drags back to the Haunt over the ground, frost and wisps pulled along behind it.", play: graveGrasp },
   "Ice Spear": { who: "haunt", blurb: "Rises with its arms raised high and a spear of ice grows over its head, cold motes drawn in to it; then it flings it straight and low down the whole line, a pale streak and frost trailing it and frost laid on the ground under it, and it shatters at the end in a cold flash and a spray of shards.", play: iceSpear },
   "Frost Breath": { who: "frost_wolf", blurb: "Draws breath with its front lifted and head thrown back, cold motes pulled in to its jaws, then thrusts its head out low and breathes: a pale flash at its mouth, freezing mist billowing out over the whole cone with frost motes, glints and shards of ice streaming through it, frost running out over the ground to the far row and lying there glinting, and a ring of frost where it ends.", play: frostBreath },
