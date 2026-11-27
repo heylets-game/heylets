@@ -552,6 +552,10 @@
 .fl-math .fl-mod { padding: 0 4px; font-size: 10px; line-height: 14px; letter-spacing: 0.04em; text-transform: uppercase; border: 1px solid; }
 .fl-math .fl-mod.adv { color: var(--f-good); }
 .fl-math .fl-mod.dis { color: var(--f-bad); }
+/* Advantage and disadvantage that cancelled: neither colour, with why each in its own. */
+.fl-math .fl-mod.even, .fr-who em.even { color: #d9c7ab; }
+.fl-mod.even .for, .fr-who em.even .for { color: var(--f-good); }
+.fl-mod.even .against, .fr-who em.even .against { color: var(--f-bad); }
 .fl-math .fl-mod.half { color: #9ec9ff; }
 .fl-math .fl-mod.blk { color: #d6dde8; border: none; padding: 0; text-transform: none; font-size: 12px; }
 .fl-parts { display: flex; flex-wrap: wrap; gap: 3px 4px; margin-top: 3px; }

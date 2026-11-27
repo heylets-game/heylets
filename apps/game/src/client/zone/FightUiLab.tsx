@@ -53,7 +53,7 @@ const roll = (over: Partial<Roll> & Pick<Roll, "kind" | "label" | "d20" | "bonus
  * the difference, or of nothing doing. `own` is the roller's own bonus and `vs` the number to reach before `vsMods`.
  * Mira (h1) attacks the Dire Wolf (e1); the wolf (e1) bites Mira; the Bandit Cutter (e2) saves.
  */
-interface SwingCase { name: string; by: "h1" | "e1" | "e2"; kind?: Roll["kind"]; label: string; d20: number[]; adv?: -1 | 0 | 1; own: number; mods?: RollMod[]; vs: number; vsMods?: RollMod[]; advWhy?: string[] }
+interface SwingCase { name: string; by: "h1" | "e1" | "e2"; kind?: Roll["kind"]; label: string; d20: number[]; adv?: -1 | 0 | 1; own: number; mods?: RollMod[]; vs: number; vsMods?: RollMod[]; advWhy?: string[]; cancelled?: Roll["cancelled"] }
 const HIGH: RollMod = { name: "High ground", n: 2 };
 const BEACON: RollMod = { name: "Beacon", n: 1 };
 const SWING_CASES: SwingCase[] = [
@@ -69,13 +69,14 @@ const SWING_CASES: SwingCase[] = [
   { name: "Bonus + adv.", by: "h1", label: "Cleave · attack", d20: [12, 3], adv: 1, own: 1, mods: [HIGH], vs: 15, advWhy: ["Inspired"] },
   { name: "Adv. made a crit", by: "h1", label: "Cleave · attack", d20: [20, 15], adv: 1, own: 3, vs: 14, advWhy: ["Exposed"] },
   { name: "Dis. cost a crit", by: "h1", label: "Longshot · attack", d20: [20, 11], adv: -1, own: 1, mods: [HIGH], vs: 14, advWhy: ["Poisoned"] },
+  { name: "Cancelled", by: "h1", label: "Longshot · attack", d20: [13], own: 3, mods: [HIGH], vs: 15, cancelled: { adv: ["Exposed"], dis: ["Poisoned", "Dark"] } },
   { name: "Weakened save", by: "e2", kind: "save", label: "Agility save", d20: [12], own: 2, mods: [{ name: "Weakened", n: -2 }], vs: 13 },
   { name: "Enemy vs Coral", by: "e1", label: "Bite · attack", d20: [13], own: 4, vs: 16, vsMods: [{ name: "Coral Armor", n: 2 }] },
 ];
 const swingRoll = (c: SwingCase): Roll => roll({
   kind: c.kind ?? "attack", id: c.by, label: c.label, d20: c.d20, adv: c.adv ?? 0,
   bonus: c.own + (c.mods ?? []).reduce((n, m) => n + m.n, 0), vs: c.vs + (c.vsMods ?? []).reduce((n, m) => n + m.n, 0),
-  ...(c.kind === "save" ? {} : { target: c.by === "e1" ? "h1" : "e1" }), mods: c.mods, vsMods: c.vsMods, advWhy: c.advWhy,
+  ...(c.kind === "save" ? {} : { target: c.by === "e1" ? "h1" : "e1" }), mods: c.mods, vsMods: c.vsMods, advWhy: c.advWhy, cancelled: c.cancelled,
 });
 const LAB_NAMES: Record<string, string> = { h1: "Mira Tidewright", e1: "Dire Wolf", e2: "Bandit Cutter" };
 

@@ -434,6 +434,8 @@ export interface AttackContext {
   parts: RollMod[];
   /** Why it has advantage or disadvantage (`adv`), a short name each, for the roll (Roll `advWhy`). Empty when neither. */
   advWhy: string[];
+  /** It has both, which cancel: why each (Roll `cancelled`). Absent otherwise. */
+  cancelled?: { adv: string[]; dis: string[] };
   /** Why, in a few words each, for the tooltip. */
   notes: string[];
 }
@@ -493,17 +495,19 @@ export function attackContext(state: ZoneState, attacker: Unit, target: Unit, op
     else add("Ladder", -2, "striking up a ladder");
   }
   const net = netAdvantage(ups.length > 0, downs.length > 0);
-  return { adv: net, mods: parts.reduce((n, p) => n + p.n, 0), parts, advWhy: net > 0 ? ups : net < 0 ? downs : [], notes };
+  const cancelled = ups.length > 0 && downs.length > 0 ? { adv: ups, dis: downs } : undefined;
+  return { adv: net, mods: parts.reduce((n, p) => n + p.n, 0), parts, advWhy: net > 0 ? ups : net < 0 ? downs : [], ...(cancelled ? { cancelled } : {}), notes };
 }
 
 /**
- * What of a roll of the moment goes on it (Roll `mods`, `vsMods`, `advWhy`): only those there are, so a roll with none
- * carries none of the three.
+ * What of a roll of the moment goes on it (Roll `mods`, `vsMods`, `advWhy`, `cancelled`): only those there are, so a
+ * roll with none carries none of them.
  */
-export const momentOf = (o: { mods?: RollMod[]; vsMods?: RollMod[]; advWhy?: string[] }): Pick<Roll, "mods" | "vsMods" | "advWhy"> => ({
+export const momentOf = (o: { mods?: RollMod[]; vsMods?: RollMod[]; advWhy?: string[]; cancelled?: Roll["cancelled"] }): Pick<Roll, "mods" | "vsMods" | "advWhy" | "cancelled"> => ({
   ...(o.mods?.length ? { mods: o.mods } : {}),
   ...(o.vsMods?.length ? { vsMods: o.vsMods } : {}),
   ...(o.advWhy?.length ? { advWhy: o.advWhy } : {}),
+  ...(o.cancelled ? { cancelled: o.cancelled } : {}),
 });
 
 /** Roll an attack and say so. A stack each of Fumbling, Inspired and Lucky is spent on it (spendUse). */
@@ -511,7 +515,7 @@ export function attackRoll(ctx: Ctx, attacker: Unit, target: Unit, opts: { label
   const c = attackContext(ctx.state, attacker, target, opts);
   const roll = d20(ctx.rng, {
     kind: "attack", id: attacker.id, target: target.id, label: opts.label, bonus: opts.bonus + c.mods, vs: defenceOf(target, ctx.state), adv: c.adv,
-    ...momentOf({ mods: c.parts, vsMods: defenceMods(target, ctx.state), advWhy: c.advWhy }),
+    ...momentOf({ mods: c.parts, vsMods: defenceMods(target, ctx.state), advWhy: c.advWhy, cancelled: c.cancelled }),
   });
   // A Ghostsail Cloak: the first attacks against its wearer each fight pass through them, whatever was rolled.
   const enc = ctx.state.encounter;

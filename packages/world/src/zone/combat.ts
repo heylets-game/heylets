@@ -254,7 +254,7 @@ export function shift(ctx: Ctx, target: Unit, dest: HexPos, by: string, dc?: num
     const vs = dc ?? edgeDc(unitById(state, by));
     const down = [has(target, "prone") && "Prone", has(target, "stunned") && "Stunned"].filter((w): w is string => !!w);
     const adv = down.length > 0 ? (boss ? 0 : -1) : boss ? 1 : 0;
-    const roll = d20(ctx.rng, { kind: "save", id: target.id, label: "Catch the edge", bonus: saveBonus(target, "agi"), vs, adv, ...momentOf({ mods: saveMods(target), advWhy: adv > 0 ? ["Boss"] : adv < 0 ? down : [] }) });
+    const roll = d20(ctx.rng, { kind: "save", id: target.id, label: "Catch the edge", bonus: saveBonus(target, "agi"), vs, adv, ...momentOf({ mods: saveMods(target), advWhy: adv > 0 ? ["Boss"] : adv < 0 ? down : [], cancelled: boss && down.length > 0 ? { adv: ["Boss"], dis: down } : undefined }) });
     ctx.events.push({ t: "roll", roll });
     if (roll.ok) {
       ctx.events.push({ t: "held", id: target.id, at: dest });

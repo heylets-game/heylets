@@ -51,6 +51,17 @@ describe("what of the moment a roll carries", () => {
     expect(roll.vs).toBe(defenceOf(wolf, state));
   });
 
+  it("an attack with advantage and disadvantage both rolls plain, and keeps why each", () => {
+    const { state, ann, wolf } = setUp();
+    wolf.conditions.push({ kind: "exposed", rounds: 2 });
+    ann.conditions.push({ kind: "poisoned", rounds: 2 });
+    const roll = attackRoll(ctxOf(state), ann, wolf, { label: "Shot", bonus: 3, melee: false });
+    expect(roll.adv).toBe(0);
+    expect(roll.d20).toHaveLength(1);
+    expect(roll.cancelled).toEqual({ adv: ["Exposed"], dis: ["Poisoned"] });
+    expect(roll).not.toHaveProperty("advWhy");
+  });
+
   it("a Defence is what it is made of: its base, and what of the moment there is", () => {
     const { state, ann } = setUp();
     const bare = defenceOf(ann, state);

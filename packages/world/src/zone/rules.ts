@@ -86,7 +86,7 @@ export const netAdvantage = (advantage: boolean, disadvantage: boolean): -1 | 0 
  * One d20 against a number to reach. A natural 20 always makes it and a natural 1 never does, on attacks;
  * saves and shoves just add up.
  */
-export function d20(rng: Rng, opts: Pick<Roll, "kind" | "id" | "target" | "label" | "bonus" | "vs" | "adv" | "mods" | "vsMods" | "advWhy">): Roll {
+export function d20(rng: Rng, opts: Pick<Roll, "kind" | "id" | "target" | "label" | "bonus" | "vs" | "adv" | "mods" | "vsMods" | "advWhy" | "cancelled">): Roll {
   const dice = opts.adv === 0 ? [rng.int(1, 20)] : [rng.int(1, 20), rng.int(1, 20)];
   const kept = opts.adv === 1 ? Math.max(...dice) : opts.adv === -1 ? Math.min(...dice) : dice[0];
   const total = kept + opts.bonus;

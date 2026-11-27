@@ -556,6 +556,8 @@ export interface Roll {
   vsMods?: RollMod[];
   /** Why it was rolled with advantage or disadvantage (`adv`), a short name each: "Exposed", "Terror Aura". */
   advWhy?: string[];
+  /** It had both advantage and disadvantage, which cancelled (`adv` 0): why each, a short name each. */
+  cancelled?: { adv: string[]; dis: string[] };
 }
 
 /** One thing of the moment that moved a roll or the number it had to reach: its short name, and by how much. */
