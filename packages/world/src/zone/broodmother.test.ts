@@ -35,7 +35,7 @@ describe("a Broodmother", () => {
     expect(ENEMIES.broodmother.abilities).toEqual(["impaling_fang", "spin_web", "brood_swarm"]);
     expect(ENEMY_ABILITIES.impaling_fang.saveOr).toEqual({ effect: "sundered", turns: 2 });
     expect(strike("Spin Web")).toMatchObject({ range: 3, cooldown: 4, harmless: true, kit: { blast: 2, surface: { kind: "web" } } });
-    expect(strike("Brood Swarm")).toMatchObject({ cost: 1, cooldown: 2, behaviour: "summon", kit: { summon: { kind: "spiderling", count: 2, most: 14 } } });
+    expect(strike("Brood Swarm")).toMatchObject({ cost: 1, cooldown: 2, behaviour: "summon", kit: { summon: { kind: "spiderling", count: 2, most: 14, share: 1 } } });
   });
 
   it("spins web over every hex within two of where it aims, hurting nobody, and slowing whoever is caught", () => {
@@ -190,5 +190,55 @@ describe("walking through web", () => {
     standInSurface(ctx, s);
     standInSurface(ctx, s);
     expect(told(spider)).toBe(1);
+  });
+});
+
+describe("a Broodmother's brood and the room round her", () => {
+  const c = at(6, 6);
+  const near = (dq: number, dr: number) => ({ q: c.q + dq, r: c.r + dr });
+  const ring = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]].map(([dq, dr]) => near(dq, dr));
+
+  it("calls one onto a hex where one of its brood stands alone, never onto two, nor onto anyone else", () => {
+    let state = flatBoard({ rng: 12345, start: at(1, 1), options: { party: 1 }, flags: { shareTurns: true } });
+    state.aiOff = true;
+    Object.assign(standHero(state, "ann", at(1, 1), hero), { hp: 900, maxHp: 900 });
+    const mother = enemy(state, "broodmother", c).id;
+    // Two of its brood on the first hex, one on each of the next three, a dummy on the fifth: only the three have room.
+    const brood = (p: HexPos) => enemy(state, "spiderling", p, "g1", { summon: { by: mother } });
+    brood(ring[0]);
+    brood(ring[0]);
+    for (const p of ring.slice(1, 4)) brood(p);
+    enemy(state, "dummy", ring[4]);
+    // The sixth is empty: it is used first.
+    state = must(state, { type: "dev", by: "ann", dev: { op: "start_fight" } });
+    const ctx = ctxOf(state);
+    enemyAct(ctx, unit(ctx.state, mother), strike("Brood Swarm"), null);
+    const fresh = ctx.state.units.filter((u) => u.kind === "spiderling").slice(5);
+    expect(fresh).toHaveLength(2);
+    expect(fresh.some((u) => sameHex(u.pos, ring[5]))).toBe(true);
+    const other = fresh.find((u) => !sameHex(u.pos, ring[5]))!;
+    expect(ring.slice(1, 4).some((p) => sameHex(p, other.pos))).toBe(true);
+    for (const p of ring) expect(ctx.state.units.filter((u) => !u.down && sameHex(u.pos, p)).length).toBeLessThanOrEqual(2);
+  });
+
+  it("keeps its Spiderlings off the hexes beside her, where they can still bite from somewhere else", () => {
+    for (let seed = 1; seed <= 6; seed++) {
+      let state = flatBoard({ rng: 12345, start: at(1, 1), options: { party: 1 }, flags: { shareTurns: true } });
+      state.aiOff = true;
+      // Ann two hexes off: the Spiderling beside the Broodmother is beside Ann too, and could bite her from where it is.
+      Object.assign(standHero(state, "ann", near(2, 0), hero), { hp: 900, maxHp: 900 });
+      const m = enemy(state, "broodmother", c);
+      m.conditions.push({ kind: "stunned", rounds: 1 });
+      const s = enemy(state, "spiderling", near(1, 0), "g1", { summon: { by: m.id } }).id;
+      state = must(state, { type: "dev", by: "ann", dev: { op: "start_fight" } });
+      state.aiOff = false;
+      state.rng = seed;
+      const events: ZoneEvent[] = [];
+      state = must(state, { type: "end_turn", by: "ann", unit: "ann" }, events);
+      for (let i = 0; i < 3 && !events.some((e) => e.t === "turn" && e.ids.includes("ann")); i++) state = must(state, { type: "timeout" }, events);
+      expect(events.some((e) => e.t === "used" && e.id === s), `seed ${seed}`).toBe(true);
+      expect(hexDistance(unit(state, s).pos, c), `seed ${seed}`).toBeGreaterThan(1);
+      expect(events.filter((e) => e.t === "reaction").length, `seed ${seed}`).toBe(0);
+    }
   });
 });

@@ -11,7 +11,7 @@ import { hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/cor
 import { ENEMIES } from "../content";
 import { tileAt } from "../map";
 import type { Ctx } from "./engine";
-import { blockerAt, sameHex, solid, span, unitAt } from "./geometry";
+import { HEX_ROOM, blockerAt, isDead, sameHex, solid, span, unitAt, unitsAt } from "./geometry";
 import { SUMMON_AP_TURN, SUMMONS, SUMMON_CALLS, enemyHp, type SummonCall } from "./kit";
 import type { KinCall } from "./enemyabilities";
 import { modsOf } from "./mods";
@@ -159,9 +159,10 @@ function arrive(ctx: Ctx, called: Unit[]): void {
 }
 
 /**
- * Where an enemy calling more of its side (EnemyDef ability `summon`) would put them: open hexes beside it (any of its
- * hexes, for a big one), each to itself, ground that does no harm first, then nearest its anchor. As many as there are,
- * up to the call's `count`, and only as many more as keep those it called standing to its `most`.
+ * Where an enemy calling more of its side (EnemyDef ability `summon`) would put them: hexes beside it (any of its
+ * hexes, for a big one) with nobody on them, or as many of the kind called as the call `share`s (and room for one more),
+ * one to a hex: empty ones first, then ground that does no harm, then nearest its anchor. As many as there are, up to
+ * the call's `count`, and only as many more as keep those it called standing to its `most`.
  */
 export function kinSpots(state: ZoneState, caller: Unit, call: KinCall, from: HexPos = caller.pos): HexPos[] {
   const out = summonsOf(state, caller.id).filter((u) => !u.down && u.kind === call.kind).length;
@@ -170,16 +171,25 @@ export function kinSpots(state: ZoneState, caller: Unit, call: KinCall, from: He
   const mine = span(caller, from);
   const seen = new Set(mine.map(posKey));
   const open: HexPos[] = [];
+  /** How many stand on each hex looked at already. */
+  const crowd = new Map<string, number>();
   for (const p of mine.flatMap((h) => hexNeighbors(h, state.map.grid))) {
     const key = posKey(p);
     if (seen.has(key)) continue;
     seen.add(key);
     const tile = tileAt(state.map, p);
-    const there = unitAt(state, p);
-    if (tile && !solid(tile) && !blockerAt(state, p) && (!there || there.id === caller.id)) open.push(p);
+    if (!tile || solid(tile) || blockerAt(state, p)) continue;
+    const there = unitsAt(state, p).filter((u) => !isDead(u) && u.id !== caller.id);
+    const shared = there.length > 0 && there.length <= (call.share ?? 0) && there.every((u) => !u.down && u.side === caller.side && u.kind === call.kind);
+    if (there.length === 0 || (shared && there.length < HEX_ROOM)) open.push(p);
+    crowd.set(key, there.length);
   }
-  const harmful = (p: HexPos) => (HARMFUL.has(state.surfaces[posKey(p)]?.kind ?? "web") ? 1 : 0);
-  return open.sort((a, b) => harmful(a) - harmful(b) || hexDistance(a, from) - hexDistance(b, from) || a.q - b.q || a.r - b.r).slice(0, count);
+  const harmful = (p: HexPos) => {
+    const kind = state.surfaces[posKey(p)]?.kind;
+    return kind && HARMFUL.has(kind) ? 1 : 0;
+  };
+  const held = (p: HexPos) => crowd.get(posKey(p)) ?? 0;
+  return open.sort((a, b) => held(a) - held(b) || harmful(a) - harmful(b) || hexDistance(a, from) - hexDistance(b, from) || a.q - b.q || a.r - b.r).slice(0, count);
 }
 
 /**

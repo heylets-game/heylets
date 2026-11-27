@@ -768,9 +768,17 @@ export interface Mind {
   height: number;
   /** How much it minds harm on the way: fire and poison underfoot, and blows drawn by walking out of reach. 1 is the usual; 0 does not care. */
   caution: number;
+  /**
+   * What ending its move beside the one that called it into the fight costs it, while that one can call more of its side
+   * (a Spiderling and its Broodmother): it leaves the hexes round its caller free for more to come. 0 does not care.
+   */
+  clear: number;
 }
 
-export const DEFAULT_MIND: Mind = { spacing: 0, height: 0, caution: 1 };
+export const DEFAULT_MIND: Mind = { spacing: 0, height: 0, caution: 1, clear: 0 };
+
+/** What a creature called into a fight minds about standing beside its caller (Mind `clear`): less than a blow, so it still strikes from there if that is the only place it can. */
+export const CLEAR_OF_CALLER = 2;
 
 /** Those that shoot: they like room, and to look down on what they shoot at. */
 const SHOOTER: Partial<Mind> = { spacing: 0.4, height: 0.5 };
@@ -807,7 +815,8 @@ export const ENEMY_KIT: Record<string, EnemyKit> = {
   villain: {},
   spider: { pack: true },
   broodmother: {},
-  spiderling: { pack: true },
+  // A Broodmother's young: they keep off the hexes round her, so she has room to call more.
+  spiderling: { pack: true, mind: { clear: CLEAR_OF_CALLER } },
   frost_wolf: { pack: true },
   ember_hound: { pack: true },
   snow_bear: {},

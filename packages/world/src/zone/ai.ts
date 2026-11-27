@@ -40,7 +40,8 @@ import { behaviourOf, type Look } from "./behaviours";
 import { BELL_AP, goesForBell, liveBell, ringBell, somethingToRouse } from "./bell";
 import { apForMove, checkCommon, doCommon, enemyAct, leavesReach, walk, walkAp } from "./combat";
 import { has, unseen, type Ctx } from "./engine";
-import { big, blast, close, elevOf, flies, gap, heldAgainst, inFight, pathIn, sameHex, stepCost, zoneReach, type Reached } from "./geometry";
+import { big, blast, close, elevOf, flies, gap, heldAgainst, inFight, pathIn, sameHex, stepCost, unitById, zoneReach, type Reached } from "./geometry";
+import { ENEMY_ABILITIES } from "./enemyabilities";
 import { ACTION_AP, AP_MAX, COMMON_ACTIONS, ENEMY_WHIM, jumpRange, mindOf, unitStrikes, type EnemyStrike, type Mind } from "./kit";
 import { seedFromString } from "../rng";
 import { HARMFUL } from "./surfaces";
@@ -168,6 +169,9 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
   // The other side's coral cuts as well as fire does.
   for (const w of state.weather ?? []) if (w.kind === "coral" && w.side !== enemy.side) for (const p of w.hexes) harmful.add(posKey(p));
   const jumpAp = COMMON_ACTIONS.jump.cost;
+  /** Its caller, if it was called into the fight by one that can still call more of its side, and it minds standing beside it (Mind `clear`). */
+  const caller = mind.clear > 0 && enemy.summon ? unitById(state, enemy.summon.by) : undefined;
+  const callsMore = caller && !caller.down && caller.abilities.some((id) => ENEMY_ABILITIES[id]?.summon) ? caller : undefined;
 
   /**
    * The best place to end this move, weighing what could be done from there against what getting there costs, with blows only
@@ -214,6 +218,8 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
       }
       // Nothing to hit from there: at least get closer.
       else score -= 50 + nearest(pos);
+      // Called into the fight by one that can call more: it keeps off the hexes round its caller, to leave them room.
+      if (callsMore && gap(enemy, callsMore, pos) === 1) score -= mind.clear;
       return { score, attacks: !!option };
     };
     let best: Plan | null = null;
