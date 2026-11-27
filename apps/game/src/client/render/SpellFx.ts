@@ -47,7 +47,7 @@ const DREAD_PULL = 2.4;
  * along the chain than across it (a chain's links are oval, not round).
  */
 const FETTER_LINKS = 12;
-const FETTER_LINK_LONG = 1.8;
+const FETTER_LINK_LONG = 2.1;
 /** How high a fetter's stake stands, to its ring, where the chain is made fast (SpellFx.fetter). */
 const FETTER_HEAD = 0.95;
 
@@ -2262,7 +2262,7 @@ export class SpellFx {
     foot.scale.setScalar(1.1);
     const round = this.sheet(anchor.clone().setY(anchor.y + 0.06), glow, ringTex(), 0);
     round.scale.setScalar(1.7);
-    const link = new THREE.TorusGeometry(0.085, 0.024, 5, 10);
+    const link = new THREE.TorusGeometry(0.1, 0.03, 5, 12);
     const links = Array.from({ length: FETTER_LINKS }, () => this.add(new THREE.Mesh(link, metal)));
     // Drawn long along the chain: after lookAt and the quarter turn below, a link's own x lies along it.
     for (const m of links) m.scale.set(FETTER_LINK_LONG, 1, 1);
