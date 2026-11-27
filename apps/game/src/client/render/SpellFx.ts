@@ -44,6 +44,8 @@ const GRACE = 2.5;
 const DREAD_PULL = 2.4;
 /** How many links a fetter's chain is drawn with, however long it is (SpellFx.fetter). */
 const FETTER_LINKS = 12;
+/** How high a fetter's stake stands, to its ring, where the chain is made fast (SpellFx.fetter). */
+const FETTER_HEAD = 0.95;
 
 /** How a song moves its notes: a lively shanty's bob up, a dour one's rise slowly and sink back, the wind-god's swirl. */
 export type SongMood = "lively" | "dour" | "wind";
@@ -2240,17 +2242,22 @@ export class SpellFx {
     this.bound.set(bind.key, release);
     const metal = new THREE.MeshLambertMaterial({ color: iron, transparent: true, opacity: 0 });
     const stake = this.add(new THREE.Group());
-    const spike = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.75, 6), metal);
+    // Tall enough to stand clear of the grass and of whoever is chained to it while they stand on the spot, its head
+    // glowing; and a pale ring round the hex on the ground, so the spot is plain even with someone on it.
+    const spike = new THREE.Mesh(new THREE.ConeGeometry(0.13, 1.25, 6), metal);
     spike.rotation.x = Math.PI;
-    spike.position.y = 0.12;
-    const head = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.04, 6, 12), metal);
+    spike.position.y = FETTER_HEAD - 0.6;
+    const head = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.05, 6, 12), metal);
     head.rotation.x = Math.PI / 2;
-    head.position.y = 0.5;
+    head.position.y = FETTER_HEAD;
     stake.add(spike, head);
     stake.position.copy(anchor);
     for (const m of [spike, head]) m.userData.ownGeometry = true;
+    const shine = this.halo(anchor.clone().setY(anchor.y + FETTER_HEAD), glow, 0.7, 0);
     const foot = this.sheet(anchor.clone().setY(anchor.y + 0.05), glow, softTex(), 0);
     foot.scale.setScalar(1.1);
+    const round = this.sheet(anchor.clone().setY(anchor.y + 0.06), glow, ringTex(), 0);
+    round.scale.setScalar(1.7);
     const link = new THREE.TorusGeometry(0.085, 0.024, 5, 10);
     const links = Array.from({ length: FETTER_LINKS }, () => this.add(new THREE.Mesh(link, metal)));
     // The links share one shape: it goes with the first.
@@ -2260,15 +2267,18 @@ export class SpellFx {
     const along = new THREE.Vector3();
     let next = 0.5;
     let gone = -1;
-    this.run([stake, foot, ...links], (age) => {
+    this.run([stake, shine, foot, round, ...links], (age) => {
       const feet = bind.follow();
       if (gone < 0 && (released || !feet || (age > GRACE && !bind.holding()))) gone = age;
       const k = gone < 0 ? Math.min(1, age / 0.3) : Math.max(0, 1 - (age - gone) / 0.5);
       metal.opacity = k;
-      (foot.material as THREE.MeshBasicMaterial).opacity = 0.5 * k * (0.75 + 0.25 * Math.sin(age * 3));
+      const pulse = 0.75 + 0.25 * Math.sin(age * 3);
+      (foot.material as THREE.MeshBasicMaterial).opacity = 0.5 * k * pulse;
+      (round.material as THREE.MeshBasicMaterial).opacity = 0.7 * k * pulse;
+      shine.material.opacity = 0.8 * k * pulse;
       if (feet) {
         // From the stake's head to about their knee, sagging most in the middle (and more, slack, as it goes).
-        a.copy(anchor).setY(anchor.y + 0.5);
+        a.copy(anchor).setY(anchor.y + FETTER_HEAD);
         b.copy(feet).setY(feet.y + 0.35);
         const span = a.distanceTo(b);
         const sag = (0.15 + span * 0.12) * (gone < 0 ? 1 : 1 + (age - gone) * 2);
