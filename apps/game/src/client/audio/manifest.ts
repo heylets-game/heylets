@@ -134,6 +134,7 @@ export const AUDIO: AudioManifest = {
     "surface.water": { files: "sfx/zone/surface_water_*", fallback: built("splash"), gainDb: -2, reverb: -8 },
     "surface.ice": { files: "sfx/zone/surface_ice_*", fallback: built("ice"), gainDb: -2, reverb: -6 },
     "surface.slime": { files: "sfx/zone/surface_slime_*", fallback: built("oil"), pitch: [-4, -2], gainDb: -2, reverb: -10 },
+    "surface.web": { files: "sfx/zone/surface_web_*", fallback: built("oil"), pitch: [3, 5], gainDb: -6, reverb: -10 },
     "effect.poisoned": { files: "sfx/combat/effect_poisoned_*", fallback: built("sick"), gainDb: -4 },
     "effect.prone": { files: "sfx/combat/effect_prone_*", fallback: built("fall"), gainDb: -2 },
     "effect.wet": { files: "sfx/combat/effect_wet_*", fallback: built("soak"), gainDb: -5 },

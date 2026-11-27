@@ -1964,16 +1964,29 @@ export function groundWeb(at: THREE.Vector3, radius: number, color: string): (gr
   };
 }
 
-/** A Web Spit's ball of silk: seconds in the air, how high it arcs, and how far the web it bursts into spreads. */
-export const WEB_SPIT = { flight: 0.42, arc: 1.5, spread: 1.6 };
+/** A thrown ball of silk (throwWeb): seconds in the air, how high it arcs, and how far the web it bursts into spreads. */
+interface WebThrow {
+  flight: number;
+  arc: number;
+  spread: number;
+}
+
+/** A Giant Spider's Web Spit, over a clump of three hexes. */
+export const WEB_SPIT: WebThrow = { flight: 0.42, arc: 1.5, spread: 1.6 };
+
+/** A Broodmother's Spin Web, over every hex within two of where it lands: thrown higher, and spreading far wider. */
+export const SPIN_WEB: WebThrow = { flight: 0.55, arc: 2.3, spread: 4.1 };
 
 /**
- * A Giant Spider's Web Spit: it sinks on braced legs and arches its abdomen up over its back (figures.ts WEB), silk
- * drawn in to its spinnerets, then throws a spinning ball of silk in a high arc, a thread trailing behind it; it
- * bursts where it lands into a web thrown out flat over the hexes it covers, a pale ring rolling out under it,
- * threads flung out round the edge, and wisps of silk drifting down over it.
+ * A spider throwing silk (a Giant Spider's Web Spit, a Broodmother's Spin Web): it sinks on braced legs and arches its
+ * abdomen up over its back (figures.ts WEB), silk drawn in to its spinnerets, then throws a spinning ball of silk in a
+ * high arc, a thread trailing behind it; it bursts where it lands into a web thrown out flat over the hexes it covers
+ * (`spread` out), a pale ring rolling out under it, threads flung out round the edge, and wisps of silk drifting down
+ * over it.
  */
-function webSpit(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+const throwWeb = (how: WebThrow) => (stage: MoveStage, ctx: MoveCtx) => webThrown(stage, ctx, how);
+
+function webThrown(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx, how: WebThrow) {
   const ground = hitAt.clone().setY(hitAt.y - 0.45);
   const wait = Math.max(0, figure.strike("web") || figure.cast());
   const silk = crit ? GOLD : SILK;
@@ -1987,7 +2000,9 @@ function webSpit(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveC
   }
   stage.later(() => {
     const from = upFigure(figure, 0.95);
-    const { flight, arc, spread } = WEB_SPIT;
+    const { flight, arc, spread } = how;
+    // A wider web throws out more threads and drops more wisps.
+    const more = Math.max(1, spread / WEB_SPIT.spread / 1.4);
     stage.spawnFx("burst", SILK, dir < 0, { from, to: offset(from, 0, 0.2, 0), life: 0.16, size: [0.5, 1], spin: 0.4, fade: true });
     stage.spawnFx("burst", silk, dir < 0, { from, to: ground, life: flight, size: [0.7, 0.9], spin: dir * 6, fade: false, arc, onEnd: () => land() });
     // The thread trailing behind it, hanging a moment along the arc.
@@ -2006,13 +2021,14 @@ function webSpit(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveC
       stage.lay(groundWeb(floor, spread, silk));
       stage.wave({ at: floor, radius: spread * 1.1, life: 0.45, color: SILK, width: 0.12 });
       // Threads flung out round its edge as it spreads.
-      for (let i = 0; i < 8; i++) {
-        const a = (i / 8) * Math.PI * 2 + Math.random() * 0.3;
+      const threads = Math.round(8 * more);
+      for (let i = 0; i < threads; i++) {
+        const a = (i / threads) * Math.PI * 2 + Math.random() * 0.3;
         const to = offset(floor, Math.cos(a) * spread, 0.05, Math.sin(a) * spread * 0.7);
         stage.spawnFx("streak", SILK, Math.cos(a) < 0, { from: floor, to, life: 0.2, size: [0.4, 0.9], turn: -a, spin: 0, fade: true });
       }
       // Wisps of silk drifting down over it after.
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < Math.round(10 * more); i++) {
         stage.later(() => {
           const a = Math.random() * Math.PI * 2;
           const far = Math.sqrt(Math.random()) * spread * 0.8;
@@ -2383,12 +2399,65 @@ function ghastlyFetter(stage: MoveStage, { figure, hitAt, crit, onImpact }: Move
   }, wait + fly + drop);
 }
 
+/** A Brood Swarm: seconds it heaves before they come, how far they scatter, how many run out, and the dark of them. */
+export const BROOD_SWARM = { heave: 0.55, scatter: 2.2, young: 14, black: "#141416", eye: "#c8463a" };
+
+/**
+ * A Broodmother's Brood Swarm, calling her young: she sinks and arches her abdomen up and shudders (figures.ts WEB),
+ * silk drawn in under her; then a ring of silk rolls out over the ground from under her, a puff of pale silk bursts at
+ * her feet, and a swarm of tiny black young runs out every way from under her along the ground, each a dark speck with
+ * a red glint, while wisps of silk drift down. Her Spiderlings appear beside her as they are told.
+ */
+function broodSwarm(stage: MoveStage, { figure, crit, onImpact }: MoveCtx) {
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const ground = feet.clone().setY(feet.y + 0.06);
+  const { heave, scatter, young, black, eye } = BROOD_SWARM;
+  const silk = crit ? GOLD : SILK;
+  const wait = Math.max(heave, figure.strike("web") || figure.cast());
+  // Silk drawn in under her as she heaves.
+  for (let s = 0; s < wait; s += 0.05) {
+    stage.later(() => {
+      const a = Math.random() * Math.PI * 2;
+      stage.spawnFx("mote", Math.random() < 0.6 ? SILK : SILK_DIM, Math.cos(a) < 0, { from: offset(ground, Math.cos(a) * 1.4, 0.3, Math.sin(a) * 1.4), to: ground, life: 0.25, size: [0.25, 0.12], spin: 0, fade: true });
+    }, s);
+  }
+  stage.later(() => {
+    stage.sound();
+    stage.spawnFx("burst", silk, false, { from: ground, to: offset(ground, 0, 0.3, 0), life: 0.3, size: [0.8, 2.2], spin: 0.4, fade: true });
+    stage.wave({ at: ground, radius: scatter * 1.2, life: 0.5, color: SILK, width: 0.12 });
+    stage.later(() => stage.wave({ at: ground, radius: scatter, life: 0.45, color: black, width: 0.18 }), 0.08);
+    // The young running out every way, low over the ground, a red glint on each.
+    for (let i = 0; i < young; i++) {
+      const a = (i / young) * Math.PI * 2 + Math.random() * 0.4;
+      const far = scatter * (0.55 + Math.random() * 0.45);
+      const from = offset(ground, Math.cos(a) * 0.4, 0.04, Math.sin(a) * 0.4);
+      const to = offset(ground, Math.cos(a) * far, 0.04, Math.sin(a) * far);
+      const life = 0.35 + Math.random() * 0.2;
+      stage.later(() => {
+        stage.spawnFx("mote", black, Math.cos(a) < 0, { from, to, life, size: [0.32, 0.26], spin: 0, fade: false });
+        stage.spawnFx("spark", eye, false, { from: offset(from, 0, 0.06, 0), to: offset(to, 0, 0.06, 0), life, size: [0.12, 0.08], spin: 0, fade: true });
+      }, Math.random() * 0.15);
+    }
+    // Wisps of silk drifting down after.
+    for (let i = 0; i < 8; i++) {
+      stage.later(() => {
+        const a = Math.random() * Math.PI * 2;
+        const to = offset(ground, Math.cos(a) * scatter * 0.6, 0.02, Math.sin(a) * scatter * 0.6);
+        stage.spawnFx("mote", Math.random() < 0.5 ? SILK : SILK_DIM, Math.random() < 0.5, { from: offset(to, 0, 0.8, 0), to, life: 0.6, size: [0.22, 0.14], spin: 1, fade: true });
+      }, 0.1 + i * 0.05);
+    }
+    stage.later(onImpact, 0.3);
+  }, wait);
+}
+
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
   "Grave Grasp": { who: "haunt", blurb: "Draws up and back and surges in with its arms out, and a great hand of ice reaches out low over the ground: it slams down on the far row with a cold flash and a ring of frost, closes into a fist and drags back to the Haunt over the ground, frost and wisps pulled along behind it.", play: graveGrasp },
   "Ice Spear": { who: "haunt", blurb: "Rises with its arms raised high and a spear of ice grows over its head, cold motes drawn in to it; then it flings it straight and low down the whole line, a pale streak and frost trailing it and frost laid on the ground under it, and it shatters at the end in a cold flash and a spray of shards.", play: iceSpear },
   "Ghastly Fetter": { who: "haunt", blurb: "Rises with its arms raised overhead as violet motes gather to its hands, then flings a chain of grave-iron at the target, link after link: a stake comes down into the ground at their feet with a violet flash and a ring, a loop of chain pulls tight round them, and the thrown chain fades from the Haunt's end.", play: ghastlyFetter },
   "Venomous Bite": { who: "spider", blurb: "Rears up, front legs thrown up wide and fangs spread, venom dripping off them, then plunges and drives its fangs in: two pale fang streaks stab down, a green flash, venom splashes out either side, green bubbles rise off the target and drops run down to a green ring at their feet.", play: venomousBite },
-  "Web Spit@spider": { who: "spider", blurb: "Sinks on braced legs and arches its abdomen up over its back, then throws a spinning ball of silk in a high arc, a thread trailing behind it: it bursts where it lands into a web thrown out flat over the hexes, a pale ring rolling out under it, threads flung out round the edge and wisps of silk drifting down.", play: webSpit },
+  "Web Spit@spider": { who: "spider", blurb: "Sinks on braced legs and arches its abdomen up over its back, then throws a spinning ball of silk in a high arc, a thread trailing behind it: it bursts where it lands into a web thrown out flat over the hexes, a pale ring rolling out under it, threads flung out round the edge and wisps of silk drifting down.", play: throwWeb(WEB_SPIT) },
+  "Spin Web": { who: "broodmother", blurb: "Sinks on braced legs and arches its great abdomen up over its back, then throws a ball of silk high over the fight: it bursts where it lands into a web thrown out flat and wide over every hex round it, a pale ring rolling out under it, threads flung out all round the edge and wisps of silk drifting down.", play: throwWeb(SPIN_WEB) },
+  "Brood Swarm": { who: "broodmother", blurb: "Sinks and arches its abdomen up and shudders, silk drawn in under it; then a ring of silk rolls out from under it and a swarm of tiny black young runs out every way along the ground, red eyes glinting, as wisps of silk drift down.", play: broodSwarm },
   Engulf: { who: "slime", blurb: "Draws itself up tall and thin, ooze running off it, then pours itself forward over the target, flattened and spread wide: a green flash, a ring of slime spreading at their feet, bubbles rising through it as it churns them about; then it lets go with a wet splat, gobs flung off every way, and slime dripping off them.", play: engulf },
   "Acid Splash": { who: "slime", blurb: "Squashes down low and springs up tall, tipping forward to spit a gob of acid in an arc from its crown, dripping as it flies: it bursts on the hexes where it lands, green rings rolling out, acid splashed up and flung out every way, and the ground left hissing and steaming.", play: acidSplash },
   "Acid Armor": { who: "slime", blurb: "Biting back at whoever struck it by hand: acid spurts off its body at them, splashing on them in green, and they are left hissing with steam rising off them.", play: acidArmor },

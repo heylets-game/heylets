@@ -10092,10 +10092,12 @@ const SCUTTLE = { stride: 1.9, lift: 2.2 };
  * feelers under them, a fat abdomen behind with a marking down its back, and eight legs, each jointed at a knee
  * held high over its body. The legs walk in two sets of four, turn about; each foot is put where it should
  * stand and the leg bent to reach it (see kneeHigh), so the body can sink, sway and lunge over planted feet.
- * `brood` is the Broodmother: a little bigger (a boss is drawn larger besides) and much heavier, spined, an
- * hourglass for its marking and a sac of eggs carried under its tail.
+ * `look`: a Giant Spider (`hunter`, three pale diamonds down its back); the Broodmother (`brood`), a little bigger (a
+ * boss is drawn larger besides) and much heavier, spined, and an hourglass for its marking; or one of her Spiderlings
+ * (`hatchling`), with no marking at all (it is drawn small: WorldRenderer enemySize).
  */
-function spider(top: THREE.Group, shell = "#24332b", dark = "#121a16", back = "#3f7d3c", mark = "#dbe6b4", glow = "#9dff5a", brood = false): Rig {
+function spider(top: THREE.Group, shell = "#24332b", dark = "#121a16", back = "#3f7d3c", mark = "#dbe6b4", glow = "#9dff5a", look: "hunter" | "brood" | "hatchling" = "hunter"): Rig {
+  const brood = look === "brood";
   const parts: Part[] = [];
   // Modelled at a hound's size, and drawn `k` times that: each part's meshes are scaled, and its joints set as far apart.
   const k = brood ? 1.08 : 1;
@@ -10158,13 +10160,7 @@ function spider(top: THREE.Group, shell = "#24332b", dark = "#121a16", back = "#
       const z = -1.5 - i * 1.05;
       for (const s of [-1, 1]) belly.shape(dark, [onHide(sac, z + 0.4, s * 0.8, -0.1), onHide(sac, z - 0.4, s * 0.8, -0.1), onHide(sac, z, s * 0.98, -0.1), onHide(sac, z, s * 0.62, -0.1), onHide(sac, z - 0.7, s * 0.86, 1.3 - Math.abs(i - 2) * 0.16)]);
     }
-    // The eggs, bound up in silk under the tail.
-    const silk = "#e9e2cf";
-    belly.ball(silk, 1.55, 0, -2.5, -6.2, 1, [1.05, 0.9, 1.15]);
-    belly.ball(tone(silk, -0.06), 0.8, 1, -2.2, -5, 1);
-    belly.ball(tone(silk, -0.06), 0.7, -1.05, -2.3, -5.3, 1);
-    belly.ball(silk, 0.65, 0.2, -2.1, -7.6, 1);
-  } else {
+  } else if (look === "hunter") {
     // Three pale diamonds down the back, each smaller than the last, a lit speck either side of each.
     ([[-2.5, 1, 0.34], [-4.6, 0.85, 0.3], [-6.3, 0.6, 0.26]] as const).forEach(([z, half, wide]) => {
       patch(mark, [[z + half, 0], [z, wide], [z - half, 0], [z, -wide]]);
@@ -10345,7 +10341,9 @@ function rigFor(kind: string, top: THREE.Group, look: Look, outfit: Outfit | und
     case "spider":
       return spider(top);
     case "broodmother":
-      return spider(top, "#2b1d3a", "#140d1f", "#3d2857", "#e23a30", "#ff3b3b", true);
+      return spider(top, "#2b1d3a", "#140d1f", "#3d2857", "#e23a30", "#ff3b3b", "brood");
+    case "spiderling":
+      return spider(top, "#1b1b1f", "#0b0b0d", "#232328", "#1b1b1f", "#c8463a", "hatchling");
     case "frost_wolf":
       return wolf(top, "#eaf2f8", "#a9c6dc", "#a8e4ff");
     case "ember_hound":
@@ -10418,7 +10416,7 @@ function castShape(top: THREE.Group, made: THREE.BufferGeometry[]): THREE.Mesh |
 }
 
 /** What is slung too low to show much from the side: in a portrait it is tipped toward the viewer, to show its back. */
-export const SEEN_FROM_ABOVE = new Set(["spider", "broodmother"]);
+export const SEEN_FROM_ABOVE = new Set(["spider", "broodmother", "spiderling"]);
 
 /** The animals that stand side-on in a portrait, as they did in their sprites. */
 export const FOUR_LEGGED = new Set(["wolf", "alpha", "bear", "great_bear", "frost_wolf", "ember_hound", "snow_bear"]);

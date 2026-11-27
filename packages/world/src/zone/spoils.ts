@@ -35,7 +35,7 @@ export type Family = "beast" | "bug" | "wild" | "raider" | "cult" | "dead" | "oo
 /** What each kind of enemy is, for what it carries. One not listed carries nothing (a training dummy). */
 export const ENEMY_FAMILY: Record<string, Family> = {
   wolf: "beast", alpha: "beast", bear: "beast", great_bear: "beast", bat: "beast", frost_wolf: "beast", ember_hound: "beast", snow_bear: "beast",
-  spider: "bug", broodmother: "bug",
+  spider: "bug", broodmother: "bug", spiderling: "bug",
   witch: "wild",
   bandit: "raider", archer: "raider", brute: "raider", villain: "raider",
   cultist: "cult",

@@ -8,16 +8,17 @@ import { alliesReached, dashWay, spreadHexes, spreads } from "./combat";
 import { blast, covers, sameHex, span } from "./geometry";
 import { ENEMY_BURST, type EnemyStrike } from "./kit";
 import { quakeHexes } from "./weather";
+import { kinSpots } from "./summon";
 import type { Unit, ZoneState } from "./types";
 
 /**
- * What an enemy ability is aimed at: `self`, nothing (a burst round it, a call to its own side); `hex`, a hex (one that
- * lands on a clump of hexes, sweeps through rows of them, reaches over a cone or down a line of them, or dashes through a line of them); `unit`, one of the other side (a blow, a shot, a leap).
+ * What an enemy ability is aimed at: `self`, nothing (a burst round it, a call to its own side or for more of it); `hex`, a hex (one that
+ * lands on a clump of hexes or a blast of them, sweeps through rows of them, reaches over a cone or down a line of them, or dashes through a line of them); `unit`, one of the other side (a blow, a shot, a leap).
  */
 export type StrikeAim = "self" | "hex" | "unit";
 
 export const strikeAim = (attack: EnemyStrike): StrikeAim =>
-  attack.burst || attack.kit.rally || attack.kit.aftershock || attack.kit.field ? "self" : spreads(attack.kit) || attack.kit.dash ? "hex" : "unit";
+  attack.burst || attack.kit.rally || attack.kit.aftershock || attack.kit.field || attack.kit.summon ? "self" : spreads(attack.kit) || attack.kit.dash ? "hex" : "unit";
 
 /** Why `enemy` cannot use `attack` on this aim from where it stands, in words, or null if it can. `anywhere`: range and line of sight are not asked. */
 export function checkStrike(state: ZoneState, enemy: Unit, attack: EnemyStrike, aim: { target?: Unit; at?: HexPos }, anywhere = false): string | null {
@@ -44,6 +45,7 @@ export function strikeHexes(state: ZoneState, enemy: Unit, attack: EnemyStrike, 
   // An Earthquake shakes the ground round all of a big one; a burst reaches out from any of its hexes.
   if (attack.kit.aftershock) return quakeHexes(state, span(enemy), ENEMY_BURST);
   if (attack.kit.field) return quakeHexes(state, span(enemy), attack.kit.field.radius);
+  if (attack.kit.summon) return kinSpots(state, enemy, attack.kit.summon.count);
   if (strikeAim(attack) === "self") {
     const all = new Map(span(enemy).flatMap((p) => blast(state.map, p, attack.range)).map((p) => [`${p.q},${p.r}`, p]));
     return [...all.values()].filter((p) => !covers(enemy, p));

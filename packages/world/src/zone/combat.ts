@@ -19,7 +19,7 @@ import { seenByHeroes } from "./light";
 import { HARMFUL, HINDERING, chill, clearSurfaces, dropTorch, enterSurface, ignite, letGoTorch, placeSurface } from "./surfaces";
 import type { Budget, CommonAction, Throwable, Unit, ZoneState } from "./types";
 import { clusterHexes, enterWeather, makeQuake, makeWeather, quakeHexes, rainHexes, wallHexes } from "./weather";
-import { summonCall, summonSpots } from "./summon";
+import { callKin, summonCall, summonSpots } from "./summon";
 import { layCurse, drown } from "./drowning";
 import { SHANTIES, joinable, shantyOf, songDamage, songMove, windward } from "./song";
 import { constellationHexes, constellationLinks, courseMarks, litFoes } from "./stars";
@@ -545,12 +545,13 @@ export function dashWay(state: ZoneState, unit: Unit, from: HexPos, toward: HexP
 }
 
 /**
- * The hexes an enemy ability that lands on several at once (EnemyAbilityDef `area`, `sweep`, `cone`, `line`) covers,
+ * The hexes an enemy ability that lands on several at once (EnemyAbilityDef `area`, `blast`, `sweep`, `cone`, `line`) covers,
  * used from `from` and aimed at `at`: everyone of the other side on them saves for half, with no roll to hit. Null for
  * one of any other shape.
  */
 export function spreadHexes(state: ZoneState, kit: EnemyAttackKit, from: HexPos, at: HexPos): HexPos[] | null {
   if (kit.area) return clusterHexes(state, from, at, kit.area);
+  if (kit.blast) return blast(state.map, at, kit.blast).filter((p) => !!tileAt(state.map, p));
   if (sameHex(from, at)) return kit.sweep || kit.cone || kit.line ? [] : null;
   if (kit.sweep) return sweepHexes(state, from, at, kit.sweep);
   if (kit.cone) return coneHexes(state, from, at, kit.cone);
@@ -559,7 +560,7 @@ export function spreadHexes(state: ZoneState, kit: EnemyAttackKit, from: HexPos,
 }
 
 /** Whether an enemy ability lands on several hexes at once (spreadHexes), and so is aimed at a hex, not at anyone. */
-export const spreads = (kit: EnemyAttackKit): boolean => !!(kit.area || kit.sweep || kit.cone || kit.line);
+export const spreads = (kit: EnemyAttackKit): boolean => !!(kit.area || kit.blast || kit.sweep || kit.cone || kit.line);
 
 /** Why `unit` cannot use this ability on this aim, in words, or null if it can. */
 export function checkAbility(state: ZoneState, unit: Unit, ability: string, aim: Aim): string | null {
@@ -1153,11 +1154,12 @@ function lungeAt(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit): bool
  * An enemy uses an ability on `target`. One that lands on more than one hex (`area`, `sweep`) is aimed at `at`, which
  * may be a hex beside the target rather than theirs (ai.ts aims it to catch as many as it can); left out, at the target.
  * Each attack it makes spends one count of a Frenzy, once it is over (so the blood it draws in that attack still
- * bleeds); a call to its own side is no attack, and spends none.
+ * bleeds); a call to its own side, or for more of it, is no attack, and spends none.
  */
 export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | null, at?: HexPos): void {
   if (attack.kit.rally) return howl(ctx, enemy, attack);
   if (attack.kit.field) return raiseField(ctx, enemy, attack);
+  if (attack.kit.summon) return callForKin(ctx, enemy, attack);
   enemyAttack(ctx, enemy, attack, target, at);
   attackMade(ctx, enemy);
 }
@@ -1173,6 +1175,12 @@ export const alliesReached = (state: ZoneState, enemy: Unit, pos: HexPos, attack
 function howl(ctx: Ctx, enemy: Unit, attack: EnemyStrike): void {
   ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name });
   for (const ally of alliesReached(ctx.state, enemy, enemy.pos, attack)) addCondition(ctx, ally, "frenzied", UNTIMED_KEEPS, attack.kit.rally!.attacks);
+}
+
+/** A call for more of its side (a Broodmother's Brood Swarm): so many of a kind come to stand beside it (summon.ts callKin). */
+function callForKin(ctx: Ctx, enemy: Unit, attack: EnemyStrike): void {
+  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name });
+  for (const called of callKin(ctx, enemy, attack.kit.summon!.kind, attack.kit.summon!.count)) if (!called.down) ctx.onStep?.(called, () => {});
 }
 
 /**
@@ -1254,14 +1262,19 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
     }
     return;
   }
-  // One that lands on several hexes at once (spreadHexes): thrown onto a clump round its aim, swept through rows of
-  // hexes, reached out over a cone, or flung down a line. Everyone there (in the fight) saves for half, as from a burst,
-  // and whatever it leaves on the ground is left on all of it.
+  // One that lands on several hexes at once (spreadHexes): thrown onto a clump round its aim or every hex within its
+  // blast, swept through rows of hexes, reached out over a cone, or flung down a line. Everyone there (in the fight)
+  // saves for half, as from a burst, and whatever it leaves on the ground is left on all of it. One that does no harm
+  // (Spin Web) is only what it leaves: they save against its `saveOr`, if it has one, not for half.
   // (Aimed at a hex, it needs nobody on it: the combat sandbox aims these by hand. Anything else needs its target.)
   const spread = aim && spreadHexes(state, attack.kit, enemy.pos, aim);
   if (spread) {
-    const dice = rollShown(ctx.rng, attack.dice);
+    const dice = attack.harmless ? null : rollShown(ctx.rng, attack.dice);
     for (const victim of state.units.filter((u) => u.side !== enemy.side && !u.down && !unseen(u) && inFight(state, u.id) && spread.some((p) => covers(u, p)))) {
+      if (!dice) {
+        leave(victim, true);
+        continue;
+      }
       const saved = saveRoll(ctx, victim, "agi", dc, attack.name).ok;
       damage(ctx, victim, saved ? Math.floor(dice.total / 2) : dice.total, { actor: enemy.id, what: attack.name, dice, halved: saved });
       if (!saved) leave(victim, false);

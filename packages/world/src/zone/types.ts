@@ -144,7 +144,7 @@ export interface Weather {
   shock?: { name: string; dice: Dice; dc: number; saveOr?: Inflict; from: HexPos };
 }
 
-export type SurfaceKind = "poison" | "fire" | "oil" | "water" | "ice" | "slime";
+export type SurfaceKind = "poison" | "fire" | "oil" | "water" | "ice" | "slime" | "web";
 
 export interface GroundSurface {
   kind: SurfaceKind;
