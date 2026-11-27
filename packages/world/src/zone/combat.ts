@@ -1328,7 +1328,7 @@ export function retune(ctx: Ctx): void {
 
 /** One of an enemy's attacks: a blow or a shot at `target`, or (an attack on every hero) a burst around itself. */
 /** Whether an enemy's attack is a leap at its target (EnemyAbilityDef `leap`): a blow by hand, struck where it lands. */
-export const leaps = (attack: EnemyStrike): boolean => !!ENEMY_ABILITIES[attack.id]?.leap;
+export const leaps = (attack: EnemyStrike): boolean => !!attack.def.leap;
 
 /**
  * Where a leaping attack (a Dire Wolf's Lunge) of `enemy`'s, made from `from`, lands to strike `target`: `from` itself

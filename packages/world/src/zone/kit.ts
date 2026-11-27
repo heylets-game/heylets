@@ -755,7 +755,7 @@ export function commonCostFor(unit: Pick<Unit, "kind" | "perks">, what: CommonAc
 // ---------- enemies ----------
 
 /** What an enemy's ability does besides its damage, when it lands. */
-export type EnemyAttackKit = Pick<EnemyAbilityDef, "surface" | "push" | "chills" | "splash" | "drain" | "area" | "blast" | "sweep" | "cone" | "line" | "dash" | "onSave" | "rally" | "field" | "summon" | "tether" | "saves"> & {
+export type EnemyAttackKit = Omit<EnemyAbilityDef, "id" | "name" | "damage" | "potency" | "weight" | "cost" | "cooldown" | "behaviour" | "heal" | "aftershock" | "scales" | "shape" | "range"> & {
   /** What it heals each of its side it lands on (EnemyAbilityDef `heal`), grown with level. */
   heal?: Dice;
   /** Its second shaking (EnemyAbilityDef `aftershock`), its damage grown with level as the first's is. */
@@ -862,6 +862,8 @@ export interface EnemyStrike {
   /** Action Points it takes, and the turns it is not ready for after. */
   cost: number;
   cooldown: number;
+  /** The ability as written (enemyabilities.ts), for whatever of it the numbers here do not carry. */
+  def: EnemyAbilityDef;
   kit: EnemyAttackKit;
 }
 
@@ -904,6 +906,8 @@ function buildStrike(id: string, level: number, more: number): EnemyStrike | und
   const a = ENEMY_ABILITIES[id];
   if (!a || a.aura) return undefined;
   const burst = a.shape === "burst";
+  // What the ability says besides its numbers goes into its kit as written; the numbers that grow with level are worked out here.
+  const { id: _id, name: _name, damage: _damage, potency: _potency, weight: _weight, cost: _cost, cooldown: _cooldown, behaviour: _behaviour, heal: _heal, aftershock: _aftershock, scales: _scales, shape: _shape, range: _range, ...rest } = a;
   const heal = a.heal ? Object.freeze(diceFor(scaled(a.heal, a.scales?.heal ?? DEFAULT_SCALE, level))) : undefined;
   const aftershock = a.aftershock ? Object.freeze({ dice: Object.freeze(diceFor(scaled(a.aftershock.damage, a.scales?.damage ?? DEFAULT_SCALE, level) + edge)), saveOr: a.aftershock.saveOr }) : undefined;
   return Object.freeze({
@@ -919,8 +923,9 @@ function buildStrike(id: string, level: number, more: number): EnemyStrike | und
     behaviour: (a.behaviour ?? (a.summon ? "summon" : burst ? "burst" : "strike")) as BehaviourId,
     cost: a.cost ?? ACTION_AP,
     cooldown: a.cooldown ?? 0,
+    def: a,
     kit: Object.freeze({
-      surface: a.surface, push: a.push, chills: a.chills, splash: a.splash, drain: a.drain, area: a.area, blast: a.blast, sweep: a.sweep, cone: a.cone, line: a.line, dash: a.dash, onSave: a.onSave, rally: a.rally, field: a.field, summon: a.summon, tether: a.tether, saves: a.saves,
+      ...rest,
       ...(heal ? { heal } : {}),
       ...(aftershock ? { aftershock } : {}),
     }),
