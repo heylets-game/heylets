@@ -2094,21 +2094,19 @@ function iceHand(): { hand: THREE.Group; curl(k: number): void; fade(o: number):
 }
 
 /**
- * A Grave Grasp: how far its hand reaches (to the far row of its cone, EnemyAbilityDef `cone`), how far either side of
- * straight ahead its frost spreads (the cone is a sixth of the way round), and the seconds the hand takes to reach out,
- * to close on what it caught, and to drag it back.
+ * A Grave Grasp: how far its hand reaches (to the far row of its cone, EnemyAbilityDef `cone`), and the seconds the hand
+ * takes to reach out, to close on what it caught, and to drag it back.
  */
-export const GRAVE_GRASP = { reach: HEX * ((ENEMY_ABILITIES.grave_grasp?.cone ?? 3) - 0.1), half: Math.PI / 6 + 0.12, out: 0.28, close: 0.14, back: 0.55 };
+export const GRAVE_GRASP = { reach: HEX * ((ENEMY_ABILITIES.grave_grasp?.cone ?? 3) - 0.1), out: 0.28, close: 0.14, back: 0.55 };
 
 /**
  * A Haunt's Grave Grasp: it draws up and back, then surges in with its arms stretched long (figures.ts GRASP), and a
- * great hand of ice reaches out of it low over the ground, opening as it goes and frost spreading out under it over
- * the whole cone. At the far row it slams down, fingers spread: a cold flash, a ring of frost, frost sparks thrown up,
+ * great hand of ice reaches out of it low over the ground, opening as it goes. At the far row it slams down, fingers spread: a cold flash, a ring of frost, frost sparks thrown up,
  * and everyone caught is told (and flinches). Then the fingers close into a fist and it drags back to the Haunt over
  * the ground, frost and cold wisps pulled along behind it, shrinking and fading as it goes back into it.
  */
 function graveGrasp(stage: MoveStage, { figure, hitAt, crit, onImpact }: MoveCtx) {
-  const { reach, half, out, close, back } = GRAVE_GRASP;
+  const { reach, out, close, back } = GRAVE_GRASP;
   const wait = Math.max(0, figure.strike("grasp"));
   if (wait <= 0) stage.lunge();
   const { feet, ahead } = aheadOf(figure, hitAt);
@@ -2117,38 +2115,6 @@ function graveGrasp(stage: MoveStage, { figure, hitAt, crit, onImpact }: MoveCtx
   const far = groundAt(reach);
   const cold = crit ? GOLD : ICE;
   stage.later(() => {
-    // The frost spreading out over the cone under the hand, and fading after it has gone back.
-    stage.lay((group) => {
-      const steps = 24;
-      const positions = [0, 0, 0];
-      for (let i = 0; i <= steps; i++) {
-        const a = Math.atan2(ahead.z, ahead.x) - half + (2 * half * i) / steps;
-        positions.push(Math.cos(a), 0, Math.sin(a));
-      }
-      const index: number[] = [];
-      for (let i = 1; i <= steps; i++) index.push(0, i + 1, i);
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-      geometry.setIndex(index);
-      const material = new THREE.MeshBasicMaterial({ color: cold, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false });
-      const fan = new THREE.Mesh(geometry, material);
-      fan.position.copy(feet).setY(feet.y + 0.05);
-      fan.renderOrder = 7;
-      group.add(fan);
-      let age = 0;
-      const life = out + close + back + 0.5;
-      return (dt) => {
-        age += dt;
-        const spread = Math.min(1, age / out);
-        fan.scale.setScalar(Math.max(0.01, reach * spread));
-        material.opacity = 0.38 * Math.min(1, age / 0.1) * (age < out + close ? 1 : Math.max(0, 1 - (age - out - close) / (life - out - close)));
-        if (age < life) return true;
-        group.remove(fan);
-        geometry.dispose();
-        material.dispose();
-        return false;
-      };
-    });
     // The hand: out to the far row, a moment to close, and back.
     stage.lay((group) => {
       const { hand, curl, fade, dispose } = iceHand();
@@ -2411,7 +2377,7 @@ function ghastlyFetter(stage: MoveStage, { figure, hitAt, crit, onImpact }: Move
 }
 
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
-  "Grave Grasp": { who: "haunt", blurb: "Draws up and back and surges in with its arms out, and a great hand of ice reaches out low over the ground, frost spreading over the cone under it: it slams down on the far row with a cold flash and a ring of frost, closes into a fist and drags back to the Haunt over the ground, frost and wisps pulled along behind it.", play: graveGrasp },
+  "Grave Grasp": { who: "haunt", blurb: "Draws up and back and surges in with its arms out, and a great hand of ice reaches out low over the ground: it slams down on the far row with a cold flash and a ring of frost, closes into a fist and drags back to the Haunt over the ground, frost and wisps pulled along behind it.", play: graveGrasp },
   "Ice Spear": { who: "haunt", blurb: "Rises with its arms raised high and a spear of ice grows over its head, cold motes drawn in to it; then it flings it straight and low down the whole line, a pale streak and frost trailing it and frost laid on the ground under it, and it shatters at the end in a cold flash and a spray of shards.", play: iceSpear },
   "Ghastly Fetter": { who: "haunt", blurb: "Rises with its arms raised overhead as violet motes gather to its hands, then flings a chain of grave-iron at the target, link after link: a stake comes down into the ground at their feet with a violet flash and a ring, a loop of chain pulls tight round them, and the thrown chain fades from the Haunt's end.", play: ghastlyFetter },
   "Venomous Bite": { who: "spider", blurb: "Rears up, front legs thrown up wide and fangs spread, venom dripping off them, then plunges and drives its fangs in: two pale fang streaks stab down, a green flash, venom splashes out either side, green bubbles rise off the target and drops run down to a green ring at their feet.", play: venomousBite },
