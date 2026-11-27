@@ -2,7 +2,7 @@
 
 import type { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
-import { bestiaryOf, bestiaryStatements } from "../src/server/bestiary";
+import { bestiaryOf, bestiaryStatements, onePerAccount } from "../src/server/bestiary";
 import { addHero, openDb } from "./d1";
 
 let sql: DatabaseSync;
@@ -38,6 +38,13 @@ describe("the bestiary's records", () => {
     await db.batch(bestiaryStatements(db, [{ hero: "nobody", kind: "wolf", level: 1, faced: 1, kills: 0 }, { hero: "bo", kind: "gone_kind", level: 1, faced: 1, kills: 0 }]));
     expect(sql.prepare("SELECT COUNT(*) AS n FROM bestiary").get()).toEqual({ n: 1 });
     expect((await bestiaryOf(db, "bo")).records).toEqual([]);
+  });
+
+  it("marks an account once for a kill two of its heroes, each on their own, were both in the fight for", async () => {
+    const wolf = { kind: "wolf", level: 1, faced: 0, kills: 1 };
+    const marks = [{ hero: "ann", ...wolf }, { hero: "ann2", ...wolf }, { hero: "bo", ...wolf }, { hero: "ann2", kind: "bear", level: 1, faced: 1, kills: 0 }];
+    expect(await onePerAccount(db, marks)).toEqual([marks[0], marks[2], marks[3]]);
+    expect(await onePerAccount(db, [marks[1]])).toEqual([marks[1]]);
   });
 
   it("goes with a guest's heroes into the account they sign up for", async () => {

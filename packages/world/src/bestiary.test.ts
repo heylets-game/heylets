@@ -3,6 +3,7 @@ import { BESTIARY_KINDS, bestiaryEntry, bestiaryMarks, bestiaryMet, bestiaryProg
 import { ENEMIES } from "./content";
 import { ENEMY_ABILITIES } from "./zone/enemyabilities";
 import { enemyHp } from "./zone/kit";
+import { hiddenEnemies } from "./zone/light";
 import { at, flatBoard, must, standEnemy, standHero } from "./test/zoneBoard";
 import type { ZoneEvent, ZoneState } from "./zone/types";
 
@@ -48,7 +49,7 @@ describe("the bestiary", () => {
     expect(move("bandit", "shove").text).toBe("Up close · knocks back 1 hex · 1 AP · 1 turn to ready again");
     expect(move("troll", "regen")).toMatchObject({ passive: true, text: expect.stringMatching(/3 HP.*Burning/) });
     expect(move("haunt", "terror_aura")).toMatchObject({ passive: true });
-    expect(move("broodmother", "brood_swarm").text).toMatch(/^Calls 2 Spiderlings/);
+    expect(move("broodmother", "brood_swarm").text).toMatch(/^Calls to its side: 2 × Spiderling, /);
   });
 
   it("has the training dummy from the first day, and counts what is met and killed", () => {
@@ -108,6 +109,22 @@ describe("the bestiary", () => {
       { hero: "cal", kind: "bandit", level: 4, faced: 1, kills: 0 },
       { hero: "cal", kind: "wolf", level: 1, faced: 1, kills: 0 },
     ]);
+  });
+
+  it("does not write up an enemy the dark still hides until the heroes can make it out", () => {
+    const dark = (state: ZoneState) => {
+      state.options = { ...state.options, biome: "caves" };
+    };
+    const before = board(dark);
+    const { after, events } = fight(before);
+    // Whatever the dark hides is left out; when nothing hides it any more, it is faced then.
+    const hidden = new Set(hiddenEnemies(after));
+    const marks = bestiaryMarks(before, after, events);
+    const facedNow = marks.filter((m) => m.hero === "ann").reduce((n, m) => n + m.faced, 0);
+    expect(facedNow).toBe(3 - hidden.size);
+    const lit = structuredClone(after);
+    lit.options = { ...lit.options, biome: "meadow" };
+    expect(bestiaryMarks(after, lit, []).filter((m) => m.hero === "ann").reduce((n, m) => n + m.faced, 0)).toBe(hidden.size);
   });
 
   it("keeps one book for a party, none for a stand-in, and nothing in the combat sandbox", () => {

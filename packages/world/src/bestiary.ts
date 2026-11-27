@@ -11,6 +11,7 @@
 import { EFFECT_INFO, ENEMIES, type Inflict } from "./content";
 import { ENEMY_ABILITIES, type EnemyAbilityDef } from "./zone/enemyabilities";
 import { CONDITION_INFO, abilityStrikes, enemyHp, retortDice, type EnemyStrike } from "./zone/kit";
+import { hiddenEnemies } from "./zone/light";
 import { diceText } from "./zone/rules";
 import { SURFACE_INFO } from "./zone/surfaces";
 import type { Unit, ZoneEvent, ZoneState } from "./zone/types";
@@ -35,7 +36,7 @@ export interface BestiaryRecord {
 }
 
 /** Whether a kind is written up in a book holding these records. */
-export const bestiaryMet = (records: ReadonlyMap<string, BestiaryRecord>, kind: string): boolean => BESTIARY_ALWAYS.includes(kind) || (records.get(kind)?.faced ?? 0) > 0;
+export const bestiaryMet = (records: ReadonlyMap<string, BestiaryRecord>, kind: string): boolean => BESTIARY_ALWAYS.includes(kind) || (records.get(kind)?.faced ?? 0) > 0 || (records.get(kind)?.kills ?? 0) > 0;
 
 /** How much of the book is filled in. */
 export function bestiaryProgress(records: ReadonlyMap<string, BestiaryRecord>): { met: number; of: number; kills: number } {
@@ -83,6 +84,16 @@ function inflictText(inflict: Inflict): string {
   return inflict.stacks && inflict.stacks > 1 ? `${inflict.stacks} stacks of ${name}` : name;
 }
 
+/** The hexes an ability lands on, for each shape it can be spread over (geometry.ts Spread): a new shape gets its phrase here. */
+type AbilitySpread = NonNullable<EnemyAbilityDef["spread"]>;
+const SPREAD_TEXT: { [S in AbilitySpread["shape"]]: (spread: Extract<AbilitySpread, { shape: S }>, range: number) => string } = {
+  blast: (s, range) => `thrown up to ${hexes(range)}, landing ${hexes(s.radius)} round`,
+  cluster: (s, range) => `thrown up to ${hexes(range)}, landing on ${hexes(s.size)}`,
+  sweep: () => "a wide swing at everyone in front of it",
+  cone: (s) => `a cone ${hexes(s.rows)} long`,
+  line: (s) => `a line ${hexes(s.length)} long`,
+};
+
 /**
  * What an ability does, read off its own entry: one phrase for each thing it says of itself, so an ability made of
  * parts the table already has needs no words written for it. A new part of EnemyAbilityDef gets its phrase here.
@@ -92,18 +103,14 @@ function moveText(def: EnemyAbilityDef, strike: EnemyStrike | undefined): string
   const parts: string[] = [];
   const range = strike?.range ?? def.range ?? 1;
   // What it is for.
-  if (def.summon) parts.push(`Calls ${plural(def.summon.count, ENEMIES[def.summon.kind]?.name ?? def.summon.kind)} to its side${def.summon.most ? `, ${def.summon.most} at most at once` : ""}`);
+  if (def.summon) parts.push(`Calls to its side: ${def.summon.count} × ${ENEMIES[def.summon.kind]?.name ?? def.summon.kind}${def.summon.most ? `, ${def.summon.most} at most at once` : ""}`);
   else if (def.rally) parts.push(`Its allies within ${hexes(range)} are ${CONDITION_INFO.frenzied.name} for ${plural(def.rally.attacks, "attack")}`);
   else if (strike?.kit.heal) parts.push(`Heals its own side for ${diceText(strike.kit.heal)}`);
   else if (strike && !strike.harmless) parts.push(`${diceText(strike.dice)} damage`);
   // Where it lands.
   if (def.field) parts.push(`a field ${hexes(def.field.radius)} round it for ${plural(def.field.rounds, "turn")}`);
   else if (def.dash) parts.push(`dashes up to ${hexes(range)}, through everyone in the way`);
-  else if (def.blast !== undefined) parts.push(`thrown up to ${hexes(range)}, landing ${hexes(def.blast)} round`);
-  else if (def.area !== undefined) parts.push(`thrown up to ${hexes(range)}, landing on ${hexes(def.area)}`);
-  else if (def.sweep !== undefined) parts.push("a wide swing at everyone in front of it");
-  else if (def.cone !== undefined) parts.push(`a cone ${hexes(def.cone)} long`);
-  else if (def.line !== undefined) parts.push(`a line ${hexes(def.line)} long`);
+  else if (def.spread) parts.push(SPREAD_TEXT[def.spread.shape](def.spread as never, range));
   else if (def.aftershock) parts.push(`the ground within ${hexes(range)} of it`);
   else if (strike?.burst) parts.push(`everyone within ${hexes(range)}`);
   else if (def.leap) parts.push(`leaps from up to ${hexes(range)} off`);
@@ -174,8 +181,14 @@ function books(state: ZoneState, order: readonly string[]): Map<string, string> 
   return out;
 }
 
-/** The enemies in a fight that have a page: anything of a kind the table has, called in or not. */
-const foes = (state: ZoneState, order: readonly string[]): Unit[] => order.flatMap((id) => state.units.filter((u) => u.id === id && u.side === "enemy" && !!ENEMIES[u.kind]));
+/**
+ * The enemies in a fight that its heroes can make out and that have a page: anything of a kind the table has, called
+ * in or not. One the dark still hides (light.ts hiddenEnemies: a "?" in the fight's order) is not faced until it is seen.
+ */
+function foes(state: ZoneState, order: readonly string[]): Unit[] {
+  const hidden = new Set(hiddenEnemies(state));
+  return order.flatMap((id) => state.units.filter((u) => u.id === id && u.side === "enemy" && !!ENEMIES[u.kind] && !hidden.has(u.id)));
+}
 
 /**
  * What one step of a map (zone.ts stepZone: the state before, the state after and what happened) adds to the books
@@ -185,6 +198,8 @@ const foes = (state: ZoneState, order: readonly string[]): Unit[] => order.flatM
  */
 export function bestiaryMarks(prev: ZoneState, next: ZoneState, events: readonly ZoneEvent[]): BestiaryMark[] {
   if (prev.sandbox || next.sandbox) return [];
+  // Most steps of a map are walks with no fight on: nothing to work out.
+  if (!prev.encounter && !next.encounter && !events.some((e) => e.t === "fight_start")) return [];
   const before = prev.encounter?.order ?? [];
   // A fight that began and ended in this one step is known only by what it said as it began.
   const begun = events.flatMap((e) => (e.t === "fight_start" ? e.units : []));
