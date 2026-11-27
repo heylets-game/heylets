@@ -1,0 +1,38 @@
+/* The sound lab (SoundLab.tsx): a page over the game in the new UI's timber (.timber, theme.css). The head (name,
+   search, stop, close) stays put; the list under it scrolls. */
+.sound-lab { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 16px; background: rgba(8, 4, 3, 0.72); }
+.sound-lab-box { width: min(860px, 100%); height: 100%; display: flex; flex-direction: column; font-size: 13px; line-height: 1.4; white-space: normal; }
+.sound-lab-head { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; }
+.sound-lab-title { font-family: var(--font-head); font-size: 18px; font-weight: normal; letter-spacing: 0.07em; color: var(--t-brass-hi); text-shadow: 0 1px 0 #000; }
+.sound-lab-head input[type="search"] { flex: 1; min-width: 160px; padding: 4px 8px; font-size: 14px; }
+.sound-lab-count { font-variant-numeric: tabular-nums; }
+.timber button.sound-lab-close { width: 26px; height: 24px; padding: 0; font-size: 16px; font-weight: bold; line-height: 1; }
+.sound-lab-notes { flex: none; padding: 6px 12px; border-bottom: 1px solid rgba(107, 53, 36, 0.6); }
+.sound-lab-notes p { margin: 0; }
+.sound-lab .bad { color: #ff9a7a; }
+.sound-lab-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 12px 12px; scrollbar-color: rgba(201, 162, 74, 0.6) transparent; }
+.sound-lab-none { margin: 16px 0; }
+.sound-lab-section {
+  position: sticky; top: 0; z-index: 1; margin: 0 -12px; padding: 8px 12px 5px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--t-brass-hi); background: linear-gradient(180deg, rgba(36, 18, 15, 1), rgba(30, 15, 12, 0.97)); border-bottom: 1px solid rgba(107, 53, 36, 0.6);
+}
+.sound-lab-row { display: flex; align-items: flex-start; gap: 10px; padding: 6px 4px; border-bottom: 1px dashed rgba(107, 53, 36, 0.45); }
+.sound-lab-row.on { background: rgba(201, 162, 74, 0.1); }
+.timber button.sound-lab-play { flex: none; width: 34px; height: 30px; padding: 0; font-size: 13px; }
+.sound-lab-row.on .sound-lab-play { color: #2a1406; text-shadow: none; background: linear-gradient(180deg, #fbe7a6, #e0b04a); border-color: #6b4a12; }
+.sound-lab-what { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sound-lab-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.sound-lab-name code { font-size: 13px; color: #fff3da; overflow-wrap: anywhere; }
+.sound-lab-detail { font-size: 11px; overflow-wrap: anywhere; }
+.sound-lab-kind { padding: 0 6px; border-radius: 3px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; border: 1px solid currentColor; }
+.sound-lab-kind.recording { color: #9fdc9a; }
+.sound-lab-kind.built-in { color: #c9b8ff; }
+.sound-lab-kind.placeholder { color: #ffcf7a; }
+.sound-lab-kind.missing, .sound-lab-kind.none { color: #ff9a7a; }
+.sound-lab-takes { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.timber .sound-lab-takes button { min-width: 26px; padding: 0 6px 1px; font-size: 11px; }
+@media (max-width: 600px) {
+  .sound-lab { padding: 0; }
+  .sound-lab-box { border-left: 0; border-right: 0; }
+  .timber button.sound-lab-play { width: 44px; height: 40px; }
+}
