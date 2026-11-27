@@ -751,6 +751,11 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     const later = (run: () => void) => play.at(at, run);
     /** Whoever the last thing shown was done by, so a new actor can be announced once as their turn comes up. */
     let acting: string | null = null;
+    /**
+     * One striking at someone as they leave its reach (a "reaction" event), until its blow (the one "used" after it) is
+     * shown: that blow is out of its turn, so it is not announced as one, and whoever was acting still is.
+     */
+    let reacting: string | null = null;
     const nowActing = (id: string, afar = false) => {
       if (id === acting) return;
       acting = id;
@@ -796,7 +801,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       const view = renderer.current;
       /** The unit makes its gesture (a cast, or a bow drawn), and `go`, what leaves its hand, runs as the gesture ends: at once with no view to draw it. */
       const cast = (id: string, name: string, x: number, z: number, go: () => void, thrown = false) => (view ? view.cast(id, name, x, z, go, thrown) : go());
-      if ((ev.t === "stood" || ev.t === "reeled" || ev.t === "moved" || ev.t === "used" || ev.t === "jumped" || ev.t === "blinked") && next.encounter?.order.includes(ev.id)) {
+      const reacts = ev.t === "used" && ev.id === reacting;
+      if (ev.t === "stood" || ev.t === "reeled" || ev.t === "moved" || ev.t === "used" || ev.t === "jumped" || ev.t === "blinked") reacting = null;
+      if ((ev.t === "stood" || ev.t === "reeled" || ev.t === "moved" || ev.t === "used" || ev.t === "jumped" || ev.t === "blinked") && !reacts && next.encounter?.order.includes(ev.id)) {
         // An enemy's turn has no event of its own: it begins with the first thing that enemy does. So the pace of
         // turns is kept here: a beat after the last thing the one before it did, its turn is announced, and a beat
         // more before it acts. (Not for one marching in from afar, and not for a hero, whose player sets the pace.)
@@ -1678,6 +1685,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         later(() => sounds.zone("burst", ev.hexes[0] && hexToWorld(ev.hexes[0])));
         say("The poison goes up in flame.");
       } else if (ev.t === "reaction") {
+        reacting = ev.id;
         later(() => sounds.zone("reaction", view?.whereIs(ev.id)));
         say(`${name(ev.id)} strikes at ${name(ev.target)} as they leave reach.`);
       } else if (ev.t === "alert") {
