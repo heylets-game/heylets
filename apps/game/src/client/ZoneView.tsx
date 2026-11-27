@@ -492,6 +492,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const [picture, setPicture] = useState<Picture | null>(null);
   /** The picture on screen, for effects that last as long as something shown in it (vines round the Slowed). */
   const shownNow = useRef<Picture | null>(null);
+  /** Where each one Fettered has its chain drawn to (by unit, "q,r"), to draw it again when the spot moves. */
+  const chainedAt = useRef(new Map<string, string>());
   shownNow.current = picture;
   /** The fight's log (zone/CombatLog.tsx): everything said and every roll, oldest first, for as long as the map is open. */
   const [log, setLog] = useState<LogEntry[]>([]);
@@ -2134,15 +2136,14 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           if (!aura || fxs.holds(key) || !follow()) continue;
           fxs.dread({ key, follow, holding: () => !!standing(id) }, DREAD.color, DREAD.deep, (aura.radius + 0.5) * Math.sqrt(3));
         }
-        // One chain for each spot: fettered again somewhere else, the old one lets go and the new one is driven in there.
-        const fetter = u.conditions.find((c) => c.kind === "fettered" && c.at);
-        const spot = fetter?.at;
-        const key = spot ? `fetter:${id}:${spot.q},${spot.r}` : "";
-        // Any chain of theirs to another spot is gone, at once: they are held by this one now (or by none).
-        fxs.letGo(`fetter:${id}:`, key);
-        if (spot && !fxs.holds(key) && follow()) {
-          const holding = () => !!standing(id)?.conditions.some((c) => c.kind === "fettered" && c.at?.q === spot.q && c.at?.r === spot.r);
-          fxs.fetter({ key, follow, holding }, point(spot), FETTER.iron, FETTER.glow);
+        // One chain for each of them, ever: fettered again somewhere else, a new one is driven in there, and drawing it
+        // takes the old one away (SpellFx.fetter, under the same key).
+        const spot = u.conditions.find((c) => c.kind === "fettered" && c.at)?.at;
+        const key = `fetter:${id}`;
+        const where = spot ? `${spot.q},${spot.r}` : "";
+        if (spot && (!fxs.holds(key) || chainedAt.current.get(id) !== where) && follow()) {
+          chainedAt.current.set(id, where);
+          fxs.fetter({ key, follow, holding: () => !!standing(id)?.conditions.some((c) => c.kind === "fettered") }, point(spot), FETTER.iron, FETTER.glow);
         }
       }
     };
