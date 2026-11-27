@@ -72,7 +72,7 @@ export function commonFacts({ crewId, now }: TalkScene): string[] {
   return [
     `It is ${sky.night ? "night" : "day"} in the Harbor${sky.storm ? ", and a storm is blowing" : ""}.`,
     `The regulars about today: ${regs.map((r) => `${r.name}, ${r.trade}`).join("; ")}. They drink in the pub at night and are out about the Harbor by day, and each has a small job going.`,
-    "Old Tam keeps the crew's pub. Hollis Crane, the dealer in materials, leans on the pillar at the end of its bar. Bram Gullet sells bait and buys fish at the shack by the fishing spot. Nell Ashby sells wallpaper, floors and roofs at her stall by the market. The smithy, the apothecary, the galley and the lapidary each have a keeper.",
+    "Old Tam keeps the crew's pub. Hollis Crane, the dealer in materials, leans on the pillar at the end of its bar. Bram Gullet sells bait and buys fish at the shack by the fishing spot. Nell Ashby sells wallpaper, floors and roofs at her stall by the market. The smithy, the apothecary, the galley and the chartmaker's each have a keeper.",
     ...(news ? news.notes.slice(0, 4).map((n) => `News pinned on the Harbor's notice board: ${n.area ? `${n.area}: ` : ""}${n.text}.`) : []),
   ];
 }
@@ -250,10 +250,10 @@ const KEEPER_MANNER: Record<KeeperHouse, { manner: string; trade: string; knows:
     shrug: "Out of my kitchen with questions like that.",
   },
   lapidary: {
-    manner: "You are careful and exact, and a little vain about your eye for a stone.",
+    manner: "You are careful and exact, and a little vain about your eye for a chart.",
     trade: "your work is bought and done at your bench, at the prices it shows",
-    knows: ["You cut lodestones from stone and iron and work them at your bench: fused, attuned, tempered and rerolled. Nobody goes out on the atlas without a lodestone. You buy gems from whoever brings them, for gold, and use them for tempering and attuning. Nothing here is haggled over."],
-    shrug: "Hold that question up to the lamp. No, I can't see anything in it either.",
+    knows: ["You draw up charters on vellum, from fur and wood, and work them at your bench with ink and wax: bound, annotated, sealed and redrawn. Nobody goes out on the atlas without a charter. You buy gems from whoever brings them, for gold, and grind them into your inks and seals for sealing and annotating. Nothing here is haggled over."],
+    shrug: "Lay that question flat under the lamp. No, I can't read anything in it either.",
   },
 };
 

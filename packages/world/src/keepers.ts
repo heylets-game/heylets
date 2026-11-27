@@ -228,8 +228,8 @@ export const KEEPER_PLACES: Record<KeeperHouse, KeeperPlace> = {
   },
   lapidary: {
     shop: "lapidary",
-    title: "The Lapidary",
-    keeper: { id: "keeper:lapidary", name: "Tilda Glint", short: "Tilda", trade: "the lapidary", look: "keeper_lapidary", hello: "Hold it up to the lamp. Let's see what you have.", line: "Every stone has a flaw. I charge for finding it." },
+    title: "The Chartmaker's",
+    keeper: { id: "keeper:lapidary", name: "Tilda Glint", short: "Tilda", trade: "the chartmaker", look: "keeper_lapidary", hello: "Lay it flat under the lamp. Let's see what you have.", line: "Every chart has an error. I charge for finding it." },
     keeperPos: KEEPER_POS,
     stand: KEEPER_STAND,
     work: { how: "grind", fitting: 3 },

@@ -883,16 +883,27 @@ export const ACTION_ART: Record<string, Art> = {
     spans(p, p.accent, [[1, 11, 11], [2, 10, 12], [3, 9, 13], [4, 9, 13]]);
     spans(p, K.flame, [[0, 11, 11], [2, 11, 11], [3, 10, 12]]);
   },
-  // A lodestone: a dark stone cut to a point at each end, with a vein of light through it (the accent: brighter
-  // the more the stone carries).
+  // A charter (the id keeps the item's first name, lodestone): a sheet of parchment on its two rollers, a few
+  // lines of ink on it, and a wax seal with its ribbon at the foot (the accent: plain tallow on a blank one, then
+  // brown wax, red wax and gold as the charter says more).
   "item-lodestone": (p) => {
-    spans(p, C.iron, [[2, 7, 8], [3, 6, 9], [4, 5, 10], [5, 4, 11], [6, 4, 11], [7, 4, 11], [8, 4, 11], [9, 4, 11], [10, 5, 10], [11, 6, 9], [12, 7, 8]]);
-    spans(p, C.steel, [[3, 6, 7], [4, 5, 7], [5, 4, 6], [6, 4, 5], [7, 4, 4]]);
-    spans(p, C.dark, [[8, 10, 11], [9, 9, 11], [10, 8, 10], [11, 8, 9]]);
-    p.l(8, 3, 6, 7, p.accent);
-    p.l(6, 7, 9, 9, p.accent);
-    p.l(9, 9, 7, 12, p.accent);
-    p.r(6, 3, 1, 1, C.shine);
+    p.r(3, 3, 10, 10, C.paper);
+    p.r(3, 3, 10, 1, K.paperDark);
+    p.r(3, 12, 10, 1, K.paperDark);
+    p.r(12, 4, 1, 8, K.paperDark);
+    for (const y of [1, 13]) {
+      p.r(2, y, 12, 2, C.paper);
+      p.r(3, y, 10, 1, C.shine);
+      p.r(1, y, 2, 2, C.leather);
+      p.r(13, y, 2, 2, C.leather);
+    }
+    p.r(5, 5, 6, 1, C.bark);
+    p.r(5, 7, 5, 1, C.bark);
+    p.r(5, 9, 3, 1, C.bark);
+    p.r(9, 13, 1, 3, p.shade);
+    p.r(12, 13, 1, 3, p.shade);
+    spans(p, p.accent, [[9, 10, 11], [10, 9, 12], [11, 9, 12], [12, 10, 11]]);
+    p.r(10, 10, 1, 1, C.shine);
   },
   "item-waterskin": (p) => {
     p.r(7, 1, 2, 1, C.bark);

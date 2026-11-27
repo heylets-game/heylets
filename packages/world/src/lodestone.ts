@@ -1,5 +1,6 @@
-// Lodestones: stones that draw a crew to a place, and pull the place off its
-// course.
+// Charters (called lodestones in the code and in stored data, their first
+// name): parchments that give a crew leave to sail for a place, and whose
+// terms pull the place off its course. Below, "stone" is a charter.
 //
 // A lodestone is an item, a hero's own, carried in the pack. To set out for
 // a place on the atlas beyond the Harbor's own country, someone must put one
@@ -18,7 +19,7 @@
 // finer. So a crew that keeps clearing places never runs out of stones, and
 // the best of them are worked up at the Lapidary in town (stonecraft.ts).
 // Should anyone ever be left with none all the same, a plain one can always
-// be cut from stone and iron (`PLAIN_STONE_COST`).
+// be drawn up from fur and wood (`PLAIN_STONE_COST`).
 //
 // A stone is nothing but the list of what it carries, in the modifiers' own
 // order, so two that carry the same are the same stone and stack. On the
@@ -35,8 +36,8 @@ export type Lodestone = ZoneMod[];
 
 /** The most a stone carries. */
 export const STONE_MODS = 3;
-/** What a plain lodestone is cut from. */
-export const PLAIN_STONE_COST: Resources = { stone: 4, iron: 2 };
+/** What a blank charter is drawn up from: vellum and a roller. */
+export const PLAIN_STONE_COST: Resources = { fur: 2, wood: 2 };
 
 /** A stone as it came off the wire or out of the database (a list, or one joined with "+"), made safe; null if it is not one. */
 export function cleanStone(raw: unknown): Lodestone | null {
@@ -53,6 +54,7 @@ export function cleanStone(raw: unknown): Lodestone | null {
 export const stoneKey = (stone: Lodestone): string => stone.join("+");
 
 /** The kind of item a stone is in a pack, and the stone an item of that kind is (null if the kind is no lodestone's). */
+// Players see this item as a "charter". The stored kind keeps its first name, because it is in every crew's data.
 export const STONE_ITEM = "lodestone";
 export const stoneItem = (stone: Lodestone): string => (stone.length === 0 ? STONE_ITEM : `${STONE_ITEM}:${stoneKey(stone)}`);
 export function stoneOfItem(kind: unknown): Lodestone | null {
@@ -63,7 +65,7 @@ export function stoneOfItem(kind: unknown): Lodestone | null {
 }
 
 /** What a stone is called: for how much it carries. */
-export const stoneName = (stone: Lodestone): string => `${["Plain", "Dull", "Bright", "Singing"][Math.min(STONE_MODS, stone.length)]} lodestone`;
+export const stoneName = (stone: Lodestone): string => `${["Blank", "Faded", "Fine", "Sealed"][Math.min(STONE_MODS, stone.length)]} charter`;
 
 /** Whether a place needs a lodestone in its slot before anyone can set out for it: all but those beside the Harbor, which is their own country. */
 export const needsStone = (node: Pick<AtlasNode, "ring" | "kind">): boolean => node.kind !== "harbor" && node.ring > 1;

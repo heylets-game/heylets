@@ -278,7 +278,7 @@ export function KeeperView({ shop, me, refresh, onLeave, resting = false }: { sh
         place={
           atDoor ? <span>The door back to the Harbor.</span>
             : atKeeper ? <span>With {keeper.name}, {keeper.trade}.</span>
-            : <span className="muted">{place.title}. Click {keeper.short} to walk up: {shop === "lapidary" ? "cut and work lodestones, or sell gems." : shop === "galley" ? "he has nothing to sell." : "buy, have work done, or haggle."}</span>
+            : <span className="muted">{place.title}. Click {keeper.short} to walk up: {shop === "lapidary" ? "have charters drawn up and worked, or sell gems." : shop === "galley" ? "he has nothing to sell." : "buy, have work done, or haggle."}</span>
         }
         onBag={() => (bag ? closeBag() : setBag(true))}
         onBook={() => setBook(true)}

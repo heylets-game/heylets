@@ -21,6 +21,18 @@ line off once it is done.
   sea bag's buttons. Move them to the new wood (`ui/WoodWindow.tsx`, theme.css `.timber`), as the menus, the account
   window and the chat are.
 
+## Charters
+
+- Lodestones are shown to players as charters, but the internal names and stored kinds still say lodestone
+  (`consumables.kind`, `town_tabs.kind`, `atlas_nodes.stone`, the `lodebearing` mod id, file and export names). They
+  could be renamed, with a data migration.
+- The chartmaker's room and the atlas's node markers are still modelled as cut stones and gem shelves
+  (`render/lapidary.ts`, `render/lapidaryProps.ts`, `client/atlas/AtlasLayer.ts`). They want parchment, ink and seals.
+- A crew's town-chest tab made before the rename is still named "Lodestones" (`town_tabs.name` is stored when the
+  tabs are first made). Rename the ones nobody renamed themselves, with a data migration.
+- Writing a boon into a charter still costs what it did as a stone (the `lodebearing` row of `ATTUNE_MATERIALS` in
+  `packages/world/src/stonecraft.ts` is stone, iron and gems). Decide whether parchment wants other makings.
+
 ## Release notes
 
 - A `Release-note: skip` on any one commit in a PR hides the whole squash-merged PR from the notice board (Atlas #500,

@@ -475,7 +475,7 @@ type Wave = { from: THREE.Vector3; at: number; rolled: Promise<number> };
 /** What an attack is called, for its look and sound: an ability's name, or an enemy attack's own. */
 const blowName = (what: string) => ABILITIES[what]?.name ?? what;
 
-/** One thing taken out of something searched, in a few words: "12 gold", "2 bone", "a Bright lodestone". */
+/** One thing taken out of something searched, in a few words: "12 gold", "2 bone", "a fine charter". */
 function lootLine(item: LootSpot["loot"][string][number]): string {
   switch (item.t) {
     case "gold": return `${item.n} gold`;

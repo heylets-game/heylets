@@ -384,7 +384,7 @@ export const api = {
   benchAttune: (stone: string, mod: string) => request<{ made: Lodestone; lodestones: HeldStone[] }>("/api/atlas/bench", { op: "attune", stone, mod }),
   benchTemper: (stone: string, mod: string) => request<{ made: Lodestone; lodestones: HeldStone[] }>("/api/atlas/bench", { op: "temper", stone, mod }),
   benchReroll: (stone: string) => request<{ made: Lodestone; lodestones: HeldStone[] }>("/api/atlas/bench", { op: "reroll", stone }),
-  /** Cut a plain lodestone from stone and iron, into your pack. */
+  /** Draw up a blank charter (a plain lodestone) from fur and wood, into your pack. */
   cutStone: () => request<{ lodestones: HeldStone[] }>("/api/atlas/cut", {}),
   devAtlas: (op: "clear" | "reset" | "stone", node?: string) => request<Chart>("/api/dev/atlas", { op, node }),
   /** Down into the caves: the crew's cave still being fought through, or a fresh one. */

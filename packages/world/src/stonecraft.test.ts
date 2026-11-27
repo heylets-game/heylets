@@ -47,7 +47,7 @@ describe("attuning a lodestone", () => {
     expect(attuned([], "hardy")).toEqual(["hardy"]);
     expect(attuned(["swift"], "tangled")).toEqual(["tangled", "swift"]);
     expect(attuneProblem(["hardy"], "hardy")).toMatch(/already/);
-    expect(attuneProblem(["tangled", "hardy", "swift"], "savage")).toMatch(/all a lodestone can/);
+    expect(attuneProblem(["tangled", "hardy", "swift"], "savage")).toMatch(/all a charter can/);
     expect(attuneProblem(["fouled"], "frozen")).toMatch(/kind of ground/);
     expect(attuneProblem([], "rainy")).toMatch(/no such thing/);
     expect(attuneProblem([], 4)).toMatch(/no such thing/);
@@ -103,9 +103,9 @@ describe("ranks and rarity at the bench", () => {
     expect(tempered(["hardy2", "swift"], "hardy2")).toEqual(["hardy3", "swift"]);
     expect(temperProblem(["hardy3"], "hardy3")).toMatch(/as much of it/);
     expect(temperProblem(["swift2"], "swift2")).toMatch(/as much of it/);
-    expect(temperProblem(["hardy"], "savage")).toMatch(/does not carry/);
-    expect(temperProblem(["hardy2"], "hardy")).toMatch(/does not carry/);
-    expect(temperProblem(["hardy"], 3)).toMatch(/does not carry/);
+    expect(temperProblem(["hardy"], "savage")).toMatch(/does not say/);
+    expect(temperProblem(["hardy2"], "hardy")).toMatch(/does not say/);
+    expect(temperProblem(["hardy"], 3)).toMatch(/does not say/);
     for (const id of ZONE_MOD_IDS) {
       const first = temperCost(id);
       expect(first.gold, id).toBeGreaterThan(attuneCost([], id).gold * 2);

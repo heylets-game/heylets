@@ -140,7 +140,7 @@ export function MapsTab() {
         {level("obstacles", "Clutter")}
         {number("clear", 2, 8, "Open start")}
         {number("tier", 0, 40, "Atlas ring (0: none)")}
-        {number("stone", 0, 3, "Stone carried")}
+        {number("stone", 0, 3, "Charter says")}
       </div>
       <div className="dev-row">
         <label>

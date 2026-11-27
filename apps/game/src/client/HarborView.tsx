@@ -567,7 +567,7 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
     : hoverPoi.kind === "lighthouse" ? (lit ? "The lighthouse: it lights the way home" : lighthouseFill > 0 ? "The lighthouse going up, out on the point" : "A bare point over the wreck, where the lighthouse will stand")
     : hoverPoi.kind === "waygate" ? (board.maps?.[0] ? `The waygate, open to ${board.maps[0].place}: step through` : "The waygate, shut: it opens onto the crew's atlas")
     : hoverPoi.kind === "apothecary" ? (apothecaryBuilt ? "The apothecary: potions and flasks, bought or brewed, and a keeper to haggle with" : "The apothecary's building site: a crew project at the works")
-    : hoverPoi.kind === "lapidary" ? "The Lapidary: lodestones cut and worked for the atlas, and gems bought"
+    : hoverPoi.kind === "lapidary" ? "The Chartmaker's: charters drawn up and worked for the atlas, and gems bought"
     : hoverPoi.kind === "smithy" ? (smithyBuilt ? "The smithy: arms and armour off the rack, your own sharpened or reinforced, and a smith to haggle with" : "The smithy's building site: a crew project at the works")
     : hoverPoi.kind === "galley" ? (galleyBuilt ? "The galley: the cook is in, with nothing to sell" : "The galley's building site: a crew project at the works")
     : hoverPoi.kind === "well" ? "The town well: fill a watering can or a water skin, or toss in a coin for luck"
@@ -585,7 +585,7 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
   const title = !hoverPoi ? null
     : hoverPoi.kind === "cave" ? "The Haunted Caverns"
     : hoverPoi.kind === "townchest" ? "The Town Chest"
-    : hoverPoi.kind === "lapidary" ? "The Lapidary"
+    : hoverPoi.kind === "lapidary" ? "The Chartmaker's"
     : hoverPoi.kind === "board" ? "Notice Board"
     : hoverPoi.kind === "shop" ? "Market Stall"
     : hoverPoi.kind === "finishes" ? "Home Furnishings"
@@ -858,9 +858,9 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
         label: "Draw up to the well",
         run: () => setWellOpen(true),
       }
-    : atChest ? { title: <>The town chest <span className="muted">· the crew's shared store, in tabs: gear, materials, lodestones</span></>, label: "Open the town chest", run: () => setChest(true) }
+    : atChest ? { title: <>The town chest <span className="muted">· the crew's shared store, in tabs: gear, materials, charters</span></>, label: "Open the town chest", run: () => setChest(true) }
     // The Lapidary was never a building site: it is open from a crew's first day, for nobody goes out without a lodestone.
-    : atLapidary ? { title: <>The Lapidary <span className="muted">· lodestones for the atlas are cut and worked here, and gems bought</span></>, label: "Go in", run: () => goInside(`${HARBOR_LAPIDARY.q},${HARBOR_LAPIDARY.r}`, "lapidary") }
+    : atLapidary ? { title: <>The Chartmaker's <span className="muted">· charters for the atlas are drawn up and worked here, and gems bought</span></>, label: "Go in", run: () => goInside(`${HARBOR_LAPIDARY.q},${HARBOR_LAPIDARY.r}`, "lapidary") }
     : atCave ? { title: <>The Haunted Caverns <span className="muted">· something lurks in the dark</span></>, label: "Go down", run: goDown }
     : atShop ? { title: "The market stall", label: "Browse the wares", run: () => setShop(true) }
     : atFinishes ? (nellIn
@@ -985,15 +985,15 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
           key: "docks",
           label: "Docks",
           icon: ANCHOR,
-          title: "The docks: the waygate, the Lapidary and the town chest",
+          title: "The docks: the waygate, the Chartmaker's and the town chest",
           width: 320,
           panel: (
             <>
               <p>The crew's atlas is opened at the <strong>waygate</strong>, in the middle of the square: everywhere you have found, and the routes that run on from there. When one of you sets out, everyone in town is asked whether they are coming.</p>
-              <p>Setting out takes a lodestone: they are cut and worked at the <strong>Lapidary</strong>, the narrow shop with a gem for a sign, where Tilda also buys gems.</p>
+              <p>Setting out takes a charter: they are drawn up and worked at the <strong>Chartmaker's</strong>, the narrow shop with a gem for a sign, where Tilda also buys gems.</p>
               <p>What the crew shares is kept in the <strong>town chest</strong>, on its dais down on the west shore.</p>
               <div className="harbor-guide-go">
-                {([["the waygate", HARBOR_WAYGATE], ["the Lapidary", HARBOR_LAPIDARY], ["the town chest", HARBOR_CHEST]] as const).map(([name, at]) => (
+                {([["the waygate", HARBOR_WAYGATE], ["the Chartmaker's", HARBOR_LAPIDARY], ["the town chest", HARBOR_CHEST]] as const).map(([name, at]) => (
                   <button key={name} onClick={() => { setTopDrop(null); renderer.current?.lookAt(at); }}>Show me {name}</button>
                 ))}
               </div>

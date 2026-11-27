@@ -179,15 +179,15 @@ describe("scouting a place before a muster is called for it", () => {
     expect(await refused("nowhere")).toMatchObject({ status: 400 });
     expect(await refused({ q: 1, r: 0 })).toMatchObject({ status: 400 });
     expect(await refused(undefined)).toMatchObject({ status: 400 });
-    expect(await refused(node, "rainy")).toMatchObject({ status: 400, error: "That is no lodestone." });
+    expect(await refused(node, "rainy")).toMatchObject({ status: 400, error: "That is no charter." });
 
     await clearNode(db, CREW, node);
     expect(await refused(node)).toMatchObject({ status: 409, error: expect.stringMatching(/cleared already/) });
     expect(await refused(node, "")).toMatchObject({ status: 409, error: expect.stringMatching(/cleared already/) });
     // Beyond it a route now runs, and the place needs a lodestone in its slot.
-    expect(await refused(far)).toMatchObject({ status: 409, error: expect.stringMatching(/needs a lodestone/) });
-    expect(await refused(far, null)).toMatchObject({ status: 409, error: expect.stringMatching(/needs a lodestone/) });
-    expect(await refused(far, "rainy")).toMatchObject({ status: 400, error: "That is no lodestone." });
+    expect(await refused(far)).toMatchObject({ status: 409, error: expect.stringMatching(/needs a charter/) });
+    expect(await refused(far, null)).toMatchObject({ status: 409, error: expect.stringMatching(/needs a charter/) });
+    expect(await refused(far, "rainy")).toMatchObject({ status: 400, error: "That is no charter." });
   });
 
   it("does not look in the pack: a stone that is not held is found out when the muster starts", async () => {
@@ -199,7 +199,7 @@ describe("scouting a place before a muster is called for it", () => {
     expect(await scoutNode(db, CREW, far, "hardy+numerous")).toEqual(placeOf(far));
     expect(everything()).toBe(before);
     // Setting out is where it is refused.
-    expect(await openNode(db, CREW, "ann", far, 2, "")).toMatchObject({ status: 409, error: expect.stringMatching(/You have no plain lodestone/) });
+    expect(await openNode(db, CREW, "ann", far, 2, "")).toMatchObject({ status: 409, error: expect.stringMatching(/You have no blank charter/) });
   });
 
   it("gives the map already being fought through there, whatever is held out, and the place again once that map is let go", async () => {
@@ -225,7 +225,7 @@ describe("scouting a place before a muster is called for it", () => {
     // Left alone too long, that map is gone: the place is there to be set out for again, with a stone.
     sql.prepare("UPDATE zones SET updated_at = ? WHERE code = ?").run(Date.now() - CAVE_IDLE_MS - 1000, b.code);
     const later = everything();
-    expect(await scoutNode(db, CREW, far)).toMatchObject({ status: 409, error: expect.stringMatching(/needs a lodestone/) });
+    expect(await scoutNode(db, CREW, far)).toMatchObject({ status: 409, error: expect.stringMatching(/needs a charter/) });
     expect(await scoutNode(db, CREW, far, "")).toEqual(placeOf(far));
     expect(everything()).toBe(later);
   });
@@ -259,8 +259,8 @@ describe("lodestones", () => {
     expect((await openNode(db, CREW, "ann", node, 2)) as { fresh: boolean }).toMatchObject({ fresh: true });
     await clearNode(db, CREW, node);
     // Beyond it: refused without one, with one that is not held, and with nonsense.
-    expect(await openNode(db, CREW, "ann", far, 2)).toMatchObject({ status: 409, error: expect.stringMatching(/needs a lodestone/) });
-    expect(await openNode(db, CREW, "ann", far, 2, "")).toMatchObject({ status: 409, error: expect.stringMatching(/You have no plain lodestone/) });
+    expect(await openNode(db, CREW, "ann", far, 2)).toMatchObject({ status: 409, error: expect.stringMatching(/needs a charter/) });
+    expect(await openNode(db, CREW, "ann", far, 2, "")).toMatchObject({ status: 409, error: expect.stringMatching(/You have no blank charter/) });
     expect(await openNode(db, CREW, "ann", far, 2, "rainy")).toMatchObject({ status: 400 });
     give("bo");
     // Bo's stone is not Ann's.
@@ -297,14 +297,14 @@ describe("lodestones", () => {
     expect((await chartFor(db, CREW)).nodes.find((n) => n.id === node)!.stone).toBeUndefined();
   });
 
-  it("a plain one can be cut from stone and iron, and not without them", async () => {
-    expect(await cutStone(db, "ann")).toMatch(/stone and iron/);
+  it("a blank one can be drawn up from fur and wood, and not without them", async () => {
+    expect(await cutStone(db, "ann")).toMatch(/fur and wood/);
     for (const [kind, qty] of Object.entries(PLAIN_STONE_COST)) sql.prepare("INSERT INTO resources (player_id, kind, qty) VALUES ('ann', ?, ?)").run(kind, qty! * 2 + 1);
     expect(await cutStone(db, "ann")).toBeNull();
     expect(await cutStone(db, "ann")).toBeNull();
     expect(await lodestonesOf(db, "ann")).toEqual([{ stone: [], qty: 2 }]);
     // What was left is not enough for a third.
-    expect(await cutStone(db, "ann")).toMatch(/stone and iron/);
+    expect(await cutStone(db, "ann")).toMatch(/fur and wood/);
     expect(sql.prepare("SELECT kind, qty FROM resources WHERE player_id = 'ann' ORDER BY kind").all()).toEqual(Object.keys(PLAIN_STONE_COST).sort().map((kind) => ({ kind, qty: 1 })));
   });
 });
@@ -326,7 +326,7 @@ describe("the town chest", () => {
 
   it("starts with a chest, a tab for materials and one for lodestones, all empty, and makes them once", async () => {
     const chest = await chestFor(db, CREW);
-    expect(chest.tabs.map((t) => [t.name, t.kind])).toEqual([["Chest", "general"], ["Materials", "materials"], ["Lodestones", "lodestones"]]);
+    expect(chest.tabs.map((t) => [t.name, t.kind])).toEqual([["Chest", "general"], ["Materials", "materials"], ["Charters", "lodestones"]]);
     expect(chest.tabs.every((t) => t.gear.length === 0 && t.stacks.length === 0)).toBe(true);
     expect(chest.nextTab).toBe(townTabCost(1));
     expect((await chestFor(db, CREW)).tabs.map((t) => t.id)).toEqual(chest.tabs.map((t) => t.id));
@@ -466,7 +466,7 @@ describe("the town chest", () => {
     sql.prepare("UPDATE characters SET gold = ? WHERE player_id = 'bo'").run(cost + townTabCost(2) - 1);
     expect(await chestBuyTab(db, CREW, "bo", "  Spare   gear ")).toBeNull();
     const chest = await chestFor(db, CREW);
-    expect(chest.tabs.map((t) => [t.name, t.kind])).toEqual([["Chest", "general"], ["Materials", "materials"], ["Lodestones", "lodestones"], ["Spare gear", "general"]]);
+    expect(chest.tabs.map((t) => [t.name, t.kind])).toEqual([["Chest", "general"], ["Materials", "materials"], ["Charters", "lodestones"], ["Spare gear", "general"]]);
     expect(chest.nextTab).toBe(townTabCost(2));
     expect(townTabCost(2)).toBeGreaterThan(cost);
     expect(gold("bo")).toBe(townTabCost(2) - 1);
@@ -546,7 +546,7 @@ describe("the Lapidary: the lodestone bench, and gems", () => {
     expect(gems()).toBe(3);
     expect(gold("ann")).toBe(had + 2 * GEM_PRICE);
     // The stall sends them on: nothing is taken and nothing paid.
-    expect(await sellMaterial(db, "ann", "gem", 1)).toMatch(/Lapidary/);
+    expect(await sellMaterial(db, "ann", "gem", 1)).toMatch(/Chartmaker/);
     expect(gems()).toBe(3);
     expect(await sellGems(db, "ann", 3)).toBe(3 * GEM_PRICE);
     expect(gems()).toBe(0);
@@ -577,7 +577,7 @@ describe("the Lapidary: the lodestone bench, and gems", () => {
     expect(await fuseStones(db, "ann", ["hardy", "hardy", "hardy"])).toMatch(/no longer have/);
     expect(await fuseStones(db, "ann", ["hardy", "hardy", ""])).toMatch(/same number/);
     expect(await fuseStones(db, "ann", ["hardy", "hardy"])).toMatch(/takes 3/);
-    expect(await fuseStones(db, "ann", ["hardy", "hardy", "rainy"])).toMatch(/no lodestone/);
+    expect(await fuseStones(db, "ann", ["hardy", "hardy", "rainy"])).toMatch(/no charter/);
     expect(await fuseStones(db, "ann", "hardy")).toMatch(/takes 3/);
     // Bo's are not Ann's.
     for (let i = 0; i < 3; i++) give("bo", ["swift"]);
@@ -638,8 +638,8 @@ describe("ranks and boons", () => {
     expect(await lodestonesOf(db, "ann")).toEqual([{ stone: ["hardy2", "swift"], qty: 1 }]);
     expect((sql.prepare("SELECT gold FROM characters WHERE player_id = 'ann'").get() as { gold: number }).gold).toBe(0);
     // What cannot be: a thing it does not carry, the rank it used to have, a stone not held.
-    expect(await temperStone(db, "ann", "hardy2+swift", "savage")).toMatch(/does not carry/);
-    expect(await temperStone(db, "ann", "hardy2+swift", "hardy")).toMatch(/does not carry/);
+    expect(await temperStone(db, "ann", "hardy2+swift", "savage")).toMatch(/does not say/);
+    expect(await temperStone(db, "ann", "hardy2+swift", "hardy")).toMatch(/does not say/);
     expect(await temperStone(db, "ann", "hardy+swift", "hardy")).toMatch(/no longer have/);
     give("ann", ["swift2"]);
     expect(await temperStone(db, "ann", "swift2", "swift2")).toMatch(/as much of it/);

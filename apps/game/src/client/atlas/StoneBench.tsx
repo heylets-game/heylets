@@ -1,11 +1,14 @@
-// The lapidary's bench: where a hero has the stones in their pack worked into
+// The chartmaker's bench (the lapidary's, in the code: players see lodestones
+// as charters): where a hero has the stones in their pack worked into
 // the ones they want (packages/world/src/stonecraft.ts has the rules;
 // server/lodestones.ts does the work and rolls what comes of it). It is in
 // the Lapidary, the shop next to the smithy in the Harbor, and this is the
 // lodestone part of what its keeper does for you (works/LapidaryPanel.tsx
 // shows it, under her and what you hold): stones are made ready here before a
 // crew goes up to the atlas with them. A plain one, which carries nothing and
-// only opens a place, is cut here from stone and iron.
+// only opens a place, is drawn up here from fur and wood.
+//
+// The four works are shown as Bind, Annotate, Seal and Redraw:
 //
 //   Fuse     three stones that carry the same number of things, into one
 //            that carries one more.
@@ -30,12 +33,12 @@ import "./bench.css";
 
 type Work = "fuse" | "attune" | "temper" | "reroll";
 const WORKS: { id: Work; name: string; blurb: string }[] = [
-  { id: "fuse", name: "Fuse", blurb: `Lay ${FUSE_COUNT} lodestones that carry the same number of things on the bench. They become one that carries one more, drawn from what they carried.` },
-  { id: "attune", name: "Attune", blurb: "Lay one lodestone on the bench and choose one more thing for it to carry. It costs gold and what that thing is made of: more the more the stone carries, and the rarer the thing." },
-  { id: "temper", name: "Temper", blurb: "Lay one lodestone on the bench and raise one thing it carries by a rank: a peril more perilous and better paid, a boon richer. It is dear, and takes gems." },
-  { id: "reroll", name: "Reroll", blurb: "Lay one lodestone on the bench. For gold it will carry as many other things: never just what it had." },
+  { id: "fuse", name: "Bind", blurb: `Lay ${FUSE_COUNT} charters of the same length on the bench. They are bound into one that says one thing more, drawn from what they said.` },
+  { id: "attune", name: "Annotate", blurb: "Lay one charter on the bench and choose one more thing to write into it. It costs gold and the makings of that thing: more the more the charter says already, and the rarer the thing." },
+  { id: "temper", name: "Seal", blurb: "Lay one charter on the bench and set a seal on one thing it says, which raises it by a rank: a peril more perilous and better paid, a boon richer. It is dear, and takes gems." },
+  { id: "reroll", name: "Redraw", blurb: "Lay one charter on the bench. For gold it is redrawn to say as many other things: never just what it said." },
 ];
-const carries = (stone: Lodestone) => (stone.length === 0 ? "Carries nothing: it only opens a place." : stone.map((id) => `${modName(id)}: ${modEffect(id).blurb}`).join("\n"));
+const carries = (stone: Lodestone) => (stone.length === 0 ? "Says nothing: it only opens a place." : stone.map((id) => `${modName(id)}: ${modEffect(id).blurb}`).join("\n"));
 
 function StoneTile({ stone, qty, dim, onClick, label: says }: { stone: Lodestone; qty?: number; dim?: boolean; onClick?(): void; label: string }) {
   const icon = STONE_ICON(stone.length);
@@ -113,9 +116,9 @@ export function StoneBench({ me, refresh, onMade }: { me: Me; refresh(): Promise
     <div className="stone-bench">
       <p className="bench-do">
         <button className="small primary" disabled={busy || !canCut} onClick={() => void cut()} title={canCut ? "Into your pack" : "You have not the materials in your pack"}>
-          Cut a plain lodestone <span className="bench-cost">· {cutCost.map(([kind, n]) => `${n} ${label("resource", kind).toLowerCase()}`).join(", ")}</span>
+          Draw up a blank charter <span className="bench-cost">· {cutCost.map(([kind, n]) => `${n} ${label("resource", kind).toLowerCase()}`).join(", ")}</span>
         </button>
-        <span className="muted small-note">It carries nothing: it only opens a place.</span>
+        <span className="muted small-note">It says nothing: it only opens a place.</span>
       </p>
 
       <div className="bench-tabs" role="tablist" aria-label="Work at the bench">
@@ -127,7 +130,7 @@ export function StoneBench({ me, refresh, onMade }: { me: Me; refresh(): Promise
 
       <h5>In your pack</h5>
       {held.length === 0 ? (
-        <p className="muted">You carry no lodestones.</p>
+        <p className="muted">You carry no charters.</p>
       ) : (
         <div className="bench-row">
           {held.map(({ stone, qty }) => (
@@ -158,7 +161,7 @@ export function StoneBench({ me, refresh, onMade }: { me: Me; refresh(): Promise
 
       {work === "fuse" && (
         <p className="bench-do">
-          <button className="primary" disabled={busy || !!fuseWhy} onClick={() => void run("fuse", () => api.benchFuse(bench.map(stoneKey)))}>Fuse them</button>
+          <button className="primary" disabled={busy || !!fuseWhy} onClick={() => void run("fuse", () => api.benchFuse(bench.map(stoneKey)))}>Bind them</button>
           {fuseWhy && <span className="muted">{fuseWhy}</span>}
         </p>
       )}
@@ -166,7 +169,7 @@ export function StoneBench({ me, refresh, onMade }: { me: Me; refresh(): Promise
       {work === "attune" && (
         one ? (
           one.length >= STONE_MODS ? (
-            <p className="muted">It carries all a lodestone can.</p>
+            <p className="muted">It says all a charter can.</p>
           ) : (
             <ul className="bench-mods">
               {ZONE_MOD_IDS.filter((id) => !attuneProblem(one, id)).map((id: ZoneModId) => {
@@ -189,7 +192,7 @@ export function StoneBench({ me, refresh, onMade }: { me: Me; refresh(): Promise
             </ul>
           )
         ) : (
-          <p className="muted">Lay a lodestone on the bench.</p>
+          <p className="muted">Lay a charter on the bench.</p>
         )
       )}
 
@@ -217,19 +220,19 @@ export function StoneBench({ me, refresh, onMade }: { me: Me; refresh(): Promise
               })}
             </ul>
           ) : (
-            <p className="muted">{one.length === 0 ? "A plain lodestone carries nothing to temper." : "Nothing it carries can be raised any further."}</p>
+            <p className="muted">{one.length === 0 ? "A blank charter says nothing to seal." : "Nothing it says can be raised any further."}</p>
           )
         ) : (
-          <p className="muted">Lay a lodestone on the bench.</p>
+          <p className="muted">Lay a charter on the bench.</p>
         )
       )}
 
       {work === "reroll" && (
         <p className="bench-do">
           <button className="primary" disabled={busy || !one || !!rerollProblem(one) || gold < rerollCost(one)} onClick={() => one && void run("reroll", () => api.benchReroll(stoneKey(one)))}>
-            Reroll it{one && !rerollProblem(one) ? ` · ${rerollCost(one)} gold` : ""}
+            Redraw it{one && !rerollProblem(one) ? ` · ${rerollCost(one)} gold` : ""}
           </button>
-          <span className="muted">{!one ? "Lay a lodestone on the bench." : rerollProblem(one) ?? (gold < rerollCost(one) ? "You have not the gold." : "")}</span>
+          <span className="muted">{!one ? "Lay a charter on the bench." : rerollProblem(one) ?? (gold < rerollCost(one) ? "You have not the gold." : "")}</span>
         </p>
       )}
     </div>

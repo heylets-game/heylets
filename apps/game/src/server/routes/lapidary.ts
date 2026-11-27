@@ -9,7 +9,7 @@ import type { GameApp } from "./shared";
 export function lapidaryRoutes(app: GameApp): void {
   // ---------- the Lapidary: lodestones cut and worked, gems bought (the keeper inside does all three) ----------
 
-  // Cut a plain lodestone from stone and iron, into the pack: the way out for someone with none. (One that
+  // Draw up a blank charter (a plain lodestone) from fur and wood, into the pack: the way out for someone with none. (One that
   // carries anything is only ever found.)
   app.post("/api/atlas/cut", async (c) => {
     const player = c.get("player");
