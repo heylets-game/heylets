@@ -411,6 +411,15 @@ export function push(ctx: Ctx, from: HexPos, target: Unit, by: string): Shift {
 }
 
 /**
+ * Knock `target` back up to `hexes`, a hex at a time, straight away from `by` (from the hex of it nearest them, if it is
+ * a big one): it stops at the first that does not simply move it. Against a wall it is one knock, not one for every hex
+ * still to go; over an edge it falls and that is the end of it.
+ */
+function knockBack(ctx: Ctx, by: Unit, target: Unit, hexes: number): void {
+  for (let k = 0; k < hexes && !target.down; k++) if (push(ctx, nearOf(by, target.pos), target, by.id) !== "moved") break;
+}
+
+/**
  * Overwhelm: an attack with Strength that does no harm (as a Shove). On a hit, it is driven straight back from the user, a hex at a time,
  * up to `hexes`. Driven into what nobody can pass (rock, a wall, a chest, a cliff face) it is Stunned; into somebody (a hex its
  * enemies hold, or one full of its own side), it just stops; over an edge, it falls (unless it catches the edge), and that ends the
@@ -1047,7 +1056,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
     // Knocked back unless it saves (Peal), or at once (Roar of Thunder).
     let shoved = landed && !!tactic.knockback && !target.down;
     if (shoved && tactic.knockSave) shoved = !saveRoll(ctx, target, "str", saveDc(unit, def), `Resist ${def.name}`).ok;
-    for (let k = 0; shoved && k < (tactic.knockback ?? 0) && !target.down; k++) push(ctx, unit.pos, target, unit.id);
+    if (shoved) knockBack(ctx, unit, target, tactic.knockback ?? 0);
     if (landed && tactic.pull && !target.down) pull(ctx, unit, target, tactic.pull);
     if (tactic.steal && landed) pocket(ctx, unit, target);
     if (tactic.inspire && landed) inspireNearest(ctx, unit, target);
@@ -1131,7 +1140,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
         // Pull of the Deep: whoever fails to brace is dragged under.
         if (tactic.drowns) drown(ctx, victim, tactic.drowns);
         // Bellows Blast: whoever fails to brace is blown back, away from the user.
-        for (let k = 0; k < (tactic.knockback ?? 0) && !victim.down; k++) push(ctx, unit.pos, victim, unit.id);
+        knockBack(ctx, unit, victim, tactic.knockback ?? 0);
       },
     });
     // A crate in it takes the lot: it cannot get out of the way.
@@ -1559,9 +1568,7 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
   const struck = nearOf(target, enemy.pos);
   if (attack.kit.surface) placeSurface(ctx, [struck], attack.kit.surface.kind, attack.kit.surface.rounds, enemy.id);
   if (attack.kit.chills) chill(ctx, struck, enemy.id);
-  const hexes = attack.kit.push === true ? 1 : attack.kit.push || 0;
-  // Pushed straight away from the hex of a big one nearest them.
-  for (let k = 0; k < hexes && !target.down; k++) if (push(ctx, nearOf(enemy, target.pos), target, enemy.id) !== "moved") break;
+  knockBack(ctx, enemy, target, attack.kit.push === true ? 1 : attack.kit.push || 0);
 }
 
 // ---------- common actions ----------
