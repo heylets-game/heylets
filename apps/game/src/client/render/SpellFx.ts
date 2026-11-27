@@ -27,7 +27,7 @@ import { flickerFlame, torchFlame } from "./torchFlame";
 import type { WorldRenderer } from "./WorldRenderer";
 
 /** Something that flies from one point to another. */
-export type Missile = "arrow" | "bolt" | "flask" | "meteor";
+export type Missile = "arrow" | "bolt" | "flask" | "meteor" | "water";
 
 /**
  * What comes up out of the ground over the hexes a spell covers: thorns or kelp winding up round whoever stands there,
@@ -587,7 +587,7 @@ export class SpellFx {
 
   /** How high the arc of a throw or a shot stands over the straight line between its ends. */
   static arcHeight(kind: Missile | "spell", distance: number): number {
-    return kind === "flask" ? 1.3 + distance * 0.22 : kind === "arrow" ? 0.35 + distance * 0.09 : kind === "meteor" ? 0 : 0.25 + distance * 0.04;
+    return kind === "flask" || kind === "water" ? 1.3 + distance * 0.22 : kind === "arrow" ? 0.35 + distance * 0.09 : kind === "meteor" ? 0 : 0.25 + distance * 0.04;
   }
 
   /** A point `t` of the way along an arc from `from` to `to`. */
@@ -597,21 +597,22 @@ export class SpellFx {
 
   /**
    * Send something flying from `from` to `to`: an arrow with a faint streak of air behind it, a bolt of light with a
-   * tail shedding motes, a flask tumbling and dripping, or a burning rock out of the sky trailing fire and smoke.
+   * tail shedding motes, a flask tumbling and dripping, a ball of water wobbling and dripping, or a burning rock out of
+   * the sky trailing fire and smoke.
    * `onLand` runs as it arrives, as it breaks or bursts there. Returns how long the flight takes, in seconds.
    */
   launch(kind: Missile, from: THREE.Vector3, to: THREE.Vector3, color: string, onLand?: () => void): number {
     // A meteor comes down out of the sky, wherever it was called from.
     const start = kind === "meteor" ? to.clone().add(new THREE.Vector3(-3.5, 9, -2)) : from.clone();
     const distance = start.distanceTo(to);
-    const speed = kind === "arrow" ? 15 : kind === "bolt" ? 11 : kind === "flask" ? 7.5 : 19;
+    const speed = kind === "arrow" ? 15 : kind === "bolt" ? 11 : kind === "flask" || kind === "water" ? 7.5 : 19;
     const time = Math.max(0.22, Math.min(0.95, distance / speed));
     const height = SpellFx.arcHeight(kind, distance);
-    const body = kind === "arrow" ? this.arrow(color) : kind === "flask" ? this.flask(color) : kind === "meteor" ? this.meteor() : this.orb(color);
+    const body = kind === "arrow" ? this.arrow(color) : kind === "flask" ? this.flask(color) : kind === "water" ? this.globe(color) : kind === "meteor" ? this.meteor() : this.orb(color);
     body.position.copy(start);
     // What it leaves behind it: a streak of air, a tail of light, a trail of fire.
     const tail =
-      kind === "flask"
+      kind === "flask" || kind === "water"
         ? null
         : new Ribbon(kind === "arrow" ? 6 : 14, kind === "bolt" ? tinted(color, 0.9, streakTex()) : light(kind === "meteor" ? "#f08a24" : "#ffffff", kind === "arrow" ? 0.35 : 0.85, streakTex()));
     if (tail) this.add(tail.mesh);
@@ -635,6 +636,11 @@ export class SpellFx {
         if (kind === "arrow") body.lookAt(ahead);
         else if (kind === "flask") body.rotation.set(t * 14, t * 5, 0);
         else if (kind === "meteor") body.rotation.set(t * 6, t * 4, 0);
+        else if (kind === "water") {
+          // It wobbles as it flies, squashing one way and then the other.
+          const w = Math.sin(t * 22) * 0.14;
+          body.scale.set(1 + w, 1 - w, 1 + w);
+        }
         else body.children[3].rotation.set(t * 9, t * 13, 0);
         trail.unshift(at);
         if (trail.length > 120) trail.pop();
@@ -657,9 +663,9 @@ export class SpellFx {
             this.smoke(at, "#5f5852", 0.7);
             this.fling(at, "#ffb347", 1, { out: 0.7, up: 0.8, fall: 2, life: 0.5 });
             shed = 0.035;
-          } else if (kind === "flask") {
+          } else if (kind === "flask" || kind === "water") {
             this.fling(at, color, 1, { out: 0.2, up: 0, fall: 5, life: 0.35, size: 0.34 , kind: "drop" });
-            shed = 0.07;
+            shed = kind === "water" ? 0.04 : 0.07;
           } else shed = Infinity;
         }
         if (t < 1) return true;
@@ -670,6 +676,7 @@ export class SpellFx {
           this.fling(to, color, 5, { out: 1.4, up: 1.6 });
         } else if (kind === "bolt") this.burst(to, color, 10);
         else if (kind === "flask") this.shatter(to, color);
+        else if (kind === "water") this.splat(to, color);
         else this.crash(to);
         onLand?.();
         return false;
@@ -874,6 +881,20 @@ export class SpellFx {
     const heart = new THREE.Mesh(diamond, glow(paler(color, 0.6), 1));
     heart.scale.setScalar(0.1);
     g.add(heart);
+    return g;
+  }
+
+  /** A ball of water: a glassy sphere of its colour with a pale glint on it and a soft glow round it. */
+  private globe(color: string): THREE.Group {
+    const g = this.add(new THREE.Group());
+    const water = new THREE.Mesh(sphere, new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0.85, emissive: new THREE.Color(color).multiplyScalar(0.35) }));
+    water.scale.setScalar(0.24);
+    const glint = new THREE.Mesh(sphere, glow("#ffffff", 0.7));
+    glint.scale.setScalar(0.07);
+    glint.position.set(-0.08, 0.1, 0.12);
+    const aura = new THREE.Sprite(new THREE.SpriteMaterial({ map: softTex(), color, transparent: true, opacity: 0.6, depthWrite: false, blending: THREE.AdditiveBlending }));
+    aura.scale.setScalar(0.9);
+    g.add(aura, water, glint);
     return g;
   }
 
@@ -1285,6 +1306,47 @@ export class SpellFx {
       const fade = Math.max(0, Math.min(1, (age - last - hold) / 0.3));
       for (const m of [material, tips, water]) if (m) m.opacity = (m === water ? 0.75 : 1) * (1 - fade);
       return age < last + hold + 0.3;
+    });
+  }
+
+  /**
+   * Water bursting where it lands, `size` times as big as a thrown ball's: a crown of drops thrown up high, a lower
+   * spray flung out wide, a flash of its colour, a ring across the ground and mist left hanging.
+   */
+  splat(at: THREE.Vector3, color: string, size = 1) {
+    const base = at.clone().setY(at.y + 0.15);
+    this.flash(base.clone().setY(base.y + 0.3), color, 1.2 * size);
+    this.fling(base, color, Math.round(16 * size), { out: 0.9 * size, up: 5.2 + size, fall: 11, life: 0.85, size: 0.55, kind: "drop" });
+    this.fling(base, "#ffffff", Math.round(7 * size), { out: 0.7 * size, up: 4.4 + size, fall: 11, life: 0.7, kind: "drop" });
+    this.fling(base, color, Math.round(14 * size), { out: 2.8 * size, up: 2.2, fall: 9, life: 0.6, kind: "drop" });
+    this.ring(at, 1.2 * size, color, 0.45);
+    for (let i = 0; i < Math.round(3 * size); i++) this.smoke(base.clone().add(new THREE.Vector3(rand(-0.5, 0.5) * size, 0.1, rand(-0.5, 0.5) * size)), "#e8f6ff", 0.9 * size, 0.5);
+  }
+
+  /**
+   * A ball of water lobbed from `from` onto the middle of `points` (the hexes it covers), bursting there in a splash as
+   * big as the ground it covers, and a moment later its drops coming down on every hex of it, each with a little
+   * ripple. `onLand` runs as it bursts. Returns how long the flight takes, in seconds.
+   */
+  splash(from: THREE.Vector3, points: THREE.Vector3[], color: string, onLand?: () => void): number {
+    if (points.length === 0) {
+      onLand?.();
+      return 0;
+    }
+    const middle = points.reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(points.length);
+    const reach = Math.max(...points.map((p) => p.clone().sub(middle).setY(0).length()));
+    // The ball's own burst as it lands (launch, "water") is the small one; this is the big one over all it covers.
+    return this.launch("water", from, middle, color, () => {
+      this.splat(middle, color, 1 + reach * 0.5);
+      this.ring(middle, reach + 1, paler(color, 0.3), 0.6);
+      this.later(0.3, () => {
+        for (const p of points) {
+          this.fling(p.clone().setY(p.y + 1.8), color, 6, { out: 0.5, up: 0, fall: 9, life: 0.5, kind: "drop" });
+          this.fling(p.clone().setY(p.y + 0.15), "#ffffff", 3, { out: 1, up: 1.4, fall: 9, life: 0.35, kind: "drop" });
+          this.ring(p, 0.7, color, 0.35);
+        }
+      });
+      onLand?.();
     });
   }
 

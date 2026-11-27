@@ -945,7 +945,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         // Where each target of this use stood, so lightning can run from one to the next.
         // A wave strikes each one as it reaches them: when it set off is known once the gesture has let it go.
         let rolled: (t: number) => void = () => {};
-        const wave = (look.kind === "wave" || look.kind === "healwave") && from ? { from, at, rolled: new Promise<number>((done) => (rolled = done)) } : undefined;
+        const wave = look.kind === "wave" && from ? { from, at, rolled: new Promise<number>((done) => (rolled = done)) } : undefined;
         use = { id: ev.id, what: ev.what === "attack" ? ev.name : ev.what, look, last: from, wave };
         // What it covers, for the things that come up out of the ground or roll across it.
         const covered = user && ABILITIES[ev.what] ? abilityArea(asState({ ...next, units: draft.units }), user, ev.what, ev.at, ev.target) : [];
@@ -1237,7 +1237,15 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
             const go = () => fxs.blare(point(user.pos, 0.05), look.color);
             if (view) view.burst(ev.id, ev.name, true, thenOn(go));
             else go();
-          } else if ((look.kind === "wave" || look.kind === "healwave") && covered.length > 0) {
+          } else if (look.kind === "splash" && covered.length > 0) {
+            // Lobbed onto the middle of what it covers: what it does to them waits till it bursts there.
+            const spots = covered.map((p) => point(p));
+            const middle = spots.reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(spots.length);
+            cast(ev.id, ev.name, middle.x, middle.z, () => {
+              const down = landing();
+              fxs.splash(from, spots, look.color, down);
+            });
+          } else if (look.kind === "wave" && covered.length > 0) {
             const line = covered.map((p) => point(p)).sort((a, b) => a.distanceTo(from) - b.distanceTo(from));
             const end = line[line.length - 1];
             cast(ev.id, ev.name, end.x, end.z, () => {
@@ -1552,7 +1560,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           const healed = find(ev.target);
           // A wave of healing heals each as it reaches them.
           const go = () => {
-            if (healed) spells.current?.motes(point(healed.pos, 0.3), use?.look.kind === "bless" || use?.look.kind === "way" || use?.look.kind === "starfire" || use?.look.kind === "healwave" ? use.look.color : "#7dff9a", !!use?.look.notes);
+            if (healed) spells.current?.motes(point(healed.pos, 0.3), use?.look.kind === "bless" || use?.look.kind === "way" || use?.look.kind === "starfire" || use?.look.kind === "splash" ? use.look.color : "#7dff9a", !!use?.look.notes);
             view?.glint(ev.target, "#7dff9a");
             view?.floatOver(ev.target, `+${ev.amount}`, "#7dff9a");
           };
