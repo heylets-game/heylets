@@ -195,8 +195,8 @@ const flakeTex = painted(32, 32, (ctx) => {
   ctx.fillRect(-5, -5, 10, 10);
 });
 
-/** A storm whirling round its bearer (SpellFx.storm): how many flakes, how big, how fast round, how high, and its haze. */
-export const STORM = { flakes: 70, fine: 0.5, big: 0.22, small: 0.09, turn: [1.6, 3.2], top: 2.4, haze: 0.18, gusts: 5 };
+/** A storm whirling round its bearer (SpellFx.storm): how many flakes, how far out (shares of its radius), how much wider each drifts over its life, how big, how fast round, how high, and its haze. */
+export const STORM = { flakes: 70, spread: [0.15, 0.6], widen: 0.06, fine: 0.5, big: 0.22, small: 0.09, turn: [1.6, 3.2], top: 2.4, haze: 0.18, gusts: 5 };
 
 /** What a flung speck is: one of the pixel effects (sprites.ts), or a drop of water. */
 type Speck = FxKind | "drop";
@@ -2179,12 +2179,12 @@ export class SpellFx {
     };
     this.bound.get(bind.key)?.();
     this.bound.set(bind.key, release);
-    const { flakes, fine, big, small, turn, top, haze: hazeOpacity, gusts } = STORM;
+    const { flakes, spread, widen, fine, big, small, turn, top, haze: hazeOpacity, gusts } = STORM;
     const flakeMap = flakeTex();
     // One flake of the storm: where it is round its bearer, and how it goes round; made again when its life is out.
     const make = () => {
       const fineOne = Math.random() < fine;
-      const r = radius * (0.3 + 0.75 * Math.sqrt(Math.random()));
+      const r = radius * (spread[0] + (spread[1] - spread[0]) * Math.sqrt(Math.random()));
       return {
         fineOne,
         a: Math.random() * Math.PI * 2,
@@ -2208,7 +2208,7 @@ export class SpellFx {
     // Gusts: soft streaks of driven snow low round it, sweeping the same way as the flakes.
     const streaks = Array.from({ length: gusts }, () => new Ribbon(8, light(color, 0, streakTex())));
     for (const g of streaks) this.add(g.mesh);
-    const gustAt = streaks.map((_, i) => ({ a: (i / gusts) * Math.PI * 2, r: radius * rand(0.55, 0.95), h: rand(0.2, 0.9), w: rand(2.2, 3.2) }));
+    const gustAt = streaks.map((_, i) => ({ a: (i / gusts) * Math.PI * 2, r: radius * rand(spread[0] + 0.15, spread[1]), h: rand(0.2, 0.9), w: rand(2.2, 3.2) }));
     const haze = this.sheet(new THREE.Vector3(), color, softTex(), 0);
     let gone = -1;
     this.run([...sprites, ...streaks.map((g) => g.mesh), haze], (age, dt) => {
@@ -2217,7 +2217,7 @@ export class SpellFx {
       const k = gone < 0 ? Math.min(1, age / 0.8) : Math.max(0, 1 - (age - gone) / 0.8);
       if (feet) {
         haze.position.copy(feet).setY(feet.y + 0.06);
-        haze.scale.setScalar(radius * 2.4 * (1 + Math.sin(age * 1.3) * 0.04));
+        haze.scale.setScalar(radius * 1.5 * (1 + Math.sin(age * 1.3) * 0.04));
         haze.material.opacity = hazeOpacity * k;
         sprites.forEach((s, i) => {
           let st = states[i];
@@ -2232,7 +2232,7 @@ export class SpellFx {
           const fade = Math.min(1, u / 0.15) * Math.min(1, (1 - u) / 0.2) * k;
           st.a += st.w * dt;
           // Thrown a little wider as it goes, and more so as the storm blows out.
-          const r = st.r * (1 + 0.15 * u + (gone >= 0 ? (1 - k) * 0.6 : 0));
+          const r = st.r * (1 + widen * u + (gone >= 0 ? (1 - k) * 0.5 : 0));
           const y = st.h + Math.sin(st.age * 2.1 + st.phase) * st.bob;
           s.position.set(feet.x + Math.cos(st.a) * r, feet.y + Math.max(0.05, y), feet.z + Math.sin(st.a) * r);
           s.scale.setScalar(st.size);
