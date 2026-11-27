@@ -63,6 +63,6 @@
   .top-strip > .grow { flex: 1 1 100%; }
 }
 @media (max-width: 420px) {
-  /* Too narrow for the place's name beside eight tabs: the tabs say where you are well enough. */
-  .top-name { display: none; }
+  /* Too narrow for the place's name beside many tabs (the hut's eight): the tabs say where you are well enough. */
+  .top-bar.crowded .top-name { display: none; }
 }

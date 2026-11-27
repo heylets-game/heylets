@@ -29,6 +29,8 @@ import { CrewRoster } from "./CrewRoster";
 import { DragPanel } from "./DragPanel";
 import { OptionsMenu } from "./OptionsMenu";
 import { HudBar } from "./ui/Hud";
+import { TopBar, type TopBarItem } from "./ui/TopBar";
+import { BOARD, DOOR as DOOR_ICON, TALK } from "./ui/menuIcons";
 import { InventoryScreen } from "./InventoryScreen";
 import { Logbook } from "./Logbook";
 import { ThingIcon, pubIcon } from "./thingIcons";
@@ -539,6 +541,24 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
     }
   };
 
+  /** What to do where you stand (a word with whoever is beside you, the board), for the top bar: the button over your head says the same. */
+  const here: TopBarItem | null = holdingDice ? null
+    : near ? { key: "here", label: `Talk to ${near.short}`, icon: TALK, primary: true, disabled: !!talking, run: () => chat(near.id) }
+    : atDealer ? { key: "here", label: `Talk to ${PUB_DEALER.short}`, icon: TALK, primary: true, disabled: !!dealing, run: () => chat("dealer") }
+    : atCounter ? { key: "here", label: `Talk to ${PUB_BARKEEP.name}`, icon: TALK, primary: true, disabled: barOpen, run: () => chat("barkeep") }
+    : atTrader && seller ? { key: "here", label: `Talk to ${seller.name}`, icon: TALK, primary: true, disabled: trading, run: () => chat("trader") }
+    : atBoard ? { key: "here", label: "Read the board", icon: BOARD, primary: true, disabled: reading, run: () => setReading(true) }
+    : null;
+  /**
+   * The pub's top bar: where you are, what to do here, and the door. The pub's own panels (the bar's menu, a
+   * salesman's wares, the dealer's board) open from a word with whoever keeps them, beside the two of you, so they
+   * stay out of the bar. A game in hand holds the door shut: walking out forfeits it.
+   */
+  const barItems: TopBarItem[] = [
+    ...(here ? [here] : []),
+    { key: "leave", label: "Leave", icon: DOOR_ICON, title: holdingDice ? "You are in a game: finish it, or stand up, first" : "Leave: back to the Harbor", primary: atDoor, disabled: holdingDice, run: onLeave, end: true },
+  ];
+
   // Put away: only the stage is kept, with the view built on it. (The stage is keyed, here and below, so it is the
   // same element either way and keeps its canvas.)
   if (resting) return <div className="run hut-view pub-view" style={{ display: "none" }}><div key="stage" className="stage" ref={mount} /></div>;
@@ -616,6 +636,8 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
         <ChatInput placeholder="Say something…" onSay={(text) => pub.send({ type: "say", text })} onEmote={(emote) => pub.send({ type: "emote", emote })} />
       </DragPanel>
 
+      {!seatedAt && !talk.active && <TopBar title="The pub" subtitle={me.crew?.name} items={barItems} className="pub-top" />}
+
       {/* Put away while seated at a game table: the table's own dock has the moves and the way to stand up, and it
           drops to the bottom of the screen (--hud-h goes with the bar). It comes back on standing up. */}
       {!seatedAt && !talk.active && <HudBar
@@ -652,14 +674,7 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
             resetBlocked="Waiting for the pub to connect."
           />
         }
-      >
-        {near && !holdingDice && <button className="primary" disabled={!!talking} onClick={() => chat(near.id)}>Talk to {near.short}</button>}
-        {atDealer && !holdingDice && <button className="primary" disabled={!!dealing} onClick={() => chat("dealer")}>Talk to {PUB_DEALER.short}</button>}
-        {atCounter && !holdingDice && <button className="primary" disabled={barOpen} onClick={() => chat("barkeep")}>Talk to {PUB_BARKEEP.name}</button>}
-        {atTrader && seller && !holdingDice && <button className="primary" disabled={trading} onClick={() => chat("trader")}>Talk to {seller.name}</button>}
-        {atBoard && !holdingDice && <button className="primary" disabled={reading} onClick={() => setReading(true)}>Read the board</button>}
-        <button className={atDoor ? "primary" : ""} disabled={holdingDice} onClick={onLeave}>Leave</button>
-      </HudBar>}
+      />}
       {bag && me.character && <InventoryScreen key={me.player.id} me={me} refresh={refresh} onClose={() => setBag(false)} onLogbook={() => { setBag(false); setBook(true); }} />}
       {book && me.character && <Logbook key={me.player.id} me={me} refresh={refresh} onClose={() => setBook(false)} />}
       {atDoor && self && !holdingDice && <TileAction renderer={renderer} pos={self.pos} unitId={self.id} label="Leave" run={onLeave} />}

@@ -54,13 +54,18 @@ interface Props {
   title: ReactNode;
   subtitle?: ReactNode;
   items: TopBarItem[];
-  open: string | null;
-  onOpen(key: string | null): void;
+  /** The open drop's key; a bar with no drops (the pub's) leaves these out. */
+  open?: string | null;
+  onOpen?(key: string | null): void;
   strip?: ReactNode;
   className?: string;
 }
 
-export function TopBar({ title, subtitle, items, open, onOpen, strip, className = "" }: Props) {
+const NO_DROP = () => {};
+/** More tabs than this and a narrow phone has no room left for the place's name (topbar.css). */
+const CROWDED = 4;
+
+export function TopBar({ title, subtitle, items, open = null, onOpen = NO_DROP, strip, className = "" }: Props) {
   const root = useRef<HTMLDivElement>(null);
   const drop = useRef<HTMLDivElement>(null);
   const tabs = useRef(new Map<string, HTMLButtonElement>());
@@ -116,7 +121,7 @@ export function TopBar({ title, subtitle, items, open, onOpen, strip, className 
   };
 
   return (
-    <div className={`top-bar ${shown ? "dropped" : ""} ${className}`} ref={root}>
+    <div className={`top-bar ${shown ? "dropped" : ""} ${items.length > CROWDED ? "crowded" : ""} ${className}`} ref={root}>
       <div className="top-row timber">
         <span className="top-name">
           <strong>{title}</strong>
