@@ -477,6 +477,11 @@ input::placeholder { color: #a5765a; }
   border: none; border-bottom: 1px solid var(--t-out); border-radius: 0; box-shadow: inset 0 1px 0 rgba(214, 150, 96, 0.3);
 }
 .chat.panel.timber > .panel-title:hover { color: #fff6cf; }
+/* It can be moved by its strip (DragPanel's `movable`): a hand to say so, and a drag on a touch screen moves it. */
+.chat.panel.timber.movable > .panel-title { cursor: grab; touch-action: none; padding-right: 58px; }
+.chat.panel.timber.movable.dragging > .panel-title { cursor: grabbing; }
+.chat.panel.timber .grip { width: 22px; height: 22px; line-height: 22px; color: var(--t-brass); cursor: grab; touch-action: none; background: none; border: none; box-shadow: none; }
+.chat.panel.timber .grip:hover { color: #fff6cf; }
 .chat.panel.timber > .panel-tools { top: 3px; right: 5px; }
 .chat.panel.timber .min-btn { width: 22px; height: 22px; line-height: 20px; padding: 0; color: var(--t-brass-hi); background: none; border: none; box-shadow: none; }
 .chat.panel.timber .min-btn:hover:not(:disabled) { color: #fff6cf; background: rgba(255, 214, 170, 0.1); }

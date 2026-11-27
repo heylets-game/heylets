@@ -1026,7 +1026,7 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
         />
       </div>
 
-      <DragPanel id="harbor.chat" title="Crew chat" foldOnPhone expandable className="chat panel harbor-chat timber">
+      <DragPanel id="harbor.chat" title="Crew chat" foldOnPhone expandable movable className="chat panel harbor-chat timber">
         <div className="chat-lines">
           {harbor.chat.length === 0 && <div className="muted">Crew chat. Only people in the Harbor right now see it.</div>}
           {harbor.chat.map((l, i) => <div key={i} className="line hero"><strong>{l.name}: </strong>{l.text}</div>)}

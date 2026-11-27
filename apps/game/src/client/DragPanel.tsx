@@ -9,6 +9,10 @@
 // Every panel also has a minimize button that folds it down to its title.
 // The larger ones start folded on a phone so they do not cover the map.
 //
+// A `movable` one (the place chats) can be dragged about but not resized: by
+// its title strip or its grip only, so a drag inside it still selects its
+// words and scrolls them. Double-click the grip to put it back.
+//
 // A `resizable` panel also has a handle in each corner. Dragging one changes
 // the panel's size while the opposite corner stays put; double-click a
 // handle to go back to the default size.
@@ -259,8 +263,10 @@ interface Props extends HTMLAttributes<HTMLDivElement> {
   title: string;
   /** A slim bar with no room for a header: the title only appears once minimized. */
   compact?: boolean;
-  /** Give the panel a resize handle in each corner. */
+  /** Give the panel a resize handle in each corner. It can be dragged about too. */
   resizable?: boolean;
+  /** Let the panel be dragged about (by its title strip or its grip), without resizing it. Where it is left is remembered. */
+  movable?: boolean;
   /** Start folded on narrow screens. The player's own choice, once made, wins. */
   foldOnPhone?: boolean;
   /** Let the panel be dragged taller or shorter by its top edge (the chat, which sits on the bottom of the view). The height is remembered. */
@@ -285,7 +291,7 @@ function loadFolded(id: string, foldOnPhone: boolean, startFolded = false): bool
   return startFolded || (foldOnPhone && isPhone());
 }
 
-export function DragPanel({ id, title, compact = false, resizable = false, expandable = false, foldOnPhone = false, startFolded = false, unfold = 0, className = "", children, style, ...rest }: Props) {
+export function DragPanel({ id, title, compact = false, resizable = false, movable = false, expandable = false, foldOnPhone = false, startFolded = false, unfold = 0, className = "", children, style, ...rest }: Props) {
   const [size, setSize] = useState<Size | null>(() => (resizable ? loadSize(id) : null));
   /** While a corner is being dragged: where the opposite corner must stay. */
   const pin = useRef<{ sx: number; sy: number; x: number; y: number } | null>(null);
@@ -461,13 +467,17 @@ export function DragPanel({ id, title, compact = false, resizable = false, expan
     reset();
   };
 
+  /** It can be moved: a window, or a panel that says so. The docked panels stay where the layout puts them. */
+  const moves = resizable || movable;
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    // Only a window moves: the docked panels stay where the layout puts them.
-    if (!resizable || e.button !== 0 || !el.current) return;
+    if (!moves || e.button !== 0 || !el.current) return;
     const target = e.target as HTMLElement;
     if (target.closest(".resize")) return;
     const onGrip = !!target.closest(".grip");
-    if (!onGrip && (e.pointerType !== "mouse" || target.closest(INTERACTIVE))) return;
+    // A movable panel is picked up by its title strip as well (the click that would fold it is swallowed after a drag).
+    const onTitle = movable && !resizable && !!target.closest(".panel-title");
+    // Anywhere else only a window is picked up, and only with a mouse and off its controls.
+    if (!onGrip && !onTitle && (!resizable || e.pointerType !== "mouse" || target.closest(INTERACTIVE))) return;
     startMove(e, el.current, live.current, setOffset, setDragging, (at) => save(id, at));
   };
 
@@ -475,10 +485,10 @@ export function DragPanel({ id, title, compact = false, resizable = false, expan
     <div
       ref={el}
       {...rest}
-      className={`${className} draggable ${dragging ? "dragging" : ""} ${folded ? "folded" : ""} ${resizable ? "resizable" : ""}`}
+      className={`${className} draggable ${dragging ? "dragging" : ""} ${folded ? "folded" : ""} ${resizable ? "resizable" : ""} ${movable ? "movable" : ""}`}
       style={{
         ...style,
-        translate: resizable ? `${offset.x}px ${offset.y}px` : undefined,
+        translate: moves ? `${offset.x}px ${offset.y}px` : undefined,
         ...(tall && !folded ? ({ "--tall": `${tall}px` } as CSSProperties) : {}),
         // A minimized panel shrinks to its title whatever size it was given.
         ...(size && !folded ? { width: size.w, height: size.h, maxWidth: "none", maxHeight: "none" } : {}),
@@ -490,7 +500,7 @@ export function DragPanel({ id, title, compact = false, resizable = false, expan
         <button className="min-btn" aria-expanded={!folded} aria-label={folded ? `Show ${title}` : `Minimize ${title}`} title={folded ? "Show" : "Minimize"} onClick={toggle}>
           {folded ? "+" : "–"}
         </button>
-        {resizable && (
+        {moves && (
           <span className="grip" title="Drag to move. Double-click to put it back." onDoubleClick={reset} aria-hidden>
             ⠿
           </span>

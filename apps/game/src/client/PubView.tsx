@@ -627,7 +627,7 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
         />
       </DragPanel>
 
-      <DragPanel id="pub.chat" title="Pub chat" foldOnPhone expandable className="chat panel harbor-chat timber">
+      <DragPanel id="pub.chat" title="Pub chat" foldOnPhone expandable movable className="chat panel harbor-chat timber">
         <div className="chat-lines">
           {pub.chat.length === 0 && <div className="muted">Only people inside the pub see what is said here.</div>}
           {pub.chat.map((l, i) => <div key={i} className="line hero"><strong>{l.name}: </strong>{l.text}</div>)}

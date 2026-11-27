@@ -890,7 +890,7 @@ export function HutView({ ownerId, me, refresh, onLeave }: { ownerId: string; me
         />
       </DragPanel>
 
-      <DragPanel id="hut.chat" title="Hut chat" foldOnPhone expandable className="chat panel harbor-chat timber">
+      <DragPanel id="hut.chat" title="Hut chat" foldOnPhone expandable movable className="chat panel harbor-chat timber">
         <div className="chat-lines">
           {hut.chat.length === 0 && <div className="muted">Only people inside this hut see what is said here.</div>}
           {hut.chat.map((l, i) => <div key={i} className="line hero"><strong>{l.name}: </strong>{l.text}</div>)}
