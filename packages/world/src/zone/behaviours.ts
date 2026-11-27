@@ -180,7 +180,7 @@ const strike: Behaviour = {
         // not standing in that ground already.
         const ground = attack.kit.surface?.kind;
         const fresh = attack.harmless ? caught.filter((h) => !ground || !span(h).some((p) => look.state.surfaces[posKey(p)]?.kind === ground)).length : 0;
-        let worth = (attack.harmless ? fresh * CURSE_WORTH : average * braced(attack) * caught.length) * (look.whim?.(attack, hero) ?? 1);
+        let worth = (attack.harmless ? fresh * CURSE_WORTH : average * 0.75 * caught.length) * (look.whim?.(attack, hero) ?? 1);
         if (worth <= 0) continue;
         if (caught.some((h) => has(h, "taunting"))) worth *= 3;
         if (!best || worth > best.worth) best = { attack, target: hero, at, worth };
@@ -202,12 +202,6 @@ const strike: Behaviour = {
 };
 
 /**
- * The share of its damage one that everyone caught saves against is worth to each: about half of them save, for half
- * (three quarters), or for none of it if a save dodges it (EnemyAbilityDef `dodge`: a half).
- */
-const braced = (attack: EnemyStrike) => (attack.kit.dodge ? 0.5 : 0.75);
-
-/**
  * Everyone round it at once: about half save for half, so three quarters of the damage, to each one caught. One that
  * does no harm is worth CURSE_WORTH for each it would catch who does not have what it leaves already.
  */
@@ -222,7 +216,7 @@ const burst: Behaviour = {
     const caught = caughtBy(look, from, attack, targets);
     // An Earthquake's heave on its next turn counts for half: some will have got off the cracked ground by then.
     const heave = attack.kit.aftershock ? diceAverage(attack.kit.aftershock.dice) * 0.5 : 0;
-    return caught.length > 0 ? { attack, target: null, worth: caught.length * (diceAverage(attack.dice) + heave) * braced(attack) * (look.whim?.(attack, null) ?? 1) } : null;
+    return caught.length > 0 ? { attack, target: null, worth: caught.length * (diceAverage(attack.dice) + heave) * 0.75 * (look.whim?.(attack, null) ?? 1) } : null;
   },
 };
 
