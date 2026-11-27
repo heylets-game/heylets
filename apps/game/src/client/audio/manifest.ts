@@ -82,6 +82,8 @@ export const AUDIO: AudioManifest = {
     // A Haunt's Grave Grasp (a deeper cold breath), its Ice Spear (ice forming), and its Ghastly Fetter (chains clanking, and a stake going home).
     "attack.grave_grasp": { files: "sfx/combat/grave_grasp_*", fallback: built("chill"), pitch: [-3, -2], reverb: -6 },
     "attack.ice_spear": { files: "sfx/combat/ice_spear_*", fallback: built("ice"), pitch: [-1, 1], reverb: -8 },
+    // A Frost Wolf's Frost Breath: a long, deep cold breath let out.
+    "attack.frost_breath": { files: "sfx/combat/frost_breath_*", fallback: built("chill"), pitch: [-4, -3], reverb: -6 },
     "attack.ghastly_fetter": { files: "sfx/combat/ghastly_fetter_*", fallback: built("chains"), pitch: [-1, 1], reverb: -6 },
     // A blow landing: a blunt thump by hand, unless it cuts or bites (blade abilities, below).
     impact: { files: "sfx/combat/hit_*", fallback: built("blunt"), pitch: [-2, 2], volume: [-2, 0], reverb: -8 },

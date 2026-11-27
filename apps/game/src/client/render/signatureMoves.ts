@@ -7,7 +7,7 @@
 
 import * as THREE from "three";
 import { ENEMY_ABILITIES } from "@gantt-quest/world";
-import { ENGULF, FLURRY_BLOWS, SLICES_APART, type Figure } from "./figures";
+import { BREATHE, ENGULF, FLURRY_BLOWS, SLICES_APART, type Figure } from "./figures";
 import type { FxKind } from "./sprites";
 import { CRACK_DARK, CRACK_EDGE, crackGeometry, crackPaths, type CrackOpts } from "./cracks";
 
@@ -2385,6 +2385,160 @@ function iceSpear(stage: MoveStage, { figure, hitAt, crit, onImpact }: MoveCtx) 
   }, wait + fly);
 }
 
+/**
+ * Where a beast's mouth is as it breathes or bites (just ahead of its middle, toward `ahead`, at its head's height):
+ * near enough for what comes out of it to look as if it does.
+ */
+function muzzle(figure: Figure, feet: THREE.Vector3, ahead: THREE.Vector3): THREE.Vector3 {
+  const box = new THREE.Box3().setFromObject(figure.root);
+  const long = Math.max(box.max.x - box.min.x, box.max.z - box.min.z);
+  return feet.clone().addScaledVector(ahead, long * 0.42).setY(box.min.y + (box.max.y - box.min.y) * 0.62);
+}
+
+/**
+ * Frost laid over the ground in a fan (a cone's spread, `spread` radians wide) from `from` along `ahead`: it runs out
+ * to `reach` over `grow` seconds, holds for `hold`, and fades over `fade`. Its step, for MoveStage.lay.
+ */
+function frostFan(from: THREE.Vector3, ahead: THREE.Vector3, o: { reach: number; spread: number; grow: number; hold: number; fade: number; color: string; opacity: number }) {
+  return (group: THREE.Object3D) => {
+    const material = new THREE.MeshBasicMaterial({ color: o.color, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false });
+    // A sector about +x, laid flat (x stays x, y goes to -z), then turned to face the way it goes.
+    const mesh = new THREE.Mesh(new THREE.CircleGeometry(1, 28, -o.spread / 2, o.spread).rotateX(-Math.PI / 2), material);
+    mesh.position.copy(from);
+    mesh.rotation.y = Math.atan2(-ahead.z, ahead.x);
+    mesh.renderOrder = 7;
+    group.add(mesh);
+    let age = 0;
+    return (dt: number) => {
+      age += dt;
+      const k = Math.min(1, age / o.grow);
+      const r = 0.2 + (o.reach - 0.2) * (1 - (1 - k) * (1 - k));
+      mesh.scale.set(r, 1, r);
+      const gone = Math.max(0, age - o.grow - o.hold) / o.fade;
+      material.opacity = o.opacity * Math.min(1, k * 2) * Math.max(0, 1 - gone);
+      if (gone < 1) return true;
+      group.remove(mesh);
+      mesh.geometry.dispose();
+      material.dispose();
+      return false;
+    };
+  };
+}
+
+/**
+ * A Frost Breath: how far it reaches (to the far row of its cone, EnemyAbilityDef `cone`), how wide it spreads (a
+ * three-row cone on hexes is a sixth of a turn), and how long the frost it lays stays and fades.
+ */
+export const FROST_BREATH = { reach: HEX * ((ENEMY_ABILITIES.frost_breath?.cone ?? 3) - 0.05), spread: Math.PI / 3, hold: 0.7, fade: 0.9 };
+
+/**
+ * A Frost Wolf's Frost Breath: it draws breath, front lifted and head thrown back, as cold motes are pulled in to its
+ * jaws, then thrusts its head out and down and breathes (figures.ts BREATHE). A pale flash bursts at its mouth, and a
+ * blast of freezing mist pours out over the whole cone, billowing wider as it goes, frost motes and glints streaming
+ * through it and ice shards spat out ahead. Frost runs out over the ground under it to the far row, a paler core
+ * inside it, and lies there glinting before it fades. Everyone in it is told (and flinches) as the breath reaches the
+ * far row, a frost ring spreading at the end of it.
+ */
+function frostBreath(stage: MoveStage, { figure, hitAt, crit, onImpact }: MoveCtx) {
+  const { reach, spread, hold, fade } = FROST_BREATH;
+  const wait = Math.max(0, figure.strike("breathe"));
+  const pour = BREATHE.pour;
+  const { feet, ahead } = aheadOf(figure, hitAt);
+  const ground = feet.clone().setY(feet.y + 0.07);
+  const cold = crit ? GOLD : ICE;
+  const core = crit ? GOLD : ICE_CORE;
+  const deep = crit ? GOLD : ICE_DEEP;
+  // Across the way it breathes, along the ground.
+  const across = new THREE.Vector3(-ahead.z, 0, ahead.x);
+  /** A point `d` out along the cone, `side` of the way to its edge (-1 to 1), `up` off the ground. */
+  const inCone = (d: number, side: number, up: number) => ground.clone().addScaledVector(ahead, d).addScaledVector(across, Math.tan(spread / 2) * d * side).setY(ground.y + up);
+  // Drawing breath: cold motes pulled in to its jaws from all round in front of it.
+  for (let s = 0; s < wait; s += 0.03) {
+    stage.later(() => {
+      const mouth = muzzle(figure, feet, ahead);
+      const a = (Math.random() - 0.5) * Math.PI * 1.4;
+      const way = ahead.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), a);
+      const from = mouth.clone().addScaledVector(way, 1 + Math.random() * 0.6).setY(mouth.y + (Math.random() - 0.4) * 0.7);
+      stage.spawnFx("mote", Math.random() < 0.5 ? core : cold, way.x > 0, { from, to: mouth, life: 0.26, size: [0.32, 0.1], spin: 0, fade: true });
+    }, s);
+  }
+  stage.later(() => {
+    const mouth = muzzle(figure, feet, ahead);
+    stage.spawnFx("burst", core, false, { from: mouth, to: mouth, life: 0.22, size: [0.6, 1.8], spin: 0.5, fade: true });
+    stage.later(() => stage.spawnFx("burst", deep, true, { from: mouth, to: mouth, life: 0.32, size: [0.7, 2], spin: -0.4, fade: true }), 0.04);
+    // Frost running out over the ground to the far row, with a paler core inside it.
+    stage.lay(frostFan(ground, ahead, { reach, spread, grow: pour * 0.7, hold, fade, color: cold, opacity: 0.5 }));
+    stage.lay(frostFan(ground.clone().setY(ground.y + 0.01), ahead, { reach: reach * 0.8, spread: spread * 0.6, grow: pour * 0.8, hold: hold * 0.8, fade, color: core, opacity: 0.4 }));
+    // The blast itself: billows of freezing mist poured out over the cone, motes and glints streaming through them,
+    // all the while it breathes.
+    for (let s = 0; s < pour; s += 0.022) {
+      stage.later(() => {
+        const from = muzzle(figure, feet, ahead);
+        const side = (Math.random() * 2 - 1) * 0.9;
+        const far = reach * (0.75 + Math.random() * 0.3);
+        const to = inCone(far, side, 0.15 + Math.random() * 0.45);
+        const left = to.x < from.x;
+        stage.spawnFx("dust", Math.random() < 0.35 ? core : FROST_MIST, left, { from, to, life: 0.5 + Math.random() * 0.2, size: [0.35, 1.6 + Math.random() * 0.6], spin: (Math.random() - 0.5) * 2, fade: true });
+        if (Math.random() < 0.7) stage.spawnFx("mote", Math.random() < 0.5 ? core : cold, left, { from, to: inCone(far * 0.9, side * 0.8, 0.3 + Math.random() * 0.5), life: 0.32, size: [0.4, 0.14], spin: 0, fade: true });
+        if (Math.random() < 0.35) stage.spawnFx("spark", core, left, { from, to: inCone(far, side, 0.2), life: 0.38, size: [0.35, 0.15], spin: 3, fade: true });
+        // Now and then a shard of ice spat out ahead.
+        if (Math.random() < 0.18) stage.spawnFx("fleck", cold, left, { from, to: inCone(far, side * 0.6, 0.05), life: 0.4, size: [0.3, 0.22], spin: 4, fade: true, arc: 0.25 });
+      }, s);
+    }
+    // It reaches the far row: everyone caught is told, and a ring of frost spreads there.
+    stage.later(() => {
+      stage.wave({ at: inCone(reach * 0.8, 0, 0), radius: HEX * 1.4, life: 0.55, color: cold, width: 0.14 });
+      stage.jolt();
+      onImpact();
+    }, pour * 0.55);
+    // Frost glinting on the ground where it lies, until it fades.
+    for (let s = pour * 0.6; s < pour + hold; s += 0.07) {
+      stage.later(() => {
+        const at = inCone(0.6 + Math.random() * (reach - 0.6), Math.random() * 2 - 1, 0.05);
+        stage.spawnFx("spark", Math.random() < 0.5 ? core : cold, Math.random() < 0.5, { from: at, to: offset(at, 0, 0.25, 0), life: 0.4, size: [0.35, 0.1], spin: 2, fade: true });
+      }, s);
+    }
+  }, wait);
+}
+
+/** The freezing mist a Frost Breath billows out in: a pale, cold white. */
+const FROST_MIST = "#dcefff";
+
+/**
+ * A Frost Wolf's Rime Bite: a snap forward, cold breath trailing from its jaws, jaws of ice closing on the target as
+ * two pale blue arches. As they meet, a cold flash with a deeper blue swelling after it, frost streaks bursting out
+ * either side, shards of ice flung off, frost glinting and drifting down, a ring of frost spreading at their feet,
+ * and the target jolted.
+ */
+function rimeBite(stage: MoveStage, ctx: MoveCtx) {
+  const { figure, hitAt, dir, crit, onImpact } = ctx;
+  const cold = crit ? GOLD : ICE;
+  const core = crit ? GOLD : ICE_CORE;
+  const deep = crit ? GOLD : ICE_DEEP;
+  stage.lunge();
+  for (let s = 0; s < 0.12; s += 0.03) {
+    stage.later(() => {
+      const from = hitAt.clone().setY(hitAt.y + (Math.random() - 0.5) * 0.4);
+      stage.spawnFx("mote", core, dir < 0, { from, to: offset(from, -dir * 0.5, 0.15, 0), life: 0.25, size: [0.3, 0.1], spin: 0, fade: true });
+    }, s);
+  }
+  jaws(stage, ctx, QUICK_BITE, 0.34, () => {
+    stage.spawnFx("burst", core, false, { from: hitAt, to: hitAt, life: 0.2, size: [0.6, 1.7], spin: 0.5, fade: true });
+    stage.later(() => stage.spawnFx("burst", deep, true, { from: hitAt, to: hitAt, life: 0.34, size: [0.8, 2.2], spin: -0.4, fade: true }), 0.05);
+    for (const side of [false, true]) for (const [n, turn] of [-0.45, 0, 0.45].entries()) stage.spawnFx("streak", n === 1 ? core : cold, side, { from: hitAt, to: hitAt, life: 0.2, size: [0.5, 1.6], turn: side ? -turn : turn, spin: 0, fade: true });
+    // Shards of ice flung off, and frost glinting, then drifting slowly down.
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + Math.random() * 0.4;
+      const to = offset(hitAt, Math.cos(a) * (0.4 + Math.random() * 0.35), Math.sin(a) * 0.35 - 0.2, 0.05);
+      stage.spawnFx(i % 3 ? "spark" : "fleck", i % 2 ? core : cold, Math.cos(a) < 0, { from: hitAt, to, life: 0.5 + Math.random() * 0.25, size: [0.35, 0.15], spin: 3, fade: true, arc: i % 3 ? 0 : 0.25 });
+    }
+    const feet = figure.root.getWorldPosition(new THREE.Vector3());
+    stage.wave({ at: hitAt.clone().setY(feet.y + 0.06), radius: 1.2, life: 0.45, color: cold, width: 0.14 });
+    stage.jolt();
+    onImpact();
+  }, ICE);
+}
+
 /** A Ghastly Fetter: the seconds its chain takes to fly, the stake to come down, and the thrown chain to fade after. */
 export const GHASTLY_FETTER = { fly: 0.28, drop: 0.12, fade: 0.45, links: 14 };
 
@@ -2637,6 +2791,8 @@ function broodSwarm(stage: MoveStage, { figure, hitAt, crit, onImpact, calls }: 
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
   "Grave Grasp": { who: "haunt", blurb: "Draws up and back and surges in with its arms out, and a great hand of ice reaches out low over the ground: it slams down on the far row with a cold flash and a ring of frost, closes into a fist and drags back to the Haunt over the ground, frost and wisps pulled along behind it.", play: graveGrasp },
   "Ice Spear": { who: "haunt", blurb: "Rises with its arms raised high and a spear of ice grows over its head, cold motes drawn in to it; then it flings it straight and low down the whole line, a pale streak and frost trailing it and frost laid on the ground under it, and it shatters at the end in a cold flash and a spray of shards.", play: iceSpear },
+  "Frost Breath": { who: "frost_wolf", blurb: "Draws breath with its front lifted and head thrown back, cold motes pulled in to its jaws, then thrusts its head out low and breathes: a pale flash at its mouth, freezing mist billowing out over the whole cone with frost motes, glints and shards of ice streaming through it, frost running out over the ground to the far row and lying there glinting, and a ring of frost where it ends.", play: frostBreath },
+  "Rime Bite": { who: "frost_wolf", blurb: "A snap forward, cold breath trailing from its jaws, jaws of ice closing on the target as two pale blue arches: a cold flash and a deeper blue one, frost streaks either side, shards of ice flung off, frost drifting down and a ring of frost at their feet.", play: rimeBite },
   "Ghastly Fetter": { who: "haunt", blurb: "Rises with its arms raised overhead as violet motes gather to its hands, then flings a chain of grave-iron at the target, link after link: a stake comes down into the ground at their feet with a violet flash and a ring, a loop of chain pulls tight round them, and the thrown chain fades from the Haunt's end.", play: ghastlyFetter },
   "Venomous Bite": { who: "spider", blurb: "Rears up, front legs thrown up wide and fangs spread, venom dripping off them, then plunges and drives its fangs in: two pale fang streaks stab down, a green flash, venom splashes out either side, green bubbles rise off the target and drops run down to a green ring at their feet.", play: venomousBite },
   "Web Spit@spider": { who: "spider", blurb: "Sinks on braced legs and arches its abdomen up over its back, then throws a spinning ball of silk in a high arc, a thread trailing behind it: it bursts where it lands into a web thrown out flat over the hexes, a pale ring rolling out under it, threads flung out round the edge and wisps of silk drifting down.", play: throwWeb(WEB_SPIT) },

@@ -258,6 +258,10 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   brood_swarm: { id: "brood_swarm", name: "Brood Swarm", damage: 0, potency: 0, cost: 1, cooldown: 2, summon: { kind: "spiderling", count: 2, most: 14, share: 1 }, weight: 2 },
   spiderling_bite: { id: "spiderling_bite", name: "Bite", damage: 5, potency: 2, weight: 1 },
   rime_bite: { id: "rime_bite", name: "Rime Bite", damage: 5, potency: 5, saveOr: { effect: "slowed", turns: 2 }, chills: true, weight: 1 },
+  // A Frost Wolf's breath: a cold blast over the three rows of a cone in front of it. Nobody is singled out, so there is
+  // no roll to hit: everyone in it makes an Agility save, taking half and no Slowing on a success. It needs a few turns
+  // to draw the cold back up.
+  frost_breath: { id: "frost_breath", name: "Frost Breath", damage: 7, potency: 4, cone: 3, saveOr: { effect: "slowed", turns: 2 }, cooldown: 3, weight: 2.5 },
   searing_bite: { id: "searing_bite", name: "Searing Bite", damage: 5, potency: 5, saveOr: { effect: "burning" }, weight: 1 },
   frost_lance: { id: "frost_lance", name: "Frost Lance", damage: 6, potency: 4, range: 5, saveOr: { effect: "slowed", turns: 2 }, chills: true, weight: 2 },
   thorn_hex: { id: "thorn_hex", name: "Thorn Hex", damage: 6, potency: 4, range: 5, saveOr: { effect: "bleeding" }, weight: 2 },

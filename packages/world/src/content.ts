@@ -503,10 +503,12 @@ export const ENEMIES: Record<string, EnemyDef> = {
     abilities: ["spiderling_bite"],
     homeGround: ["web"],
   },
-  // The frost's wolves: a dire wolf in all but coat, and the cold in its bite slows what it bleeds.
+  // The frost's wolves: a dire wolf in all but coat. The cold in its bite slows what it bleeds, and now and then it
+  // breathes that cold out over everyone in front of it. (Rime Bite first: it is the one it strikes with at whoever
+  // steps away, combat.ts provoke.)
   frost_wolf: {
     kind: "frost_wolf", name: "Frost Wolf", hp: 14, defence: 12, move: 3, save: 0, init: 2, xp: 11,
-    abilities: ["rime_bite"],
+    abilities: ["rime_bite", "frost_breath"],
   },
   // The ashlands' hounds, and what they bite catches fire.
   ember_hound: {
