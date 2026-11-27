@@ -109,6 +109,9 @@ function partsOf(roll: Roll, swings: Swing[]) {
   ];
 }
 
+/** Why a roll had advantage or disadvantage, as its badge shows it after the word: " · Dark", or nothing if not known. */
+const reasons = (roll: Roll) => (roll.advWhy?.length ? ` · ${roll.advWhy.join(", ")}` : "");
+
 /** Whether advantage or disadvantage made the difference to a roll, for its badge. */
 const advSwung = (swings: Swing[]) => swings.some((s) => s.adv);
 
@@ -154,7 +157,7 @@ function RollSum({ roll }: { roll: Roll }) {
         <span>{signed(roll.bonus)}</span>
         <span>= <strong>{roll.total}</strong></span>
         {roll.kind !== "initiative" && <i>vs {roll.vs}</i>}
-        {roll.adv !== 0 && <span className={`fl-mod ${roll.adv > 0 ? "adv" : "dis"} ${advSwung(swings) ? "swung" : ""}`} title={roll.adv > 0 ? `Advantage${why}: two dice, the higher counts` : `Disadvantage${why}: two dice, the lower counts`}>{roll.adv > 0 ? "adv" : "dis"}</span>}
+        {roll.adv !== 0 && <span className={`fl-mod ${roll.adv > 0 ? "adv" : "dis"} ${advSwung(swings) ? "swung" : ""}`} title={roll.adv > 0 ? `Advantage${why}: two dice, the higher counts` : `Disadvantage${why}: two dice, the lower counts`}>{roll.adv > 0 ? "adv" : "dis"}{reasons(roll)}</span>}
         {roll.kind !== "initiative" && <span className={`fl-tag ${out.tone}`}>{out.word}</span>}
       </div>
       {parts.length > 0 && (
@@ -386,7 +389,7 @@ export function RollToast({ roll, who, dice, hold = 2200 }: RollToastProps) {
       <div className="fr-text">
         <div className="fr-who">
           {who && <><b>{who}</b> · </>}{roll.label}
-          {roll.adv !== 0 && <em className={`${roll.adv > 0 ? "adv" : "dis"} ${advSwung(swings) ? "swung" : ""}`} title={roll.advWhy?.join(", ")}>{roll.adv > 0 ? "advantage" : "disadvantage"}</em>}
+          {roll.adv !== 0 && <em className={`${roll.adv > 0 ? "adv" : "dis"} ${advSwung(swings) ? "swung" : ""}`}>{roll.adv > 0 ? "advantage" : "disadvantage"}{reasons(roll)}</em>}
         </div>
         <div className="fr-line">
           <span className="fr-sum">
