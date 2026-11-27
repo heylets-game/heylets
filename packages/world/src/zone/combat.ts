@@ -57,6 +57,8 @@ function provoke(ctx: Ctx, unit: Unit, next: HexPos, budget: Budget | null, flus
     if (foe.side === unit.side || foe.down || !inFight(ctx.state, foe.id)) continue;
     if (!leavesReach(ctx.state, foe, unit, unit.pos, next)) continue;
     if (enc.reacted.includes(foe.id) || has(foe, "stunned") || has(foe, "prone")) continue;
+    // An enemy's blow of opportunity is the first of its abilities that reaches a hex beside it. One that spreads (a cone,
+    // a sweep: a Haunt's Grave Grasp, a Great Bear's Rending Cleave) goes off whole, at whoever steps away: meant so.
     const blow = foe.side === "enemy" ? unitStrikes(ctx.state, foe).find((s) => s.range === 1 && !s.burst) : undefined;
     if (foe.side === "enemy" && !blow) continue;
     flush();
