@@ -42,8 +42,12 @@ export type EruptStyle = "thorn" | "kelp" | "coral" | "stone" | "water" | "shine
 const GRACE = 2.5;
 /** Seconds a Terror Aura's ring takes to be drawn in from its edge to its bearer's feet (SpellFx.dread). */
 const DREAD_PULL = 2.4;
-/** How many links a fetter's chain is drawn with, however long it is (SpellFx.fetter). */
-const FETTER_LINKS = 12;
+/**
+ * A fetter's chain (SpellFx.fetter): how far apart its links are along it, close enough that each runs through the
+ * next (a link is about 0.22 across), and the most it is ever drawn with, however far it is stretched.
+ */
+const FETTER_LINK_GAP = 0.14;
+const FETTER_LINKS = 60;
 /** How high a fetter's stake stands, to its ring, where the chain is made fast (SpellFx.fetter). */
 const FETTER_HEAD = 0.95;
 
@@ -2139,11 +2143,6 @@ export class SpellFx {
     return this.bound.has(key);
   }
 
-  /** Let go at once of every effect bound to a key starting with `prefix`, bar `keep`: each fades out as it would at its end. */
-  letGo(prefix: string, keep?: string) {
-    for (const [key, release] of this.bound) if (key.startsWith(prefix) && key !== keep) release();
-  }
-
   /**
    * The dread round one with a Terror Aura (a Haunt), for as long as `bind.holding()` says it stands, following it:
    * a dark ring on the ground at the edge of its reach (`radius`), breathing; a dark haze over the ground inside it;
@@ -2265,6 +2264,7 @@ export class SpellFx {
     round.scale.setScalar(1.7);
     const link = new THREE.TorusGeometry(0.085, 0.024, 5, 10);
     const links = Array.from({ length: FETTER_LINKS }, () => this.add(new THREE.Mesh(link, metal)));
+    let shown = 0;
     // The links share one shape: it goes with the first.
     links[0].userData.ownGeometry = true;
     const a = new THREE.Vector3();
@@ -2289,8 +2289,14 @@ export class SpellFx {
         const sag = (0.15 + span * 0.12) * (gone < 0 ? 1 : 1 + (age - gone) * 2);
         const sway = Math.sin(age * 1.7) * 0.05;
         along.subVectors(b, a);
+        // As many links as its length takes, the rest put away.
+        shown = Math.max(4, Math.min(FETTER_LINKS, Math.ceil(span / FETTER_LINK_GAP)));
         links.forEach((m, i) => {
-          const t = (i + 0.5) / FETTER_LINKS;
+          if (i >= shown) {
+            m.visible = false;
+            return;
+          }
+          const t = (i + 0.5) / shown;
           m.position.copy(a).addScaledVector(along, t);
           m.position.y -= sag * 4 * t * (1 - t);
           m.position.x += sway * Math.sin(Math.PI * t);
@@ -2302,7 +2308,7 @@ export class SpellFx {
         });
         if (gone < 0 && age >= next) {
           next = age + rand(0.5, 1.1);
-          const at = links[Math.floor(Math.random() * FETTER_LINKS)].position.clone();
+          const at = links[Math.floor(Math.random() * shown)].position.clone();
           this.fling(at, glow, 1, { out: 0.15, up: 0.5, fall: -0.2, life: 0.9, size: 0.3 });
         }
       }
