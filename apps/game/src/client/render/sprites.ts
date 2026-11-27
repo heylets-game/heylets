@@ -843,6 +843,8 @@ const GLYPHS: Record<string, string[]> = {
   north_star: ["...#...", "...#...", "..###..", "#######", "..###..", "...#...", "...#..."],
   // Rings spreading slowly out from it.
   slowing_field: ["..###..", ".#...#.", "#..#..#", "#.#.#.#", "#..#..#", ".#...#.", "..###.."],
+  // A snowflake.
+  blizzard_aura: ["#..#..#", ".#.#.#.", "..###..", "#######", "..###..", ".#.#.#.", "#..#..#"],
   // A chain's links, running down to a stake.
   fettered: ["##.....", "#.#....", ".###...", "..#.#..", "...###.", "....#.#", ".....##"],
   // Claw marks torn across it.

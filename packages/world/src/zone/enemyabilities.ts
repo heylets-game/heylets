@@ -8,7 +8,7 @@
 
 import type { Inflict } from "../content";
 import type { ScaleRate } from "./rules";
-import type { SurfaceKind } from "./types";
+import type { FieldKind, SurfaceKind } from "./types";
 
 /**
  * How each of an ability's numbers grows with its user's level, by name (rules.ts SCALE_RATES: a share more for
@@ -73,11 +73,14 @@ export interface EnemyAbilityDef {
    */
   rally?: { attacks: number };
   /**
-   * A field round its user, not an attack (a Guardian's Slowing Field): for `rounds` of its turns, every one of the other
-   * side within `radius` hexes of it (of any of its hexes, for a big one) is Slowed, as their turn starts there or as
-   * they step in (combat.ts fieldSlows). It goes with its user. It does no harm, and is aimed at nobody.
+   * A field round its user, not an attack (a Guardian's Slowing Field, a Snow Bear's Blizzard Aura): for `rounds` of its
+   * turns it carries the condition `kind`, and every one of the other side within `radius` hexes of it (of any of its
+   * hexes, for a big one) is caught by it as their turn starts there or as they step in (combat.ts fieldsCatch). It goes
+   * with its user, and is aimed at nobody. One that `slows` leaves them Slowed for that turn. One that does harm (its
+   * `damage`, its `saveOr`) deals it to each, no roll to hit, once in each of their turns: its damage, then a save
+   * against its `saveOr`.
    */
-  field?: { rounds: number; radius: number };
+  field?: { rounds: number; radius: number; kind: FieldKind; slows?: boolean };
   /**
    * Thrown at a hex up to `range` off, it lands on every hex within this many of it (2: that hex and the two rings round
    * it), as `area` does on its clump: everyone there saves for half, and its `surface` is left on all of it. One that
@@ -179,7 +182,9 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   // A cave bear's favourite: it rears and comes down with its whole weight. Slow to wind up (most of its turn), but
   // whoever it lands on is left reeling, with less to do on their next turn.
   bear_maul: { id: "bear_maul", name: "Maul", damage: 12, potency: 4, saveOr: { effect: "reeling", turns: 1, amount: 2 }, cost: 3, cooldown: 3, weight: 2 },
-  roar: { id: "roar", name: "Roar", damage: 4, potency: 3, saveOr: { effect: "stunned", turns: 1 }, weight: 1 },
+  // A Snow Bear's blizzard: for three of its turns a storm of snow whirls round it, a hex deep. Whoever starts a turn in
+  // it, or first steps into it in a turn, is cut by the ice in it, and must save or be left reeling (an AP short).
+  blizzard_aura: { id: "blizzard_aura", name: "Blizzard Aura", damage: 2, potency: 3, field: { rounds: 3, radius: 1, kind: "blizzard_aura" }, saveOr: { effect: "reeling", turns: 1, amount: 1 }, cooldown: 4, behaviour: "field", weight: 2 },
   // An ogre's everyday blow: the club comes down on one hero so hard that whoever stands beside them is battered too.
   club_smash: { id: "club_smash", name: "Club Smash", damage: 13, potency: 3, splash: true, weight: 1 },
   // An ogre's favourite: it stamps the ground and the whole crew round it is thrown about and left slow on their feet.
@@ -221,7 +226,7 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   earthquake: { id: "earthquake", name: "Earthquake", damage: 7, potency: 3, shape: "burst", cost: 4, cooldown: 4, aftershock: { damage: 15, saveOr: { effect: "prone", turns: 1 } }, weight: 2 },
   // A guardian's hum: the air round it thickens, and whoever comes near wades through it, too slow to get away from
   // what it does next. It moves with it.
-  slowing_field: { id: "slowing_field", name: "Slowing Field", damage: 0, potency: 0, cost: 2, cooldown: 4, field: { rounds: 3, radius: 2 }, behaviour: "field", weight: 2 },
+  slowing_field: { id: "slowing_field", name: "Slowing Field", damage: 0, potency: 0, cost: 2, cooldown: 4, field: { rounds: 3, radius: 2, kind: "slowing_field", slows: true }, behaviour: "field", weight: 2 },
   chill_touch: { id: "chill_touch", name: "Chill Touch", damage: 5, potency: 3, saveOr: { effect: "slowed", turns: 2 }, chills: true, weight: 2 },
   // A scream all round it: anyone it gets through to fumbles their next attack.
   wail: { id: "wail", name: "Wail", damage: 3, potency: 3, shape: "burst", saveOr: { effect: "fumbling", stacks: 1 }, cooldown: 3, weight: 3 },

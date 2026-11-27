@@ -266,16 +266,20 @@ const rally: Behaviour = {
   },
 };
 
-/** What a Slowing Field is worth for each hero it would reach (behaviour `field`): about a blow, for keeping them close. */
+/** What a field is worth for each hero it would reach (behaviour `field`): about a blow, for keeping them close or wearing them down. */
 export const FIELD_WORTH = 6;
 
 /**
- * A field round its user (a Slowing Field): worth FIELD_WORTH for each hero, in the fight and not Slowed already, within
- * its reach of where it would be raised, so the more it would hold near it the likelier it is; nothing with none near.
- * Heroes it would reach are worth walking toward.
+ * A field round its user (a Slowing Field, a Blizzard Aura): worth FIELD_WORTH for each hero, in the fight, within its
+ * reach of where it would be raised (one that only slows passes over those Slowed already), so the more it would hold
+ * near it the likelier it is; nothing with none near. Heroes it would reach are worth walking toward.
  */
-const fielded = (look: Look, from: HexPos, attack: EnemyStrike, targets: readonly Unit[]): Unit[] =>
-  targets.filter((h) => !has(h, "slowed") && gap(look.enemy, h, from) <= (attack.kit.field?.radius ?? 0));
+const fielded = (look: Look, from: HexPos, attack: EnemyStrike, targets: readonly Unit[]): Unit[] => {
+  const field = attack.kit.field;
+  if (!field) return [];
+  const onlySlows = field.slows && attack.harmless && !attack.saveOr;
+  return targets.filter((h) => !(onlySlows && has(h, "slowed")) && gap(look.enemy, h, from) <= field.radius);
+};
 
 const field: Behaviour = {
   reaches: (look, from, attack, targets) => fielded(look, from, attack, targets).length > 0,

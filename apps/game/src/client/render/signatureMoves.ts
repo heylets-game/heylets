@@ -1244,6 +1244,9 @@ function earthquakeHeave(stage: MoveStage, { figure, hitAt, crit, onImpact, echo
 /** A Slowing Field going up: how far it reaches from the middle of a Guardian (two hexes past its own), and its slow rings. */
 export const SLOWING_FIELD = { reach: HEX * 2.75, rings: 3, life: 1.3, apart: 0.32 };
 
+/** How far out a field reaching `radius` hexes past its bearer's own is drawn (a Slowing Field's 2: SLOWING_FIELD.reach). */
+export const fieldReach = (radius: number): number => HEX * (radius + 0.75);
+
 /** How bright a Guardian's eyes and the gem in its chest flare as it channels a Slowing Field (Figure.setGlow): built up to `held`, flashed to `flash` as it lets go, and back to its own over `fade` seconds. */
 export const CHANNEL_GLOW = { held: 2.2, flash: 3.4, fade: 0.9, pulse: 0.22, rays: 6, rayEvery: 0.14 };
 

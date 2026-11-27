@@ -533,6 +533,7 @@ export const SAVE_STAT: Record<Condition, StatKey> = {
   lucky: "dex",
   frenzied: "int_stat",
   slowing_field: "vit",
+  blizzard_aura: "vit",
   fettered: "str",
 };
 
@@ -574,6 +575,7 @@ export const CONDITION_INFO: Record<Condition, { name: string; blurb: string; co
   // Its stacks are the lucky rolls left: they do not run down with the turns, only with the rolls.
   lucky: { name: "Lucky", blurb: "A coin in the town well: each of its next rolls to hit, one for each coin, has advantage.", color: "#f6d365" },
   slowing_field: { name: "Slowing Field", blurb: "Every foe within 2 hexes of it is Slowed: as their turn starts in it, or as they step into it.", color: "#7fe3ff" },
+  blizzard_aura: { name: "Blizzard Aura", blurb: "A blizzard whirls round it: every foe beside it is cut by the ice as their turn starts there or the first time in a turn they step in, and must save or be Reeling.", color: "#e4f4ff" },
   // Its stacks are the attacks it has left: they do not run down with the turns, only with the attacks (engine.ts SPURS).
   frenzied: { name: "Frenzied", blurb: "Driven on by a howl: each of its next attacks, one for each stack, has advantage, and every one that draws blood leaves a stack of Bleeding.", color: "#e0322b" },
   guiding_light: { name: "Guiding Light", blurb: "Lit up by a star: every attack against it has advantage.", color: "#fff3a8" },
@@ -619,6 +621,7 @@ const CONDITION_DETAIL: Partial<Record<Condition, (c: UnitCondition, by?: string
   },
   tailwind: (c) => `The wind at its back: ${c.amount ?? 1} more movement for each AP on its next turn.`,
   slowing_field: (c) => `Every foe within ${plural(c.amount ?? 2, "hex", "hexes")} of it is Slowed: as their turn starts in it, or as they step into it.`,
+  blizzard_aura: (c) => `A blizzard whirls round it: every foe within ${plural(c.amount ?? 1, "hex", "hexes")} of it is cut by the ice as their turn starts there or the first time in a turn they step in, and must save or be Reeling.`,
   contraband: (c) => `${plural(c.amount ?? 1, "smuggled fire bomb")} in the pack, to throw before they are found out.`,
   taunted: (_c, by) => `Goaded${by ? ` by ${by}` : ""}: it attacks no one but ${by ?? "the one who taunted it"}, and comes at them if it cannot reach them yet.`,
   black_spot: (_c, by) => `${CONDITION_INFO.black_spot.blurb}${by ? ` Laid by ${by}.` : ""}`,

@@ -12,12 +12,12 @@ import { DEBUFFS, UNTIMED_KEEPS, attackMade, addCondition, addUses, addShield, a
 import { cratesOn, crateById, hurtCrate, isCrateId } from "./crates";
 import { ENEMY_ABILITIES } from "./enemyabilities";
 import { bearing, big, caught, close, blast, blockerAt, courseShare, covers, directionToward, gap, gapTo, meet, nearOf, reaches, ringToward, elevOf, fetterBars, flies, heldAgainst, inFight, lineFrom, pathIn, perkOf, pitAt, reachFrom, roomAt, roomFor, sameHex, sees, seesFor, solid, span, stepCost, strikes, unitById, zoneReach, type Course, type Pit } from "./geometry";
-import { ACTION_AP, CHART, COMMON_ACTIONS, CORAL_ARMOR, ENEMY_EDGE, RALLY, SHANTY, SUMMON_CALLS, ENEMY_BURST, FLEE_RANGE, JUMP_DOWN, JUMP_UP, blinkRange, jumpRange, POTION_EDGE, SAVE_STAT, SMUGGLED, SPLASH_SHARE, THROWABLES, TORCH_GROUND_ROUNDS, abilityDice, abilityStrikes, enemySave, retortDice, unitStrikes, healDice, reactionStrike, tacticOf, throwRange, type EnemyAttackKit, type EnemyStrike, type Tactic } from "./kit";
+import { ACTION_AP, CHART, COMMON_ACTIONS, CORAL_ARMOR, ENEMY_EDGE, RALLY, SHANTY, SUMMON_CALLS, ENEMY_BURST, FLEE_RANGE, JUMP_DOWN, JUMP_UP, blinkRange, jumpRange, POTION_EDGE, SAVE_STAT, SMUGGLED, SPLASH_SHARE, THROWABLES, TORCH_GROUND_ROUNDS, abilityDice, abilityStrikes, enemySave, retortDice, unitStrike, unitStrikes, healDice, reactionStrike, tacticOf, throwRange, type EnemyAttackKit, type EnemyStrike, type Tactic } from "./kit";
 import { modsOf } from "./mods";
 import { d20, diceFor, hitChance, mod, proficiency, rollDice, rollShown, statOf } from "./rules";
 import { seenByHeroes } from "./light";
 import { HARMFUL, HINDERING, chill, clearSurfaces, dropTorch, enterSurface, ignite, letGoTorch, placeSurface } from "./surfaces";
-import type { Budget, CommonAction, Throwable, Unit, ZoneState } from "./types";
+import { FIELD_KINDS, type Budget, type CommonAction, type FieldKind, type Throwable, type Unit, type ZoneState } from "./types";
 import { clusterHexes, enterWeather, makeQuake, makeWeather, quakeHexes, rainHexes, wallHexes } from "./weather";
 import { callKin, summonCall, summonSpots } from "./summon";
 import { layCurse, drown } from "./drowning";
@@ -1186,34 +1186,86 @@ function callForKin(ctx: Ctx, enemy: Unit, attack: EnemyStrike): void {
 }
 
 /**
- * A field round its user (a Guardian's Slowing Field): it carries it for so many of its turns, and whoever of the other
- * side is in it now is Slowed for the rest of their turn, if it is theirs (fieldSlows). No attack: no Frenzy is spent.
+ * A field round its user (a Guardian's Slowing Field, a Snow Bear's Blizzard Aura): it carries the field's condition for
+ * so many of its turns, and catches those of the other side in it as their turns start or they step in (fieldsCatch).
+ * Raising it catches nobody at once. No attack: no Frenzy is spent.
  */
 function raiseField(ctx: Ctx, enemy: Unit, attack: EnemyStrike): void {
   const field = attack.kit.field!;
   ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name });
-  addCondition(ctx, enemy, "slowing_field", field.rounds, field.radius);
+  addCondition(ctx, enemy, field.kind, field.rounds, field.radius);
   // However long it was up for before, it reaches as far as this one does.
-  const held = enemy.conditions.find((c) => c.kind === "slowing_field");
+  const held = enemy.conditions.find((c) => c.kind === field.kind);
   if (held) held.amount = field.radius;
 }
 
-/** Whoever of the other side carries a Slowing Field that reaches `unit` where it stands, if anyone does. */
-export const fieldOver = (state: ZoneState, unit: Unit): Unit | undefined =>
-  state.units.find((u) => u.side !== unit.side && !u.down && inFight(state, u.id) && gap(u, unit) <= (u.conditions.find((c) => c.kind === "slowing_field")?.amount ?? -1));
+/** One field that reaches a unit: who carries it, and the ability it was raised with. */
+export interface FieldOver {
+  holder: Unit;
+  kind: FieldKind;
+  /** The carrier's ability that raises it (its EnemyAbilityDef `field` is of this kind). */
+  ability: string;
+}
 
 /**
- * A unit in the fight is in a Slowing Field of the other side's (as its turn starts, or as it steps in): it is Slowed
- * until its turn is over, and its movement left this turn is halved at once (engine.ts addCondition). Leaving the field
- * does not lift it; out of it, its next turn is its own pace again. Those who fly are caught as well: it is the air.
+ * Every field of the other side's that reaches `unit` where it stands (EnemyAbilityDef `field`): carried by one standing in
+ * the fight, as far as its condition's `amount` from any of its hexes.
  */
-export function fieldSlows(ctx: Ctx, unit: Unit): void {
+export function fieldsOver(state: ZoneState, unit: Unit): FieldOver[] {
+  const out: FieldOver[] = [];
+  for (const u of state.units) {
+    if (u.side === unit.side || u.down || !inFight(state, u.id)) continue;
+    for (const kind of FIELD_KINDS) {
+      const reach = u.conditions.find((c) => c.kind === kind)?.amount;
+      if (reach === undefined || gap(u, unit) > reach) continue;
+      const ability = u.abilities.find((id) => ENEMY_ABILITIES[id]?.field?.kind === kind);
+      if (ability) out.push({ holder: u, kind, ability });
+    }
+  }
+  return out;
+}
+
+/** Whoever of the other side carries a Slowing Field (a field that `slows`) that reaches `unit` where it stands, if anyone does. */
+export const fieldOver = (state: ZoneState, unit: Unit): Unit | undefined =>
+  fieldsOver(state, unit).find((f) => ENEMY_ABILITIES[f.ability].field!.slows)?.holder;
+
+/**
+ * A unit in the fight is in fields of the other side's (as its turn starts, `start`, or as it steps in). One that slows
+ * (a Slowing Field) leaves it Slowed until its turn is over, and its movement left this turn is halved at once
+ * (engine.ts addCondition); leaving the field does not lift it, and out of it, its next turn is its own pace again. One
+ * that does harm (a Blizzard Aura) deals it once in each of its turns (Unit `caughtBy`): its damage with no roll to hit,
+ * then a save against its `saveOr`. What it leaves as a turn starts counts for that turn (a Reeling takes its AP now);
+ * stepped in later, from the next. Those who fly are caught as well: it is the air.
+ */
+export function fieldsCatch(ctx: Ctx, unit: Unit, start = false): void {
   const { state } = ctx;
-  if (unit.down || !inFight(state, unit.id) || has(unit, "slowed") || !fieldOver(state, unit)) return;
-  addCondition(ctx, unit, "slowed", 1);
-  // Only for this turn of theirs: they are Slowed again next turn only if they are still in it then.
-  const c = unit.conditions.find((x) => x.kind === "slowed");
-  if (c) delete c.fresh;
+  if (unit.down || !inFight(state, unit.id)) return;
+  for (const { holder, ability } of fieldsOver(state, unit)) {
+    if (unit.down) return;
+    const def = ENEMY_ABILITIES[ability];
+    if (def.field!.slows && !has(unit, "slowed")) {
+      addCondition(ctx, unit, "slowed", 1);
+      // Only for this turn of theirs: they are Slowed again next turn only if they are still in it then.
+      const c = unit.conditions.find((x) => x.kind === "slowed");
+      if (c) delete c.fresh;
+    }
+    if (!(def.damage > 0 || def.saveOr) || unit.caughtBy?.includes(holder.id)) continue;
+    const strike = unitStrike(state, holder, ability);
+    if (!strike) continue;
+    (unit.caughtBy ??= []).push(holder.id);
+    if (!strike.harmless) {
+      const rolled = rollShown(ctx.rng, strike.dice);
+      damage(ctx, unit, rolled.total, { actor: holder.id, what: strike.name, dice: rolled });
+    }
+    const leave = strike.saveOr;
+    if (unit.down || !leave || saveRoll(ctx, unit, SAVE_STAT[leave.effect], 8 + strike.potency, `Resist ${strike.name}`).ok) continue;
+    const had = has(unit, leave.effect);
+    inflict(ctx, unit, leave);
+    if (start && !had) {
+      const c = unit.conditions.find((x) => x.kind === leave.effect);
+      if (c) delete c.fresh;
+    }
+  }
 }
 
 /**
