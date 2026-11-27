@@ -10,7 +10,7 @@ import { FIGHTS_ONLY, abilityArea, checkAbility, checkCommon, courseFor, crateBl
 import { addCondition, addShield, addStacks, attackContext, burnOf, damage, defenceOf, shieldOf, shieldUnit, type Ctx } from "./engine";
 import { shantyOf, shantyRadius, songsOn } from "./song";
 import { chartOf, constellationLinks } from "./stars";
-import { ALERT_RANGE, DEFAULT_ZONE_OPTIONS, JOIN_RANGE, generateZone, zoneOptions } from "./gen";
+import { ALERT_RANGE, DEFAULT_ZONE_OPTIONS, generateZone, zoneOptions } from "./gen";
 import { HEX_ROOM, adjacent, blast, blockerAt, flies, isDead, sameHex, seesFor, solid, stepCost, unitAt, zoneReach } from "./geometry";
 import { propOf } from "./props";
 import { SITE_IDS, backdropOf, siteInside, type SiteId } from "./sites";
@@ -455,7 +455,7 @@ describe("starting a fight", () => {
     expect(state.encounter!.order).toContain("bo");
     expect(events.some((e) => e.t === "fight_join" && e.id === "bo")).toBe(true);
     // Stopped where they came into range, short of where they were going.
-    expect(Math.min(...state.units.filter((u) => u.id !== "bo" && state.encounter!.order.includes(u.id)).map((u) => hexDistance(u.pos, unit(state, "bo").pos)))).toBe(JOIN_RANGE);
+    expect(Math.min(...state.units.filter((u) => u.id !== "bo" && state.encounter!.order.includes(u.id)).map((u) => hexDistance(u.pos, unit(state, "bo").pos)))).toBe(ALERT_RANGE);
   });
 
   it("pulls a second group in when a fighter comes within its sight", () => {
@@ -1865,14 +1865,14 @@ describe("fleeing", () => {
     expect(state.encounter!.order).toEqual(expect.arrayContaining(["bo", wolf]));
     expect(state.encounter!.order).not.toContain("ann");
     expect(state.encounter!.fled).toEqual(["ann"]);
-    // Walking is free again, and well inside JOIN_RANGE of the fight she stays out of it.
+    // Walking is free again, and well inside ALERT_RANGE of the fight she stays out of it.
     state = must(state, { type: "move", by: "ann", unit: "ann", to: at(6, 6) });
     expect(unit(state, "ann").pos).toEqual(at(6, 6));
     expect(state.encounter!.order).not.toContain("ann");
     // Within 2 of the wolf: back in, and stopped there.
     const events: ZoneEvent[] = [];
     state = must(state, { type: "move", by: "ann", unit: "ann", to: at(8, 6) }, events);
-    expect(events).toContainEqual({ t: "fight_join", id: "ann" });
+    expect(events).toContainEqual({ t: "fight_join", id: "ann", why: { kind: "near", near: wolf } });
     expect(hexDistance(unit(state, "ann").pos, unit(state, wolf).pos)).toBe(FLEE_RANGE);
     expect(state.encounter!.order).toContain("ann");
     expect(state.encounter!.fled).toEqual([]);
@@ -1885,7 +1885,7 @@ describe("fleeing", () => {
     state.units.find((u) => u.id === wolf)!.pos = at(5, 6);
     const events: ZoneEvent[] = [];
     state = must(state, { type: "time", now: 1 }, events);
-    expect(events).toContainEqual({ t: "fight_join", id: "ann" });
+    expect(events).toContainEqual({ t: "fight_join", id: "ann", why: { kind: "near", near: wolf } });
     expect(state.encounter!.order).toContain("ann");
   });
 
@@ -1901,7 +1901,7 @@ describe("fleeing", () => {
     expect(fails(out, { type: "throw", by: "ann", unit: "ann", item: "healing", at: unit(out, "bo").pos })).toMatch(/got away from that fight/);
     // Mending themselves is for a fight, and they are out of it (onlyInFights).
     expect(fails(out, { type: "use", by: "ann", unit: "ann", ability: "mend", target: "ann" })).toBe(FIGHTS_ONLY);
-    // A hero who never was in it, shooting in from further off than JOIN_RANGE, is in it too.
+    // A hero who never was in it, shooting in from further off than ALERT_RANGE, is in it too.
     let far = board();
     far.aiOff = true;
     hero(far, "ann", "qa_paladin", at(3, 2));
@@ -1910,9 +1910,11 @@ describe("fleeing", () => {
     Object.assign(foe, { hp: 200, maxHp: 200 });
     far = provoke(far);
     expect(far.encounter!.order).not.toContain(archer.id);
-    expect(Math.min(hexDistance(archer.pos, foe.pos), hexDistance(archer.pos, at(3, 2)))).toBeGreaterThan(JOIN_RANGE);
-    far = must(far, { type: "use", by: "cy", unit: "cy", ability: "bow_shot", target: foe.id });
+    expect(Math.min(hexDistance(archer.pos, foe.pos), hexDistance(archer.pos, at(3, 2)))).toBeGreaterThan(ALERT_RANGE);
+    const shot: ZoneEvent[] = [];
+    far = must(far, { type: "use", by: "cy", unit: "cy", ability: "bow_shot", target: foe.id }, shot);
     expect(far.encounter!.order).toContain("cy");
+    expect(shot).toContainEqual({ t: "fight_join", id: "cy", why: { kind: "acted", on: foe.id } });
   });
 
   /**
@@ -2057,7 +2059,7 @@ describe("fleeing", () => {
     state = must(state, { type: "join", hero: standInHero("qa_paladin", "bo", 1)! }, back);
     expect(unit(state, "bo").away).toBeUndefined();
     expect(unit(state, "s1").away).toBeUndefined();
-    expect(back).toContainEqual({ t: "fight_join", id: "bo" });
+    expect(back).toContainEqual({ t: "fight_join", id: "bo", why: { kind: "near", near: expect.any(String) } });
     expect(state.encounter!.order).toContain("s1");
   });
 

@@ -172,7 +172,7 @@ describe("a turn is one fighter's alone", () => {
         const nearer = [...reach.values()].filter((r) => r.stop).sort((a, b) => hexDistance(a.pos, at(8, 6)) - hexDistance(b.pos, at(8, 6)))[0];
         state = must(state, { type: "move", by: "di", unit: "di", to: nearer.pos }, events);
       }
-      expect(events.slice(before)).toContainEqual({ t: "fight_join", id: "di" });
+      expect(events.slice(before)).toContainEqual({ t: "fight_join", id: "di", why: { kind: "near", near: expect.any(String) } });
       expect(rolls(events, "Initiative").map((r) => r.id).sort()).toEqual([...state.encounter!.order].sort());
       if (strict(`seed ${seed}, with di`) > 0) tied++;
       else untied++;

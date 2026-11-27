@@ -216,7 +216,7 @@ export interface Encounter {
   deadline: number | null;
   /**
    * Heroes who fled this fight (Flee) and have not come back into it. One is drawn back in only by an enemy in
-   * it coming within FLEE_RANGE (not by walking within JOIN_RANGE), and cannot reach into it from outside: no
+   * it coming within FLEE_RANGE (not by walking within ALERT_RANGE), and cannot reach into it from outside: no
    * blow, flask or help for anyone in it until they are back.
    */
   fled?: string[];
@@ -571,6 +571,14 @@ export interface Rolled {
  */
 export type JoinCause = { kind: "seen" | "struck" | "noise" | "bell"; by: string } | { kind: "heard"; near: string };
 
+/**
+ * Why a hero is now in a fight already on (zone.ts pullIn, reachIn, engage). `near`: they came within ALERT_RANGE of
+ * this one in it (or, having fled it, an enemy in it came within FLEE_RANGE of them). `acted`: they did something,
+ * harm or help, to this one in it from outside. `band`: a band they set off came into it, and they with it (its
+ * `alert` says why).
+ */
+export type HeroJoinCause = { kind: "near"; near: string } | { kind: "acted"; on: string } | { kind: "band"; group: string };
+
 export type ZoneEvent =
   | { t: "joined"; id: string }
   /** `cut`: the walk before this one was called off at this hex, and this one sets off from it. */
@@ -578,7 +586,8 @@ export type ZoneEvent =
   /** A band has noticed the party and is in the fight: these of it (`units`), and why (`why`). */
   | { t: "alert"; group: string; units: string[]; why: JoinCause }
   | { t: "fight_start"; units: string[] }
-  | { t: "fight_join"; id: string }
+  /** A hero comes into a fight already on, and why. */
+  | { t: "fight_join"; id: string; why: HeroJoinCause }
   | { t: "roll"; roll: Roll }
   | { t: "round"; n: number }
   | { t: "turn"; ids: string[] }
