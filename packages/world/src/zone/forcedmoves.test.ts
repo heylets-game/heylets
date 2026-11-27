@@ -77,3 +77,37 @@ describe("a blink arrives once", () => {
     expect(ctx.events.some((e) => e.t === "roll" && e.roll.id === "ann" && /Blizzard/.test(e.roll.label))).toBe(true);
   });
 });
+
+describe("forced moves in a real fight (the reducer's own arrival: zone.ts onStep)", () => {
+  const dev = (state: ZoneState, op: Extract<Parameters<typeof must>[1], { type: "dev" }>["dev"], events: ZoneEvent[] = []) => must(state, { type: "dev", by: "ann", dev: op }, events);
+
+  it("a hero rammed into the sight of a band not yet in the fight brings it in", () => {
+    let state = flatBoard({ rng: 12345, start: at(2, 6), options: { party: 1 } });
+    Object.assign(standHero(state, "ann", at(5, 6), hero), { hp: 900, maxHp: 900 });
+    const brute = enemy(state, "brute", at(4, 6), "g1", { hp: 900, maxHp: 900 }).id;
+    enemy(state, "bandit", at(11, 6), "g2");
+    state = dev(dev(state, { op: "sandbox", on: true }), { op: "start_fight" });
+    expect(state.groups.g2.alerted).toBe(false);
+    let rammed = false;
+    for (let seed = 1; seed <= 30 && !rammed; seed++) {
+      const events: ZoneEvent[] = [];
+      const after = dev({ ...state, rng: seed }, { op: "strike", unit: brute, ability: "battering_ram", target: "ann" }, events);
+      if (!events.some((e) => e.t === "shoved" && e.target === "ann" && e.to)) continue;
+      rammed = true;
+      expect(after.groups.g2.alerted).toBe(true);
+      expect(events.some((e) => e.t === "alert" && e.group === "g2")).toBe(true);
+    }
+    expect(rammed).toBe(true);
+  });
+
+  it("an Unseen hero under a Great Cleave saves against it and is hit", () => {
+    let state = flatBoard({ rng: 12345, start: at(2, 6), options: { party: 2 } });
+    Object.assign(standHero(state, "ann", at(5, 6), hero), { hp: 900, maxHp: 900 });
+    Object.assign(standHero(state, "bob", at(5, 7), hero), { hp: 900, maxHp: 900 }).conditions.push({ kind: "invisible", rounds: 5 });
+    const brute = enemy(state, "brute", at(6, 6), "g1", { hp: 900, maxHp: 900 }).id;
+    state = dev(dev(state, { op: "sandbox", on: true }), { op: "start_fight" });
+    const events: ZoneEvent[] = [];
+    dev(state, { op: "strike", unit: brute, ability: "great_cleave", at: at(5, 6) }, events);
+    expect(events.some((e) => e.t === "hit" && e.target === "bob")).toBe(true);
+  });
+});
