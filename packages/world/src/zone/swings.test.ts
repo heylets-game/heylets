@@ -52,6 +52,23 @@ describe("what made the difference to a roll", () => {
     expect(swingsOf(roll({ d20: [15, 14], adv: 1, own: 3, vs: 14 }))).toEqual([]);
   });
 
+  it("names advantage that made a critical hit, though the other die would have hit too", () => {
+    expect(swingsOf(roll({ d20: [20, 15], adv: 1, own: 3, vs: 14, advWhy: ["Exposed"] }))).toEqual([{ names: ["Exposed"], helped: true, adv: true, crit: true }]);
+    // The other die would have missed: it made the hit, and the critical with it.
+    expect(swingsOf(roll({ d20: [20, 4], adv: 1, own: 3, vs: 14, advWhy: ["Exposed"] }))).toEqual([{ names: ["Exposed"], helped: true, adv: true, crit: true }]);
+  });
+
+  it("names disadvantage that dropped a 20, even on a blow that landed, beside the bonus that landed it", () => {
+    expect(swingsOf(roll({ d20: [20, 11], adv: -1, own: 1, mods: [HIGH], vs: 14, advWhy: ["Poisoned"] }))).toEqual([
+      { names: ["High ground"], helped: true },
+      { names: ["Poisoned"], helped: false, adv: true, crit: true },
+    ]);
+  });
+
+  it("names no critical on a save, where a 20 is only a number", () => {
+    expect(swingsOf(roll({ kind: "save", d20: [20, 15], adv: 1, own: 0, vs: 12 }))).toEqual([]);
+  });
+
   it("can name a bonus and advantage both", () => {
     expect(swingsOf(roll({ d20: [12, 3], adv: 1, own: 1, mods: [HIGH], vs: 15, advWhy: ["Inspired"] }))).toEqual([
       { names: ["High ground"], helped: true },

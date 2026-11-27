@@ -78,23 +78,45 @@ const LOST: Record<Roll["kind"], string> = { attack: "hit", save: "save", shove:
 const listOf = (names: string[]) => (names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`);
 
 /**
- * Everything that made the difference to a roll (swingsOf) as one sentence: "High ground made the difference", "High
- * ground and advantage (Inspired) both made the difference", "Trees cost the hit". They all went the same way (the way
- * the roll did), so one verb does for all. Null: nothing did.
+ * Everything that made the difference to a roll (swingsOf), as few clauses as it takes, each with whether it went the
+ * roller's way: "High ground and advantage (Inspired) both made the difference", "Trees cost the hit", "Advantage
+ * (Exposed) made it a critical hit". What turned the hit or the save shares one clause, and what turned a critical
+ * another, so a roll has two at most: a bonus that landed a blow, and disadvantage that cost it a critical.
  */
-export function swingText(roll: Roll, swings: Swing[]): string | null {
-  if (swings.length === 0) return null;
-  const did = swings[0].helped ? "made the difference" : `cost the ${LOST[roll.kind]}`;
-  const who = swings.flatMap((s) => {
-    if (s.adv) {
-      const which = roll.adv > 0 ? "advantage" : "disadvantage";
-      return [s.names.length > 0 ? `${which} (${s.names.join(", ")})` : which];
-    }
-    return s.between ? [`${listOf(s.names)} between them`] : s.names;
+export function swingClauses(roll: Roll, swings: Swing[]): { text: string; good: boolean }[] {
+  const groups = new Map<string, Swing[]>();
+  for (const s of swings) {
+    const key = `${s.crit ? "crit" : "roll"}:${s.helped}`;
+    groups.set(key, [...(groups.get(key) ?? []), s]);
+  }
+  return [...groups.values()].map((group) => {
+    const { helped, crit } = group[0];
+    const did = crit ? (helped ? "made it a critical hit" : "cost the critical hit") : helped ? "made the difference" : `cost the ${LOST[roll.kind]}`;
+    const who = group.flatMap((s) => {
+      if (s.adv) {
+        const which = roll.adv > 0 ? "advantage" : "disadvantage";
+        return [s.names.length > 0 ? `${which} (${s.names.join(", ")})` : which];
+      }
+      return s.between ? [`${listOf(s.names)} between them`] : s.names;
+    });
+    const each = group.some((s) => s.between) ? "" : who.length === 2 ? "both " : who.length > 2 ? "all " : "";
+    const line = `${listOf(who)} ${each}${did}`;
+    return { text: line[0].toUpperCase() + line.slice(1), good: helped };
   });
-  const each = swings.some((s) => s.between) ? "" : who.length === 2 ? "both " : who.length > 2 ? "all " : "";
-  const line = `${listOf(who)} ${each}${did}`;
-  return line[0].toUpperCase() + line.slice(1);
+}
+
+/** What made the difference to a roll as one line of plain words (swingClauses, joined), or null if nothing did. */
+export const swingText = (roll: Roll, swings: Swing[]): string | null => swingClauses(roll, swings).map((c) => c.text).join("; ") || null;
+
+/** What made the difference to a roll as it is shown under it: its clauses, each in its own colour. */
+function SwingLine({ roll, swings, className }: { roll: Roll; swings: Swing[]; className: string }) {
+  const clauses = swingClauses(roll, swings);
+  if (clauses.length === 0) return null;
+  return (
+    <div className={className}>
+      {clauses.map((c, i) => <span key={i} className={c.good ? "good" : "bad"}>{i > 0 && " · "}{c.text}</span>)}
+    </div>
+  );
 }
 
 /**
@@ -165,7 +187,7 @@ function RollSum({ roll }: { roll: Roll }) {
           {parts.map((p, i) => <span key={i} className={`fl-part ${p.good ? "good" : "bad"} ${p.swung ? "swung" : ""}`}>{p.text}</span>)}
         </div>
       )}
-      {swings.length > 0 && <div className={`fl-swing ${roll.ok ? "good" : "bad"}`}>{swingText(roll, swings)}</div>}
+      <SwingLine roll={roll} swings={swings} className="fl-swing" />
     </>
   );
 }
@@ -430,7 +452,7 @@ function RollCard({ roll, who, dice, hold, onGone }: { roll: Roll; who?: string;
             {parts.map((p, i) => <span key={i} className={`fr-part ${p.good ? "good" : "bad"} ${p.swung ? "swung" : ""}`}>{p.text}</span>)}
           </div>
         )}
-        {swings.length > 0 && <div className={`fr-swing ${roll.ok ? "good" : "bad"}`}>{swingText(roll, swings)}</div>}
+        <SwingLine roll={roll} swings={swings} className="fr-swing" />
         {dice && (
           <div className="fr-dmg">
             <i>{dice.faces.length}d{dice.d}</i>

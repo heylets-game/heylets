@@ -559,7 +559,7 @@
 .fl-math .fl-mod.swung { color: #fff; background: color-mix(in srgb, var(--f-good) 30%, transparent); }
 .fl-math .fl-mod.dis.swung { background: color-mix(in srgb, var(--f-bad) 30%, transparent); }
 .fl-swing { margin-top: 2px; font-size: 11.5px; letter-spacing: 0.03em; color: var(--f-good); }
-.fl-swing.bad { color: var(--f-bad); }
+.fl-swing .bad { color: var(--f-bad); }
 .fl-tag { margin-left: auto; flex: none; padding: 0 7px 1px; font-family: var(--font-head); font-size: 13px; line-height: 17px; letter-spacing: 0.08em; color: #10240f; background: var(--f-good); border: 1px solid #000; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45); }
 .fl-tag.no { color: #2c0b07; background: #e8705c; }
 .fl-tag.crit { color: #3b2408; background: linear-gradient(180deg, #fff0b8, #f4c64e); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 0 8px rgba(244, 198, 78, 0.8); }
@@ -685,7 +685,7 @@
 .fr-part.bad, .fl-part.bad { --pc: var(--f-bad); }
 .fr-part.swung, .fl-part.swung { color: #fff; border-color: var(--pc); background: color-mix(in srgb, var(--pc) 32%, rgba(14, 7, 6, 0.8)); box-shadow: 0 0 10px color-mix(in srgb, var(--pc) 55%, transparent); }
 .fr-swing { font-family: var(--font-head); font-size: 15px; letter-spacing: 0.05em; color: var(--f-good); text-shadow: 0 2px 0 #000, 0 0 12px color-mix(in srgb, currentColor 45%, transparent); max-width: 380px; }
-.fr-swing.bad { color: var(--f-bad); }
+.fr-swing .bad { color: var(--f-bad); }
 .fr-who em.swung { background: color-mix(in srgb, currentColor 22%, transparent); box-shadow: 0 0 10px color-mix(in srgb, currentColor 55%, transparent); }
 .fr-parts, .fr-swing { opacity: 0; }
 .fight-roll.landed .fr-parts { animation: fr-rise 0.25s ease-out 0.45s both; }

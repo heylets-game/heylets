@@ -106,6 +106,11 @@ export interface Swing {
   between?: boolean;
   /** It was advantage or disadvantage: the die it dropped would have turned it. */
   adv?: boolean;
+  /**
+   * What it turned was a critical hit: advantage kept a 20 over a die that was not one (`helped`), or disadvantage
+   * dropped a 20 (not), whether or not the blow would have landed all the same.
+   */
+  crit?: boolean;
 }
 
 /**
@@ -116,7 +121,8 @@ export interface Swing {
  * reach); on one missed, what hurt. Each is first taken away alone, and any that turns it on its own is named. Should
  * none, they are taken away all at once, and if that turns it they are named together (`between`): a 10 + 2 + 1
  * against 11 was made by the two between them, neither alone. Advantage or disadvantage made the difference if the die
- * it dropped would have. Nothing for initiative, nor for a roll whose outcome was not its sum's (a Ghostsail Cloak's).
+ * it dropped would have, or if it was the difference between a critical hit and none (`crit`): that one can go the
+ * other way from the rest, disadvantage costing a critical on a blow a bonus landed. Nothing for initiative, nor for a roll whose outcome was not its sum's (a Ghostsail Cloak's).
  */
 export function swingsOf(roll: Roll): Swing[] {
   if (roll.kind === "initiative" || reaches(roll.kind, roll.kept, roll.total, roll.vs) !== roll.ok) return [];
@@ -136,7 +142,10 @@ export function swingsOf(roll: Roll): Swing[] {
   // Advantage or disadvantage: the other die, had it been the one kept.
   if (roll.adv !== 0 && roll.d20.length === 2) {
     const other = roll.adv === 1 ? Math.min(...roll.d20) : Math.max(...roll.d20);
-    if (turns(other, roll.total - roll.kept + other, roll.vs)) out.push({ names: roll.advWhy ?? [], helped: roll.ok, adv: true });
+    const turned = turns(other, roll.total - roll.kept + other, roll.vs);
+    // To hit, a 20 is a critical hit: one kept over a die that was not, or one dropped, turned that, if nothing else.
+    const crit = roll.kind === "attack" && (other === 20) !== (roll.kept === 20);
+    if (turned || crit) out.push({ names: roll.advWhy ?? [], helped: turned ? roll.ok : roll.kept === 20, adv: true, ...(crit ? { crit: true } : {}) });
   }
   return out;
 }

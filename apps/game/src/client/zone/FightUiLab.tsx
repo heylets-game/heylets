@@ -67,6 +67,8 @@ const SWING_CASES: SwingCase[] = [
   { name: "Advantage", by: "h1", label: "Cleave · attack", d20: [15, 4], adv: 1, own: 3, vs: 14, advWhy: ["Exposed"] },
   { name: "Disadvantage", by: "h1", label: "Longshot · attack", d20: [15, 4], adv: -1, own: 3, vs: 14, advWhy: ["Poisoned"] },
   { name: "Bonus + adv.", by: "h1", label: "Cleave · attack", d20: [12, 3], adv: 1, own: 1, mods: [HIGH], vs: 15, advWhy: ["Inspired"] },
+  { name: "Adv. made a crit", by: "h1", label: "Cleave · attack", d20: [20, 15], adv: 1, own: 3, vs: 14, advWhy: ["Exposed"] },
+  { name: "Dis. cost a crit", by: "h1", label: "Longshot · attack", d20: [20, 11], adv: -1, own: 1, mods: [HIGH], vs: 14, advWhy: ["Poisoned"] },
   { name: "Weakened save", by: "e2", kind: "save", label: "Agility save", d20: [12], own: 2, mods: [{ name: "Weakened", n: -2 }], vs: 13 },
   { name: "Enemy vs Coral", by: "e1", label: "Bite · attack", d20: [13], own: 4, vs: 16, vsMods: [{ name: "Coral Armor", n: 2 }] },
 ];
