@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { hexDistance, posKey } from "@gantt-quest/core";
+import { hexDistance, posKey, type HexPos } from "@gantt-quest/core";
 import { at, flatBoard, must, standEnemy as enemy, standHero, unit } from "../test/zoneBoard";
 import { makeRng } from "../rng";
 import { enemyAct } from "./combat";
 import { enemyStrikes } from "./kit";
 import { ENEMIES } from "../content";
 import { ENEMY_ABILITIES } from "./enemyabilities";
-import { placeSurface, standInSurface } from "./surfaces";
-import { blast } from "./geometry";
+import { enterSurface, placeSurface, standInSurface } from "./surfaces";
+import { blast, sameHex } from "./geometry";
 import type { Ctx } from "./engine";
 import type { ZoneEvent, ZoneState } from "./types";
 
@@ -128,5 +128,67 @@ describe("a Broodmother's turn", () => {
     }
     expect(all.has("Brood Swarm")).toBe(true);
     expect(all.has("Spin Web")).toBe(true);
+  });
+});
+
+describe("a Broodmother with no room to call its brood", () => {
+  /**
+   * Walled in by hexes with no ground on every side but two: the hex west of it (its way out) and the one east of it,
+   * where Ann stands if `beside`, or more bare ground if not (Ann then far off). Its first turn, from Ann's end of turn.
+   */
+  function walled(beside: boolean, seed: number) {
+    const c = at(6, 6);
+    const near = (dq: number, dr: number) => ({ q: c.q + dq, r: c.r + dr });
+    const gone = [[0, 1], [0, -1], [1, -1], [-1, 1], ...(beside ? [] : [[1, 0]])].map(([dq, dr]) => near(dq, dr));
+    let state = flatBoard({ rng: 12345, start: at(1, 1), options: { party: 1 }, flags: { shareTurns: true }, gone });
+    state.aiOff = true;
+    Object.assign(standHero(state, "ann", beside ? near(1, 0) : at(1, 1), hero), { hp: 900, maxHp: 900 });
+    const mother = enemy(state, "broodmother", c).id;
+    state = must(state, { type: "dev", by: "ann", dev: { op: "start_fight" } });
+    state.aiOff = false;
+    state.rng = seed;
+    const events: ZoneEvent[] = [];
+    state = must(state, { type: "end_turn", by: "ann", unit: "ann" }, events);
+    for (let i = 0; i < 3 && !events.some((e) => e.t === "turn" && e.ids.includes("ann")); i++) state = must(state, { type: "timeout" }, events);
+    const used = events.filter((e): e is Extract<ZoneEvent, { t: "used" }> => e.t === "used" && e.id === mother).map((e) => e.name);
+    return { state, mother, used, drawn: events.filter((e) => e.t === "reaction").length, brood: state.units.filter((u) => u.kind === "spiderling").length };
+  }
+
+  it("steps out to where there is room for its whole brood, when nobody would strike at it on the way", () => {
+    for (let seed = 1; seed <= 6; seed++) {
+      const { state, mother, used, brood } = walled(false, seed);
+      expect(used[0], `seed ${seed}`).toBe("Brood Swarm");
+      // Where it stood there was room for one: two came, so it called them from somewhere else.
+      expect(brood, `seed ${seed}`).toBe(2);
+      expect(sameHex(unit(state, mother).pos, at(6, 6)), `seed ${seed}`).toBe(false);
+    }
+  });
+
+  it("does not leave a hero's reach for more room: it stays, and draws no blow", () => {
+    for (let seed = 1; seed <= 6; seed++) {
+      const { state, mother, drawn, brood } = walled(true, seed);
+      expect(drawn, `seed ${seed}`).toBe(0);
+      expect(sameHex(unit(state, mother).pos, at(6, 6)), `seed ${seed}`).toBe(true);
+      expect(brood, `seed ${seed}`).toBeLessThanOrEqual(1);
+    }
+  });
+});
+
+describe("walking through web", () => {
+  it("is told once: Slowed (or Hasted, for a spider) as the first hex of it is entered, and not again on the next", () => {
+    const { state, spider } = board();
+    const ctx = ctxOf(state);
+    placeSurface(ctx, [at(2, 2), at(3, 2), at(7, 7)], "web", 4, null);
+    const told = (id: string) => ctx.events.filter((e) => e.t === "condition" && e.target === id).length;
+    const ann = unit(ctx.state, "ann");
+    for (const p of [at(2, 2), at(3, 2)]) {
+      ann.pos = p;
+      enterSurface(ctx, ann);
+    }
+    expect(told("ann")).toBe(1);
+    const s = unit(ctx.state, spider);
+    standInSurface(ctx, s);
+    standInSurface(ctx, s);
+    expect(told(spider)).toBe(1);
   });
 });

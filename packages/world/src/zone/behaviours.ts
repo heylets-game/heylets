@@ -41,6 +41,11 @@ export interface Use {
 export interface Behaviour {
   reaches(look: Look, from: HexPos, attack: EnemyStrike, targets: readonly Unit[]): boolean;
   value(look: Look, from: HexPos, attack: EnemyStrike, targets: readonly Unit[]): Use | null;
+  /**
+   * Worth walking somewhere for only if getting there draws no blows (ai.ts weigh): it will step to where it can be used,
+   * but not out of anyone's reach for it. None: worth any risk the rest of the turn is.
+   */
+  riskFree?: boolean;
 }
 
 /** Whether an attack of an enemy's reaches from `pos` to a hero: a blow by hand, by the rules of reach (strikes); a leap, by where it could land; a shot, by its range (further from above) and a clear line. */
@@ -285,10 +290,12 @@ export const KIN_WORTH = 5;
 
 /**
  * A call for more of its side (behaviour `summon`): worth KIN_WORTH for each that has room to stand beside it where it
- * would call them (summon.ts kinSpots: none once it has its most out), and only while one of the other side is in the fight. It reaches none of the
- * other side, so it is nothing to walk toward by itself.
+ * would call them (summon.ts kinSpots: none once it has its most out), and only while one of the other side is in the
+ * fight. It reaches none of the other side, so it is nothing to walk toward by itself; but with no room where it stands,
+ * it will step to where there is, if it can do that without drawing a blow (`riskFree`).
  */
 const summon: Behaviour = {
+  riskFree: true,
   reaches: () => false,
   value(look, from, attack, targets) {
     const call = attack.kit.summon;
