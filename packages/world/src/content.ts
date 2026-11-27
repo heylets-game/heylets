@@ -2,9 +2,11 @@
 // enemies. Data only; the fights on the tiles (zone/) give it meaning.
 
 import type { StatKey } from "@gantt-quest/core";
+import type { ScaleRate } from "./zone/rules";
+import type { SurfaceKind } from "./zone/types";
 
 /** What an ability or an enemy's attack can leave on whoever it lands on. A fight on the tiles has more conditions of its own (zone/types.ts). */
-export type EffectKind = "bleeding" | "burning" | "stunned" | "guarded" | "taunting" | "slowed" | "hasted" | "glitched" | "exposed" | "prone" | "sundered";
+export type EffectKind = "bleeding" | "burning" | "stunned" | "guarded" | "taunting" | "slowed" | "hasted" | "fumbling" | "exposed" | "prone" | "sundered" | "reeling" | "memento_mori" | "weakened";
 
 export const EFFECT_INFO: Record<EffectKind, { name: string; blurb: string; color: string }> = {
   bleeding: { name: "Bleeding", blurb: "Loses 2 HP at the start of each turn.", color: "#f87171" },
@@ -14,16 +16,53 @@ export const EFFECT_INFO: Record<EffectKind, { name: string; blurb: string; colo
   taunting: { name: "Taunting", blurb: "Every enemy attack aimed at one hero goes to it instead, until its next turn.", color: "#fbbf24" },
   slowed: { name: "Slowed", blurb: "Its next turns come half again later on the timeline.", color: "#4ade80" },
   hasted: { name: "Hasted", blurb: "Its next turn comes a third sooner on the timeline.", color: "#67e8f9" },
-  glitched: { name: "Fumbling", blurb: "One roll of its next attack fails, whatever happens.", color: "#e879f9" },
+  fumbling: { name: "Fumbling", blurb: "Its next roll to hit, one for each stack, is made with disadvantage.", color: "#e879f9" },
   exposed: { name: "Exposed", blurb: "Takes 3 more damage from every direct hit, for 2 of its turns.", color: "#facc15" },
   prone: { name: "Prone", blurb: "Knocked flat: standing up costs 1 AP.", color: "#cbd5e1" },
   sundered: { name: "Sundered", blurb: "Its armor is dented: 2 less Defence.", color: "#b0a48a" },
+  memento_mori: { name: "Memento Mori", blurb: "Each time it takes damage it starts Fumbling, unless it is Fumbling already.", color: "#c4b5fd" },
+  reeling: { name: "Reeling", blurb: "Shaken by a heavy blow: as much less AP on its next turn as its number says.", color: "#c084fc" },
+  weakened: { name: "Weakened", blurb: "Hexed: as much less on every save as its number says.", color: "#9bbf3a" },
 };
 
 /** Sundered targets have this much less Defence. */
 export const SUNDERED_DEFENCE = 2;
 
-export const EFFECT_TICK: Partial<Record<EffectKind, number>> = { bleeding: 2, burning: 3 };
+/** AP a Reeling unit goes without on its next turn, when what left it Reeling does not say. */
+export const REELING_AP = 2;
+
+/** What a Weakened unit takes off every save it makes, when what Weakened it does not say (its `amount`). */
+export const WEAKENED_SAVES = 2;
+
+/** The effects that stack, each stack hurting for its tick at the start of the bearer's turn. */
+export type StackingEffect = "bleeding" | "burning";
+export const STACKING: readonly StackingEffect[] = ["bleeding", "burning"];
+export const isStacking = (kind: string): kind is StackingEffect => (STACKING as readonly string[]).includes(kind);
+
+/** What each stack takes off its bearer at the start of each of its turns. */
+export const EFFECT_TICK: Record<StackingEffect, number> = { bleeding: 2, burning: 3 };
+
+/**
+ * The turns a stack lasts, the same wherever it comes from. A new stack of Bleeding starts every stack's count over;
+ * each stack of Burning keeps its own count, and goes out on its own (engine.ts addStacks).
+ */
+export const STACK_TURNS: Record<StackingEffect, number> = { bleeding: 3, burning: 2 };
+
+/**
+ * The effects held as stacks that are spent, one a use, and do not wear off with turns (Fumbling: one roll to hit
+ * each). They are untimed conditions (zone/engine.ts UNTIMED); a new one adds its stacks to what is there.
+ */
+export type SpentEffect = "fumbling";
+export const SPENT: readonly SpentEffect[] = ["fumbling"];
+export const isSpent = (kind: string): kind is SpentEffect => (SPENT as readonly string[]).includes(kind);
+
+/**
+ * An effect an ability leaves: a stacking one (a stack of it, lasting STACK_TURNS), a spent one (stacks, used up one
+ * a use: SPENT), or any other for the turns it says.
+ */
+export type Inflict =
+  | { effect: StackingEffect | SpentEffect; /** How many stacks: 1 when not said. */ stacks?: number }
+  | { effect: Exclude<EffectKind, StackingEffect | SpentEffect>; turns: number; /** Reeling: the AP it takes off each turn (REELING_AP when not said). Weakened: what it takes off every save (WEAKENED_SAVES). */ amount?: number };
 
 // ---------- classes ----------
 
@@ -115,6 +154,12 @@ export function heroClass(id: string): HeroClass | undefined {
 
 export type AbilityTarget = "enemy" | "all_enemies" | "ally" | "self";
 
+/**
+ * Whether an ability can be used only in a fight: one aimed at the user or an ally. Out of one, a hero's abilities are
+ * the ones aimed at enemies, and using one starts the fight.
+ */
+export const onlyInFights = (def: Pick<AbilityDef, "target">): boolean => def.target === "self" || def.target === "ally";
+
 export interface AbilityDef {
   id: string;
   name: string;
@@ -125,11 +170,11 @@ export interface AbilityDef {
   /** How much it heals, turned into dice the same way (healDice). */
   heal?: number;
   /** Applied to the user when the ability lands. */
-  selfEffect?: { effect: EffectKind; turns: number };
+  selfEffect?: Inflict;
   /** Applied to a target it gets through to, unless the target makes its save (where the ability allows one). */
-  perfect?: { effect: EffectKind; turns: number };
+  saveOr?: Inflict;
   /** Applied to each target it gets through to, with no save. */
-  targetEffect?: { effect: EffectKind; turns: number };
+  targetEffect?: Inflict;
   /** Heals the user this share of the damage it deals. */
   drain?: number;
   blurb: string;
@@ -138,41 +183,41 @@ export interface AbilityDef {
 export const ABILITIES: Record<string, AbilityDef> = {
   // Bare hands: what a hero has with no weapon. Weak on purpose, and never on a weapon.
   // A lit torch swung in the main hand (zones only): the weapon is put away while it is held.
-  torch_swing: { id: "torch_swing", name: "Torch Swing", stat: "str", target: "enemy", damage: 6, perfect: { effect: "burning", turns: 2 }, blurb: "A swing of a lit torch. Whoever it hits may catch fire." },
+  torch_swing: { id: "torch_swing", name: "Torch Swing", stat: "str", target: "enemy", damage: 6, saveOr: { effect: "burning" }, blurb: "A swing of a lit torch. Whoever it hits may catch fire." },
   // Paladin weapons. Mace: Bash and Recover. Greatsword: Cleave and Block. Flail: Strike and Armor Crush.
-  bash: { id: "bash", name: "Bash", stat: "str", target: "enemy", damage: 8, perfect: { effect: "prone", turns: 1 }, blurb: "A heavy blow with the mace. On a hit, the target must save or be knocked Prone." },
+  bash: { id: "bash", name: "Bash", stat: "str", target: "enemy", damage: 8, saveOr: { effect: "prone", turns: 1 }, blurb: "A heavy blow with the mace. On a hit, the target must save or be knocked Prone." },
   recover: { id: "recover", name: "Recover", stat: "vit", target: "self", heal: 7, blurb: "Catch your breath and heal yourself a fair amount." },
   block: { id: "block", name: "Block", stat: "vit", target: "self", blurb: "Set the flat of the blade before you, for a shield of 8 plus your level that takes the damage of blows before HP does, until it is spent or the fight ends." },
-  flail_strike: { id: "flail_strike", name: "Strike", stat: "str", target: "enemy", damage: 8, perfect: { effect: "slowed", turns: 2 }, blurb: "A swing of the flail. On a hit, the target must save or be Slowed." },
-  armor_crush: { id: "armor_crush", name: "Armor Crush", stat: "str", target: "enemy", damage: 4, perfect: { effect: "sundered", turns: 2 }, blurb: "A quick blow at the joints of its armor. On a hit, the target must save or be Sundered, with 2 less Defence for 2 turns." },
+  flail_strike: { id: "flail_strike", name: "Strike", stat: "str", target: "enemy", damage: 8, saveOr: { effect: "slowed", turns: 2 }, blurb: "A swing of the flail. On a hit, the target must save or be Slowed." },
+  armor_crush: { id: "armor_crush", name: "Armor Crush", stat: "str", target: "enemy", damage: 4, saveOr: { effect: "sundered", turns: 2 }, blurb: "A quick blow at the joints of its armor. On a hit, the target must save or be Sundered, with 2 less Defence for 2 turns." },
   // Mage weapons. Staff: Shock and Mend. Logbook: Slicing Wind and Wind's Blessing. Rod: Waterbolt and Lightning Strike.
   shock: { id: "shock", name: "Shock", stat: "int_stat", target: "enemy", damage: 7, blurb: "A bolt of lightning. Hits 3 harder on anything Wet." },
   mend: { id: "mend", name: "Mend", stat: "int_stat", target: "ally", heal: 10, blurb: "Heal an ally (or yourself) a good amount." },
   slicing_wind: { id: "slicing_wind", name: "Slicing Wind", stat: "int_stat", target: "enemy", damage: 7, blurb: "A blade of wind at an enemy, and the gust carries you: 1 more movement for each AP for the rest of this turn." },
   winds_blessing: { id: "winds_blessing", name: "Wind's Blessing", stat: "int_stat", target: "ally", heal: 4, blurb: "Heal an ally (or yourself) a little, and put the wind at their back: 1 more movement for each AP, this turn if they are taking it, else their next." },
   waterbolt: { id: "waterbolt", name: "Waterbolt", stat: "int_stat", target: "enemy", damage: 7, blurb: "A bolt of seawater. On a hit, it leaves water under the target, soaking it Wet." },
-  lightning_strike: { id: "lightning_strike", name: "Lightning Strike", stat: "int_stat", target: "enemy", damage: 12, perfect: { effect: "stunned", turns: 1 }, blurb: "Lightning out of the sky: a heavy blow, 3 harder on anything Wet. On a hit, the target must save or be Stunned." },
+  lightning_strike: { id: "lightning_strike", name: "Lightning Strike", stat: "int_stat", target: "enemy", damage: 12, saveOr: { effect: "stunned", turns: 1 }, blurb: "Lightning out of the sky: a heavy blow, 3 harder on anything Wet. On a hit, the target must save or be Stunned." },
   // Rogue weapons. Knives: Stab and Eviscerate. Shortbow: Shot and Take Aim. Gaff Hook: Tear and Snag.
   stab: { id: "stab", name: "Stab", stat: "dex", target: "enemy", damage: 8, blurb: "A quick stab with the knives. Made with advantage, it finds a gap: 3 more damage." },
-  eviscerate: { id: "eviscerate", name: "Eviscerate", stat: "dex", target: "enemy", damage: 14, perfect: { effect: "bleeding", turns: 3 }, blurb: "Open them up with both knives: a heavy blow, and on a hit the target must save or start Bleeding." },
+  eviscerate: { id: "eviscerate", name: "Eviscerate", stat: "dex", target: "enemy", damage: 14, saveOr: { effect: "bleeding" }, blurb: "Open them up with both knives: a heavy blow, and on a hit the target must save or start Bleeding." },
   bow_shot: { id: "bow_shot", name: "Shot", stat: "dex", target: "enemy", damage: 7, blurb: "An arrow from the shortbow." },
   take_aim: { id: "take_aim", name: "Take Aim", stat: "dex", target: "self", blurb: "Steady your hand. Your next roll to hit has advantage." },
   // Ship's guns, for anyone. Pistol: Pistol Shot and Pistol Whip. Blunderbuss: Scattershot and Butt Stroke. Harpoon gun: Harpoon and Barbed Line.
   pistol_shot: { id: "pistol_shot", name: "Pistol Shot", stat: "dex", target: "enemy", damage: 8, blurb: "A shot from the pistol, reaching 6 hexes." },
   pistol_whip: { id: "pistol_whip", name: "Pistol Whip", stat: "str", target: "enemy", damage: 5, blurb: "Crack the butt across an enemy beside you." },
   scattershot: { id: "scattershot", name: "Scattershot", stat: "dex", target: "enemy", damage: 10, blurb: "A blast of shot in a cone, 3 hexes long, that catches every enemy in it." },
-  butt_stroke: { id: "butt_stroke", name: "Bludgeon", stat: "str", target: "enemy", damage: 7, perfect: { effect: "prone", turns: 1 }, blurb: "Swing the stock at an enemy beside you. On a hit, the target must save or be knocked Prone." },
+  butt_stroke: { id: "butt_stroke", name: "Bludgeon", stat: "str", target: "enemy", damage: 7, saveOr: { effect: "prone", turns: 1 }, blurb: "Swing the stock at an enemy beside you. On a hit, the target must save or be knocked Prone." },
   harpoon_shot: { id: "harpoon_shot", name: "Harpoon", stat: "dex", target: "enemy", damage: 8, blurb: "Fire the harpoon up to 6 hexes. On a hit, the line hauls the target 2 hexes toward you." },
-  barbed_line: { id: "barbed_line", name: "Barbed Line", stat: "dex", target: "enemy", damage: 7, perfect: { effect: "slowed", turns: 2 }, blurb: "A barb on a short line, 3 hexes. On a hit, the target must save or be Slowed." },
-  tear: { id: "tear", name: "Tear", stat: "dex", target: "enemy", damage: 8, perfect: { effect: "bleeding", turns: 3 }, blurb: "A tearing swing of the hook. On a hit, the target must save or start Bleeding." },
-  snag: { id: "snag", name: "Snag", stat: "dex", target: "enemy", damage: 8, perfect: { effect: "slowed", turns: 2 }, blurb: "Throw the hook at an enemy up to 3 hexes off. On a hit, the target must save or be Slowed." },
+  barbed_line: { id: "barbed_line", name: "Barbed Line", stat: "dex", target: "enemy", damage: 7, saveOr: { effect: "slowed", turns: 2 }, blurb: "A barb on a short line, 3 hexes. On a hit, the target must save or be Slowed." },
+  tear: { id: "tear", name: "Tear", stat: "dex", target: "enemy", damage: 8, saveOr: { effect: "bleeding" }, blurb: "A tearing swing of the hook. On a hit, the target must save or start Bleeding." },
+  snag: { id: "snag", name: "Snag", stat: "dex", target: "enemy", damage: 8, saveOr: { effect: "slowed", turns: 2 }, blurb: "Throw the hook at an enemy up to 3 hexes off. On a hit, the target must save or be Slowed." },
   // Druid weapons. Driftwood Staff: Thornlash and Rejuvenate. Sickle: Sea Slash and Binding Kelp. Coral Staff: Coral Burst and Restore.
   sea_slash: { id: "sea_slash", name: "Sea Slash", stat: "int_stat", target: "enemy", damage: 8, blurb: "A slash of the sickle with the sea behind it. On a hit, water pools under the target and under you." },
   binding_kelp: { id: "binding_kelp", name: "Binding Kelp", stat: "int_stat", target: "enemy", blurb: "Kelp lashes round an enemy up to 4 hexes off, no roll to hit. It must save or be Slowed for 1 turn. Standing in water, it must instead save against being Stunned for 1 turn." },
-  coral_burst: { id: "coral_burst", name: "Coral Burst", stat: "int_stat", target: "all_enemies", damage: 6, perfect: { effect: "bleeding", turns: 3 }, blurb: "Coral bursts out in a cone 3 hexes long: 1 hex, then 2, then 3. Every enemy in it takes a little damage (half if they brace), and those that fail to brace are cut and start Bleeding." },
+  coral_burst: { id: "coral_burst", name: "Coral Burst", stat: "int_stat", target: "all_enemies", damage: 6, saveOr: { effect: "bleeding" }, blurb: "Coral bursts out in a cone 3 hexes long: 1 hex, then 2, then 3. Every enemy in it takes a little damage (half if they brace), and those that fail to brace are cut and start Bleeding." },
   restore: { id: "restore", name: "Restore", stat: "int_stat", target: "ally", heal: 4, blurb: "Heal an ally (or yourself) a little and lift every harmful condition off them." },
   // Bard weapons. Lute: Dissonance and Second Wind. Bosun's Pipe: Blasting Tone and Soothing Tone. Squeeze Box: Bellows Blast and Hornpipe. Ship's Bell: Peal and Clarion Call.
-  dissonance: { id: "dissonance", name: "Dissonance", stat: "int_stat", target: "enemy", damage: 7, targetEffect: { effect: "glitched", turns: 1 }, blurb: "A note nobody can think through. On a hit, the target's next roll to hit is made with disadvantage. No save." },
+  dissonance: { id: "dissonance", name: "Dissonance", stat: "int_stat", target: "enemy", damage: 7, targetEffect: { effect: "fumbling", stacks: 1 }, blurb: "A note nobody can think through. On a hit, the target's next roll to hit is made with disadvantage. No save." },
   encore: { id: "encore", name: "Second Wind", stat: "int_stat", target: "ally", heal: 4, blurb: "A tune that gets an ally (or yourself) back on their feet. Heal a little, and their next roll to hit has advantage." },
   blasting_tone: { id: "blasting_tone", name: "Blasting Tone", stat: "int_stat", target: "all_enemies", damage: 6, blurb: "A blast of sound in a line 4 hexes long. Every enemy on it takes a little damage (half if they brace). Your allies on the line are spared." },
   soothing_tone: { id: "soothing_tone", name: "Soothing Tone", stat: "int_stat", target: "self", heal: 6, blurb: "A calming tone: you and every ally within 2 hexes heal a fair amount." },
@@ -184,16 +229,16 @@ export const ABILITIES: Record<string, AbilityDef> = {
   starbeam: { id: "starbeam", name: "Starbeam", stat: "int_stat", target: "enemy", damage: 12, blurb: "A beam of raw starlight. On a hit, the target must save or be lit with Guiding Light for 3 turns: every attack on it has advantage." },
   st_elmos_fire: { id: "st_elmos_fire", name: "St. Elmo's Fire", stat: "int_stat", target: "ally", blurb: "Fire dances over an ally (or yourself) up to 4 hexes off for 3 turns. Every blow they land sets its target Burning, one stack more if it would have anyway." },
   water_burst: { id: "water_burst", name: "Water Burst", stat: "int_stat", target: "enemy", damage: 7, blurb: "A burst of seawater at an enemy up to 5 hexes off. On a hit, every other enemy beside the target is drenched for a little damage too." },
-  rust_armor: { id: "rust_armor", name: "Rust Armor", stat: "int_stat", target: "all_enemies", damage: 7, perfect: { effect: "sundered", turns: 3 }, blurb: "Rust spreads over 3 hexes up to 5 off. Every enemy in it takes damage (half if they brace), and those that fail to brace are Sundered: 2 less Defence for 3 turns." },
+  rust_armor: { id: "rust_armor", name: "Rust Armor", stat: "int_stat", target: "all_enemies", damage: 7, saveOr: { effect: "sundered", turns: 3 }, blurb: "Rust spreads over 3 hexes up to 5 off. Every enemy in it takes damage (half if they brace), and those that fail to brace are Sundered: 2 less Defence for 3 turns." },
   // Astrolabe: Moonlight and Focus Light.
   moonlight: { id: "moonlight", name: "Moonlight", stat: "int_stat", target: "all_enemies", damage: 7, blurb: "Moonlight pours over 3 hexes up to 7 off. Every enemy in it takes damage (half if they brace), and those that fail to brace are lit with Guiding Light for 3 turns: every attack on them has advantage." },
   focus_light: { id: "focus_light", name: "Focus Light", stat: "int_stat", target: "enemy", damage: 4, blurb: "A thin focused beam at an enemy up to 5 hexes off. If it is lit by Guiding Light, a hit also sets it Burning." },
   // Warden weapons. Bell-Buoy Maul: Sturdy Blow and Stand Strong. Foghorn Axe: Disarming Chop and Guard. Boarding Pike: Goading Strike and Throw Pike.
   sturdy_blow: { id: "sturdy_blow", name: "Sturdy Blow", stat: "str", target: "enemy", damage: 8, blurb: "A heavy, careful blow with the maul. Hit or miss, you gain a shield of 3 plus your level on top of any you have, until it is spent or the fight ends." },
   stand_strong: { id: "stand_strong", name: "Stand Strong", stat: "vit", target: "self", blurb: "Plant your feet. A shield of 3 plus your level, and 3 more for each enemy beside you, on top of any you have, until it is spent or the fight ends." },
-  disarming_chop: { id: "disarming_chop", name: "Disarming Chop", stat: "str", target: "enemy", damage: 8, perfect: { effect: "glitched", turns: 1 }, blurb: "A chop at the weapon arm. On a hit, the target must save or its next attack is rolled with disadvantage." },
+  disarming_chop: { id: "disarming_chop", name: "Disarming Chop", stat: "str", target: "enemy", damage: 8, saveOr: { effect: "fumbling", stacks: 1 }, blurb: "A chop at the weapon arm. On a hit, the target must save or its next attack is rolled with disadvantage." },
   raise_guard: { id: "raise_guard", name: "Against the Waves", stat: "vit", target: "self", blurb: "Set yourself behind the axe as the sea breaks on you: a shield of 4 plus your level, 4 more if you stand in water, until it is spent or the fight ends. 1 turn to wait." },
-  goading_strike: { id: "goading_strike", name: "Goading Strike", stat: "str", target: "enemy", damage: 8, blurb: "A jab with the pike to get its attention. On a hit, the target must save or be Taunted for 2 turns: it must come at you if it can." },
+  goading_strike: { id: "goading_strike", name: "Goading Strike", stat: "str", target: "enemy", damage: 8, blurb: "A jab with the pike to get its attention. On a hit, the target must save or be Taunted for 2 turns: it attacks no one but you, and comes at you if it cannot reach you yet." },
   throw_pike: { id: "throw_pike", name: "Throw Pike", stat: "str", target: "enemy", damage: 7, blurb: "Hurl the pike at an enemy up to 3 hexes off. On a hit, it is dragged straight toward you, as far as beside you. 2 turns to wait." },
   // Warlock weapons. Grimoire: Hex and Soul Drain. Undertow Staff: Sink and Pull of the Deep. Bilge Chalice: Vile Splash and Drink Deeply.
   sink: { id: "sink", name: "Sink", stat: "int_stat", target: "enemy", damage: 7, blurb: "A weight of black water on an enemy. On a hit, it must save or take a stack of Drowning." },
@@ -202,18 +247,18 @@ export const ABILITIES: Record<string, AbilityDef> = {
   drink_deeply: { id: "drink_deeply", name: "Drink Deeply", stat: "int_stat", target: "self", heal: 14, blurb: "Drink deep from the chalice. Heal yourself a great deal, but you are Poisoned for 2 turns: your attacks are rolled with disadvantage. 2 turns to wait." },
   punch: { id: "punch", name: "Punch", stat: "str", target: "enemy", damage: 4, blurb: "Bare knuckles. All you have without a weapon in hand." },
   cleave: { id: "cleave", name: "Cleave", stat: "str", target: "all_enemies", damage: 7, blurb: "A wide swing through three hexes beside you, an attack on each enemy in them." },
-  thornlash: { id: "thornlash", name: "Thornlash", stat: "int_stat", target: "enemy", damage: 7, perfect: { effect: "slowed", turns: 2 }, blurb: "Thorns that dig in. On a hit, the target must save or be Slowed." },
+  thornlash: { id: "thornlash", name: "Thornlash", stat: "int_stat", target: "enemy", damage: 7, saveOr: { effect: "slowed", turns: 2 }, blurb: "Thorns that dig in. On a hit, the target must save or be Slowed." },
   rejuvenate: { id: "rejuvenate", name: "Rejuvenate", stat: "int_stat", target: "ally", heal: 7, blurb: "Heal an ally (or yourself) now, and the same again at the start of their next turn." },
-  hex: { id: "hex", name: "Hex", stat: "int_stat", target: "enemy", damage: 7, perfect: { effect: "glitched", turns: 1 }, blurb: "A slow curse on the target. On a hit, it must save or be Fumbling: its next attack is rolled with disadvantage." },
+  hex: { id: "hex", name: "Hex", stat: "int_stat", target: "enemy", damage: 7, saveOr: { effect: "fumbling", stacks: 1 }, blurb: "A slow curse on the target. On a hit, it must save or be Fumbling: its next attack is rolled with disadvantage." },
   soul_drain: { id: "soul_drain", name: "Soul Drain", stat: "int_stat", target: "enemy", damage: 11, drain: 0.5, blurb: "Takes some of their life for yours: heals you half the damage dealt. 2 turns to wait." },
   // Class abilities: chosen for a hero's slots from their class's pool (classabilities.ts), not given by a weapon.
   // Paladin. The two auras are conditions on the Paladin in a fight (zone/kit.ts AURAS).
   beacon_aura: { id: "beacon_aura", name: "Beacon Aura", stat: "vit", target: "self", blurb: "For 4 turns you shine: you light the dark around you, and you and allies within 2 hexes get +2 to hit." },
   healing_aura: { id: "healing_aura", name: "Healing Aura", stat: "vit", target: "self", blurb: "For 4 turns, at the start of each of your turns, you and every ally within 2 hexes heal a little." },
-  branding_strike: { id: "branding_strike", name: "Branding Strike", stat: "str", target: "enemy", damage: 11, targetEffect: { effect: "burning", turns: 2 }, blurb: "A searing blow that hits harder than most, and sets the target Burning." },
+  branding_strike: { id: "branding_strike", name: "Branding Strike", stat: "str", target: "enemy", damage: 11, targetEffect: { effect: "burning" }, blurb: "A searing blow that hits harder than most, and sets the target Burning." },
   soothing_rain: { id: "soothing_rain", name: "Soothing Rain", stat: "int_stat", target: "ally", blurb: "A rain cloud over 3 hexes for 3 turns. It lays water under itself, and heals your side a little as it comes, as each of you starts a turn in it, and the first time on a turn each of you walks into it." },
   chain_lightning: { id: "chain_lightning", name: "Chain Lightning", stat: "int_stat", target: "enemy", damage: 9, blurb: "Lightning strikes an enemy, then leaps to the nearest enemy within 2 hexes it has not struck yet, and on, as long as there is one and it keeps hitting: a miss ends it. +3 against anything Wet." },
-  roar_of_thunder: { id: "roar_of_thunder", name: "Roar of Thunder", stat: "int_stat", target: "enemy", perfect: { effect: "stunned", turns: 1 }, blurb: "A thunderclap that never misses: the enemy is thrown a hex back from you, and must save or be Stunned." },
+  roar_of_thunder: { id: "roar_of_thunder", name: "Roar of Thunder", stat: "int_stat", target: "enemy", saveOr: { effect: "stunned", turns: 1 }, blurb: "A thunderclap that never misses: the enemy is thrown a hex back from you, and must save or be Stunned." },
   trade_winds: { id: "trade_winds", name: "Trade Winds", stat: "int_stat", target: "ally", blurb: "Winds over 19 hexes for 3 turns: your side moves twice as far in them, and the enemy is Slowed." },
   tidal_wave: { id: "tidal_wave", name: "Tidal Wave", stat: "int_stat", target: "all_enemies", damage: 9, blurb: "A wave rolls out 5 hexes in a line, striking every enemy in it. Those that fail to brace are swept to the end of it, and the line is left under water." },
   bolster: { id: "bolster", name: "Bolster", stat: "vit", target: "self", blurb: "You raise a great ward: you and every ally within 2 hexes get a shield of 10 plus your level, which takes the damage of blows before HP does, until it is spent or the fight ends." },
@@ -234,7 +279,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   windgod_shanty: { id: "windgod_shanty", name: "Wind-god's Shanty", stat: "int_stat", target: "self", blurb: "Strike up a shanty to the wind-god for 4 turns: you and every ally within 2 hexes move 1 further for each AP of movement and cannot be Slowed. An ally in it can join the song (1 AP, once): it reaches a hex further, they Disengage (no blows drawn moving away this turn), and everyone in it moves 1 further for each AP until your next turn. One shanty at a time." },
   chorus: { id: "chorus", name: "Chorus", stat: "int_stat", target: "all_enemies", damage: 8, targetEffect: { effect: "slowed", turns: 2 }, blurb: "A roar of voices over 7 hexes: every enemy in it is struck (half if they brace) and those who fail are Slowed. Your allies in it are not hurt: each one sings along, for +3 damage." },
   lead_by_example: { id: "lead_by_example", name: "Lead by Example", stat: "int_stat", target: "enemy", damage: 13, blurb: "A heavy blow of sound at an enemy. If it lands, the ally nearest the target is Inspired: advantage on their next attack." },
-  falling_star: { id: "falling_star", name: "Falling Star", stat: "int_stat", target: "enemy", damage: 13, targetEffect: { effect: "burning", turns: 3 }, blurb: "Bring a star down on an enemy up to 7 hexes off: a heavy blow that, if it lands, sets them Burning and lights them with Guiding Light for 3 turns (every attack on them has advantage)." },
+  falling_star: { id: "falling_star", name: "Falling Star", stat: "int_stat", target: "enemy", damage: 13, targetEffect: { effect: "burning" }, blurb: "Bring a star down on an enemy up to 7 hexes off: a heavy blow that, if it lands, sets them Burning and lights them with Guiding Light for 3 turns (every attack on them has advantage)." },
   constellation: { id: "constellation", name: "Constellation", stat: "int_stat", target: "self", damage: 5, blurb: "Draw lines of starlight from you to the nearest ally within 4 hexes, from them to the next, and on through every ally it can reach. Your side is untouched; every enemy a line crosses takes a little damage and is lit with Guiding Light for 3 turns." },
   new_moon: { id: "new_moon", name: "New Moon", stat: "int_stat", target: "all_enemies", damage: 15, blurb: "Put out every Guiding Light at once, wherever it is: each enemy that was lit takes heavy damage, no roll to dodge it." },
   chart_a_course: { id: "chart_a_course", name: "Chart a Course", stat: "int_stat", target: "self", blurb: "Mark a hex up to 8 off with a red X for 4 turns: you and your allies move 1 further for each AP of movement, on steps that bring you nearer the mark. A new mark takes the place of the old." },
@@ -242,8 +287,8 @@ export const ABILITIES: Record<string, AbilityDef> = {
   against_the_waves: { id: "against_the_waves", name: "Endure", stat: "vit", target: "self", selfEffect: { effect: "guarded", turns: 1 }, blurb: "Dig in and endure: a high shield of 10 plus your level, which takes the damage of blows before HP does until it is spent or the fight ends, and you are Guarded (half damage) until your next turn." },
   overwhelm: { id: "overwhelm", name: "Overwhelm", stat: "str", target: "enemy", blurb: "Throw your weight at an enemy beside you, an attack that does no harm: on a hit, it is driven 2 hexes back. Driven into a wall, rock or anything else nobody can pass, it is Stunned and loses its next turn." },
   fortify: { id: "fortify", name: "Fortify", stat: "vit", target: "self", blurb: "Raise a wall 3 hexes long, up to 5 off, bowed toward you, for 3 rounds. Nobody gets through it. Your side sees and shoots over it, and has +1 Defence standing beside it; the enemy cannot see through it at all." },
-  bulwark_strike: { id: "bulwark_strike", name: "Bulwark Strike", stat: "str", target: "enemy", damage: 8, blurb: "Set your shield and swing: you gain a small shield of 4 plus your level on top of any you have, then the blow lands harder by half of all the shield you carry." },
-  taunt: { id: "taunt", name: "Taunt", stat: "str", target: "all_enemies", blurb: "Bellow a challenge: every enemy within 2 hexes of you is Taunted for 2 of its turns, and must come at you if it can reach you." },
+  bulwark_strike: { id: "bulwark_strike", name: "Bulwark Strike", stat: "str", target: "enemy", damage: 8, blurb: "Set your shield and swing: you gain a small shield of 4 plus your level on top of any you have, then the blow lands harder by half of all the shield you carry, up to the most the blow could roll without it." },
+  taunt: { id: "taunt", name: "Taunt", stat: "str", target: "all_enemies", blurb: "Bellow a challenge: every enemy within 2 hexes of you is Taunted for 2 of its turns: it attacks no one but you, and comes at you if it cannot reach you yet." },
   curse_of_drowning: { id: "curse_of_drowning", name: "Curse of Drowning", stat: "int_stat", target: "enemy", damage: 8, targetEffect: { effect: "slowed", turns: 2 }, blurb: "Curse an enemy up to 5 hexes off. It is struck, no roll, and Slowed for 2 turns, and for 3 turns it takes a stack of Drowning whenever it starts or ends a turn standing in water." },
   summon_sunken_sailors: { id: "summon_sunken_sailors", name: "Summon Sunken Sailors", stat: "int_stat", target: "self", blurb: "Call two drowned sailors up onto a hex up to 3 off and the hex beside it: a cutlass, who can take a beating and hits harder, and a gunner, whose pistol reaches 4 hexes. They are yours to play, on your turn, till the fight is over; calling them again sends the first two away." },
   red_sky_at_morning: { id: "red_sky_at_morning", name: "Red Sky at Morning", stat: "int_stat", target: "all_enemies", blurb: "Turn the sky red over 19 hexes up to 5 off: every enemy under it reads the omen, and attacks with disadvantage for 3 turns." },
@@ -251,7 +296,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   the_black_spot: { id: "the_black_spot", name: "The Black Spot", stat: "int_stat", target: "enemy", blurb: "Press the Black Spot on an enemy up to 5 hexes off, no roll, for 4 turns: it attacks with disadvantage, and takes a stack of Drowning at the end of each of its turns. If it falls before the Spot runs out, the Spot passes to the nearest of its side." },
   sailor_pistol: { id: "sailor_pistol", name: "Pistol", stat: "dex", target: "enemy", damage: 7, blurb: "A drowned gunner's pistol, somehow still dry enough to fire. Reaches 4 hexes." },
   sailor_scimitar: { id: "sailor_scimitar", name: "Scimitar", stat: "str", target: "enemy", damage: 8, blurb: "A drowned sailor's scimitar, rusted but sharp enough." },
-  stoke_the_fire: { id: "stoke_the_fire", name: "Stoke the Fire", stat: "str", target: "all_enemies", damage: 6, targetEffect: { effect: "burning", turns: 2 }, blurb: "Flame bursts off you: every enemy beside you is struck and set Burning." },
+  stoke_the_fire: { id: "stoke_the_fire", name: "Stoke the Fire", stat: "str", target: "all_enemies", damage: 6, targetEffect: { effect: "burning" }, blurb: "Flame bursts off you: every enemy beside you is struck and set Burning." },
   // Signature abilities: one per class, on its signature weapon.
 };
 
@@ -317,14 +362,37 @@ export interface EnemyDef {
   move: number;
   /** Added to its initiative roll, as a hero's AGI modifier is. */
   init: number;
-  /** Added to every saving throw it makes, and to the DC of saves against what it does (as 10 + this). */
+  /** Added to every saving throw it makes, and to the DC of catching the edge when it shoves (as 10 + this). Saves against its abilities are made against their potency (zone/enemyabilities.ts). */
   save: number;
   xp: number;
   boss?: boolean;
+  /**
+   * How many hexes it stands on: 1 when not said, or 3, a triangle of hexes all touching (zone/geometry.ts span). One
+   * bigger than a hex is too heavy to be pushed, pulled or knocked about by anything.
+   */
+  size?: 1 | 3;
   /** The abilities it starts with, by id (zone/enemyabilities.ts ENEMY_ABILITIES). Each enemy carries its own copy. */
   abilities: string[];
   /** Grows back `amount` HP at the start of each of its turns, unless it has the effect `unless` on it (a troll and fire). */
   regen?: { amount: number; unless: EffectKind; name: string };
+  /** What hurts whoever lands a blow on it up close (a slime's Acid Armor; combat.ts thorns). */
+  retort?: Retort;
+  /** Ground it is at home on: what slows anyone else there quickens it instead (a spider on web; zone/surfaces.ts). */
+  homeGround?: SurfaceKind[];
+  /** Ground that does nothing to it at all, as it walks on or stands in it (an ember hound in fire; zone/surfaces.ts). */
+  groundImmune?: SurfaceKind[];
+}
+
+/**
+ * A passive that bites back: whoever lands a blow on its bearer up close takes `damage` (at level 1, grown with the
+ * bearer's level at `scale`, rules.ts SCALE_RATES, then turned into dice as an ability's is), told as `name`.
+ */
+export interface Retort {
+  name: string;
+  damage: number;
+  scale?: ScaleRate;
+  /** What it says on the enemy's card. */
+  blurb: string;
 }
 
 /** HP a troll grows back at the start of each of its turns, when it is not Burning. */
@@ -338,30 +406,32 @@ export const ENEMIES: Record<string, EnemyDef> = {
   },
   bandit: {
     kind: "bandit", name: "Bandit", hp: 17, defence: 12, move: 2, save: 0, init: 1, xp: 12,
-    abilities: ["slash", "cheap_shot"],
+    abilities: ["slash", "cheap_shot", "shove"],
   },
   wolf: {
     kind: "wolf", name: "Dire Wolf", hp: 13, defence: 12, move: 3, save: 0, init: 2, xp: 10,
-    abilities: ["wolf_bite"],
+    abilities: ["wolf_bite", "wolf_lunge"],
   },
   // A beast bruiser: slow and thick-hided, and every blow lands like a falling tree.
   // Where the Brute stuns with a club, the bear tears (bleeding) and only its roar stuns.
   bear: {
     kind: "bear", name: "Cave Bear", hp: 38, defence: 11, move: 2, save: 2, init: -1, xp: 20,
-    abilities: ["mauling_swipe", "roar"],
+    abilities: ["bear_maul", "mauling_swipe", "shove"],
   },
-  // The heaviest thing that walks ashore: very slow, and its club lands like a dropped mast. Its stomp
-  // shakes the whole crew and leaves them slow on their feet. A pair's worth on its own, like a bear.
+  // The heaviest thing that walks ashore: very slow, and its club lands like a dropped mast, battering whoever
+  // stands beside its target too. Its favourite is the slam, every few turns: it shakes the whole crew and leaves
+  // them slow on their feet. A pair's worth on its own, like a bear.
   ogre: {
     kind: "ogre", name: "Ogre", hp: 46, defence: 10, move: 2, save: 2, init: -2, xp: 24,
-    abilities: ["club_smash", "stomp"],
+    abilities: ["club_smash", "slam", "shove"],
   },
   // A troll: no tougher than a brute to look at, but its wounds close as you watch. It grows back every
-  // turn unless it is Burning, so fire (or a lot of damage at once) is how it is put down.
+  // turn unless it is Burning, so fire (or a lot of damage at once) is how it is put down. It rakes, chomps (and
+  // grows back half of what it bites off), and throws a rock that leaves whoever keeps away reeling.
   troll: {
     kind: "troll", name: "Troll", hp: 29, defence: 11, move: 2, save: 2, init: -1, xp: 22,
     regen: { amount: TROLL_REGEN, unless: "burning", name: "Regenerate" },
-    abilities: ["rake", "hurl_rock"],
+    abilities: ["rake", "chomp", "hurl_rock", "shove"],
   },
   cultist: {
     kind: "cultist", name: "Cultist", hp: 16, defence: 11, move: 2, save: 0, init: 0, xp: 14,
@@ -369,28 +439,30 @@ export const ENEMIES: Record<string, EnemyDef> = {
   },
   brute: {
     kind: "brute", name: "Brute", hp: 26, defence: 11, move: 2, save: 2, init: -1, xp: 18,
-    abilities: ["maul", "brute_shove"],
+    abilities: ["beatdown", "battering_ram", "great_cleave"],
   },
+  // An archer keeps its distance and shoots; every few turns it looses a rain of arrows over a hex and the ring round it.
   archer: {
     kind: "archer", name: "Archer", hp: 13, defence: 12, move: 2, save: 0, init: 1, xp: 13,
-    abilities: ["volley", "barbed_arrow"],
+    abilities: ["volley", "rain_of_arrows"],
   },
-  // A beast boss: fast, and it makes its victims bleed.
+  // A beast boss: it howls its pack into a frenzy, tears deep with its bite, and leaps on whoever stands apart.
   alpha: {
-    kind: "alpha", name: "Pack Leader", hp: 39, defence: 13, move: 3, save: 3, init: 2, xp: 40, boss: true,
-    abilities: ["savage_bite", "pounce", "rending_howl"],
+    kind: "alpha", name: "Pack Leader", hp: 66, defence: 13, move: 3, save: 3, init: 2, xp: 40, boss: true,
+    abilities: ["howl", "savage_bite", "great_lunge"],
   },
-  // A beast boss that comes alone: slow, huge, and it tears; its roar can stun the whole crew.
+  // A beast boss that comes alone: slow, huge, and it tears through everyone in front of it; its roar leaves the whole crew reeling.
   great_bear: {
     kind: "great_bear", name: "Great Bear", hp: 60, defence: 12, move: 2, save: 3, init: -1, xp: 44, boss: true,
-    abilities: ["crushing_maul", "thunderous_roar"],
+    abilities: ["rending_cleave", "thunderous_roar", "shove"],
   },
-  // A guardian boss: slow and alone, but each blow lands like a wall.
+  // A guardian boss: slow and alone, but each blow lands like a wall, and the ground it stands on shakes itself apart.
   guardian: {
-    kind: "guardian", name: "Guardian", hp: 51, defence: 12, move: 2, save: 3, init: -1, xp: 44, boss: true,
-    abilities: ["stone_fist", "quake"],
+    kind: "guardian", name: "Guardian", hp: 92, defence: 12, move: 2, save: 3, init: -1, xp: 44, boss: true, size: 3,
+    abilities: ["stone_fist", "earthquake", "slowing_field"],
   },
-  // The Haunted Caverns' dead. A shade is quick and weak, and its touch chills (slows) whoever it lays a hand on.
+  // The Haunted Caverns' dead. A shade is quick and weak, its touch chills (slows) whoever it lays a hand on, and its
+  // wail leaves everyone round it fumbling their next attack.
   shade: {
     kind: "shade", name: "Shade", hp: 14, defence: 12, move: 3, save: 0, init: 1, xp: 12,
     abilities: ["chill_touch", "wail"],
@@ -398,23 +470,24 @@ export const ENEMIES: Record<string, EnemyDef> = {
   // Cave bats: weak alone, but quick, and they come in swarms.
   bat: {
     kind: "bat", name: "Cave Bat", hp: 9, defence: 13, move: 3, save: 0, init: 3, xp: 7,
-    abilities: ["bat_bite", "screech"],
+    abilities: ["bat_bite", "fell_swoop"],
   },
   // The smugglers' dead, still guarding their camp: slow and steady, and hard to put down.
   skeleton: {
     kind: "skeleton", name: "Skeleton", hp: 22, defence: 11, move: 2, save: 0, init: 0, xp: 14,
-    abilities: ["rusted_cutlass", "bone_rattle"],
+    abilities: ["rusted_cutlass", "memento_mori", "shove"],
   },
-  // A cave slime: very slow and very tough, and its acid leaves its prey exposed (taking more from every hit). The acid
-  // burns and is spent: it leaves no poison lying about (enemyabilities.ts).
+  // A cave slime: very slow and very tough. Its spat acid eats into armor, and its body burns whoever strikes it by hand.
+  // The acid is spent as it burns: it leaves no poison lying about (enemyabilities.ts).
   slime: {
     kind: "slime", name: "Cave Slime", hp: 29, defence: 10, move: 2, save: 2, init: -2, xp: 13,
     abilities: ["engulf", "acid_splash"],
+    retort: { name: "Acid Armor", damage: 2, blurb: "Whoever hits it in melee is burned by its acid." },
   },
   // What is bound in the caverns' deepest chamber, guarding the hoard.
   haunt: {
-    kind: "haunt", name: "Haunt", hp: 43, defence: 12, move: 2, save: 3, init: 0, xp: 44, boss: true,
-    abilities: ["grave_grasp", "keening"],
+    kind: "haunt", name: "Haunt", hp: 69, defence: 12, move: 2, save: 3, init: 0, xp: 44, boss: true,
+    abilities: ["grave_grasp", "ice_spear", "ghastly_fetter", "terror_aura"],
   },
   // ---- what lives out on the atlas's maps ----
   // A hunting spider the size of a hound: quick and frail, its bite leaves venom on the ground, and its web slows
@@ -422,41 +495,54 @@ export const ENEMIES: Record<string, EnemyDef> = {
   spider: {
     kind: "spider", name: "Giant Spider", hp: 14, defence: 12, move: 3, save: 0, init: 1, xp: 11,
     abilities: ["venomous_bite", "spider_web_spit"],
+    groundImmune: ["poison", "slime"],
+    homeGround: ["web"],
   },
   // What the nest belongs to: a spider the size of a cart, that webs the whole crew at once.
   broodmother: {
-    kind: "broodmother", name: "Broodmother", hp: 55, defence: 12, move: 2, save: 3, init: 0, xp: 44, boss: true,
-    abilities: ["impaling_fang", "brood_web_spit", "brood_swarm"],
+    kind: "broodmother", name: "Broodmother", hp: 77, defence: 12, move: 2, save: 3, init: 0, xp: 44, boss: true,
+    abilities: ["impaling_fang", "spin_web", "brood_swarm"],
+    homeGround: ["web"],
   },
-  // The frost's wolves: a dire wolf in all but coat, and the cold in its bite slows what it bleeds.
+  // The Broodmother's young, called out of the nest by the pair (Brood Swarm): small, soft and quick, and they bite.
+  spiderling: {
+    kind: "spiderling", name: "Spiderling", hp: 5, defence: 9, move: 3, save: 0, init: 1, xp: 2,
+    abilities: ["spiderling_bite"],
+    homeGround: ["web"],
+  },
+  // The frost's wolves: a dire wolf in all but coat. The cold in its bite slows what it bleeds, and now and then it
+  // breathes that cold out over everyone in front of it. (Rime Bite first: it is the one it strikes with at whoever
+  // steps away, combat.ts provoke.)
   frost_wolf: {
     kind: "frost_wolf", name: "Frost Wolf", hp: 14, defence: 12, move: 3, save: 0, init: 2, xp: 11,
-    abilities: ["rime_bite"],
+    abilities: ["rime_bite", "frost_breath"],
+    groundImmune: ["ice"],
   },
-  // The ashlands' hounds, and what they bite catches fire.
+  // The ashlands' hounds: what they bite catches fire, and now and then the fire in them pulses out all round. (Searing
+  // Bite first: it is the one it strikes with at whoever steps away, combat.ts provoke.)
   ember_hound: {
     kind: "ember_hound", name: "Ember Hound", hp: 16, defence: 12, move: 3, save: 0, init: 1, xp: 12,
-    abilities: ["searing_bite"],
+    abilities: ["searing_bite", "ember_burst"],
+    groundImmune: ["fire"],
   },
-  // A cave bear's white cousin: as slow, as thick-hided, and every bit as cross.
+  // A cave bear's white cousin: as slow, as thick-hided, and every bit as cross, and it brings the blizzard with it.
   snow_bear: {
     kind: "snow_bear", name: "Snow Bear", hp: 40, defence: 11, move: 2, save: 2, init: -1, xp: 21,
-    abilities: ["mauling_swipe", "roar"],
+    abilities: ["mauling_swipe", "blizzard_aura", "shove"],
+    groundImmune: ["ice"],
   },
-  // The frost's dead: it keeps its distance, and what its cold reaches is slow to move after.
+  // The frost's dead: it keeps its distance, slows what its cold reaches, and ices the ground under whoever is bunched up.
   wraith: {
     kind: "wraith", name: "Rime Wraith", hp: 16, defence: 12, move: 2, save: 0, init: 1, xp: 14,
-    abilities: ["frost_lance", "wail"],
+    abilities: ["frost_mote", "icy_bomb"],
+    groundImmune: ["ice"],
   },
-  // Whoever it is that lives alone in the wood or the fen, and does not care for callers. Thorns from across the
-  // clearing, and a hex that leaves whoever it lands on easy to hit.
+  // Whoever it is that lives alone in the wood or the fen, and does not care for callers. A hex from across the
+  // clearing that leaves whoever it lands on the worse at shaking off what comes next, and a brew flung over its own
+  // to mend them.
   witch: {
     kind: "witch", name: "Hedge Witch", hp: 17, defence: 11, move: 2, save: 0, init: 0, xp: 15,
-    abilities: ["thorn_hex", "evil_eye"],
-  },
-  villain: {
-    kind: "villain", name: "Villain", hp: 38, defence: 12, move: 2, save: 3, init: 0, xp: 40, boss: true,
-    abilities: ["crushing_strike", "sweeping_ruin"],
+    abilities: ["weakening_hex", "witches_brew"],
   },
 };
 

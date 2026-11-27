@@ -29,7 +29,7 @@ import { makeRng, seedFromString, type Rng } from "../rng";
 import { CRATE_HP } from "./crates";
 import { GROUP_EXTRAS } from "./kit";
 import { modsOf } from "./mods";
-import { PARTY_SIZES } from "./sites";
+import { PARTY_SIZES, spreadPosts } from "./sites";
 import type { ZoneOptions } from "./types";
 import type { ZonePlan } from "./gen";
 
@@ -190,12 +190,14 @@ export function generateDelve(seed: string, options: ZoneOptions): ZonePlan {
       return kinds;
     };
     const kinds = kindsAt(options.party);
-    // They stand in their chamber: on its middle and the open floor nearest it.
-    const posts = map.tiles
-      .filter((t) => t.biome === "cave" && hexDistance(t, camp.pos) <= 3 && !taken.has(posKey(t)))
-      .map((t) => ({ q: t.q, r: t.r }))
-      .sort((a, b) => hexDistance(a, camp.pos) - hexDistance(b, camp.pos) || rng.next() - 0.5)
-      .slice(0, kinds.length);
+    // They stand in their chamber: on its middle and the open floor nearest it, spread out where the chamber allows.
+    const posts = spreadPosts(
+      map.tiles
+        .filter((t) => t.biome === "cave" && hexDistance(t, camp.pos) <= 3 && !taken.has(posKey(t)))
+        .map((t) => ({ q: t.q, r: t.r }))
+        .sort((a, b) => hexDistance(a, camp.pos) - hexDistance(b, camp.pos) || rng.next() - 0.5),
+      kinds.length,
+    );
     for (const p of posts) taken.add(posKey(p));
     if (posts.length > 0) {
       groups.push({ id: camp.id, kinds: kinds.slice(0, posts.length), posts, bands: PARTY_SIZES.map(kindsAt) });

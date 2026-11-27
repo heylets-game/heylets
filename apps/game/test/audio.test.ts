@@ -138,6 +138,11 @@ describe("file patterns", () => {
   it("match takes within one folder", () => {
     expect(expandFiles("sfx/footsteps/stone_*", keys)).toEqual(["sfx/footsteps/stone_01", "sfx/footsteps/stone_02"]);
   });
+  it("match a take number with #, and never another sound's takes that share the start of its name", () => {
+    const more = [...keys, "sfx/combat/heal_1", "sfx/combat/heal_02", "sfx/combat/heal_fail_1", "sfx/combat/heal_x"];
+    expect(expandFiles("sfx/combat/heal_#", more)).toEqual(["sfx/combat/heal_02", "sfx/combat/heal_1"]);
+    expect(expandFiles("sfx/combat/heal_fail_#", more)).toEqual(["sfx/combat/heal_fail_1"]);
+  });
   it("take exact names, and skip ones that are missing", () => {
     expect(expandFiles(["sfx/ui/loot", "sfx/ui/gone", "sfx/ui/loot"], keys)).toEqual(["sfx/ui/loot"]);
   });
@@ -244,6 +249,14 @@ describe("built-in sounds", () => {
   const index = synthIndex();
   const keys = Object.keys(index);
 
+  it("plays each event only its own built-in sound, never another whose name starts the same (heal and heal_fail)", () => {
+    for (const [name, ev] of Object.entries(AUDIO.events)) {
+      if (!ev.fallback) continue;
+      const sounds = new Set(expandFiles(ev.fallback, keys).map((k) => k.replace(/_\d+$/, "")));
+      expect(sounds.size, name).toBe(new Set(Array.isArray(ev.fallback) ? ev.fallback : [ev.fallback]).size);
+    }
+  });
+
   it("gives every event that names a fallback something to play", () => {
     for (const [name, ev] of Object.entries(AUDIO.events)) {
       if (!ev.fallback) continue;
@@ -268,9 +281,9 @@ describe("built-in sounds", () => {
   });
 
   it("cuts with a blade and thumps with a mace, as before", () => {
-    expect(AUDIO.events[`impact.${slug("Stab")}`]?.fallback).toBe("synth/combat/blade_*");
+    expect(AUDIO.events[`impact.${slug("Stab")}`]?.fallback).toBe("synth/combat/blade_#");
     expect(AUDIO.events[`impact.${slug("Smite")}`]).toBeUndefined();
-    expect(AUDIO.events.impact.fallback).toBe("synth/combat/blunt_*");
+    expect(AUDIO.events.impact.fallback).toBe("synth/combat/blunt_#");
   });
 
   it("plays a recording over a built-in sound, and a built-in sound over a placeholder", () => {

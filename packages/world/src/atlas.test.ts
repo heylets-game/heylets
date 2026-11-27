@@ -478,14 +478,14 @@ describe("the land a place stands on", () => {
 });
 
 describe("lookouts and lairs", () => {
-  it("are out there from the second and third rings, a few in a hundred, and named for what they are", () => {
+  it("are out there from the second and third rings (lookouts a few in a hundred, lairs one in seven or so), and named for what they are", () => {
     for (const seed of SEEDS) {
       const all = nodes(seed, 14).filter((n) => n.ring > 0);
       const share = (kind: AtlasNode["kind"]) => all.filter((n) => n.kind === kind).length / all.length;
       expect(share("lookout"), seed).toBeGreaterThan(0.03);
       expect(share("lookout"), seed).toBeLessThan(0.12);
-      expect(share("lair"), seed).toBeGreaterThan(0.03);
-      expect(share("lair"), seed).toBeLessThan(0.12);
+      expect(share("lair"), seed).toBeGreaterThan(0.08);
+      expect(share("lair"), seed).toBeLessThan(0.22);
       expect(all.some((n) => n.ring < 2 && n.kind !== "landfall"), seed).toBe(false);
       expect(all.some((n) => n.ring < 3 && n.kind === "lair"), seed).toBe(false);
       for (const n of all.filter((n) => n.kind === "lookout")) expect(n.name).toMatch(/ (Lookout|Watch|Height|Crag|Beacon|Tor)$/);

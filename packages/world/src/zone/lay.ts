@@ -38,7 +38,7 @@ import { layInside } from "./indoors";
 import { GROUP_EXTRAS } from "./kit";
 import { modsOf } from "./mods";
 import { propOf } from "./props";
-import { SITES, backdropOf, bandOf, bandsBeside, factionsOf, siteFor, type Backdrop, type PieceKind, type SiteDef, type SiteId } from "./sites";
+import { SITES, backdropOf, bandOf, bandsBeside, factionsOf, siteFor, spaced, type Backdrop, type PieceKind, type SiteDef, type SiteId } from "./sites";
 import type { GroundSurface, ZoneOptions, ZoneSize } from "./types";
 
 /** How big a map of each size is, in hexes: the land takes up rather more than half of it. */
@@ -730,15 +730,20 @@ export function layZone(seed: string, asked: ZoneOptions): Laid {
   const sizeFor = (party: number) => Math.max(2, Math.min(8, party + GROUP_EXTRAS + mods.extras + (party >= 3 ? 1 : 0)));
   const factions = factionsOf(siteId, clime);
   const groups: (LaidGroup & { centre: HexPos })[] = [];
-  /** Post a band of `kinds` (each with its part) at a place: its own posts by part first, then whatever open ground is nearest. */
+  /**
+   * Post a band of `kinds` (each with its part) at a place: its own posts by part first, then whatever open ground is
+   * nearest; spread out (sites.ts spaced) where the ground allows, shoulder to shoulder only where it does not.
+   */
   const post = (id: string, centre: HexPos, band: { kind: string; role: Role }[], bands: string[][], own: Post[]) => {
     const near = disk(centre, 5).filter(standable);
     const kinds: string[] = [];
     const posts: HexPos[] = [];
     for (const member of band) {
-      const mine = own.find((o) => o.role === member.role && standable(o.pos));
-      // No post of its own left: one that shoots takes the highest ground near, anyone else the nearest.
-      const spot = mine?.pos ?? (member.role === "shot" ? [...near].filter(standable).sort((a, b) => elev(b) - elev(a) || hexDistance(a, centre) - hexDistance(b, centre))[0] : near.find(standable));
+      const pick = (fits: (p: HexPos) => boolean): HexPos | undefined =>
+        own.find((o) => o.role === member.role && fits(o.pos))?.pos ??
+        // No post of its own left: one that shoots takes the highest ground near, anyone else the nearest.
+        (member.role === "shot" ? near.filter(fits).sort((a, b) => elev(b) - elev(a) || hexDistance(a, centre) - hexDistance(b, centre))[0] : near.find(fits));
+      const spot = pick((p) => standable(p) && spaced(p, posts)) ?? pick(standable);
       if (!spot) continue;
       taken.add(posKey(spot));
       kinds.push(member.kind);

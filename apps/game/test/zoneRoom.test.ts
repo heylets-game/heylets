@@ -598,6 +598,19 @@ describe("ZoneRoom", () => {
     expect(Object.values(ann.state.surfaces).map((s) => s.kind)).toEqual(["fire"]);
     expect(zoneActionFrom({ type: "dev", dev: { op: "heal" } }, "ann", false)).toBeNull();
     expect(zoneActionFrom({ type: "dev", dev: { op: "heal" } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "heal" } });
+    expect(zoneActionFrom({ type: "dev", dev: { op: "undying", on: true } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "undying", on: true } });
+    expect(zoneActionFrom({ type: "dev", dev: { op: "timer", off: true } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "timer", off: true } });
+    expect(zoneActionFrom({ type: "dev", dev: { op: "clear_enemies" } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "clear_enemies" } });
+    expect(zoneActionFrom({ type: "dev", dev: { op: "clear_enemies" } }, "ann", false)).toBeNull();
+    expect(zoneActionFrom({ type: "dev", dev: { op: "sandbox", on: 1 } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "sandbox", on: true } });
+    expect(zoneActionFrom({ type: "dev", dev: { op: "next_turn", round: true } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "next_turn", round: true } });
+    expect(zoneActionFrom({ type: "dev", dev: { op: "set_turn", unit: "e1" } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "set_turn", unit: "e1" } });
+    expect(zoneActionFrom({ type: "dev", dev: { op: "set_level", unit: "e1", level: 7 } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "set_level", unit: "e1", level: 7 } });
+    expect(zoneActionFrom({ type: "dev", dev: { op: "hero_levels", level: 9 } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "hero_levels", level: 9 } });
+    expect(zoneActionFrom({ type: "dev", dev: { op: "spawn", kinds: ["wolf"], at: { q: 1, r: 1 }, level: 4 } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "spawn", kinds: ["wolf"], at: { q: 1, r: 1 }, level: 4 } });
+    expect(zoneActionFrom({ type: "dev", dev: { op: "next_turn" } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "next_turn" } });
+    expect(zoneActionFrom({ type: "dev", dev: { op: "strike", unit: "e1", ability: "slash", at: { q: 2, r: 3 }, anywhere: 1 } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "strike", unit: "e1", ability: "slash", at: { q: 2, r: 3 }, anywhere: true } });
+    expect(zoneActionFrom({ type: "dev", dev: { op: "place", unit: "e1", at: { q: 2, r: 3 } } }, "ann", true)).toEqual({ type: "dev", by: "ann", dev: { op: "place", unit: "e1", at: { q: 2, r: 3 } } });
     expect(zoneActionFrom({ type: "dev", dev: { op: "kit", unit: "ann", classId: "devops_mage", weapon: "tome", level: "7", abilities: ["tidal_wave", 3] } }, "ann", true)).toEqual({
       type: "dev", by: "ann", dev: { op: "kit", unit: "ann", classId: "devops_mage", weapon: "tome", level: 7, abilities: ["tidal_wave"] },
     });

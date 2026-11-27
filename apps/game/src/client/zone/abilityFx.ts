@@ -75,8 +75,8 @@ export type FxKind =
   | "drench"
   /** A gust of wind sweeping over the hexes it covers (Trade Winds). */
   | "gust"
-  /** A wave of healing rolling over the hexes it covers, healing each ally as it reaches them (Revitalizing Splash). */
-  | "healwave"
+  /** A ball of water lobbed onto the middle of the hexes it covers, bursting in a splash over all of them (Revitalizing Splash). */
+  | "splash"
   /** A blare of sound bursting all round the player (Bellows Blast). */
   | "blare"
   /** A crescent blade of wind flying to each target. */
@@ -218,7 +218,7 @@ const ABILITY_FX: Record<string, Fx> = {
   coral_field: fx("erupt", "#ff7f6e", "coral"),
   aqueous_regeneration: fx("bless", "#5eead4"),
   coral_armor: fx("bless", "#ff8f7a"),
-  revitalizing_splash: fx("healwave", "#5eead4"),
+  revitalizing_splash: fx("splash", "#5eead4"),
   summon_sea_turtle: fx("bless", "#4fb286"),
   curse_of_drowning: fx("drown", "#2fa4c9"),
   summon_sunken_sailors: fx("bless", "#5fe0c0"),
@@ -248,10 +248,12 @@ export const SUMMONS = new Set(["summon_sea_turtle", "summon_sunken_sailors"]);
 /** What enemies shoot and cast, by the attack's own name. Anything not here is a blow up close, or (an attack on every hero) a ring. */
 const ENEMY_FX: Record<string, Fx> = {
   Volley: fx("arrow", "#e8dcc0"),
-  "Barbed Arrow": fx("arrow", "#e8dcc0"),
+  "Rain of Arrows": fx("arrow", "#e8dcc0"),
   "Dark Bolt": fx("bolt", "#a78bfa"),
-  Immolate: fx("bolt", "#ff7a2a"),
+  Immolate: fx("lob", "#ff7a2a"),
   "Acid Splash": fx("bolt", "#f0e44a"),
+  "Frost Mote": fx("bolt", "#bfeaff"),
+  "Icy Bomb": fx("lob", "#bfeaff"),
 };
 
 /** How a hero's ability (by id) or an enemy's attack (by name) looks. `burst` says an enemy attack was on every hero at once. */

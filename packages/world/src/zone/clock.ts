@@ -14,8 +14,8 @@
 // falls due (nextTick), so a round is seen to pass when it passes.
 // In a fight, rounds are the fight's own, and the clock only keeps up.
 
-import { DRUID_REGEN, EFFECT_TICK, ENEMIES } from "../content";
-import { UNTIMED, burnOf, has, heal, regrow, removeCondition, tick, type Ctx } from "./engine";
+import { DRUID_REGEN, ENEMIES } from "../content";
+import { UNTIMED, countDown, has, heal, regrow, removeCondition, tickStacks, type Ctx } from "./engine";
 import { EXPLORE_ROUND_MS, TORCH_ROUND_MS } from "./kit";
 import { tickWeather } from "./weather";
 import { standInSurface, tickLights, tickSurfaces } from "./surfaces";
@@ -35,7 +35,7 @@ export function exploreRound(ctx: Ctx, unit: Unit): void {
   removeCondition(unit, "guarded");
   removeCondition(unit, "taunting");
   removeCondition(unit, "stunned");
-  for (const kind of ["bleeding", "burning"] as const) if (has(unit, kind)) tick(ctx, unit, kind, kind === "burning" ? burnOf(unit) : (EFFECT_TICK[kind] ?? 0));
+  tickStacks(ctx, unit);
   if (unit.down) return;
   if (unit.kind === "backend_druid" && unit.hp < unit.maxHp) heal(ctx, unit, DRUID_REGEN, { actor: unit.id, what: "regen" });
   regrow(ctx, unit);
@@ -46,12 +46,7 @@ export function exploreRound(ctx: Ctx, unit: Unit): void {
     unit.cooldowns[key] -= 1;
     if (unit.cooldowns[key] <= 0) delete unit.cooldowns[key];
   }
-  for (const c of unit.conditions) {
-    if (UNTIMED.has(c.kind)) continue;
-    if (c.fresh) c.fresh = false;
-    else c.rounds -= 1;
-  }
-  unit.conditions = unit.conditions.filter((c) => c.rounds > 0);
+  countDown(unit);
 }
 
 /** The room says it is now `now`: count the rounds that have gone by out of a fight. */

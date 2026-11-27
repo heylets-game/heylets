@@ -5,7 +5,7 @@ This folder holds the WAV masters for the game's sound. The engine that plays th
 ## Adding a sound
 
 1. Bounce a WAV into this folder. Its path without the extension is its name: `sfx/footsteps/stone_04.wav` is `sfx/footsteps/stone_04`.
-2. Point at it from the manifest. An event's `files` can end in `*`, so `sfx/footsteps/stone_*` picks up every take in that folder with no further edit.
+2. Point at it from the manifest. An event's `files` can end in `#`, a take number, so `sfx/footsteps/stone_#` picks up every take (`stone_01`, `stone_02`, …) with no further edit. Use `#` rather than `*` for a pool of takes: `heal_*` would also catch `heal_fail_01`, which belongs to another sound.
 3. With `pnpm dev:game` running, the game plays the WAV as it is. Overwriting a file or saving the manifest is heard at once, with no reload.
 
 The top folder decides how a file is encoded: `music/`, `ambience/`, `sfx/` or `ir/` (impulse responses). Sounds placed in the world should be mono.
@@ -28,7 +28,7 @@ The game asks for sounds by name, most specific first, and plays the first one t
 |---|---|
 | `footstep.<ground>` → `footstep` | A foot lands. Ground is `plains`, `forest`, `hills`, `cobble`, `dock`, `mud`, `floor`, `rampart`. |
 | `attack.<ability>` → `attack.<melee\|ranged\|magic>` → `attack` | An attack sets off. |
-| `impact.<ability>` → `impact.<style>` → `impact` | A blow lands. `impact.crit` is laid over it on a perfect roll. |
+| `impact.<ability>` → `impact.<style>` → `impact` | A blow lands. On a critical hit `impact.crit.<hero\|enemy>` is laid over it, by the side that landed it. |
 | `miss.<ability>` → `miss.<style>` → `miss` | An attack misses. |
 | `hero.<class>.<attack\|hurt\|down>` → `hero.<…>` | A hero's voice. |
 | `enemy.<kind>.<attack\|hurt\|down>` → `enemy.<…>` | An enemy's voice, such as `enemy.wolf.attack`. |
@@ -39,8 +39,9 @@ The game asks for sounds by name, most specific first, and plays the first one t
 | `table.shake`, `table.roll`, `table.settle`, `table.hold`, `table.reveal`, `table.coins`, `table.kraken`, `table.win` → `stinger.victory` | The pub's game tables: the dice cup shaken, dice thrown onto the felt, each die coming to rest, a ship or captain set aside, the Kraken taking a cargo, every die shown after a call, gold onto the pot (as a game starts, and to the winner), and your own win. Timed to the throw on screen. Each has a built-in take (`synth/table/…`) until a recording is added under `sfx/table/`. |
 | `weather.thunder` | Lightning strikes in a storm. A storm is its own weather: heavy rain with thunder, where a downpour is heavy rain without. The flash on screen follows the loudness of the take that plays, so bounce each strike, crack and rumble together, as one take: `sfx/weather/thunder_01.wav`, `thunder_02.wav`, and so on. |
 | `stinger.battle_start`, `stinger.victory`, `stinger.defeat`, `stinger.fled`, `stinger.ambush` | Musical stings. |
-| `zone.roll`, `zone.roll.crit`, `zone.initiative`, `zone.turn.yours`, `zone.turn.enemy`, `zone.reaction`, `zone.shove`, `zone.fall`, `zone.jump`, `zone.throw`, `zone.shatter`, `zone.burst` | A fight on the tiles (a zone). A d20 is rolled for an attack, a save or a shove (`roll.crit` on a natural 20); a fight breaks out and everyone rolls initiative; your turn starts, or an enemy's; someone strikes at an enemy leaving their reach; a shove; somebody knocked to the ground; a jump; something thrown from the pack, and it breaking where it lands; poison going up in flame. Each has a built-in sound until you bounce a file to `sfx/zone/<name>_01.wav` (the paths are in the manifest). |
+| `zone.roll`, `zone.initiative`, `zone.turn.yours`, `zone.turn.enemy`, `zone.reaction`, `zone.shove`, `zone.fall`, `zone.jump`, `zone.throw`, `zone.shatter`, `zone.burst` | A fight on the tiles (a zone). A d20 is rolled for an attack, a save or a shove ; a fight breaks out and everyone rolls initiative; your turn starts, or an enemy's; someone strikes at an enemy leaving their reach; a shove; somebody knocked to the ground; a jump; something thrown from the pack, and it breaking where it lands; poison going up in flame. Each has a built-in sound until you bounce a file to `sfx/zone/<name>_01.wav` (the paths are in the manifest). |
 | `zone.chest_open`, `zone.crate_hit`, `zone.crate_break` | A delve. A chest, strongbox or the hoard is thrown open: the latch, the hinge creaking through the swing and the lid knocking back against its stop, all in about half a second, as the lid is drawn swinging (`sfx/zone/chest_open_01.wav`). A crate takes a blow, a blast or the fire under it (`crate_hit_01.wav`), and breaks apart into boards (`crate_break_01.wav`). Each is built in (`synth/combat/creak`, `knock`, `splinter`) until a recording is bounced there. |
+| `zone.bell` | An enemy rings the alarm bell on an open map: five hard strokes, one every third of a second, timed to the five waves of sound drawn pulsing out of it, the last left ringing (`sfx/zone/bell_01.wav`). Built in (`synth/combat/alarm`) until a recording is bounced there. |
 | `surface.<poison\|fire\|oil\|water\|ice\|slime>` → `surface` | A surface is laid on the ground in a zone. Also new there: `effect.poisoned`, `effect.prone`, `effect.wet`, and `tick.poison` and `tick.fire` for the ground hurting whoever stands in it. All built in until recorded. |
 
 Ability, class, enemy and trait names are lower case with underscores (`Aimed Shot` is `aimed_shot`). While developing, the browser console says once which names were asked for and found nothing, and `pnpm test` fails if the manifest has an event name the game never asks for.
@@ -174,7 +175,7 @@ Players choose how placed sounds are rendered with **Headphones (3D sound)** in 
 A one-shot is heard in the reverb of the place you are in if its event sets `reverb`, its send level in dB:
 
 ```ts
-"footstep.cobble": { files: "sfx/footsteps/stone_*", reverb: -6 },
+"footstep.cobble": { files: "sfx/footsteps/stone_#", reverb: -6 },
 ```
 
 Events without it stay dry, which is right for stings and interface sounds. Music and atmosphere are never sent.

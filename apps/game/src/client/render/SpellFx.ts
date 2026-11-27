@@ -27,7 +27,7 @@ import { flickerFlame, torchFlame } from "./torchFlame";
 import type { WorldRenderer } from "./WorldRenderer";
 
 /** Something that flies from one point to another. */
-export type Missile = "arrow" | "bolt" | "flask" | "meteor";
+export type Missile = "arrow" | "bolt" | "flask" | "meteor" | "water";
 
 /**
  * What comes up out of the ground over the hexes a spell covers: thorns or kelp winding up round whoever stands there,
@@ -40,6 +40,12 @@ export type EruptStyle = "thorn" | "kelp" | "coral" | "stone" | "water" | "shine
  * shows comes up in the fight's playback a beat or two after the cast that put it on.
  */
 const GRACE = 2.5;
+/** Seconds a Terror Aura's ring takes to be drawn in from its edge to its bearer's feet (SpellFx.dread). */
+const DREAD_PULL = 2.4;
+/** How many links a fetter's chain is drawn with, however long it is (SpellFx.fetter). */
+const FETTER_LINKS = 12;
+/** How high a fetter's stake stands, to its ring, where the chain is made fast (SpellFx.fetter). */
+const FETTER_HEAD = 0.95;
 
 /** How a song moves its notes: a lively shanty's bob up, a dour one's rise slowly and sink back, the wind-god's swirl. */
 export type SongMood = "lively" | "dour" | "wind";
@@ -161,6 +167,36 @@ const ringTex = painted(128, 128, (ctx) => radial(ctx, 128, [[0, 0.04], [0.6, 0.
 const streakTex = painted(4, 32, (ctx) => linear(ctx, 4, 32, [[0, 0], [0.28, 0.25], [0.5, 1], [0.72, 0.25], [1, 0]]));
 /** Up a column of light: strong at its foot, gone at its head. */
 const columnTex = painted(4, 64, (ctx) => linear(ctx, 4, 64, [[0, 0], [0.55, 0.25], [0.92, 0.85], [1, 0.5]]));
+
+/** A snowflake: six arms from its middle, each with a pair of little branches, and a soft bright heart. */
+const flakeTex = painted(32, 32, (ctx) => {
+  ctx.strokeStyle = "rgba(255,255,255,0.95)";
+  ctx.lineCap = "round";
+  ctx.translate(16, 16);
+  for (let i = 0; i < 6; i++) {
+    ctx.rotate(Math.PI / 3);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(0, -13);
+    ctx.stroke();
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(0, -7);
+    ctx.lineTo(-4, -10);
+    ctx.moveTo(0, -7);
+    ctx.lineTo(4, -10);
+    ctx.stroke();
+  }
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 5);
+  g.addColorStop(0, "rgba(255,255,255,1)");
+  g.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(-5, -5, 10, 10);
+});
+
+/** A storm whirling round its bearer (SpellFx.storm): how many flakes, how far out (shares of its radius), how much wider each drifts over its life, how big, how fast round, how high, and its haze. */
+export const STORM = { flakes: 70, spread: [0.2, 0.75], widen: 0.08, fine: 0.5, big: 0.22, small: 0.09, turn: [1.6, 3.2], top: 2.4, haze: 0.18, gusts: 5 };
 
 /** What a flung speck is: one of the pixel effects (sprites.ts), or a drop of water. */
 type Speck = FxKind | "drop";
@@ -551,7 +587,7 @@ export class SpellFx {
 
   /** How high the arc of a throw or a shot stands over the straight line between its ends. */
   static arcHeight(kind: Missile | "spell", distance: number): number {
-    return kind === "flask" ? 1.3 + distance * 0.22 : kind === "arrow" ? 0.35 + distance * 0.09 : kind === "meteor" ? 0 : 0.25 + distance * 0.04;
+    return kind === "flask" || kind === "water" ? 1.3 + distance * 0.22 : kind === "arrow" ? 0.35 + distance * 0.09 : kind === "meteor" ? 0 : 0.25 + distance * 0.04;
   }
 
   /** A point `t` of the way along an arc from `from` to `to`. */
@@ -561,21 +597,22 @@ export class SpellFx {
 
   /**
    * Send something flying from `from` to `to`: an arrow with a faint streak of air behind it, a bolt of light with a
-   * tail shedding motes, a flask tumbling and dripping, or a burning rock out of the sky trailing fire and smoke.
+   * tail shedding motes, a flask tumbling and dripping, a ball of water wobbling and dripping, or a burning rock out of
+   * the sky trailing fire and smoke.
    * `onLand` runs as it arrives, as it breaks or bursts there. Returns how long the flight takes, in seconds.
    */
   launch(kind: Missile, from: THREE.Vector3, to: THREE.Vector3, color: string, onLand?: () => void): number {
     // A meteor comes down out of the sky, wherever it was called from.
     const start = kind === "meteor" ? to.clone().add(new THREE.Vector3(-3.5, 9, -2)) : from.clone();
     const distance = start.distanceTo(to);
-    const speed = kind === "arrow" ? 15 : kind === "bolt" ? 11 : kind === "flask" ? 7.5 : 19;
+    const speed = kind === "arrow" ? 15 : kind === "bolt" ? 11 : kind === "flask" || kind === "water" ? 7.5 : 19;
     const time = Math.max(0.22, Math.min(0.95, distance / speed));
     const height = SpellFx.arcHeight(kind, distance);
-    const body = kind === "arrow" ? this.arrow(color) : kind === "flask" ? this.flask(color) : kind === "meteor" ? this.meteor() : this.orb(color);
+    const body = kind === "arrow" ? this.arrow(color) : kind === "flask" ? this.flask(color) : kind === "water" ? this.globe(color) : kind === "meteor" ? this.meteor() : this.orb(color);
     body.position.copy(start);
     // What it leaves behind it: a streak of air, a tail of light, a trail of fire.
     const tail =
-      kind === "flask"
+      kind === "flask" || kind === "water"
         ? null
         : new Ribbon(kind === "arrow" ? 6 : 14, kind === "bolt" ? tinted(color, 0.9, streakTex()) : light(kind === "meteor" ? "#f08a24" : "#ffffff", kind === "arrow" ? 0.35 : 0.85, streakTex()));
     if (tail) this.add(tail.mesh);
@@ -599,6 +636,11 @@ export class SpellFx {
         if (kind === "arrow") body.lookAt(ahead);
         else if (kind === "flask") body.rotation.set(t * 14, t * 5, 0);
         else if (kind === "meteor") body.rotation.set(t * 6, t * 4, 0);
+        else if (kind === "water") {
+          // It wobbles as it flies, squashing one way and then the other.
+          const w = Math.sin(t * 22) * 0.14;
+          body.scale.set(1 + w, 1 - w, 1 + w);
+        }
         else body.children[3].rotation.set(t * 9, t * 13, 0);
         trail.unshift(at);
         if (trail.length > 120) trail.pop();
@@ -621,9 +663,9 @@ export class SpellFx {
             this.smoke(at, "#5f5852", 0.7);
             this.fling(at, "#ffb347", 1, { out: 0.7, up: 0.8, fall: 2, life: 0.5 });
             shed = 0.035;
-          } else if (kind === "flask") {
+          } else if (kind === "flask" || kind === "water") {
             this.fling(at, color, 1, { out: 0.2, up: 0, fall: 5, life: 0.35, size: 0.34 , kind: "drop" });
-            shed = 0.07;
+            shed = kind === "water" ? 0.04 : 0.07;
           } else shed = Infinity;
         }
         if (t < 1) return true;
@@ -634,6 +676,7 @@ export class SpellFx {
           this.fling(to, color, 5, { out: 1.4, up: 1.6 });
         } else if (kind === "bolt") this.burst(to, color, 10);
         else if (kind === "flask") this.shatter(to, color);
+        else if (kind === "water") this.splat(to, color);
         else this.crash(to);
         onLand?.();
         return false;
@@ -838,6 +881,20 @@ export class SpellFx {
     const heart = new THREE.Mesh(diamond, glow(paler(color, 0.6), 1));
     heart.scale.setScalar(0.1);
     g.add(heart);
+    return g;
+  }
+
+  /** A ball of water: a glassy sphere of its colour with a pale glint on it and a soft glow round it. */
+  private globe(color: string): THREE.Group {
+    const g = this.add(new THREE.Group());
+    const water = new THREE.Mesh(sphere, new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0.85, emissive: new THREE.Color(color).multiplyScalar(0.35) }));
+    water.scale.setScalar(0.24);
+    const glint = new THREE.Mesh(sphere, glow("#ffffff", 0.7));
+    glint.scale.setScalar(0.07);
+    glint.position.set(-0.08, 0.1, 0.12);
+    const aura = new THREE.Sprite(new THREE.SpriteMaterial({ map: softTex(), color, transparent: true, opacity: 0.6, depthWrite: false, blending: THREE.AdditiveBlending }));
+    aura.scale.setScalar(0.9);
+    g.add(aura, water, glint);
     return g;
   }
 
@@ -1253,6 +1310,47 @@ export class SpellFx {
   }
 
   /**
+   * Water bursting where it lands, `size` times as big as a thrown ball's: a crown of drops thrown up high, a lower
+   * spray flung out wide, a flash of its colour, a ring across the ground and mist left hanging.
+   */
+  splat(at: THREE.Vector3, color: string, size = 1) {
+    const base = at.clone().setY(at.y + 0.15);
+    this.flash(base.clone().setY(base.y + 0.3), color, 1.2 * size);
+    this.fling(base, color, Math.round(16 * size), { out: 0.9 * size, up: 5.2 + size, fall: 11, life: 0.85, size: 0.55, kind: "drop" });
+    this.fling(base, "#ffffff", Math.round(7 * size), { out: 0.7 * size, up: 4.4 + size, fall: 11, life: 0.7, kind: "drop" });
+    this.fling(base, color, Math.round(14 * size), { out: 2.8 * size, up: 2.2, fall: 9, life: 0.6, kind: "drop" });
+    this.ring(at, 1.2 * size, color, 0.45);
+    for (let i = 0; i < Math.round(3 * size); i++) this.smoke(base.clone().add(new THREE.Vector3(rand(-0.5, 0.5) * size, 0.1, rand(-0.5, 0.5) * size)), "#e8f6ff", 0.9 * size, 0.5);
+  }
+
+  /**
+   * A ball of water lobbed from `from` onto the middle of `points` (the hexes it covers), bursting there in a splash as
+   * big as the ground it covers, and a moment later its drops coming down on every hex of it, each with a little
+   * ripple. `onLand` runs as it bursts. Returns how long the flight takes, in seconds.
+   */
+  splash(from: THREE.Vector3, points: THREE.Vector3[], color: string, onLand?: () => void): number {
+    if (points.length === 0) {
+      onLand?.();
+      return 0;
+    }
+    const middle = points.reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(points.length);
+    const reach = Math.max(...points.map((p) => p.clone().sub(middle).setY(0).length()));
+    // The ball's own burst as it lands (launch, "water") is the small one; this is the big one over all it covers.
+    return this.launch("water", from, middle, color, () => {
+      this.splat(middle, color, 1 + reach * 0.5);
+      this.ring(middle, reach + 1, paler(color, 0.3), 0.6);
+      this.later(0.3, () => {
+        for (const p of points) {
+          this.fling(p.clone().setY(p.y + 1.8), color, 6, { out: 0.5, up: 0, fall: 9, life: 0.5, kind: "drop" });
+          this.fling(p.clone().setY(p.y + 0.15), "#ffffff", 3, { out: 1, up: 1.4, fall: 9, life: 0.35, kind: "drop" });
+          this.ring(p, 0.7, color, 0.35);
+        }
+      });
+      onLand?.();
+    });
+  }
+
+  /**
    * A wave rolling out from `from` over each of `points` (the hexes of its line, nearest first) at WAVE_PACE: a wall of
    * water rising as it leaves, foam blown off its crest, a splash on every hex it crosses, lighting the ground under it,
    * and breaking in a burst of spray at the end.
@@ -1550,6 +1648,25 @@ export class SpellFx {
       onLand?.();
     });
     return time;
+  }
+
+  /**
+   * An alarm bell rung: waves of sound pulsing out from it one after another, wide rings racing across the ground,
+   * circles swelling round the bell itself, notes flung off it, and the ground jolted at the first stroke.
+   * `at` is the bell itself, up on its frame.
+   */
+  alarm(at: THREE.Vector3, color = "#ffcf5a") {
+    const feet = at.clone().setY(at.y - 1);
+    this.renderer.shake(0.1, 0.3);
+    for (let i = 0; i < 5; i++) {
+      this.later(i * 0.32, () => {
+        this.flash(at, color, 1.8 - i * 0.2);
+        this.toll(at, color);
+        this.ring(feet, 5.5, color, 0.9);
+        this.ring(feet, 3, paler(color, 0.3), 0.6);
+        for (let n = 0; n < 4; n++) this.note(at, color, "lively", Math.random() * Math.PI * 2, rand(1, 2), 0, 0.9);
+      });
+    }
   }
 
   /** A bell's ring round something struck: circles of sound swelling out round it, upright to the eye, one after another. */
@@ -2102,6 +2219,269 @@ export class SpellFx {
           const a = Math.random() * Math.PI * 2;
           const d = Math.sqrt(Math.random()) * radius * 0.9;
           this.fling(feet.clone().add(new THREE.Vector3(Math.cos(a) * d, 0.1, Math.sin(a) * d)), color, 1, { out: 0.1, up: 0.9, fall: -0.4, life: 1 });
+        }
+      }
+      if (k <= 0 && gone >= 0 && this.bound.get(bind.key) === release) this.bound.delete(bind.key);
+      return gone < 0 || k > 0;
+    });
+  }
+
+  /**
+   * A storm whirling round someone (a Snow Bear's Blizzard Aura), for as long as `bind.holding()` says, following them:
+   * flakes (snowflakes and finer specks of snow, `color`) swept round and round them out to `radius`, each on its own
+   * ring, height and pace, those nearer in going faster, rising and dipping as the wind takes them, tumbling as they go,
+   * and thrown out of the storm and caught up again when their time is up; a few pale gusts of driven snow sweeping
+   * round low; and a faint cold haze over the ground. No ring: it is weather, not a spell's edge. It blows itself out
+   * over a moment when it ends.
+   */
+  storm(bind: Binding, color: string, radius: number) {
+    let released = false;
+    const release = () => {
+      released = true;
+    };
+    this.bound.get(bind.key)?.();
+    this.bound.set(bind.key, release);
+    const { flakes, spread, widen, fine, big, small, turn, top, haze: hazeOpacity, gusts } = STORM;
+    const flakeMap = flakeTex();
+    // One flake of the storm: where it is round its bearer, and how it goes round; made again when its life is out.
+    const make = () => {
+      const fineOne = Math.random() < fine;
+      const r = radius * (spread[0] + (spread[1] - spread[0]) * Math.sqrt(Math.random()));
+      return {
+        fineOne,
+        a: Math.random() * Math.PI * 2,
+        r,
+        h: rand(0.1, top),
+        w: rand(turn[0], turn[1]) * (radius / Math.max(0.4, r)) ** 0.6,
+        bob: rand(0.15, 0.45),
+        phase: Math.random() * Math.PI * 2,
+        spin: rand(-4, 4),
+        size: fineOne ? small * rand(0.7, 1.3) : big * rand(0.75, 1.25),
+        life: rand(1.8, 3.6),
+        age: -Math.random() * 1.5,
+      };
+    };
+    const states = Array.from({ length: flakes }, make);
+    const sprites = states.map((st) => {
+      const s = this.add(new THREE.Sprite(new THREE.SpriteMaterial({ map: st.fineOne ? softTex() : flakeMap, color, transparent: true, opacity: 0, depthWrite: false })));
+      s.renderOrder = 6;
+      return s;
+    });
+    // Gusts: soft streaks of driven snow low round it, sweeping the same way as the flakes.
+    const streaks = Array.from({ length: gusts }, () => new Ribbon(8, light(color, 0, streakTex())));
+    for (const g of streaks) this.add(g.mesh);
+    const gustAt = streaks.map((_, i) => ({ a: (i / gusts) * Math.PI * 2, r: radius * rand(spread[0] + 0.15, spread[1]), h: rand(0.2, 0.9), w: rand(2.2, 3.2) }));
+    const haze = this.sheet(new THREE.Vector3(), color, softTex(), 0);
+    let gone = -1;
+    this.run([...sprites, ...streaks.map((g) => g.mesh), haze], (age, dt) => {
+      const feet = bind.follow();
+      if (gone < 0 && (released || !feet || (age > GRACE && !bind.holding()) || age > 600)) gone = age;
+      const k = gone < 0 ? Math.min(1, age / 0.8) : Math.max(0, 1 - (age - gone) / 0.8);
+      if (feet) {
+        haze.position.copy(feet).setY(feet.y + 0.06);
+        haze.scale.setScalar(radius * 1.5 * (1 + Math.sin(age * 1.3) * 0.04));
+        haze.material.opacity = hazeOpacity * k;
+        sprites.forEach((s, i) => {
+          let st = states[i];
+          st.age += dt;
+          if (st.age > st.life) {
+            st = states[i] = make();
+            st.age = 0;
+            s.material.map = st.fineOne ? softTex() : flakeMap;
+          }
+          const u = Math.max(0, st.age) / st.life;
+          // Faded in as it is caught up, out as it is thrown off; a blown-out storm takes them all with it.
+          const fade = Math.min(1, u / 0.15) * Math.min(1, (1 - u) / 0.2) * k;
+          st.a += st.w * dt;
+          // Thrown a little wider as it goes, and more so as the storm blows out.
+          const r = st.r * (1 + widen * u + (gone >= 0 ? (1 - k) * 0.5 : 0));
+          const y = st.h + Math.sin(st.age * 2.1 + st.phase) * st.bob;
+          s.position.set(feet.x + Math.cos(st.a) * r, feet.y + Math.max(0.05, y), feet.z + Math.sin(st.a) * r);
+          s.scale.setScalar(st.size);
+          s.material.rotation += st.spin * dt;
+          s.material.opacity = (st.fineOne ? 0.7 : 0.95) * fade * (st.age > 0 ? 1 : 0);
+        });
+        streaks.forEach((g, i) => {
+          const at = gustAt[i];
+          at.a += at.w * dt;
+          const line = Array.from({ length: 8 }, (_, j) => {
+            const b = at.a - j * 0.13;
+            return new THREE.Vector3(feet.x + Math.cos(b) * at.r, feet.y + at.h + Math.sin(age * 1.7 + i) * 0.12, feet.z + Math.sin(b) * at.r);
+          });
+          g.material.opacity = 0.3 * k * (0.6 + 0.4 * Math.sin(age * 2.3 + i * 1.7));
+          g.lay(line, (t) => 0.05 + 0.16 * Math.sin(Math.PI * t), this.eye);
+        });
+      }
+      if (k <= 0 && gone >= 0 && this.bound.get(bind.key) === release) this.bound.delete(bind.key);
+      return gone < 0 || k > 0;
+    });
+  }
+
+  /** Whether an effect bound to `key` (a Binding's) is still going. */
+  holds(key: string): boolean {
+    return this.bound.has(key);
+  }
+
+  /**
+   * The dread round one with a Terror Aura (a Haunt), for as long as `bind.holding()` says it stands, following it:
+   * a dark ring on the ground at the edge of its reach (`radius`), breathing; a dark haze over the ground inside it;
+   * rings drawn in from the edge to its feet one after another, as if the dread were pulling everything in to it; and
+   * pale wisps, lost souls, rising off the ground all over it and spiralling in toward it (dreadWisp). Unlike a spell's aura it has no end of its
+   * own: it is what the bearer is.
+   */
+  dread(bind: Binding, color: string, deep: string, radius: number) {
+    let released = false;
+    const release = () => {
+      released = true;
+    };
+    this.bound.get(bind.key)?.();
+    this.bound.set(bind.key, release);
+    const dark = (c: string, map: THREE.Texture) => {
+      const m = this.add(new THREE.Mesh(plane, new THREE.MeshBasicMaterial({ color: c, map, transparent: true, opacity: 0, depthWrite: false })));
+      m.rotation.x = -Math.PI / 2;
+      m.renderOrder = 3;
+      return m;
+    };
+    const haze = dark(deep, softTex());
+    const edge = dark(color, ringTex());
+    const pulls = [0, 1].map(() => dark(color, ringTex()));
+    const opacity = (m: THREE.Mesh, o: number) => ((m.material as THREE.MeshBasicMaterial).opacity = o);
+    let next = 0.3;
+    let gone = -1;
+    this.run([haze, edge, ...pulls], (age) => {
+      const feet = bind.follow();
+      if (gone < 0 && (released || !feet || (age > GRACE && !bind.holding()))) gone = age;
+      const k = gone < 0 ? Math.min(1, age / 0.8) : Math.max(0, 1 - (age - gone) / 0.6);
+      if (feet) {
+        const breathe = 1 + Math.sin(age * 1.6) * 0.025;
+        for (const m of [haze, edge, ...pulls]) m.position.copy(feet).setY(feet.y + 0.06);
+        haze.scale.setScalar(radius * 2.3 * breathe);
+        opacity(haze, 0.32 * k);
+        edge.scale.setScalar(radius * 2 * breathe);
+        opacity(edge, 0.6 * k * (0.8 + 0.2 * Math.sin(age * 1.6)));
+        // Two rings drawn in from the edge, half a beat apart, each over DREAD_PULL seconds: faint as they set off,
+        // darkest part way in, and gone at its feet.
+        pulls.forEach((m, i) => {
+          const t = ((age + i * DREAD_PULL * 0.5) % DREAD_PULL) / DREAD_PULL;
+          m.scale.setScalar(Math.max(0.05, radius * 2 * (1 - t * t)));
+          opacity(m, 0.45 * k * Math.sin(Math.PI * t));
+        });
+        if (gone < 0 && age >= next) {
+          next = age + rand(0.22, 0.42);
+          this.dreadWisp(bind, paler(color, 0.45), radius);
+        }
+      }
+      if (k <= 0 && gone >= 0 && this.bound.get(bind.key) === release) this.bound.delete(bind.key);
+      return gone < 0 || k > 0;
+    });
+  }
+
+  /**
+   * One of a Terror Aura's wisps (SpellFx.dread): a lost soul, a soft glow with a tail of fainter ones behind it, rising
+   * off the ground somewhere in the aura and spiralling in and up toward its bearer, following them as they go, and
+   * fading out as it reaches them. Which way round it spirals is up to chance.
+   */
+  private dreadWisp(bind: Binding, color: string, radius: number) {
+    const a = Math.random() * Math.PI * 2;
+    const d = radius * (0.45 + 0.5 * Math.sqrt(Math.random()));
+    const turn = (Math.random() < 0.5 ? -1 : 1) * rand(1, 1.6);
+    const rise = rand(1.1, 1.7);
+    const life = rand(1.6, 2.2);
+    // Where it is `u` of the way through its life, about its bearer's feet: round and in, and up.
+    const at = (u: number, feet: THREE.Vector3) => {
+      const k = Math.max(0, u);
+      const r = d * (1 - 0.8 * k * (2 - k));
+      const b = a + turn * k;
+      return feet.clone().add(new THREE.Vector3(Math.cos(b) * r, 0.15 + rise * k * k + Math.sin(k * 9 + a) * 0.06, Math.sin(b) * r));
+    };
+    // The head, and its tail: each a little further back along the way, smaller and fainter.
+    const parts = [0, 1, 2, 3, 4, 5].map((i) => ({ s: this.halo(new THREE.Vector3(), color, 0, 0), lag: i * 0.035, size: 0.3 * (1 - i * 0.14), bright: 0.85 * (1 - i * 0.16) }));
+    this.run(parts.map((p) => p.s), (age) => {
+      const feet = bind.follow();
+      const u = Math.min(1, age / life);
+      if (!feet) return false;
+      const fade = Math.min(1, u / 0.15) * Math.min(1, (1 - u) / 0.25);
+      for (const p of parts) {
+        p.s.position.copy(at(u - p.lag, feet));
+        p.s.scale.setScalar(p.size);
+        p.s.material.opacity = p.bright * fade * (u - p.lag > 0 ? 1 : 0);
+      }
+      return u < 1;
+    });
+  }
+
+  /**
+   * A chain holding someone to a spot (Fettered, a Haunt's Ghastly Fetter), for as long as `bind.holding()` says, from
+   * a stake of grave-iron driven into the ground at `anchor` to their feet, following them: links of iron sagging
+   * between the two and swaying a little, a pale glow round the stake's foot, and the odd cold mote off the chain. It
+   * drops slack and fades when they are free.
+   */
+  fetter(bind: Binding, anchor: THREE.Vector3, iron: string, glow: string) {
+    let released = false;
+    const release = () => {
+      released = true;
+    };
+    this.bound.get(bind.key)?.();
+    this.bound.set(bind.key, release);
+    const metal = new THREE.MeshLambertMaterial({ color: iron, transparent: true, opacity: 0 });
+    const stake = this.add(new THREE.Group());
+    // Tall enough to stand clear of the grass and of whoever is chained to it while they stand on the spot, its head
+    // glowing; and a pale ring round the hex on the ground, so the spot is plain even with someone on it.
+    const spike = new THREE.Mesh(new THREE.ConeGeometry(0.13, 1.25, 6), metal);
+    spike.rotation.x = Math.PI;
+    spike.position.y = FETTER_HEAD - 0.6;
+    const head = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.05, 6, 12), metal);
+    head.rotation.x = Math.PI / 2;
+    head.position.y = FETTER_HEAD;
+    stake.add(spike, head);
+    stake.position.copy(anchor);
+    for (const m of [spike, head]) m.userData.ownGeometry = true;
+    const shine = this.halo(anchor.clone().setY(anchor.y + FETTER_HEAD), glow, 0.7, 0);
+    const foot = this.sheet(anchor.clone().setY(anchor.y + 0.05), glow, softTex(), 0);
+    foot.scale.setScalar(1.1);
+    const round = this.sheet(anchor.clone().setY(anchor.y + 0.06), glow, ringTex(), 0);
+    round.scale.setScalar(1.7);
+    const link = new THREE.TorusGeometry(0.085, 0.024, 5, 10);
+    const links = Array.from({ length: FETTER_LINKS }, () => this.add(new THREE.Mesh(link, metal)));
+    // The links share one shape: it goes with the first.
+    links[0].userData.ownGeometry = true;
+    const a = new THREE.Vector3();
+    const b = new THREE.Vector3();
+    const along = new THREE.Vector3();
+    let next = 0.5;
+    let gone = -1;
+    this.run([stake, shine, foot, round, ...links], (age) => {
+      const feet = bind.follow();
+      if (gone < 0 && (released || !feet || (age > GRACE && !bind.holding()))) gone = age;
+      const k = gone < 0 ? Math.min(1, age / 0.3) : Math.max(0, 1 - (age - gone) / 0.5);
+      metal.opacity = k;
+      const pulse = 0.75 + 0.25 * Math.sin(age * 3);
+      (foot.material as THREE.MeshBasicMaterial).opacity = 0.5 * k * pulse;
+      (round.material as THREE.MeshBasicMaterial).opacity = 0.7 * k * pulse;
+      shine.material.opacity = 0.8 * k * pulse;
+      if (feet) {
+        // From the stake's head to about their knee, sagging most in the middle (and more, slack, as it goes).
+        a.copy(anchor).setY(anchor.y + FETTER_HEAD);
+        b.copy(feet).setY(feet.y + 0.35);
+        const span = a.distanceTo(b);
+        const sag = (0.15 + span * 0.12) * (gone < 0 ? 1 : 1 + (age - gone) * 2);
+        const sway = Math.sin(age * 1.7) * 0.05;
+        along.subVectors(b, a);
+        links.forEach((m, i) => {
+          const t = (i + 0.5) / FETTER_LINKS;
+          m.position.copy(a).addScaledVector(along, t);
+          m.position.y -= sag * 4 * t * (1 - t);
+          m.position.x += sway * Math.sin(Math.PI * t);
+          // Each lying along the chain, and turned across the one before.
+          m.lookAt(m.position.x + along.x, m.position.y, m.position.z + along.z);
+          m.rotateY(Math.PI / 2);
+          if (i % 2) m.rotateX(Math.PI / 2);
+          m.visible = span > 0.05;
+        });
+        if (gone < 0 && age >= next) {
+          next = age + rand(0.5, 1.1);
+          const at = links[Math.floor(Math.random() * FETTER_LINKS)].position.clone();
+          this.fling(at, glow, 1, { out: 0.15, up: 0.5, fall: -0.2, life: 0.9, size: 0.3 });
         }
       }
       if (k <= 0 && gone >= 0 && this.bound.get(bind.key) === release) this.bound.delete(bind.key);

@@ -7,12 +7,14 @@
 // (the enemy's turn) and zone.ts (the reducer that ties them together).
 
 import type { HexPos, Stats } from "@gantt-quest/core";
-import type { EffectKind } from "../content";
+import type { EffectKind, Inflict } from "../content";
+import type { Dice } from "./rules";
 import type { ItemDef, Outfit, Perks } from "../gear";
 import type { ResourceKind, Resources } from "../hut";
 import type { Clime, WorldMap } from "../map";
 import type { FurnishingGrant } from "../drops";
 import type { ZoneMod } from "./mods";
+import type { Lean } from "./geometry";
 
 export type Side = "hero" | "enemy";
 
@@ -23,10 +25,14 @@ export type Side = "hero" | "enemy";
  * the Bard's: a shanty sung (song.ts), and Inspired (from joining one, or Lead by Example: the next roll to hit has advantage);
  * and the Sage's (stars.ts): Guiding Light on an enemy (whoever attacks it has advantage), North Star on an ally (their blows
  * set what they hit Burning), and a course charted (on the Sage: the mark their allies move faster toward);
- * and the Warden's: Taunted, on an enemy (it must go for the Warden who taunted it, if it can);
+ * and the Warden's: Taunted, on an enemy (it attacks no one but the Warden who taunted it);
  * and the Warlock's (drowning.ts), all on an enemy: Drowning (stacks, `amount`), the Curse of Drowning, the Black Spot and Red Sky at Morning.
  */
-export type Condition = EffectKind | "poisoned" | "wet" | "beacon" | "mending" | "bolstered" | "invisible" | "contraband" | "regenerating" | "rejuvenating" | "rallied" | "coral_armor" | ShantyKind | "inspired" | "guiding_light" | "north_star" | "charted" | "taunted" | "drowning" | "drowning_curse" | "black_spot" | "red_sky" | "tailwind" | "lucky";
+/** What an enemy's field round it is (EnemyAbilityDef `field`): a condition on the one that carries it. */
+export const FIELD_KINDS = ["slowing_field", "blizzard_aura"] as const;
+export type FieldKind = (typeof FIELD_KINDS)[number];
+
+export type Condition = EffectKind | "poisoned" | "wet" | "beacon" | "mending" | "bolstered" | "invisible" | "contraband" | "regenerating" | "rejuvenating" | "rallied" | "coral_armor" | ShantyKind | "inspired" | "guiding_light" | "north_star" | "charted" | "taunted" | "drowning" | "drowning_curse" | "black_spot" | "red_sky" | "tailwind" | "lucky" | "frenzied" | FieldKind | "fettered";
 
 /** The shanties a Bard sings (song.ts): a condition on the Bard, reaching everyone of theirs nearby. */
 export type ShantyKind = "lively_shanty" | "dour_shanty" | "windgod_shanty";
@@ -37,9 +43,11 @@ export interface UnitCondition {
   rounds: number;
   /** Put on during the bearer's own turn: the end of that turn does not count against it. */
   fresh?: boolean;
-  /** Bolstered: the points of shield left, spent before HP. Burning: its stacks (none said is one), each burning for the full tick. Drowning: its stacks. Tailwind: the movement it adds. */
+  /** Bolstered: the points of shield left, spent before HP. Bleeding, Burning: its stacks (none said is one), each hurting for the full tick. Drowning: its stacks. Tailwind: the movement it adds. Slowing Field: how many hexes it reaches. Fettered: how far from its spot it may go. */
   amount?: number;
-  /** A course charted (Chart a Course): the hex marked. */
+  /** Burning: each stack's own count of turns (`rounds` is the longest of them, `amount` how many there are). */
+  stacks?: { rounds: number; fresh?: boolean }[];
+  /** A course charted (Chart a Course): the hex marked. Fettered: the hex it is chained to. */
   at?: HexPos;
   /** A shanty: the allies who have joined it (each once), each widening it a hex. */
   joined?: string[];
@@ -110,6 +118,8 @@ export interface Unit {
    * (`controller`) on the hero's initiative, and gone when it falls, when another is called in its place, or when the fight ends.
    */
   summon?: { by: string };
+  /** Who of the other side has caught it in a harmful field this turn of its own (combat.ts fieldsCatch): once a turn each. */
+  caughtBy?: string[];
   /**
    * A hero whose player is not on the map (their last connection to it closed): nothing draws them into a
    * fight, and no enemy blow meant for a fight lands on them. A fight they were already in goes on with them in it.
@@ -119,7 +129,7 @@ export interface Unit {
 }
 
 /** What a spell can leave hanging over (or standing on) some hexes (weather.ts). A wall (Fortify) is one too: nobody passes it. */
-export type WeatherKind = "rain" | "wind" | "coral" | "wall";
+export type WeatherKind = "rain" | "wind" | "coral" | "wall" | "quake";
 
 export interface Weather {
   kind: WeatherKind;
@@ -133,9 +143,15 @@ export interface Weather {
   side: Side;
   /** Rain and coral: the turn (Encounter.turnNo, or -1 out of a fight) each unit was last healed or cut by it in. */
   touched: Record<string, number>;
+  /**
+   * A quake: the shaking still to come as its maker's next turn begins (weather.ts quakeAtTurn), as the ability that
+   * made it (its name, for the log) rolls it, the DC of the Agility save against it, and where its maker stood (its
+   * anchor) as it cracked the ground: the middle of it, where the heave is drawn from.
+   */
+  shock?: { name: string; dice: Dice; dc: number; saveOr?: Inflict; from: HexPos };
 }
 
-export type SurfaceKind = "poison" | "fire" | "oil" | "water" | "ice" | "slime";
+export type SurfaceKind = "poison" | "fire" | "oil" | "water" | "ice" | "slime" | "web";
 
 export interface GroundSurface {
   kind: SurfaceKind;
@@ -200,7 +216,7 @@ export interface Encounter {
   deadline: number | null;
   /**
    * Heroes who fled this fight (Flee) and have not come back into it. One is drawn back in only by an enemy in
-   * it coming within FLEE_RANGE (not by walking within JOIN_RANGE), and cannot reach into it from outside: no
+   * it coming within FLEE_RANGE (not by walking within ALERT_RANGE), and cannot reach into it from outside: no
    * blow, flask or help for anyone in it until they are back.
    */
   fled?: string[];
@@ -368,6 +384,21 @@ export interface ZoneState {
   seq: number;
   /** Dev switches. */
   aiOff?: boolean;
+  /** Dev switch: a hero brought to 0 HP stays on their feet, and goes on fighting at 0. */
+  undying?: boolean;
+  /** Dev switch: a turn in a fight has no time limit (the server sets no deadline). */
+  timerOff?: boolean;
+  /**
+   * Dev switch: heroes take no turns. A hero's turn comes as ever, and the player's own screen ends it a moment after all
+   * before it has been shown (ZoneView), so the enemy plays on with a short pause for each hero. Not in the sandbox.
+   */
+  heroesIdle?: boolean;
+  /**
+   * Dev switch: the combat sandbox (the Maps tab). A fight goes by the dev's hand, not its own flow: no enemy plays its
+   * turn, no turn ends of itself, and nothing is timed. Turns still come round, one after another, when the dev moves
+   * them on (DevOp "next_turn"), and all that happens as one starts or a round ends happens as ever.
+   */
+  sandbox?: boolean;
   /**
    * A switch for the tests alone: heroes one after another in the order take their turns together, as fights
    * once went, so what one hero's ability does for another's can be tried within a single turn. Nothing sets
@@ -405,7 +436,12 @@ export interface ZoneHero {
 export type CommonAction = "disengage" | "help" | "shove" | "jump" | "flee" | "join";
 
 export type DevOp =
-  | { op: "spawn"; kinds: string[]; at: HexPos }
+  /** `level`: what level they come at (the map's, left out). */
+  | { op: "spawn"; kinds: string[]; at: HexPos; level?: number }
+  /** In the combat sandbox: an enemy in the fight at another level, as hurt as it was (as a share of its health). */
+  | { op: "set_level"; unit: string; level: number }
+  /** Every hero on the map at this level (a dev kit, as "kit"): class, weapon and abilities as they are, and whole. */
+  | { op: "hero_levels"; level: number }
   | { op: "paint"; kind: SurfaceKind | null; hexes: HexPos[] }
   | { op: "standin"; classId: string }
   | { op: "heal" }
@@ -413,6 +449,28 @@ export type DevOp =
   /** Set the nearest group that has not noticed anyone on whoever asked, wherever they stand. */
   | { op: "start_fight" }
   | { op: "ai"; off: boolean }
+  /** The combat sandbox (ZoneState.sandbox), on or off. Off in the middle of an enemy's turn: it plays it. */
+  | { op: "sandbox"; on: boolean }
+  /**
+   * In the combat sandbox: have an enemy in the fight use one of its abilities, aimed by hand (strikes.ts): at
+   * `target` (a unit) or `at` (a hex), as the ability takes. `anywhere`: its range and line of sight are not asked.
+   */
+  | { op: "strike"; unit: string; ability: string; target?: string; at?: HexPos; anywhere?: boolean }
+  /** Put anyone standing straight on a hex (one they would have room on), with no walk to it. */
+  | { op: "place"; unit: string; at: HexPos }
+  /** In the combat sandbox: end whoever's turn it is and start `unit`'s, there and then (those between are passed over, not played). */
+  | { op: "set_turn"; unit: string }
+  /** In a fight: end whoever's turn it is and start the next one's (`round`: every turn, round to theirs again). */
+  | { op: "next_turn"; round?: boolean }
+  /** Heroes cannot go down: 0 HP does nothing. */
+  | { op: "undying"; on: boolean }
+  /** No time limit on a turn in a fight. */
+  | { op: "timer"; off: boolean }
+  /** Heroes take no turns (ZoneState.heroesIdle). */
+  | { op: "heroes_idle"; on: boolean }
+  /** Take every enemy off the map, standing or not (bodies already left stay): a fight with them ends. */
+  | { op: "clear_enemies" }
+  /** Clear every surface off the ground, and every body and anything else left to loot. */
   | { op: "clear_surfaces" }
   /**
    * A dev kit (the Maps tab): make one of your own heroes (yourself, or a stand-in you play) a hero of this class and level, with
@@ -431,7 +489,8 @@ export type ZoneAction =
    */
   | { type: "move"; by: string; unit: string; to: HexPos; from?: HexPos; now?: number }
   /** `target`: a unit's id, or a crate's (it is a poi on the map) for an ability that does damage. */
-  | { type: "use"; by: string; unit: string; ability: string; target?: string; at?: HexPos }
+  /** `lean`: where in `at` it is aimed, for a shape that turns with the pointer (Aim). */
+  | { type: "use"; by: string; unit: string; ability: string; target?: string; at?: HexPos; lean?: Lean }
   | { type: "common"; by: string; unit: string; what: CommonAction; target?: string; at?: HexPos }
   | { type: "throw"; by: string; unit: string; item: Throwable; at: HexPos }
   | { type: "drink"; by: string; unit: string; item: Throwable }
@@ -504,21 +563,48 @@ export interface Rolled {
   halved?: boolean;
 }
 
+/**
+ * Why a band that had noticed nobody is now in the fight (zone.ts engage). Each names the unit that set it off:
+ * `seen`: a hero walked into its sight. `heard`: someone in the fight (either side) came near enough to hear.
+ * `struck`: a hero's blow, shove or throw reached it. `noise`: a hero forced a door, and it heard the crash.
+ * `bell`: the enemy that rang the alarm bell.
+ */
+export type JoinCause = { kind: "seen" | "struck" | "noise" | "bell"; by: string } | { kind: "heard"; near: string };
+
+/**
+ * Why a hero is now in a fight already on (zone.ts pullIn, reachIn, engage). `near`: they came within ALERT_RANGE of
+ * this one in it (or, having fled it, an enemy in it came within FLEE_RANGE of them). `acted`: they did something,
+ * harm or help, to this one in it from outside. `band`: a band they set off came into it, and they with it (its
+ * `alert` says why).
+ */
+export type HeroJoinCause = { kind: "near"; near: string } | { kind: "acted"; on: string } | { kind: "band"; group: string };
+
 export type ZoneEvent =
   | { t: "joined"; id: string }
   /** `cut`: the walk before this one was called off at this hex, and this one sets off from it. */
   | { t: "moved"; id: string; path: HexPos[]; cut?: HexPos }
-  | { t: "alert"; group: string; by: string }
+  /** A band has noticed the party and is in the fight: these of it (`units`), and why (`why`). */
+  | { t: "alert"; group: string; units: string[]; why: JoinCause }
   | { t: "fight_start"; units: string[] }
-  | { t: "fight_join"; id: string }
+  /** A hero comes into a fight already on, and why. */
+  | { t: "fight_join"; id: string; why: HeroJoinCause }
   | { t: "roll"; roll: Roll }
   | { t: "round"; n: number }
   | { t: "turn"; ids: string[] }
   /** Something done, said before its rolls: an ability, a common action, a throw, an enemy's attack by name. */
-  | { t: "used"; id: string; what: string; name: string; target?: string; at?: HexPos }
+  /** Something tried to move a big unit by force (a shove, a pull, a wave), and it was too heavy to budge. */
+  | { t: "heavy"; id: string }
+  /**
+   * `again`: the second part of something used on an earlier turn (an Earthquake's heave), not a new use of it; `at`
+   * then is where its user stood (its anchor) when it was first used, where it goes off from.
+   */
+  | { t: "used"; id: string; what: string; name: string; target?: string; at?: HexPos; lean?: Lean; again?: true }
   | { t: "reaction"; id: string; target: string }
-  /** `dice`: what was rolled for it, where dice were. */
-  | { t: "hit"; actor: string | null; target: string; amount: number; what: string; crit: boolean; blocked?: number; dice?: Rolled }
+  /**
+   * `dice`: what was rolled for it, where dice were. `splash`: not struck itself, but caught by the shock of the same
+   * blow landing on someone beside it (EnemyAbilityDef `splash`).
+   */
+  | { t: "hit"; actor: string | null; target: string; amount: number; what: string; crit: boolean; blocked?: number; dice?: Rolled; splash?: boolean }
   | { t: "miss"; actor: string; target: string; what: string }
   | { t: "heal"; actor: string | null; target: string; amount: number; what: string; dice?: Rolled }
   /** Someone drops off a height (shoved off it, or leaping from too high): how many levels. The harm follows as a `hit` by "fall". */
@@ -527,13 +613,16 @@ export type ZoneEvent =
   | { t: "held"; id: string; at: HexPos }
   /** Someone goes into a pit: deep water, lava, or over the edge of the land. An enemy is gone; a hero is hauled back to the brink, down. */
   | { t: "sunk"; id: string; by: string | null; from: HexPos; into: HexPos; pit: "water" | "lava" | "void" }
-  | { t: "condition"; target: string; kind: Condition; rounds: number; amount?: number }
+  /** A condition put on, or lengthened; `spent`: one use of an untimed one spent, `amount` what is left (0: it is gone). */
+  | { t: "condition"; target: string; kind: Condition; rounds: number; amount?: number; spent?: boolean; /** Fettered: the hex it is chained to. */ at?: HexPos }
   | { t: "tick"; target: string; kind: Condition | SurfaceKind; amount: number }
   /** Weather made over some hexes, or (`kind` null) cleared from them. */
   | { t: "weather"; kind: WeatherKind | null; hexes: HexPos[]; by: string }
   | { t: "skip"; id: string; kind: Condition }
   /** One lying Prone gets up as its turn begins (for an AP), before it does anything else. */
   | { t: "stood"; id: string }
+  /** One Reeling from a heavy blow starts its turn short: `ap` is how much less it has to spend. */
+  | { t: "reeled"; id: string; ap: number }
   /** Drowning: it failed to hold its breath, and loses 2 of its AP this turn. */
   | { t: "choked"; id: string }
   | { t: "down"; id: string }
@@ -542,14 +631,21 @@ export type ZoneEvent =
   | { t: "burst"; hexes: HexPos[] }
   /** Driven from `from` to `to`, or flattened where it stands (`to` null). `pulled`: hauled toward `id` on a line, not struck back (Throw Pike, Harpoon); the number of this step of the haul, from 1. */
   | { t: "shoved"; id: string; target: string; from: HexPos; to: HexPos | null; pulled?: number }
-  | { t: "jumped"; id: string; from: HexPos; to: HexPos }
+  /**
+   * `lunge`: not a Jump but the leap of a leaping attack (a Dire Wolf's Lunge) at this target, drawn as part of the blow.
+   * `dash`: not a Jump but a dash (a Cave Bat's Fell Swoop, its `name`) in a straight line through these hexes on the way.
+   */
+  | { t: "jumped"; id: string; from: HexPos; to: HexPos; lunge?: string; dash?: { name: string; through: HexPos[] } }
   /** One who was Unseen gives themselves away. */
   | { t: "seen"; id: string }
   /** Gone from one hex and there on another, with nothing crossed between (Smuggler's Route, Tactical Retreat). */
   /** `phase`: through Phase Treads, in place of a Jump (drawn as its own shimmer). */
   | { t: "blinked"; id: string; from: HexPos; to: HexPos; phase?: true }
-  /** A creature is called into the fight (Summon Sea Turtle) by `by`; or one is gone (it fell, was replaced, or the fight is over). */
-  | { t: "summoned"; id: string; by: string }
+  /**
+   * A creature is called into the fight (Summon Sea Turtle, Brood Swarm) by `by`, standing `at` (it may have moved on by
+   * the end of the same step: it is drawn coming in here); or one is gone (it fell, was replaced, or the fight is over).
+   */
+  | { t: "summoned"; id: string; by: string; at: HexPos }
   | { t: "dismissed"; id: string }
   /** A hero gets away from the fight (Flee): out of the order, walking free. */
   | { t: "fled"; id: string }
@@ -572,8 +668,6 @@ export type ZoneEvent =
   | { t: "key"; keys: number; from: "chest" | "band"; id?: string }
   /** A door is worked: unlocked with a key, forced open, or forced and held. */
   | { t: "door"; id: string; poi: string; how: "key" | "forced" | "held" }
-  /** The crash of a forced door is heard by a band, which comes running. */
-  | { t: "noise"; group: string }
   /** An enemy is picked to go and ring the alarm bell (bell.ts pickBellGoer); it is marked to the players. */
   | { t: "bell_goer"; id: string }
   /** An enemy rings the alarm bell (bell.ts): the rest of the place is roused next. */

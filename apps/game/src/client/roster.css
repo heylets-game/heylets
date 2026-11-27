@@ -51,7 +51,8 @@ button.cm-main:hover:not(:disabled) { border-color: var(--line); background: rgb
   color: var(--gold); background: #2a2414; border: 1px solid #8a6d1f;
 }
 .cm-tag { flex: none; font-size: 10px; line-height: 14px; padding: 0 4px; color: var(--muted); border: 1px solid var(--line); }
-.cm-tag.you { color: var(--ink); background: var(--gold); border-color: var(--gold); font-weight: bold; }
+/* Dark ink on gold: no text shadow, though the card it sits in is a button and buttons shadow their text. */
+.cm-tag.you { color: var(--ink); background: var(--gold); border-color: var(--gold); font-weight: bold; text-shadow: none; }
 
 /* The party (the crew as cards, ui/hud.css, outlines who plays whom): one of yours that cannot be played just now. */
 .roster li.cm .cm-main:disabled { opacity: 0.55; cursor: default; }

@@ -18,21 +18,25 @@ function patternRegex(pattern: string): RegExp {
     const body = pattern
       .split("*")
       .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
-      .join("[^/]*");
+      .join("[^/]*")
+      .replace(/#/g, "\\d+");
     re = new RegExp(`^${body}$`);
     patternCache.set(pattern, re);
   }
   return re;
 }
 
-/** The file keys matched by an event's `files`, in a stable order, each once. */
+/**
+ * The file keys matched by an event's `files`, in a stable order, each once. In a pattern `*` matches
+ * anything but a slash, and `#` a take number: "heal_#" is heal_1 and heal_02, never heal_fail_1.
+ */
 export function expandFiles(patterns: string | string[], keys: Iterable<string>): string[] {
   const list = Array.isArray(patterns) ? patterns : [patterns];
   const all = [...keys];
   const out: string[] = [];
   const seen = new Set<string>();
   for (const p of list) {
-    const matches = p.includes("*") ? all.filter((k) => patternRegex(p).test(k)).sort() : all.includes(p) ? [p] : [];
+    const matches = /[*#]/.test(p) ? all.filter((k) => patternRegex(p).test(k)).sort() : all.includes(p) ? [p] : [];
     for (const m of matches) {
       if (seen.has(m)) continue;
       seen.add(m);

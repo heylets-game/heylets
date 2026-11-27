@@ -110,7 +110,7 @@ const ROUTE_REACH = ATLAS_SPACING + 1;
 /** One node in so many, from the second ring out, is a sea cave; one in so many more a lookout; and from the third ring, a lair. */
 const SEACAVE_CHANCE = 0.16;
 const LOOKOUT_CHANCE = 0.07;
-const LAIR_CHANCE = 0.07;
+const LAIR_CHANCE = 0.15;
 /** A lair's bounty is that of a place this many rings further out. */
 export const LAIR_RINGS = 3;
 /** What has made its den in a lair, by the ground it is on; and, in some climates, whatever the ground. */

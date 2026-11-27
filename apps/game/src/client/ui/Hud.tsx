@@ -114,6 +114,8 @@ interface Props {
   chips?: ReactNode;
   /** The slots, on a map: two rows of ten, null for an empty one. Left out, the bar is slim, with no slots. */
   slots?: (HudSlot | null)[];
+  /** Shown in place of the bottom row of slots, as tall as it (the combat sandbox's enemy being played): that row's slots are not drawn. */
+  slotsBelow?: ReactNode;
   /** The player dragged slot `from` onto slot `to`. */
   onSlotMove?(from: number, to: number): void;
   /** The player asked to choose what goes in a slot (a right-click, or a click on an empty one). */
@@ -127,6 +129,8 @@ interface Props {
   torch?: { rounds: number | null; hand: "main" | "off"; carried: number; light?(hand: "main" | "off"): void; stow?(): void; why?: string };
   /** The turn: seconds left on it (null with no clock), and ending it when it is yours. */
   turn?: { seconds: number | null; onEnd?(): void; waitingFor?: string };
+  /** In place of the hero's level on the crest (the combat sandbox's enemy): its level, what it is, and what a press does. */
+  plaque?: { level: number; name: string; line: string; onClick(): void };
   /** Resting, where it can be done. */
   rest?: { run(): void; hint: string; disabled?: boolean };
   /** The emote wheel's button (EmoteWheel), in the lower tab off the left end: only where there is no resting (on a map, in a fight). */
@@ -154,7 +158,7 @@ function Tip({ name, line, more, keys }: { name: string; line?: string; more?: s
   );
 }
 
-export function HudBar({ me, place, children, hp, meter: given, pips = [], chips, slots, onSlotMove, onSlotMenu, torch, turn, rest, emote, onBag, bagBlocked, onBook, menu }: Props) {
+export function HudBar({ me, place, children, hp, meter: given, pips = [], chips, slots, slotsBelow, plaque, onSlotMove, onSlotMenu, torch, turn, rest, emote, onBag, bagBlocked, onBook, menu }: Props) {
   const c = me.character;
   // The pack is read out of its stored form (each row's JSON) when it changes, not every time the bar is drawn.
   const items = useMemo(() => me.inventory.map(toOwned), [me.inventory]);
@@ -165,10 +169,13 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
   /** What the pointer is over on the bar, and where along it (in the board's own pixels), for the card that explains it. */
   const [tip, setTip] = useState<{ x: number; node: ReactNode } | null>(null);
   const board = useRef<HTMLDivElement>(null);
+  // React passes pointer events up out of a portal as if it were inside the thing that drew it (the menu's window is
+  // the cog's), though on screen it is not: over one of those, the pointer is not over the thing at all.
+  const inside = (e: ReactPointerEvent<HTMLElement>) => e.currentTarget.contains(e.target as Node);
   const hover = (node: ReactNode) => ({
     onPointerEnter: (e: ReactPointerEvent<HTMLElement>) => {
       const el = board.current;
-      if (!el) return;
+      if (!el || !inside(e)) return;
       const at = el.getBoundingClientRect();
       const thing = e.currentTarget.getBoundingClientRect();
       // The view may be zoomed (the UI scale): measured on the screen, placed in the board's own pixels.
@@ -177,6 +184,8 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
     },
     onPointerLeave: () => setTip(null),
     onPointerDown: () => setTip(null),
+    // Onto the menu's window (or anything else it drew elsewhere): gone, as it would be on leaving.
+    onPointerOver: (e: ReactPointerEvent<HTMLElement>) => !inside(e) && setTip(null),
   });
 
   // Energy (gathering outings left today) is always on the right. A view that keeps its own count (the Harbor, a
@@ -395,6 +404,11 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
                 <PixelIcon rows={HOURGLASS} size={12} />
                 {turn.seconds !== null ? <span>{turn.seconds}</span> : <span>{turn.onEnd ? "End" : "…"}</span>}
               </button>
+            ) : plaque ? (
+              <button className="hud-plaque" aria-label={`${plaque.name}: ${plaque.line}`} onClick={plaque.onClick} {...hover(<Tip name={plaque.name} line={plaque.line} />)}>
+                <small>Lv</small>
+                <span>{plaque.level}</span>
+              </button>
             ) : (
               <button className={`hud-plaque ${news ? "news" : ""}`} aria-label="Logbook" disabled={!onBook} onClick={onBook} {...hover(<Tip name={`${c.name}, level ${c.level}`} line={news ? "Something to spend or pick in the logbook" : "Open the logbook"} keys="L" />)}>
                 <small>Lv</small>
@@ -423,7 +437,12 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
           </span>
 
           {/* On a map: what the hero can do, two rows of ten. */}
-          {slots && <span className="hud-slots" style={{ "--cols": BAR_ROW } as CSSProperties}>{shown.slice(0, BAR_ROW * 2).map(slotButton)}</span>}
+          {slots && (
+            <span className="hud-slots" style={{ "--cols": BAR_ROW } as CSSProperties}>
+              {shown.slice(0, BAR_ROW * (slotsBelow ? 1 : 2)).map(slotButton)}
+              {slotsBelow && <span className="hud-slots-below">{slotsBelow}</span>}
+            </span>
+          )}
         </span>
 
         {/* Right: the bag, and beside it the tabs for the logbook, rest (or, in a fight, the emote wheel) and the menu. */}
@@ -462,7 +481,7 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
         </span>
 
         {/* What the pointer is over, explained: a card over the bar, above that thing. */}
-        {tip && <div className="hud-tip panel" style={{ left: `clamp(150px, ${tip.x}px, calc(100% - 150px))` }} role="tooltip">{tip.node}</div>}
+        {tip && <div className="hud-tip timber" style={{ left: `clamp(150px, ${tip.x}px, calc(100% - 150px))` }} role="tooltip">{tip.node}</div>}
       </div>
     </div>
   );

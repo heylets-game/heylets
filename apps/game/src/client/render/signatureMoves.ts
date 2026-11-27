@@ -1,0 +1,3404 @@
+// Enemy abilities with an animation of their own, beyond the ordinary swing, shot or cast (WorldRenderer.attack):
+// the figure's moves and the effects thrown off them, step by step. Keyed by the ability's name, as a fight's
+// events carry it.
+//
+// Each is played on a stage that lends it the effects and the clock: the game's map (WorldRenderer), or the
+// figure lab (FigureLab.tsx), where each one has a button of its own. A new one added here shows in both.
+
+import * as THREE from "three";
+import { ENEMY_ABILITIES, type FieldKind } from "@gantt-quest/world";
+import { BREATHE, ENGULF, FLARE, FLURRY_BLOWS, SLICES_APART, type Figure } from "./figures";
+import type { FxKind } from "./sprites";
+import { CRACK_DARK, CRACK_EDGE, crackGeometry, crackPaths, type CrackOpts } from "./cracks";
+
+/** One effect sprite: flown from `from` to `to` over `life` seconds, growing from one size to the other. */
+export interface FxOpts {
+  from: THREE.Vector3;
+  to: THREE.Vector3;
+  life: number;
+  size: [number, number];
+  /** Total rotation over its life, in radians. */
+  spin: number;
+  /** Its rotation to begin with, in radians. */
+  turn?: number;
+  fade: boolean;
+  arc?: number;
+  onEnd?: () => void;
+}
+
+/** A ring lying flat on the ground, spreading out from `at` to `radius` over `life` seconds and fading as it goes. */
+export interface WaveOpts {
+  at: THREE.Vector3;
+  radius: number;
+  life: number;
+  color: string;
+  /** How thick the ring is, as a share of how far out it has spread. */
+  width: number;
+}
+
+/** How far out a wave has spread, `k` of the way through its life: fast at first, slowing as it goes. */
+const waveOut = (k: number, radius: number) => WAVE_START + (radius - WAVE_START) * (1 - (1 - k) * (1 - k));
+const WAVE_START = 0.2;
+
+/** Seconds until a wave of `radius` over `life` reaches `far` out (never, past its radius: then as it ends). */
+export function waveReaches(far: number, radius: number, life: number): number {
+  const out = Math.min(1, Math.max(0, (far - WAVE_START) / (radius - WAVE_START)));
+  return (1 - Math.sqrt(1 - out)) * life;
+}
+
+/**
+ * Lay a wave on the ground in `group` (see WaveOpts). Returns its step: run it every frame with the seconds gone by,
+ * and it says whether it is still going; once it is over it has taken itself away.
+ */
+export function groundWave(group: THREE.Object3D, o: WaveOpts): (dt: number) => boolean {
+  const material = new THREE.MeshBasicMaterial({ color: o.color, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+  const mesh = new THREE.Mesh(new THREE.RingGeometry(1 - o.width, 1, 48), material);
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.copy(o.at);
+  mesh.renderOrder = 8;
+  group.add(mesh);
+  let age = 0;
+  return (dt) => {
+    age += dt;
+    const k = Math.min(1, age / o.life);
+    const r = waveOut(k, o.radius);
+    mesh.scale.set(r, r, 1);
+    material.opacity = 0.85 * (1 - k) * (1 - k * 0.3);
+    if (k < 1) return true;
+    group.remove(mesh);
+    mesh.geometry.dispose();
+    material.dispose();
+    return false;
+  };
+}
+
+/** What a stage lends a move. */
+export interface MoveStage {
+  spawnFx(kind: FxKind, color: string, flip: boolean, opts: FxOpts): void;
+  /** A wave spreading out over the ground (see groundWave). */
+  wave(opts: WaveOpts): void;
+  /**
+   * Lay something flat on the ground (see groundSlash): `lay` puts it in the group it is given and returns its step,
+   * run every frame with the seconds gone by until it says it is over (and has taken itself away).
+   */
+  lay(lay: (group: THREE.Object3D) => (dt: number) => boolean): void;
+  /** Run this so many seconds on, on the stage's clock (slowed and paused with it, in the lab). */
+  later(run: () => void, seconds: number): void;
+  /** The attack's sound again, for a swing after the first (the stage plays the first itself). */
+  sound(): void;
+  /** Spring the attacker at the target: for a creature, which has no swing of its own. */
+  lunge(): void;
+  /**
+   * Leap the attacker bodily at the target and home again after (see pounceAt): a crouch, a jump through the air
+   * that comes down in the target's face, a moment there, and a hop back; or, for one that leapt in from further
+   * off (a Lunge), from where it set off, settling onto the hex it took after. Returns the seconds until it lands.
+   */
+  pounce(): number;
+  /** A blow has landed on the target: jolt it. */
+  jolt(): void;
+  /**
+   * Dash the attacker straight along its way and on through whoever is on it, to come to rest at the far end (a Cave
+   * Bat's Fell Swoop): where it goes through each one it passes, how many seconds in, and a jolt for them as it does;
+   * and how long the whole dash takes (dashTime). Only where it is played as a dash (WorldRenderer.dashUnit, the lab).
+   */
+  dash?(): DashWay;
+  /** Rock the whole view, `by` world units at first and dying away over `seconds` (a great quake). None in the lab. */
+  shake?(by: number, seconds: number): void;
+}
+
+/** A dash under way (MoveStage.dash): whoever it passes through, and when, and the seconds it takes to come to rest. */
+export interface DashWay {
+  passes: { at: THREE.Vector3; when: number; jolt(): void }[];
+  over: number;
+}
+
+/** How long a dash `far` world units long takes: quick, and not much longer the further it goes. */
+export const dashTime = (far: number) => Math.min(0.6, 0.22 + 0.05 * far);
+
+export interface MoveCtx {
+  figure: Figure;
+  /** Where on the target it lands. */
+  hitAt: THREE.Vector3;
+  /** Which way the target is from the attacker as the viewer sees it: 1 right, -1 left. */
+  dir: 1 | -1;
+  /** A critical hit: what lands is drawn gold, as any critical blow is. */
+  crit: boolean;
+  /** When the blow is told: the damage and what it leaves show then. */
+  onImpact(): void;
+  /**
+   * For a move that catches several at once (a Slam), played once for each: this one is not the first, so what it
+   * throws out round its user has been drawn already, and only its landing on this target is left to time.
+   */
+  echo?: boolean;
+  /**
+   * Played round its user alone, before anyone it catches is known (a fight's burst, ZoneView): nobody is reached
+   * by it here, and `onImpact` runs as it lands. Whoever it catches flinches as their own hit is told.
+   */
+  alone?: boolean;
+  /**
+   * Where on the ground it goes off from, when not from its user's feet: an Earthquake's heave comes up out of the
+   * cracked ground, from the middle of it, wherever the Guardian stands now.
+   */
+  ground?: THREE.Vector3;
+  /**
+   * Where those it calls into the fight will stand (a Broodmother's Brood Swarm), on the ground, so its move can bring
+   * them there: they appear as it lands. None in the lab, or if nobody came.
+   */
+  calls?: THREE.Vector3[];
+}
+
+/**
+ * The moves are keyed by the ability's name. One kind's own move for an ability others have by the same name (a bat's
+ * Bite, not a wolf's) is keyed `Name@kind`, and is played for that kind alone (zone/ownMoves.ts ownMove).
+ */
+export const moveName = (key: string) => key.split("@")[0];
+
+export interface SignatureMove {
+  /** Who uses it, by enemy kind, for the lab. */
+  who: string;
+  /** What it looks like, for the lab's tooltip. */
+  blurb: string;
+  /**
+   * The kinds it is played for, where more than `who` should have it (every bear's Maul, not a Brute's): any other
+   * strikes as usual. None: `who` alone, since others have abilities of the same name (a bat's Bite is not a wolf's).
+   */
+  only?: readonly string[];
+  /**
+   * One swing that catches several at once, each told as a hit of its own (a Brute's Great Cleave): played in full
+   * for the first, and as an `echo` for the rest, which are told once it has landed.
+   */
+  sweeps?: boolean;
+  play(stage: MoveStage, ctx: MoveCtx): void;
+  /**
+   * Its second part, played on a later turn (an Earthquake's heave, told as the ability used `again`): the lab has a
+   * button for it too.
+   */
+  again?: { blurb: string; play(stage: MoveStage, ctx: MoveCtx): void };
+}
+
+const CHEAP_SHOT_RED = "#e0313f";
+
+/**
+ * Two flat side slashes, one each way: a forehand across the front from the right, carried straight on into a
+ * backhand from the left (figures.ts SLICES), the sword leaving a red trail as it goes (figures.ts SWOOSH_TINT).
+ * Each cut leaves a red swipe lying flat across the target, the second a little below the first and swept the
+ * other way, and jolts it. The blow is told when the second lands.
+ */
+function cheapShot(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const cut = (second: boolean) => {
+    // The swipe is drawn as a quarter circle bowed up and to one side; turned an eighth, it lies flat, an arch.
+    const flip = second ? dir > 0 : dir < 0;
+    const at = hitAt.clone().setY(hitAt.y + (second ? -0.1 : 0.12));
+    stage.spawnFx("slash", crit ? "#ffd23f" : CHEAP_SHOT_RED, flip, { from: at, to: at, life: 0.24, size: [1.4, 2.3], turn: flip ? -Math.PI / 4 : Math.PI / 4, spin: (flip ? 1 : -1) * 0.5, fade: true });
+    stage.jolt();
+  };
+  const first = figure.strike("slices");
+  // A creature has no swing of its own: it springs at the target, and the two cuts land as it does.
+  if (first <= 0) stage.lunge();
+  stage.later(() => cut(false), first);
+  stage.later(() => {
+    stage.sound();
+    cut(true);
+    onImpact();
+  }, first + (first > 0 ? SLICES_APART : 0.2));
+}
+
+/**
+ * A creature's leap at its target (MoveStage.pounce), in seconds for each part: gathering itself (drawn back by
+ * `gather`), in the air (`high` at the top), held where it landed, and the hop home (`homeHop` high). It comes down
+ * `short` of the target's middle: in its face, not on top of it. A leap that carries it to a new hex (a Lunge from
+ * further off) is longer in the air the further it goes (leapAir), and settles onto its new hex in place of the hop.
+ */
+export const POUNCE = { crouch: 0.14, air: 0.26, hold: 0.2, back: 0.24, gather: 0.22, high: 0.6, homeHop: 0.12, short: 0.6 };
+/** Seconds from a pounce's start to its landing, and to its end, home again (or settled on its new hex). */
+export const pounceLands = (air: number = POUNCE.air) => POUNCE.crouch + air;
+export const pounceOver = (air: number = POUNCE.air) => pounceLands(air) + POUNCE.hold + POUNCE.back;
+export const POUNCE_LANDS = pounceLands();
+export const POUNCE_OVER = pounceOver();
+/** How long a leap to a new hex, at a target `far` world units off, is in the air: longer the further it goes. */
+export const leapAir = (far: number) => Math.min(0.6, POUNCE.air + 0.06 * Math.max(0, far - 1.5));
+
+const ease = (k: number) => k * k * (3 - 2 * k);
+
+/**
+ * Where a pounce has its creature `s` seconds in, at a target `far` away, `air` seconds off the ground: how far it is
+ * toward the target from where it set off (back from it while gathering itself), how high off the ground, the most
+ * it comes toward the target (`reach`), and how far it is on its way home from there, 0 to 1 (`home`).
+ */
+export function pounceAt(s: number, far: number, air: number = POUNCE.air): { ahead: number; up: number; reach: number; home: number } {
+  const reach = Math.max(0, far - POUNCE.short);
+  if (s <= 0) return { ahead: 0, up: 0, reach, home: 0 };
+  if (s >= pounceOver(air)) return { ahead: 0, up: 0, reach, home: 1 };
+  if (s < POUNCE.crouch) return { ahead: -POUNCE.gather * ease(s / POUNCE.crouch), up: 0, reach, home: 0 };
+  s -= POUNCE.crouch;
+  if (s < air) {
+    const k = s / air;
+    // A longer leap goes higher, but not as much higher as it goes further.
+    const high = POUNCE.high * Math.sqrt(air / POUNCE.air);
+    return { ahead: -POUNCE.gather + (reach + POUNCE.gather) * k, up: 4 * high * k * (1 - k), reach, home: 0 };
+  }
+  s -= air;
+  if (s < POUNCE.hold) return { ahead: reach, up: 0, reach, home: 0 };
+  const k = (s - POUNCE.hold) / POUNCE.back;
+  return { ahead: reach * (1 - ease(k)), up: 4 * POUNCE.homeHop * k * (1 - k), reach, home: ease(k) };
+}
+
+const TEETH = "#f4efe2";
+const GOLD = "#ffd23f";
+/** How long a lunge's jaws take to close: they meet as the wolf lands. A plain bite's are quicker. */
+const LUNGE_BITE = 0.1;
+const QUICK_BITE = 0.08;
+/** Seconds between each set of speed lines thrown off a leaping wolf. */
+const STREAK_EVERY = 0.03;
+const STREAK_PALE = "#d6e4ff";
+
+/**
+ * Jaws closing on the target: two arches (white, or `teeth`), the upper and the lower, `gape` apart, snapping together
+ * over `life` seconds. `onShut` runs as they meet.
+ */
+function jaws(stage: MoveStage, { hitAt, dir, crit }: MoveCtx, life: number, gape: number, onShut: () => void, teeth = TEETH) {
+  const color = crit ? GOLD : teeth;
+  // The swipe is drawn as a quarter circle; turned an eighth it lies flat as an arch, and half a turn more turns it over.
+  const flat = dir < 0 ? -Math.PI / 4 : Math.PI / 4;
+  for (const upper of [false, true]) {
+    const side = upper ? 1 : -1;
+    const from = hitAt.clone().setY(hitAt.y + side * gape);
+    const to = hitAt.clone().setY(hitAt.y + side * 0.06);
+    stage.spawnFx("slash", color, dir < 0, { from, to, life, size: [1.5, 1.2], turn: upper ? flat : flat + Math.PI, spin: 0, fade: false, onEnd: upper ? onShut : undefined });
+  }
+}
+
+/** A wolf's plain bite: a snap forward, and its jaws close on the target. */
+function wolfBite(stage: MoveStage, ctx: MoveCtx) {
+  stage.lunge();
+  jaws(stage, ctx, QUICK_BITE, 0.3, () => {
+    stage.spawnFx("burst", ctx.crit ? GOLD : TEETH, false, { from: ctx.hitAt, to: ctx.hitAt, life: 0.18, size: [0.5, 1.2], spin: 0.5, fade: true });
+    stage.jolt();
+    ctx.onImpact();
+  });
+}
+
+/** A troll's Chomp: a wolf's snap forward, its jaws closing on the target as two red arches. */
+function trollChomp(stage: MoveStage, ctx: MoveCtx) {
+  const red = ctx.crit ? GOLD : CHEAP_SHOT_RED;
+  stage.lunge();
+  jaws(stage, ctx, QUICK_BITE, 0.3, () => {
+    stage.spawnFx("burst", red, false, { from: ctx.hitAt, to: ctx.hitAt, life: 0.18, size: [0.5, 1.2], spin: 0.5, fade: true });
+    stage.jolt();
+    ctx.onImpact();
+  }, CHEAP_SHOT_RED);
+}
+
+/** A troll's Rake: its usual swing with a long clawed arm, leaving a red swoosh across the target. */
+function trollRake(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const red = crit ? GOLD : CHEAP_SHOT_RED;
+  const wait = figure.strike("light");
+  // A creature with no swing of its own springs at the target, and the swoosh lands as it does.
+  if (wait <= 0) stage.lunge();
+  stage.later(() => {
+    stage.spawnFx("slash", red, dir < 0, { from: hitAt, to: hitAt, life: 0.26, size: [1.3, 2.3], spin: -dir * 0.9, fade: true });
+    stage.spawnFx("burst", red, dir < 0, { from: hitAt, to: hitAt, life: 0.22, size: [0.6, 1.5], spin: 0.5, fade: true });
+    onImpact();
+  }, Math.max(0, wait));
+}
+
+/**
+ * A wolf's lunge: it gathers itself and leaps at the target (from up to 3 hexes off, if it sprang from there), kicking dust back off the ground as it goes and throwing
+ * speed lines off itself the whole way through the air. Its jaws close on the target as it comes down, with a flash
+ * and lines bursting out round it; the target is jolted and dust is thrown up at its feet. The wolf holds there a
+ * moment, then hops back (or settles onto the hex it took). The blow is told when the jaws meet.
+ */
+function wolfLunge(stage: MoveStage, ctx: MoveCtx) {
+  lunge(stage, ctx, false);
+}
+
+/**
+ * A Pack Leader's Great Lunge: a Dire Wolf's Lunge (wolfLunge) with more weight behind it. Thicker speed lines, red
+ * among the pale, stream off it through the air; where it lands the ground shakes, a shock rolling out over it with
+ * dust after, a ring of dust and grit thrown up all round, a second, bigger flash and the target jolted again.
+ */
+function greatLunge(stage: MoveStage, ctx: MoveCtx) {
+  lunge(stage, ctx, true);
+}
+
+/** A lunge (wolfLunge); `great`, a Pack Leader's (greatLunge). */
+function lunge(stage: MoveStage, ctx: MoveCtx, great: boolean) {
+  const { figure, hitAt, dir, crit, onImpact } = ctx;
+  const flip = dir < 0;
+  // Where the wolf's body is just now, wherever the leap has carried it.
+  const body = () => {
+    const at = figure.root.getWorldPosition(hitAt.clone());
+    at.y += 0.5;
+    return at;
+  };
+  // Away from the target, along the ground: the way what it throws off goes.
+  const back = body().sub(hitAt).setY(0).normalize();
+  const lands = stage.pounce();
+  if (lands > 0) {
+    // Off the ground: dust kicked back from its feet.
+    stage.later(() => {
+      const at = body();
+      const feet = at.setY(at.y - 0.45);
+      for (const lift of [0.15, 0.35]) stage.spawnFx("dust", "#c9b994", !flip, { from: feet, to: feet.clone().addScaledVector(back, 0.7).setY(feet.y + lift), life: 0.4, size: [0.8, 1.4], spin: 0, fade: true });
+    }, POUNCE.crouch);
+    // Through the air: speed lines streaming off behind it.
+    for (let s = POUNCE.crouch; s < lands; s += STREAK_EVERY) {
+      stage.later(() => {
+        const at = body();
+        for (let i = 0; i < (great ? 3 : 2); i++) {
+          const from = at.clone().setY(at.y - 0.3 + Math.random() * (great ? 0.9 : 0.65)).addScaledVector(back, 0.2 + Math.random() * 0.25);
+          const color = crit ? GOLD : great && i === 2 ? SAVAGE_RED : STREAK_PALE;
+          stage.spawnFx("streak", color, flip, { from, to: from.clone().addScaledVector(back, great ? 0.8 : 0.55), life: 0.16, size: great ? [1.5, 0.9] : [1.1, 0.7], spin: 0, fade: true });
+        }
+      }, s);
+    }
+  }
+  stage.later(() => {
+    jaws(stage, ctx, LUNGE_BITE, 0.4, () => {
+      const color = crit ? GOLD : TEETH;
+      stage.spawnFx("burst", color, false, { from: hitAt, to: hitAt, life: 0.26, size: [0.9, 2.4], spin: 0.6, fade: true });
+      // Lines bursting out from where the jaws met, either side.
+      for (const side of [false, true]) for (const turn of [-0.55, -0.15, 0.25, 0.6]) stage.spawnFx("streak", color, side, { from: hitAt, to: hitAt, life: 0.2, size: [0.6, 1.9], turn: side ? -turn : turn, spin: 0, fade: true });
+      const feet = hitAt.clone().setY(hitAt.y - 0.45);
+      for (const side of [-1, 1]) stage.spawnFx("dust", "#c9b994", side > 0, { from: feet, to: feet.clone().setX(feet.x + side * 0.55).setY(feet.y + 0.3), life: 0.4, size: [0.6, 1.1], spin: 0, fade: true });
+      stage.jolt();
+      stage.later(() => stage.jolt(), 0.05);
+      if (great) {
+        // The ground shakes where it lands: a shock rolling out with dust after, dust and grit thrown up all round,
+        // a second, bigger flash, and the target jolted again.
+        const floor = feet.clone().setY(feet.y + 0.05);
+        stage.wave({ at: floor, radius: 2.2, life: 0.42, color: crit ? GOLD : "#f3e7c8", width: 0.1 });
+        stage.later(() => stage.wave({ at: floor, radius: 1.9, life: 0.5, color: DUST, width: 0.3 }), 0.05);
+        for (let i = 0; i < 10; i++) {
+          const a = (i / 10) * Math.PI * 2 + Math.random() * 0.3;
+          const far = 0.7 + Math.random() * 0.4;
+          stage.spawnFx("dust", DUST, Math.cos(a) < 0, { from: feet, to: offset(feet, Math.cos(a) * far, 0.2 + Math.random() * 0.3, Math.sin(a) * far * 0.6), life: 0.5 + Math.random() * 0.2, size: [0.7, 1.6], spin: 0, fade: true });
+        }
+        for (let i = 0; i < 7; i++) {
+          const to = offset(feet, (Math.random() - 0.5) * 1.3, 0.4 + Math.random() * 0.5, (Math.random() - 0.5) * 0.4);
+          stage.spawnFx("fleck", ROCK_PALE, Math.random() < 0.5, { from: feet, to, life: 0.35, size: [0.4, 0.3], spin: 0, fade: true });
+        }
+        stage.later(() => {
+          stage.spawnFx("burst", crit ? GOLD : SAVAGE_RED, false, { from: hitAt, to: hitAt, life: 0.3, size: [1.2, 3.1], spin: -0.5, fade: true });
+          stage.jolt();
+        }, 0.09);
+      }
+      onImpact();
+    });
+  }, Math.max(0, lands - LUNGE_BITE));
+}
+
+const SAVAGE_RED = "#e0322b";
+const SAVAGE_DEEP = "#8f1414";
+
+/**
+ * A Pack Leader's Savage Bite: a snap forward, wide red jaws closing hard on the target. As they meet, a red flash
+ * with a deeper one swelling after it, red lines bursting out either side, and the target jolted twice.
+ */
+function savageBite(stage: MoveStage, ctx: MoveCtx) {
+  const { hitAt, crit, onImpact } = ctx;
+  const red = crit ? GOLD : SAVAGE_RED;
+  const deep = crit ? GOLD : SAVAGE_DEEP;
+  stage.lunge();
+  jaws(stage, ctx, LUNGE_BITE, 0.48, () => {
+    stage.spawnFx("burst", red, false, { from: hitAt, to: hitAt, life: 0.24, size: [0.8, 2.3], spin: 0.6, fade: true });
+    stage.later(() => stage.spawnFx("burst", deep, true, { from: hitAt, to: hitAt, life: 0.32, size: [1, 2.8], spin: -0.4, fade: true }), 0.06);
+    for (const side of [false, true]) for (const [n, turn] of [-0.5, -0.1, 0.3].entries()) stage.spawnFx("streak", n === 1 ? TEETH : red, side, { from: hitAt, to: hitAt, life: 0.2, size: [0.6, 1.9], turn: side ? -turn : turn, spin: 0, fade: true });
+    stage.jolt();
+    stage.later(() => stage.jolt(), 0.07);
+    onImpact();
+  }, SAVAGE_RED);
+}
+
+/**
+ * A Howl's sound waves: how far out each spreads over the ground (just past every ally 3 hexes off, its reach, at a
+ * hex's width of √3 apiece), how long it takes, and how many there are, how far apart.
+ */
+const HOWL_WAVES = { radius: 5.6, life: 0.95, count: 5, every: 0.17 };
+
+
+/**
+ * A Pack Leader's Howl: it sits back on its haunches and throws its head up at the sky (figures.ts HOWL). As the howl
+ * rings out, red sound waves pulse out from it one after another, rings spreading over the ground round it, with a red
+ * flare at its mouth and lines bursting off its head with each wave. It
+ * reaches its own side, not the other, so nobody is jolted; what it does to them is told as it rings out.
+ */
+function howlMove(stage: MoveStage, { figure, crit, onImpact }: MoveCtx) {
+  const peak = Math.max(0, figure.howl());
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const ground = feet.clone().setY(feet.y + 0.08);
+  // Its muzzle, thrown up: about as high over its feet as its head is when it sits back.
+  const mouth = () => figure.root.getWorldPosition(new THREE.Vector3()).setY(feet.y + 1.35);
+  const red = crit ? GOLD : SAVAGE_RED;
+  const deep = crit ? GOLD : SAVAGE_DEEP;
+  stage.later(() => {
+    const at = mouth();
+    stage.spawnFx("burst", red, false, { from: at, to: at, life: 0.3, size: [0.6, 1.9], spin: 0.5, fade: true });
+    for (let n = 0; n < HOWL_WAVES.count; n++) {
+      stage.later(() => {
+        stage.wave({ at: ground, radius: HOWL_WAVES.radius, life: HOWL_WAVES.life, color: n % 2 ? deep : red, width: 0.06 });
+        // Lines bursting off its head with each wave, either side, fanned up from level: the first the fullest.
+        const head = mouth();
+        const turns = n === 0 ? [-0.2, 0.15, 0.5, 0.85, 1.2] : [0.1, 0.55, 1];
+        for (const side of [false, true]) for (const [k, turn] of turns.entries()) stage.spawnFx("streak", k % 2 ? TEETH : n % 2 ? deep : red, side, { from: head, to: head, life: 0.22, size: n === 0 ? [0.7, 2.3] : [0.5, 1.6], turn: side ? -turn : turn, spin: 0, fade: true });
+      }, n * HOWL_WAVES.every);
+    }
+    onImpact();
+  }, peak);
+}
+
+/** How far apart a bear's three claw marks lie across the target, and the seconds between each being torn. */
+const CLAW_MARKS = { apart: 0.17, every: 0.025 };
+
+/**
+ * Three red claw marks torn across the target one after another, raked the way `dir` says (1: down to the right as
+ * the viewer sees it), `at` a little off its middle; `size` scales them.
+ */
+function clawMarks(stage: MoveStage, at: THREE.Vector3, dir: 1 | -1, color: string, size = 1) {
+  const flip = dir < 0;
+  [-1, 0, 1].forEach((i, n) =>
+    stage.later(() => {
+      // Each mark a little further across, and a little lower, than the one before: three parallel rakes.
+      const mark = at.clone().setX(at.x + i * CLAW_MARKS.apart * size * dir).setY(at.y - i * CLAW_MARKS.apart * size * 0.5);
+      stage.spawnFx("slash", color, flip, { from: mark, to: mark, life: 0.28, size: [1.1 * size, 1.9 * size], turn: (flip ? -1 : 1) * 0.15, spin: (flip ? 1 : -1) * 0.35, fade: true });
+    }, n * CLAW_MARKS.every),
+  );
+}
+
+/** A Maul's claw marks: near black, so they read against any ground. */
+const MAUL_BLACK = "#16121c";
+
+/** The bears: what plays a bear's own Maul. */
+const BEARS = ["bear", "snow_bear", "great_bear"] as const;
+
+/**
+ * A bear's Maul: it rears right up onto its hind legs with both forepaws high, and tears into the target with them by
+ * turns, right, left, right, left (figures.ts FLURRY), white swooshes behind its claws and lurching in as it goes.
+ * Every blow tears three black claw marks across the target, the way that paw raked, with white slashes flung off
+ * round it and a white flash, and jolts it; the last throws black and white lines out all round. The blow is told as
+ * the last lands.
+ */
+function bearMaul(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  // Black claw marks and white slashes (all gold on a critical hit).
+  const dark = crit ? GOLD : MAUL_BLACK;
+  const pale = crit ? GOLD : TEETH;
+  const first = figure.strike("flurry");
+  // A creature with no flurry of its own springs at the target, and the blows land quick as it does.
+  if (first <= 0) stage.lunge();
+  const when = FLURRY_BLOWS.map((h) => (first > 0 ? first + h - FLURRY_BLOWS[0] : (h - FLURRY_BLOWS[0]) * 0.6));
+  when.forEach((at, n) => {
+    const last = n === when.length - 1;
+    stage.later(() => {
+      if (n > 0) stage.sound();
+      // The right paw rakes one way across the target, the left the other.
+      const way = (n % 2 === 0 ? dir : -dir) as 1 | -1;
+      const middle = hitAt.clone().setY(hitAt.y + 0.12 - n * 0.06);
+      clawMarks(stage, middle, way, dark, last ? 1.25 : 1);
+      // Slashes flung off round it, every which way.
+      for (let k = 0; k < 3; k++) {
+        const off = middle.clone().setX(middle.x + (Math.random() - 0.5) * 0.7).setY(middle.y + (Math.random() - 0.5) * 0.6);
+        const side = Math.random() < 0.5;
+        stage.spawnFx("slash", pale, side, { from: off, to: off, life: 0.2, size: [0.6, 1.2], turn: Math.random() * Math.PI * 2, spin: (side ? 1 : -1) * 0.6, fade: true });
+      }
+      stage.spawnFx("burst", pale, way < 0, { from: middle, to: middle, life: 0.2, size: [0.5, 1.3], spin: 0.5, fade: true });
+      stage.jolt();
+      if (!last) return;
+      // The last: lines bursting out all round, and the blow told.
+      stage.spawnFx("burst", pale, false, { from: hitAt, to: hitAt, life: 0.3, size: [1, 2.6], spin: 0.7, fade: true });
+      for (const side of [false, true]) for (const [n, turn] of [-0.6, -0.2, 0.2, 0.6].entries()) stage.spawnFx("streak", n % 2 ? dark : pale, side, { from: hitAt, to: hitAt, life: 0.22, size: [0.6, 2], turn: side ? -turn : turn, spin: 0, fade: true });
+      stage.later(() => stage.jolt(), 0.05);
+      onImpact();
+    }, at);
+  });
+}
+
+/**
+ * A bear's Rending Swipe: it rears back onto its hind legs with a forepaw raised high and out to its side, then
+ * comes down on the target, the paw raking down and across its front and leaving a red swoosh behind its claws
+ * (figures.ts CLAW). Where they land, three red claw marks are torn across the target one after another, with a
+ * spray of red off it; it is jolted, and the blow is told.
+ */
+function rendingSwipe(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const color = crit ? GOLD : CHEAP_SHOT_RED;
+  const wait = figure.strike("claw");
+  // A creature with no swipe of its own springs at the target, and the marks land as it does.
+  if (wait <= 0) stage.lunge();
+  stage.later(() => {
+    clawMarks(stage, hitAt, dir, color);
+    stage.spawnFx("burst", color, dir < 0, { from: hitAt, to: hitAt, life: 0.22, size: [0.6, 1.5], spin: 0.5, fade: true });
+    stage.jolt();
+    onImpact();
+  }, Math.max(0, wait));
+}
+
+const DUST = "#c9b994";
+const ROCK = "#8a8070";
+const ROCK_PALE = "#a89f8c";
+/** A point so far off another. */
+const offset = (p: THREE.Vector3, x: number, y: number, z: number) => p.clone().set(p.x + x, p.y + y, p.z + z);
+
+/** A Club Smash's pulse: as far as it spreads (just past the hexes beside the target) and how long it takes. */
+const SMASH_PULSE = { radius: 2.3, life: 0.4 };
+
+/**
+ * An Ogre's Club Smash: it heaves the club right up over its head and brings it straight down on the target
+ * (figures.ts SLAM). Where it lands the ground bursts like a small explosion: a flash, a pulse rolling out over the
+ * ground to the hexes all round, a ring of dust thrown out and billowing up, chunks of rock flung out every way in
+ * arcs, grit spraying up, and shock lines bursting out. The target is jolted twice, and the blow is told as the club
+ * lands. Only the target is smashed: a hero beside it caught by the pulse just flinches (ZoneView, a `splash` hit).
+ */
+function clubSmash(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const wait = figure.strike("slam");
+  // A creature has no slam of its own: it springs at the target, and the ground bursts as it lands.
+  if (wait <= 0) stage.lunge();
+  stage.later(() => {
+    const ground = hitAt.clone().setY(hitAt.y - 0.45);
+    const flash = crit ? GOLD : "#fff3d6";
+    stage.spawnFx("burst", flash, false, { from: ground, to: ground, life: 0.24, size: [1, 3], spin: 0.6, fade: true });
+    // The shock pulsing out over the ground to the hexes all round, where any hero beside the target is caught by it.
+    const floor = ground.clone().setY(ground.y + 0.05);
+    stage.wave({ at: floor, radius: SMASH_PULSE.radius, life: SMASH_PULSE.life, color: crit ? GOLD : "#f3e7c8", width: 0.1 });
+    stage.later(() => stage.wave({ at: floor, radius: SMASH_PULSE.radius * 0.85, life: SMASH_PULSE.life * 1.15, color: DUST, width: 0.3 }), 0.05);
+    // Shock lines bursting out from where it landed, all round.
+    for (const side of [false, true]) for (const turn of [-0.7, -0.3, 0.1, 0.5]) stage.spawnFx("streak", flash, side, { from: ground, to: ground, life: 0.2, size: [0.7, 2.2], turn: side ? -turn : turn, spin: 0, fade: true });
+    // A ring of dust thrown out along the ground and billowing up, then a slower cloud hanging over it.
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 + Math.random() * 0.3;
+      const far = 0.7 + Math.random() * 0.35;
+      const to = offset(ground, Math.cos(a) * far, 0.15 + Math.random() * 0.35, Math.sin(a) * far * 0.6);
+      stage.spawnFx("dust", DUST, Math.cos(a) < 0, { from: ground, to, life: 0.45 + Math.random() * 0.2, size: [0.7, 1.6], spin: 0, fade: true });
+    }
+    stage.later(() => {
+      for (const x of [-0.35, 0, 0.35]) {
+        const at = ground.clone().setX(ground.x + x);
+        stage.spawnFx("dust", DUST, x < 0, { from: at, to: at.clone().setY(at.y + 0.7), life: 0.7, size: [1.2, 2.2], spin: 0, fade: true });
+      }
+    }, 0.08);
+    // Chunks of rock flung out every way in arcs, tumbling, and grit sprayed up between them.
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2 + Math.random() * 0.5;
+      const far = 0.8 + Math.random() * 0.7;
+      const to = offset(ground, Math.cos(a) * far, -0.05, Math.sin(a) * far * 0.6);
+      const big = 0.35 + Math.random() * 0.25;
+      stage.spawnFx("rock", i % 2 ? ROCK : ROCK_PALE, Math.cos(a) < 0, { from: ground, to, life: 0.4 + Math.random() * 0.2, size: [big, big * 0.8], spin: (Math.random() - 0.5) * 16, fade: false, arc: 0.4 + Math.random() * 0.5 });
+    }
+    for (let i = 0; i < 8; i++) {
+      const to = offset(ground, (Math.random() - 0.5) * 1.4, 0.5 + Math.random() * 0.6, (Math.random() - 0.5) * 0.4);
+      stage.spawnFx("fleck", ROCK_PALE, Math.random() < 0.5, { from: ground, to, life: 0.35, size: [0.4, 0.3], spin: 0, fade: true });
+    }
+    stage.jolt();
+    stage.later(() => stage.jolt(), 0.06);
+    onImpact();
+  }, Math.max(0, wait));
+}
+
+/** An Ogre's Slam wave: as far as it spreads (past every hero two hexes off, ENEMY_BURST) and how long it takes. */
+export const SLAM_WAVE = { radius: 3.8, life: 0.6 };
+
+/**
+ * An Ogre's Slam: it crouches, springs straight up into the air and comes down flat on its backside (figures.ts
+ * SEAT_DROP). As it lands the ground pulses out from under it, a bright wave spreading over the ground with a broad
+ * dusty one just behind it, and great clouds of dust rolling out after them and billowing up round it. Each hero is
+ * jolted, with dust thrown up at their feet, as the wave reaches them, and the blow on them is told then.
+ */
+function seatSlam(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alone }: MoveCtx) {
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const ground = feet.clone().setY(feet.y + 0.08);
+  const { radius, life } = SLAM_WAVE;
+  // Only the first plays the drop: by the time the others are told, it has already landed.
+  const lands = echo ? 0 : Math.max(0, figure.strike("drop"));
+  if (!echo) stage.later(() => {
+    stage.wave({ at: ground, radius, life, color: crit ? GOLD : "#f3e7c8", width: 0.08 });
+    stage.later(() => stage.wave({ at: ground, radius: radius * 0.85, life: life * 1.15, color: DUST, width: 0.3 }), 0.06);
+    stage.spawnFx("burst", crit ? GOLD : "#fff3d6", false, { from: offset(ground, 0, 0.3, 0), to: offset(ground, 0, 0.3, 0), life: 0.24, size: [1, 3], spin: 0.6, fade: true });
+    // Clouds of dust rolling out after the wave, all round, swelling as they go.
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2 + Math.random() * 0.25;
+      const far = radius * (0.5 + Math.random() * 0.3);
+      const from = offset(ground, Math.cos(a) * 0.5, 0.15, Math.sin(a) * 0.5);
+      const to = offset(ground, Math.cos(a) * far, 0.25 + Math.random() * 0.25, Math.sin(a) * far);
+      stage.spawnFx("dust", DUST, Math.cos(a) < 0, { from, to, life: 0.75 + Math.random() * 0.25, size: [0.9, 2.3], spin: 0, fade: true });
+    }
+    // And a slower cloud billowing up round its feet.
+    stage.later(() => {
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + Math.random() * 0.5;
+        const from = offset(ground, Math.cos(a) * 0.6, 0.1, Math.sin(a) * 0.6);
+        stage.spawnFx("dust", DUST, Math.cos(a) < 0, { from, to: offset(from, Math.cos(a) * 0.4, 0.8, Math.sin(a) * 0.4), life: 1, size: [1.4, 2.8], spin: 0, fade: true });
+      }
+    }, 0.1);
+  }, lands);
+  if (alone) return stage.later(onImpact, lands);
+  // Whoever it reaches is caught as the wave passes under them.
+  const far = Math.hypot(hitAt.x - feet.x, hitAt.z - feet.z);
+  stage.later(() => {
+    const at = hitAt.clone().setY(hitAt.y - 0.45);
+    for (const side of [-1, 1]) stage.spawnFx("dust", crit ? GOLD : DUST, side > 0, { from: at, to: offset(at, side * 0.6, 0.4, 0), life: 0.45, size: [0.7, 1.4], spin: 0, fade: true });
+    stage.jolt();
+    onImpact();
+  }, lands + waveReaches(far, radius, life));
+}
+
+const FIRE = "#ff7a2a";
+const FLAME = "#ffb347";
+const FIRE_DEEP = "#d9381e";
+const FIRE_FLASH = "#fff1c9";
+const SMOKE = "#5a5048";
+/** An Immolate's fireball: how long it is in the air, how high it goes over the straight line, and how far its fire spreads. */
+export const IMMOLATE = { flight: 0.55, arc: 1.6, spread: 2.0 };
+
+/**
+ * A Cultist's Immolate: sparks of fire swirl up round its staff hand as it winds up (the cast), and as it points a
+ * fireball leaves the hand with a flare and goes up in a high arc, spinning, embers and wisps of smoke falling off it
+ * the whole way. Where it comes down the ground goes up: a white flash and a burst of fire, a ring of flame rolling out
+ * over the hexes round it with a deeper red one behind, tongues of flame licking up all over, embers flung out in arcs,
+ * and smoke rising after. `hitAt` is over the hex it is thrown at; the blow (on all it catches) is told as it lands.
+ */
+function immolate(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const hand = () => {
+    const held = figure.hands()?.[0];
+    if (held) return held.getWorldPosition(new THREE.Vector3());
+    const at = figure.root.getWorldPosition(new THREE.Vector3());
+    return at.setY(at.y + 1.1);
+  };
+  const ground = hitAt.clone().setY(hitAt.y - 0.45);
+  const wait = Math.max(0, figure.cast());
+  // Winding up: sparks of fire swirling in and up round the hand.
+  for (let s = 0; s < wait; s += 0.045) {
+    stage.later(() => {
+      const at = hand();
+      const a = Math.random() * Math.PI * 2;
+      const from = offset(at, Math.cos(a) * 0.4, -0.25 + Math.random() * 0.2, Math.sin(a) * 0.4);
+      stage.spawnFx("spark", Math.random() < 0.5 ? FIRE : FLAME, Math.cos(a) < 0, { from, to: offset(at, Math.cos(a) * 0.1, 0.35, Math.sin(a) * 0.1), life: 0.28, size: [0.55, 0.2], spin: 3, fade: true });
+    }, s);
+  }
+  stage.later(() => {
+    const from = hand();
+    const { flight, arc, spread } = IMMOLATE;
+    stage.spawnFx("burst", FLAME, false, { from, to: from, life: 0.16, size: [0.4, 1], spin: 0.4, fade: true });
+    stage.spawnFx("bolt", crit ? GOLD : FIRE, dir < 0, { from, to: ground, life: flight, size: [1.3, 1.5], spin: dir * 7, fade: false, arc, onEnd: () => blast() });
+    // Embers and smoke falling off it all the way, along the same arc (WorldRenderer's fx: up by arc·4k(1−k)).
+    for (let s = 0.03; s < flight; s += 0.035) {
+      stage.later(() => {
+        const k = s / flight;
+        const at = from.clone().lerp(ground, k);
+        at.y += arc * 4 * k * (1 - k);
+        stage.spawnFx("fleck", Math.random() < 0.5 ? FIRE : FLAME, Math.random() < 0.5, { from: at, to: offset(at, (Math.random() - 0.5) * 0.35, -0.3, (Math.random() - 0.5) * 0.2), life: 0.32, size: [0.35, 0.2], spin: 0, fade: true });
+        if (Math.random() < 0.4) stage.spawnFx("dust", SMOKE, Math.random() < 0.5, { from: at, to: offset(at, 0, 0.25, 0), life: 0.45, size: [0.4, 0.8], spin: 0, fade: true });
+      }, s);
+    }
+    const blast = () => {
+      stage.spawnFx("burst", crit ? GOLD : FIRE_FLASH, false, { from: ground, to: ground, life: 0.2, size: [1.2, 3.4], spin: 0.6, fade: true });
+      stage.spawnFx("burst", FIRE, true, { from: ground, to: ground.clone().setY(ground.y + 0.3), life: 0.38, size: [1, 2.8], spin: -0.5, fade: true });
+      // A ring of flame rolling out over the hexes round it, a deeper red one just behind.
+      const floor = ground.clone().setY(ground.y + 0.05);
+      stage.wave({ at: floor, radius: spread, life: 0.45, color: FLAME, width: 0.14 });
+      stage.later(() => stage.wave({ at: floor, radius: spread * 0.85, life: 0.55, color: FIRE_DEEP, width: 0.32 }), 0.05);
+      // Shock lines out from where it struck.
+      for (const side of [false, true]) for (const turn of [-0.6, -0.2, 0.2, 0.6]) stage.spawnFx("streak", FLAME, side, { from: ground, to: ground, life: 0.2, size: [0.7, 2], turn: side ? -turn : turn, spin: 0, fade: true });
+      // Tongues of flame licking up all over, one after another.
+      for (let i = 0; i < 12; i++) {
+        stage.later(() => {
+          const a = Math.random() * Math.PI * 2;
+          const far = Math.sqrt(Math.random()) * spread * 0.6;
+          const at = offset(ground, Math.cos(a) * far, 0.05, Math.sin(a) * far * 0.7);
+          stage.spawnFx("streak", Math.random() < 0.5 ? FIRE : FLAME, Math.random() < 0.5, { from: at, to: offset(at, 0, 0.6 + Math.random() * 0.5, 0), life: 0.3 + Math.random() * 0.15, size: [0.9, 0.5], turn: Math.PI / 2, spin: 0, fade: true });
+          stage.spawnFx("burst", FIRE, Math.random() < 0.5, { from: at, to: offset(at, 0, 0.35, 0), life: 0.3, size: [0.3, 0.9], spin: 0.5, fade: true });
+        }, i * 0.03);
+      }
+      // Embers flung out every way in arcs.
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2 + Math.random() * 0.4;
+        const far = 0.7 + Math.random() * 0.9;
+        stage.spawnFx("fleck", i % 2 ? FIRE : FLAME, Math.cos(a) < 0, { from: ground, to: offset(ground, Math.cos(a) * far, 0, Math.sin(a) * far * 0.6), life: 0.45 + Math.random() * 0.2, size: [0.4, 0.25], spin: 0, fade: true, arc: 0.5 + Math.random() * 0.5 });
+      }
+      // And smoke rising after it, slow.
+      stage.later(() => {
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2 + Math.random() * 0.5;
+          const at = offset(ground, Math.cos(a) * 0.6, 0.2, Math.sin(a) * 0.4);
+          stage.spawnFx("dust", SMOKE, Math.cos(a) < 0, { from: at, to: offset(at, Math.cos(a) * 0.3, 1.1, 0), life: 1.1, size: [1, 2.4], spin: 0, fade: true });
+        }
+      }, 0.15);
+      stage.jolt();
+      onImpact();
+    };
+  }, wait);
+}
+
+/** A hex's width on the map, in world units (places/placing.ts hexToWorld). */
+const HEX = Math.sqrt(3);
+const STEEL = "#dfe9ff";
+/**
+ * A Great Cleave's slash on the ground, laid over both rows of hexes in front of the Brute (combat.ts sweepHexes): how
+ * far out its middle runs (between the near row, a hex out, and the far one, two out), how far either side of straight
+ * ahead (past the middle of the near row's side hexes), how wide it is at its widest (from inside the near row's middle
+ * to past the far row's), and the seconds to cut it and then to fade.
+ */
+export const GREAT_CLEAVE = { radius: HEX * 1.45, half: Math.PI / 3 + 0.3, width: HEX * 1.25, cut: 0.16, life: 0.55 };
+
+/** The swing landing on one caught by a Great Cleave: a jolt as the slash reaches them. */
+function cleaveHit(stage: MoveStage, { onImpact }: MoveCtx) {
+  stage.jolt();
+  onImpact();
+}
+
+/**
+ * A Brute's Great Cleave: its great two-handed sweep from side to side (figures.ts SWEEP), carried right round
+ * through both rows of hexes in front of it. As it comes across, one great steel-white slash is cut into the ground
+ * over the near row and the far one together, from one side to the other (groundSlash, as a Great Bear's Rending
+ * Cleave), dust kicked up along it and grit flung out past its far end. Everyone it catches is jolted as it lands.
+ */
+function greatCleave(stage: MoveStage, ctx: MoveCtx) {
+  const { figure, hitAt, dir, crit, echo } = ctx;
+  if (echo) return cleaveHit(stage, ctx);
+  const wait = figure.strike("heavy");
+  // A creature has no swing of its own: it springs at the target, and the sweep runs as it lands.
+  if (wait <= 0) stage.lunge();
+  const { radius, half, width, cut, life } = GREAT_CLEAVE;
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const ahead = Math.atan2(hitAt.z - feet.z, hitAt.x - feet.x);
+  const color = crit ? GOLD : STEEL;
+  const from = (-dir) as 1 | -1;
+  const lands = Math.max(0, wait);
+  stage.later(() => {
+    stage.lay(groundSlash({ at: feet.clone().setY(feet.y + 0.08), radius, ahead, half, width, from, color, cut, life }));
+    // Dust kicked up along it as it is cut, and grit flung on out past its far end.
+    for (let i = 0; i <= 6; i++) {
+      const a = ahead + half * (1 - (2 * i) / 6) * from;
+      const out = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+      const at = feet.clone().addScaledVector(out, radius).setY(feet.y + 0.12);
+      stage.later(() => {
+        stage.spawnFx("dust", DUST, out.x < 0, { from: at, to: at.clone().addScaledVector(out, 0.5).setY(at.y + 0.35), life: 0.45, size: [0.6, 1.3], spin: 0, fade: true });
+        if (i >= 4) for (let n = 0; n < 2; n++) stage.spawnFx("fleck", ROCK_PALE, out.x < 0, { from: at, to: at.clone().addScaledVector(out, 0.7 + Math.random() * 0.5).setY(at.y + 0.3), life: 0.38, size: [0.4, 0.3], spin: 0, fade: true, arc: 0.4 });
+      }, (cut * i) / 6);
+    }
+  }, Math.max(0, lands - cut / 2));
+  stage.later(() => cleaveHit(stage, ctx), lands);
+}
+
+/** A Battering Ram's charge: the least it gathers itself for, in seconds. */
+export const BATTERING_RAM = { gather: 0.18 };
+
+/**
+ * A Brute's Battering Ram: it drops its shoulder and drives in at the target (figures.ts THRUST, then a spring at
+ * them), dust kicked back off its heels and speed lines streaming off it. It hits like a door caving in: a big flash and a shock pulsing out over the ground,
+ * shock lines bursting out ahead, and the target jolted hard. (Shoved back, it leaves a trail of dust of its own:
+ * WorldRenderer.trailDust.)
+ */
+function batteringRam(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const flip = dir < 0;
+  const color = crit ? GOLD : "#fff3d6";
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  // Toward the target and on past it, along the ground: the way it charges, and the way the target is driven.
+  const on = hitAt.clone().sub(feet).setY(0).normalize();
+  const lands = Math.max(BATTERING_RAM.gather, figure.strike("stab"));
+  const heels = feet.clone().setY(feet.y + 0.12);
+  for (const lift of [0.15, 0.35]) stage.spawnFx("dust", DUST, !flip, { from: heels, to: heels.clone().addScaledVector(on, -0.8).setY(heels.y + lift), life: 0.4, size: [0.8, 1.5], spin: 0, fade: true });
+  stage.later(() => stage.lunge(), Math.max(0, lands - 0.12));
+  for (let s = 0; s < lands; s += STREAK_EVERY) {
+    stage.later(() => {
+      const at = figure.root.getWorldPosition(new THREE.Vector3());
+      for (let i = 0; i < 2; i++) {
+        const from = at.clone().setY(at.y + 0.3 + Math.random() * 0.7).addScaledVector(on, -(0.2 + Math.random() * 0.3));
+        stage.spawnFx("streak", crit ? GOLD : STREAK_PALE, flip, { from, to: from.clone().addScaledVector(on, -0.6), life: 0.16, size: [1.1, 0.7], spin: 0, fade: true });
+      }
+    }, s);
+  }
+  stage.later(() => {
+    // A big flash where the shoulder meets them, a second, slower one swelling behind it, and a shock pulsing out
+    // over the ground from their feet.
+    stage.spawnFx("burst", color, false, { from: hitAt, to: hitAt, life: 0.26, size: [1.2, 3.4], spin: 0.6, fade: true });
+    stage.later(() => stage.spawnFx("burst", crit ? GOLD : DUST, true, { from: hitAt, to: hitAt, life: 0.34, size: [1, 2.6], spin: -0.5, fade: true }), 0.05);
+    const floor = hitAt.clone().setY(feet.y + 0.06);
+    stage.wave({ at: floor, radius: 1.6, life: 0.32, color: crit ? GOLD : "#f3e7c8", width: 0.12 });
+    // Shock lines bursting out ahead, the way they are going, and a few flung back the way it came.
+    for (const turn of [-0.6, -0.3, 0, 0.3, 0.6]) stage.spawnFx("streak", color, flip, { from: hitAt, to: hitAt.clone().addScaledVector(on, 1.1), life: 0.24, size: [0.9, 2.4], turn, spin: 0, fade: true });
+    for (const turn of [-0.4, 0.4]) stage.spawnFx("streak", color, !flip, { from: hitAt, to: hitAt.clone().addScaledVector(on, -0.5), life: 0.18, size: [0.6, 1.6], turn, spin: 0, fade: true });
+    // Grit and dust thrown up off them by the blow.
+    for (let i = 0; i < 6; i++) {
+      const to = hitAt.clone().addScaledVector(on, 0.4 + Math.random() * 0.6).setY(hitAt.y + (Math.random() - 0.3) * 0.8);
+      stage.spawnFx("fleck", ROCK_PALE, flip, { from: hitAt, to, life: 0.32, size: [0.4, 0.3], spin: 0, fade: true });
+    }
+    stage.jolt();
+    stage.later(() => stage.jolt(), 0.06);
+    stage.later(() => stage.jolt(), 0.12);
+    // The dust they throw up as they are driven back is theirs, not the blow's (WorldRenderer.trailDust).
+    onImpact();
+  }, lands);
+}
+
+const SHAFT = "#e8dcc0";
+/**
+ * A Rain of Arrows: how many arrows go up off the string, how many come down, how far out from the hex aimed at they
+ * fall (in world units: past the ring of hexes round it, just), how high they start, how long each falls, how long
+ * the whole shower takes to come down, and how long the ones that land stay standing in the ground.
+ */
+export const RAIN_OF_ARROWS = { up: 3, down: 18, spread: HEX * 1.25, height: 5.5, fall: 0.3, over: 0.45, stand: 0.7 };
+
+/**
+ * An Archer's Rain of Arrows: it draws and looses (figures.ts shoot), and a sheaf of arrows goes up off the string,
+ * out of sight. A moment later they come down slanting on the hex aimed at and all round it, one after another:
+ * each lands with a puff of dust and stays standing in the ground a moment, and a pale ring pulses out over the
+ * hexes as the first of them hit. `hitAt` is over the hex it is aimed at; the blow (on all it catches) is told as
+ * the thick of it lands.
+ */
+function rainOfArrows(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const { up, down, spread, height, fall, over, stand } = RAIN_OF_ARROWS;
+  const color = crit ? GOLD : SHAFT;
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const ground = hitAt.clone().setY(hitAt.y - 0.45);
+  const wait = Math.max(0, figure.loose() || figure.cast());
+  // Up off the string, steeply, toward the mark, and gone.
+  stage.later(() => {
+    const from = feet.clone().setY(feet.y + 1.1);
+    for (let i = 0; i < up; i++) {
+      const tilt = 0.25 + i * 0.12;
+      const to = offset(from, dir * (0.9 + i * 0.25), height - 1, 0);
+      stage.spawnFx("arrow", color, false, { from: offset(from, 0, i * 0.1, 0), to, life: 0.3, size: [0.9, 0.9], turn: Math.PI / 2 - dir * tilt, spin: 0, fade: true });
+    }
+  }, wait);
+  // Down on the hex and all round it, slanting the way they were shot.
+  const slant = 0.5;
+  const start = wait + 0.35;
+  for (let i = 0; i < down; i++) {
+    // The first few on the hex aimed at, the rest spread out over the ring round it.
+    const a = Math.random() * Math.PI * 2;
+    const far = i < 3 ? Math.random() * 0.4 : (0.35 + 0.65 * Math.sqrt(Math.random())) * spread;
+    const lands = offset(ground, Math.cos(a) * far, 0.15, Math.sin(a) * far);
+    const from = offset(lands, -dir * slant * height * 0.35, height, 0);
+    const turn = -Math.PI / 2 + dir * slant * 0.6;
+    stage.later(() => {
+      stage.spawnFx("arrow", color, false, { from, to: lands, life: fall, size: [0.85, 0.85], turn, spin: 0, fade: false, onEnd: () => {
+        // It stands in the ground a moment, a puff of dust kicked up round it.
+        stage.spawnFx("arrow", color, false, { from: lands, to: lands, life: stand, size: [0.85, 0.85], turn, spin: 0, fade: true });
+        stage.spawnFx("dust", DUST, Math.random() < 0.5, { from: lands, to: offset(lands, (Math.random() - 0.5) * 0.4, 0.3, 0), life: 0.35, size: [0.35, 0.8], spin: 0, fade: true });
+        if (Math.random() < 0.4) stage.spawnFx("fleck", ROCK_PALE, Math.random() < 0.5, { from: lands, to: offset(lands, (Math.random() - 0.5) * 0.6, 0, (Math.random() - 0.5) * 0.4), life: 0.3, size: [0.3, 0.2], spin: 0, fade: true, arc: 0.3 });
+      } });
+    }, start + (over * i) / down);
+  }
+  // As the first hit: a pale ring over the hexes it covers.
+  stage.later(() => stage.wave({ at: ground.clone().setY(ground.y + 0.05), radius: spread, life: 0.5, color: crit ? GOLD : "#f3e7c8", width: 0.1 }), start + fall);
+  // The thick of it: everyone caught is told.
+  stage.later(() => {
+    stage.jolt();
+    onImpact();
+  }, start + fall + over / 2);
+}
+
+/** How a slash laid on the ground looks (see groundSlash). */
+export interface SlashOpts {
+  /** The middle of the circle it is cut along, on the ground. */
+  at: THREE.Vector3;
+  /** How far out from `at` it runs, in world units. */
+  radius: number;
+  /** The way it faces, as an angle about the vertical (atan2 of z over x), and how far it runs either side of it, in radians. */
+  ahead: number;
+  half: number;
+  /** How wide it is at its widest, the middle, in world units: it tapers to points at either end. */
+  width: number;
+  /** Which end it is cut from: 1 from the side clockwise of `ahead` (as seen from above), -1 from the other. */
+  from: 1 | -1;
+  color: string;
+  /** Seconds to cut it from end to end, and then for it to fade. */
+  cut: number;
+  life: number;
+}
+
+/**
+ * A slash laid flat on the ground (see SlashOpts): a crescent along a circle round `at`, thickest in the middle and
+ * drawn on from one end to the other, then fading. Always on the plane of the ground, whichever way it is seen from.
+ * Lay it with MoveStage.lay.
+ */
+export function groundSlash(o: SlashOpts): (group: THREE.Object3D) => (dt: number) => boolean {
+  return (group) => {
+    const steps = 40;
+    const positions: number[] = [];
+    const index: number[] = [];
+    for (let i = 0; i <= steps; i++) {
+      const k = i / steps;
+      // From the end it is cut from, round to the other.
+      const a = o.ahead + o.half * (1 - 2 * k) * o.from;
+      const w = o.width * (0.06 + 0.94 * Math.pow(Math.sin(Math.PI * k), 0.8));
+      for (const r of [o.radius - w / 2, o.radius + w / 2]) positions.push(Math.cos(a) * r, 0, Math.sin(a) * r);
+      if (i > 0) index.push(2 * i - 2, 2 * i - 1, 2 * i, 2 * i - 1, 2 * i + 1, 2 * i);
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setIndex(index);
+    geometry.setDrawRange(0, 0);
+    const material = new THREE.MeshBasicMaterial({ color: o.color, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.copy(o.at);
+    mesh.renderOrder = 8;
+    group.add(mesh);
+    let age = 0;
+    return (dt) => {
+      age += dt;
+      geometry.setDrawRange(0, Math.ceil(Math.min(1, age / o.cut) * steps) * 6);
+      const k = Math.max(0, (age - o.cut) / o.life);
+      material.opacity = 0.95 * (1 - k * k);
+      if (k < 1) return true;
+      group.remove(mesh);
+      geometry.dispose();
+      material.dispose();
+      return false;
+    };
+  };
+}
+
+const BLOOD = "#e0313f";
+const BLOOD_DEEP = "#8c1420";
+/**
+ * A Rending Cleave's slash on the ground: how far out it runs (through the middle of the hexes beside the bear), how
+ * far either side of straight ahead (past the middle of the hexes either side), how wide it is, and the seconds to
+ * cut it and then to fade.
+ */
+export const RENDING_CLEAVE = { radius: HEX * 0.95, half: Math.PI / 3 + 0.4, width: 1.25, cut: 0.14, life: 0.55 };
+
+/**
+ * A Great Bear's Rending Cleave: it rears a little and carries a forepaw right out to its side, then sweeps it flat
+ * across its whole front (figures.ts RAKE), a red swoosh behind its claws. As the paw comes across, one great red slash
+ * is cut into the ground through the three hexes in front of it, from one end to the other, lying flat on the ground
+ * however the map is turned; a spray of red flecks is thrown off its far end and dust kicked up along it. `hitAt` is
+ * over the hex it is swept toward; everyone caught is told (and flinches) as it is cut.
+ */
+function rendingCleave(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const wait = figure.strike("rake");
+  // A creature with no rake of its own springs at the mark, and the slash is cut as it does.
+  if (wait <= 0) stage.lunge();
+  const { radius, half, width, cut, life } = RENDING_CLEAVE;
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const ahead = Math.atan2(hitAt.z - feet.z, hitAt.x - feet.x);
+  const color = crit ? GOLD : BLOOD;
+  const from = (-dir) as 1 | -1;
+  const lands = Math.max(0, wait - cut / 2);
+  stage.later(() => {
+    stage.lay(groundSlash({ at: feet.clone().setY(feet.y + 0.08), radius, ahead, half, width, from, color, cut, life }));
+    // Dust kicked up along it as it is cut, and red flecks thrown off the far end.
+    for (let i = 0; i <= 6; i++) {
+      const a = ahead + half * (1 - (2 * i) / 6) * from;
+      const out = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+      const at = feet.clone().addScaledVector(out, radius).setY(feet.y + 0.12);
+      stage.later(() => {
+        stage.spawnFx("dust", DUST, out.x < 0, { from: at, to: at.clone().addScaledVector(out, 0.45).setY(at.y + 0.35), life: 0.45, size: [0.55, 1.2], spin: 0, fade: true });
+        if (i >= 4) for (let n = 0; n < 2; n++) stage.spawnFx("fleck", n ? BLOOD_DEEP : color, out.x < 0, { from: at, to: at.clone().addScaledVector(out, 0.6 + Math.random() * 0.5).setY(at.y + 0.2), life: 0.38, size: [0.35, 0.22], spin: 0, fade: true, arc: 0.4 });
+      }, (cut * i) / 6);
+    }
+  }, lands);
+  stage.later(() => {
+    stage.jolt();
+    onImpact();
+  }, lands + cut / 2);
+}
+
+/** A Thunderous Roar's waves: as far as they roll (past every hero two hexes off, ENEMY_BURST), how long each takes, and the seconds between them. */
+export const THUNDEROUS_ROAR = { radius: 3.9, life: 0.6, apart: 0.13 };
+const ROAR_PALE = "#f3e7c8";
+/** What Reeling looks like (content.ts EFFECT_INFO): the colour of the waves behind the first. */
+const REELING = "#c084fc";
+
+/**
+ * A Great Bear's Thunderous Roar: it rears right up on its hind legs, throws its head back and bellows (figures.ts
+ * ROAR). As it roars, three rings roll out over the ground from its feet one after another, the first pale and the
+ * others Reeling's purple, sound lines burst out from its open mouth every way, and dust is blown out and away from
+ * it all round. Each hero is jolted as the first ring reaches them, with dust thrown up at their feet, and the blow on
+ * them is told then.
+ */
+function thunderousRoar(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alone }: MoveCtx) {
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const ground = feet.clone().setY(feet.y + 0.08);
+  const { radius, life, apart } = THUNDEROUS_ROAR;
+  // Only the first plays the roar: by the time the others are told, it has already gone out.
+  const roars = echo ? 0 : Math.max(0, figure.strike("roar"));
+  if (!echo) stage.later(() => {
+    [crit ? GOLD : ROAR_PALE, REELING, REELING].forEach((color, n) =>
+      stage.later(() => stage.wave({ at: ground, radius: radius * (1 - n * 0.08), life, color, width: n ? 0.14 : 0.08 }), n * apart),
+    );
+    // Sound lines bursting out of its mouth every way, twice.
+    const mouth = offset(feet, 0, 1.9, 0);
+    for (const again of [0, 0.16]) {
+      stage.later(() => {
+        for (let i = 0; i < 10; i++) {
+          const a = (i / 10) * Math.PI * 2 + again * 3;
+          const to = offset(mouth, Math.cos(a) * 1.4, Math.sin(a) * 0.9, 0);
+          stage.spawnFx("streak", crit ? GOLD : i % 2 ? REELING : ROAR_PALE, Math.cos(a) < 0, { from: mouth, to, life: 0.3, size: [0.8, 1.8], turn: a, spin: 0, fade: true });
+        }
+      }, again);
+    }
+    // Dust blown out and away from it all round.
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2 + Math.random() * 0.3;
+      const from = offset(ground, Math.cos(a) * 0.5, 0.1, Math.sin(a) * 0.5);
+      const to = offset(ground, Math.cos(a) * radius * 0.6, 0.2 + Math.random() * 0.2, Math.sin(a) * radius * 0.6);
+      stage.spawnFx("dust", DUST, Math.cos(a) < 0, { from, to, life: 0.7 + Math.random() * 0.2, size: [0.8, 2], spin: 0, fade: true });
+    }
+  }, roars);
+  if (alone) return stage.later(onImpact, roars);
+  // Whoever it reaches is caught as the first ring passes under them.
+  const far = Math.hypot(hitAt.x - feet.x, hitAt.z - feet.z);
+  stage.later(() => {
+    const at = hitAt.clone().setY(hitAt.y - 0.45);
+    for (const side of [-1, 1]) stage.spawnFx("dust", crit ? GOLD : DUST, side > 0, { from: at, to: offset(at, side * 0.6, 0.4, 0), life: 0.45, size: [0.7, 1.4], spin: 0, fade: true });
+    stage.jolt();
+    stage.later(() => stage.jolt(), 0.08);
+    onImpact();
+  }, roars + waveReaches(far, radius, life));
+}
+
+const STONE = "#e6e1d6";
+/** What a Guardian's power glows: its eyes' cyan (looks.ts). */
+const GUARDIAN_GLOW = "#7fe3ff";
+
+/**
+ * A Guardian's Stone Fist: it heaves its fist right up overhead and brings it straight down on the target (figures.ts
+ * SLAM). Where it lands: a pale stone flash with a duller one swelling behind it, a pulse over the ground at their feet,
+ * shock lines driven on the way the blow goes, chips of stone flung on past them, a glint of the Guardian's cyan, and
+ * the view jolted. (Knocked back, they leave a trail of dust of their own: WorldRenderer.trailDust.)
+ */
+function stoneFist(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const flip = dir < 0;
+  const wait = figure.strike("slam");
+  // A creature has no slam of its own: it springs at the target, and the blow lands as it does.
+  if (wait <= 0) stage.lunge();
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const on = hitAt.clone().sub(feet).setY(0).normalize();
+  const color = crit ? GOLD : STONE;
+  stage.later(() => {
+    stage.spawnFx("burst", color, false, { from: hitAt, to: hitAt, life: 0.24, size: [1.1, 3.1], spin: 0.6, fade: true });
+    stage.later(() => stage.spawnFx("burst", crit ? GOLD : ROCK_PALE, true, { from: hitAt, to: hitAt, life: 0.34, size: [0.9, 2.4], spin: -0.5, fade: true }), 0.05);
+    stage.spawnFx("spark", GUARDIAN_GLOW, flip, { from: hitAt, to: offset(hitAt, 0, 0.35, 0), life: 0.3, size: [0.7, 0.2], spin: 2, fade: true });
+    const floor = hitAt.clone().setY(feet.y + 0.06);
+    stage.wave({ at: floor, radius: 1.4, life: 0.3, color: crit ? GOLD : "#f3e7c8", width: 0.12 });
+    // Shock lines driven on the way it is struck, and chips of stone flung on past them.
+    for (const turn of [-0.5, -0.2, 0.2, 0.5]) stage.spawnFx("streak", color, flip, { from: hitAt, to: hitAt.clone().addScaledVector(on, 1.0), life: 0.22, size: [0.8, 2.2], turn, spin: 0, fade: true });
+    for (let i = 0; i < 7; i++) {
+      const to = hitAt.clone().addScaledVector(on, 0.6 + Math.random() * 0.8).setY(hitAt.y + (Math.random() - 0.4) * 0.9);
+      const big = 0.25 + Math.random() * 0.2;
+      stage.spawnFx("rock", i % 2 ? ROCK : ROCK_PALE, flip, { from: hitAt, to, life: 0.36 + Math.random() * 0.15, size: [big, big * 0.8], spin: (Math.random() - 0.5) * 14, fade: false, arc: 0.3 + Math.random() * 0.3 });
+    }
+    stage.shake?.(0.1, 0.3);
+    stage.jolt();
+    stage.later(() => stage.jolt(), 0.07);
+    // The dust they throw up as they are knocked back is theirs, not the blow's (WorldRenderer.trailDust).
+    onImpact();
+  }, Math.max(0, wait));
+}
+
+/**
+ * Cracks laid on the ground at `at` (cracks.ts): spreading out from it over `grow` seconds, held `hold`, then fading
+ * over `fade`. Each is drawn dark, over a paler broken edge a little wider. Lay it with MoveStage.lay.
+ */
+function groundCracks(at: THREE.Vector3, o: CrackOpts & { grow: number; hold: number; fade: number }): (group: THREE.Object3D) => (dt: number) => boolean {
+  return (group) => {
+    const cracks = crackPaths(o);
+    const parts = [
+      { geometry: crackGeometry(cracks.map((c) => ({ ...c, width: c.width * 2 + 0.03 }))), color: CRACK_EDGE, full: 0.7, order: 7 },
+      { geometry: crackGeometry(cracks), color: CRACK_DARK, full: 0.95, order: 8 },
+    ];
+    const meshes = parts.map(({ geometry, color, full, order }, n) => {
+      const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: full, side: THREE.DoubleSide, depthWrite: false });
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.copy(at).setY(at.y + n * 0.004);
+      mesh.renderOrder = order;
+      group.add(mesh);
+      return { mesh, material, full };
+    });
+    let age = 0;
+    return (dt) => {
+      age += dt;
+      const g = Math.min(1, age / o.grow);
+      const spread = 0.04 + 0.96 * (1 - (1 - g) * (1 - g));
+      const k = Math.min(1, Math.max(0, (age - o.grow - o.hold) / o.fade));
+      for (const { mesh, material, full } of meshes) {
+        mesh.scale.set(spread, 1, spread);
+        material.opacity = full * (1 - k * k);
+      }
+      if (k < 1) return true;
+      for (const { mesh, material } of meshes) {
+        group.remove(mesh);
+        mesh.geometry.dispose();
+        material.dispose();
+      }
+      return false;
+    };
+  };
+}
+
+/** A random spot on the ground within `radius` of `at`, evenly over the disc. */
+function spotWithin(at: THREE.Vector3, radius: number, lift = 0): THREE.Vector3 {
+  const a = Math.random() * Math.PI * 2;
+  const d = Math.sqrt(Math.random()) * radius;
+  return offset(at, Math.cos(a) * d, lift, Math.sin(a) * d);
+}
+
+/**
+ * A Guardian's Earthquake, both turns of it: how far the shaking reaches from the middle of its three hexes (past every hero two hexes off any of them, ENEMY_BURST),
+ * and for each turn the ripples sent out (how many, how long each takes, the seconds between), the cracks (how many,
+ * how wide), and how hard the view is shaken.
+ */
+export const EARTHQUAKE = {
+  reach: HEX * 2.75,
+  first: { ripples: 4, life: 0.55, apart: 0.22, cracks: 7, width: 0.08, shake: 0.05 },
+  heave: { ripples: 4, life: 0.6, apart: 0.3, cracks: 11, width: 0.24, shake: 0.3 },
+};
+
+/**
+ * A Guardian's Earthquake, the turn it is used: it heaves both fists up overhead and drives them into the ground
+ * (figures.ts POUND). From under its fists thin cracks run out over the ground all round to two hexes off, small
+ * ripples of dust follow one another out across it, little puffs of dust pop up here and there and pebbles hop, and
+ * the view trembles a little. Each hero is jolted as the first ripple reaches them, and the blow on them is told then.
+ * The cracks fade as the map's cracked ground (TacticsLayer) takes over, to heave on its next turn (`again`).
+ */
+function earthquake(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alone }: MoveCtx) {
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const ground = feet.clone().setY(feet.y + 0.06);
+  const { reach } = EARTHQUAKE;
+  const f = EARTHQUAKE.first;
+  const lands = echo ? 0 : Math.max(0, figure.strike("pound"));
+  if (!echo) stage.later(() => {
+    stage.spawnFx("burst", crit ? GOLD : "#f3e7c8", false, { from: offset(ground, 0, 0.2, 0), to: offset(ground, 0, 0.2, 0), life: 0.22, size: [0.8, 2.2], spin: 0.5, fade: true });
+    for (const side of [-1, 1]) stage.spawnFx("dust", DUST, side > 0, { from: ground, to: offset(ground, side * 0.7, 0.3, 0), life: 0.45, size: [0.7, 1.4], spin: 0, fade: true });
+    stage.lay(groundCracks(ground, { count: f.cracks, reach, width: f.width, step: 0.2, wander: 0.5, fork: 0.1, grow: 0.5, hold: 1.1, fade: 0.6 }));
+    stage.shake?.(f.shake, 1.0);
+    // Small tremors: thin ripples of dust, one after another.
+    for (let n = 0; n < f.ripples; n++) stage.later(() => stage.wave({ at: ground, radius: reach * (1 - n * 0.05), life: f.life, color: n === 0 && crit ? GOLD : DUST, width: 0.05 }), n * f.apart);
+    // The ground stirring all over: little puffs of dust, and pebbles hopping.
+    for (let k = 0; k < 16; k++) {
+      stage.later(() => {
+        const at = spotWithin(ground, reach, 0.04);
+        stage.spawnFx("dust", DUST, Math.random() < 0.5, { from: at, to: offset(at, (Math.random() - 0.5) * 0.3, 0.25, 0), life: 0.4, size: [0.3, 0.75], spin: 0, fade: true });
+        stage.spawnFx("fleck", ROCK_PALE, Math.random() < 0.5, { from: at, to: offset(at, (Math.random() - 0.5) * 0.25, 0.02, (Math.random() - 0.5) * 0.25), life: 0.3, size: [0.28, 0.22], spin: 0, fade: false, arc: 0.25 });
+      }, 0.05 + Math.random() * 1.0);
+    }
+  }, lands);
+  if (alone) return stage.later(onImpact, lands);
+  const far = Math.hypot(hitAt.x - feet.x, hitAt.z - feet.z);
+  stage.later(() => {
+    const at = hitAt.clone().setY(feet.y + 0.12);
+    for (const side of [-1, 1]) stage.spawnFx("dust", crit ? GOLD : DUST, side > 0, { from: at, to: offset(at, side * 0.5, 0.3, 0), life: 0.4, size: [0.5, 1.1], spin: 0, fade: true });
+    stage.jolt();
+    onImpact();
+  }, lands + waveReaches(far, reach, f.life));
+}
+
+/**
+ * A Guardian's Earthquake on its next turn, as the cracked ground heaves: no blow is struck for it (the Guardian does
+ * nothing), the ground itself goes, all of it, from the middle of the cracked ground (`ground`), wherever it is now. The view is shaken hard; wide cracks tear out across the ground all round, a bright flash and a
+ * heavy wave burst out from its fists with broad rolling ones of dust behind, and all over the cracked ground dust
+ * bursts up in columns and chunks of rock are thrown into the air, the ground rumbling on in further ripples and a
+ * second jolt of the view. Each hero is jolted as the first wave reaches them, and the blow on them is told then.
+ */
+function earthquakeHeave(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alone, ground: from }: MoveCtx) {
+  // Out of the cracked ground itself: no blow struck for it, the Guardian does nothing.
+  const feet = from?.clone() ?? figure.root.getWorldPosition(new THREE.Vector3());
+  const ground = feet.clone().setY(feet.y + 0.06);
+  const { reach } = EARTHQUAKE;
+  const h = EARTHQUAKE.heave;
+  const lands = 0;
+  if (!echo) stage.later(() => {
+    stage.shake?.(h.shake, 1.4);
+    stage.later(() => stage.shake?.(h.shake * 0.6, 0.9), 0.55);
+    stage.spawnFx("burst", crit ? GOLD : "#fff3d6", false, { from: offset(ground, 0, 0.3, 0), to: offset(ground, 0, 0.3, 0), life: 0.28, size: [1.3, 3.8], spin: 0.6, fade: true });
+    stage.lay(groundCracks(ground, { count: h.cracks, reach: reach * 1.05, width: h.width, step: 0.28, wander: 0.4, fork: 0.2, start: 0.15, grow: 0.22, hold: 1.0, fade: 0.7 }));
+    stage.wave({ at: ground, radius: reach * 1.1, life: 0.5, color: crit ? GOLD : "#f3e7c8", width: 0.1 });
+    // Broad rolling waves of dust behind it: the ground rumbling on.
+    for (let n = 0; n < h.ripples; n++) stage.later(() => stage.wave({ at: ground, radius: reach * (1.05 - n * 0.06), life: h.life, color: DUST, width: 0.3 - n * 0.04 }), 0.06 + n * h.apart);
+    // Dust bursting up in columns all over it, and chunks of rock thrown up.
+    for (let k = 0; k < 14; k++) {
+      stage.later(() => {
+        const at = spotWithin(ground, reach, 0.05);
+        stage.spawnFx("dust", DUST, Math.random() < 0.5, { from: at, to: offset(at, (Math.random() - 0.5) * 0.4, 0.9 + Math.random() * 0.5, 0), life: 0.6, size: [0.7, 1.9], spin: 0, fade: true });
+        for (let r = 0; r < 2; r++) {
+          const big = 0.3 + Math.random() * 0.3;
+          stage.spawnFx("rock", r ? ROCK : ROCK_PALE, Math.random() < 0.5, { from: at, to: offset(at, (Math.random() - 0.5) * 0.9, 0.05, (Math.random() - 0.5) * 0.9), life: 0.45 + Math.random() * 0.2, size: [big, big * 0.8], spin: (Math.random() - 0.5) * 14, fade: false, arc: 0.7 + Math.random() * 0.6 });
+        }
+      }, Math.random() * 0.7);
+    }
+    // Clouds of dust rolling out after the first wave, all round, and a slower one hanging over its feet.
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2 + Math.random() * 0.25;
+      const far = reach * (0.55 + Math.random() * 0.3);
+      stage.spawnFx("dust", DUST, Math.cos(a) < 0, { from: offset(ground, Math.cos(a) * 0.5, 0.15, Math.sin(a) * 0.5), to: offset(ground, Math.cos(a) * far, 0.3 + Math.random() * 0.3, Math.sin(a) * far), life: 0.8 + Math.random() * 0.25, size: [0.9, 2.4], spin: 0, fade: true });
+    }
+    stage.later(() => {
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2 + Math.random() * 0.5;
+        const from = offset(ground, Math.cos(a) * 0.6, 0.1, Math.sin(a) * 0.6);
+        stage.spawnFx("dust", DUST, Math.cos(a) < 0, { from, to: offset(from, Math.cos(a) * 0.4, 0.9, Math.sin(a) * 0.4), life: 1.1, size: [1.4, 2.8], spin: 0, fade: true });
+      }
+    }, 0.12);
+  }, lands);
+  if (alone) return stage.later(onImpact, lands);
+  const far = Math.hypot(hitAt.x - feet.x, hitAt.z - feet.z);
+  stage.later(() => {
+    const at = hitAt.clone().setY(feet.y + 0.12);
+    for (const side of [-1, 1]) stage.spawnFx("dust", crit ? GOLD : DUST, side > 0, { from: at, to: offset(at, side * 0.7, 0.5, 0), life: 0.5, size: [0.8, 1.6], spin: 0, fade: true });
+    stage.jolt();
+    stage.later(() => stage.jolt(), 0.08);
+    onImpact();
+  }, lands + waveReaches(far, reach * 1.1, 0.5));
+}
+
+/** A Slowing Field going up: how far it reaches from the middle of a Guardian (two hexes past its own), and its slow rings. */
+export const SLOWING_FIELD = { reach: HEX * 2.75, rings: 3, life: 1.3, apart: 0.32 };
+
+/**
+ * How each kind of field round an enemy looks while it lasts (ZoneView, as it goes up): a glowing ring at its edge
+ * (SpellFx.aura), or a storm of snow whirling round its bearer (SpellFx.storm).
+ */
+export const FIELD_LOOKS: Record<FieldKind, "ring" | "storm"> = { slowing_field: "ring", blizzard_aura: "storm" };
+
+/** How far out a field reaching `radius` hexes past its bearer's own is drawn (a Slowing Field's 2: SLOWING_FIELD.reach). */
+export const fieldReach = (radius: number): number => HEX * (radius + 0.75);
+
+/** How bright a Guardian's eyes and the gem in its chest flare as it channels a Slowing Field (Figure.setGlow): built up to `held`, flashed to `flash` as it lets go, and back to its own over `fade` seconds. */
+export const CHANNEL_GLOW = { held: 2.2, flash: 3.4, fade: 0.9, pulse: 0.22, rays: 6, rayEvery: 0.14 };
+
+/**
+ * A Guardian's Slowing Field: it opens its arms out wide, chest thrown out and head lifted, and holds there, trembling,
+ * as it draws the field up through itself (figures.ts CHANNEL). Its eyes and the gem in its chest burn brighter and
+ * brighter, pulsing quicker as they go (Figure.setGlow); off the gem alone, a halo pulsing out bigger and bigger, little
+ * rays of light shooting out every way and flickers of cyan, and motes drawn in to it from all round. As it lets go,
+ * the glow flashes white-bright and the field goes out from it: a flash and long rays at its chest, three slow
+ * cyan rings rolling out over the ground one after another to the edge of its reach, and the air in it thick with motes
+ * drifting lazily up; its glow settles back as they go. (What stays round it while it lasts is the map's: ZoneView,
+ * SpellFx.aura.)
+ */
+function slowingField(stage: MoveStage, { figure, crit, onImpact, alone, hitAt }: MoveCtx) {
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const ground = feet.clone().setY(feet.y + 0.07);
+  const { reach, rings, life, apart } = SLOWING_FIELD;
+  const color = crit ? GOLD : GUARDIAN_GLOW;
+  // Where the gem in its chest is, as it moves (Figure.glowAt); for a figure without one, well up its body. (Its eyes
+  // only glow and pulse with the rest of its light: nothing comes off them.)
+  const box = new THREE.Box3().setFromObject(figure.root);
+  const tall = Math.max(0.5, box.max.y - box.min.y);
+  const chest = () => figure.glowAt("gem") ?? figure.root.getWorldPosition(new THREE.Vector3()).setY(box.min.y + tall * 0.58);
+  const wait = figure.strike("channel") || Math.max(0.35, figure.cast());
+  const { held, flash, fade } = CHANNEL_GLOW;
+  // The glow building as it draws the field in: eased up to `held` over the channelling.
+  for (let s = 0; s <= wait; s += 0.03) {
+    const k = s / wait;
+    // Pulsing as it builds, quicker and deeper toward the end.
+    const beat = 1 + 0.18 * k * Math.sin(s * (10 + 14 * k));
+    stage.later(() => figure.setGlow((1 + (held - 1) * k * k * (3 - 2 * k)) * beat), s);
+  }
+  // Drawn in: motes of light coming in from all round to its chest, and flickers off its gem.
+  for (let s = 0; s < wait; s += 0.05) {
+    stage.later(() => {
+      const to = chest();
+      const a = Math.random() * Math.PI * 2;
+      const from = offset(to, Math.cos(a) * 2.2, -0.6 + Math.random() * 1.6, Math.sin(a) * 2.2);
+      stage.spawnFx("mote", color, Math.cos(a) < 0, { from, to, life: 0.4, size: [0.35, 0.15], spin: 0, fade: true });
+      if (Math.random() < 0.6) {
+        const at = to;
+        stage.spawnFx("spark", color, Math.random() < 0.5, { from: at, to: offset(at, (Math.random() - 0.5) * 0.5, 0.3 + Math.random() * 0.3, (Math.random() - 0.5) * 0.5), life: 0.25, size: [0.35, 0.12], spin: 2, fade: true });
+      }
+    }, s);
+  }
+  // Light pouring off its gem: a halo round it, pulsing out bigger and brighter as it builds, and little
+  // rays shooting out of them every way, longer as it goes.
+  const { pulse, rays, rayEvery } = CHANNEL_GLOW;
+  for (let s = 0; s < wait; s += pulse) {
+    const k = s / wait;
+    stage.later(() => {
+      for (const [at, big] of [[chest(), 1]] as const) {
+        stage.spawnFx("burst", color, Math.random() < 0.5, { from: at, to: at, life: pulse * 1.6, size: [0.3 * big, (1 + 2.2 * k) * big], spin: 0.2, fade: true });
+      }
+    }, s);
+  }
+  for (let s = 0.1; s < wait; s += rayEvery) {
+    const k = s / wait;
+    stage.later(() => {
+      for (const [at, long] of [[chest(), 1]] as const) {
+        for (let i = 0; i < rays; i++) {
+          const a = (i / rays) * Math.PI * 2 + Math.random() * 0.6;
+          const reach = (0.35 + 0.65 * k) * long;
+          const to = offset(at, Math.cos(a) * reach, Math.sin(a) * reach, 0.05);
+          stage.spawnFx("streak", i % 2 ? "#f4feff" : color, false, { from: at, to, life: 0.22, size: [0.35 * long, (0.6 + 0.9 * k) * long], turn: a, spin: 0, fade: true });
+        }
+      }
+    }, s);
+  }
+  stage.later(() => {
+    // Let go: a last burst of rays from both, long, and the glow flashes and settles back to its own as the field goes out.
+    for (const [at, long] of [[chest(), 1.4]] as const) {
+      for (let i = 0; i < rays + 2; i++) {
+        const a = (i / (rays + 2)) * Math.PI * 2;
+        stage.spawnFx("streak", "#f4feff", false, { from: at, to: offset(at, Math.cos(a) * long, Math.sin(a) * long, 0.05), life: 0.3, size: [0.4 * long, 1.6 * long], turn: a, spin: 0, fade: true });
+      }
+    }
+    for (let s = 0; s <= fade; s += 0.03) stage.later(() => figure.setGlow(1 + (flash - 1) * (1 - s / fade) ** 2), s);
+    stage.later(() => figure.setGlow(1), fade + 0.05);
+    const heart = chest();
+    stage.spawnFx("burst", "#f4feff", false, { from: heart, to: heart, life: 0.3, size: [0.8, 2.6], spin: 0.3, fade: true });
+    stage.spawnFx("burst", color, false, { from: heart, to: heart, life: 0.45, size: [1.2, 3.6], spin: -0.3, fade: true });
+
+    for (let n = 0; n < rings; n++) stage.later(() => stage.wave({ at: ground, radius: reach * (1 - n * 0.04), life, color, width: n ? 0.06 : 0.1 }), n * apart);
+    // The air in it thickening: motes drifting slowly up all over it.
+    for (let k = 0; k < 18; k++) {
+      stage.later(() => {
+        const at = spotWithin(ground, reach, 0.1);
+        stage.spawnFx("mote", color, Math.random() < 0.5, { from: at, to: offset(at, (Math.random() - 0.5) * 0.2, 0.6 + Math.random() * 0.4, 0), life: 1.1, size: [0.3, 0.2], spin: 0, fade: true });
+      }, 0.1 + Math.random() * 0.9);
+    }
+    if (alone) onImpact();
+  }, wait);
+  if (alone) return;
+  // In the lab, nobody is reached: told as the field goes out to where the target stands.
+  const far = Math.hypot(hitAt.x - feet.x, hitAt.z - feet.z);
+  stage.later(onImpact, wait + waveReaches(far, reach, life));
+}
+
+/** A ghost's cold: the pale blue of its frost, the near white of its wisps, and the deep blue under them. */
+const CHILL = "#9fd8ff";
+const WISP = "#e8f4ff";
+const CHILL_DEEP = "#4f7fbf";
+/** What Fumbling looks like (content.ts EFFECT_INFO): a Wail's rings behind the first, and what it leaves on a hero. */
+const FUMBLING = "#e879f9";
+/** A ghost's pale violet: the colour of its scream. */
+const WAIL_PALE = "#d9d0ff";
+
+/** Where a figure's middle and its head are, as it stands now: `share` of the way up it. */
+function upFigure(figure: Figure, share: number): THREE.Vector3 {
+  const box = new THREE.Box3().setFromObject(figure.root);
+  return figure.root.getWorldPosition(new THREE.Vector3()).setY(box.min.y + (box.max.y - box.min.y) * share);
+}
+
+/**
+ * Wisps curling out of `from` along a bent path, in two legs (the second turned `curl` off the first), so they swirl
+ * rather than fly straight: each leg a mote fading as it goes.
+ */
+function wisp(stage: MoveStage, from: THREE.Vector3, to: THREE.Vector3, curl: number, color: string, life: number, size: [number, number]) {
+  const mid = from.clone().lerp(to, 0.5);
+  const run = to.clone().sub(from);
+  // Bent off the straight line, across it and a little up.
+  mid.add(new THREE.Vector3(-run.z, 0, run.x).multiplyScalar(curl)).setY(mid.y + Math.abs(curl) * 0.6);
+  stage.spawnFx("mote", color, run.x < 0, { from, to: mid, life: life / 2, size, spin: 0, fade: false, onEnd: () => stage.spawnFx("mote", color, run.x < 0, { from: mid, to, life: life / 2, size: [size[1], size[1] * 0.4], spin: 0, fade: true }) });
+}
+
+/**
+ * A Shade's Chill Touch: it draws up and back, then surges in at the target, leaning in with its arms stretching out
+ * long to lay its cold hands on them (figures.ts GRASP). Pale wisps stream off it as it comes. Where its hands land:
+ * a cold flash with a deeper blue swelling behind it, three pale finger marks drawn down across the target, frost
+ * glinting off them and drifting down, a ring of frost spreading at their feet, and the warmth drawn out of them in
+ * wisps that curl back to the Shade. The target is jolted, and the blow is told as its hands land.
+ */
+function chillTouch(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const wait = figure.strike("grasp");
+  // Anything that does not float springs at the target, and its hands land as it does.
+  if (wait <= 0) stage.lunge();
+  const lands = Math.max(0, wait);
+  const flip = dir < 0;
+  const cold = crit ? GOLD : CHILL;
+  const pale = crit ? GOLD : WISP;
+  // Wisps streaming off it as it surges in, toward the target.
+  for (let s = 0; s < lands; s += 0.035) {
+    stage.later(() => {
+      const from = upFigure(figure, 0.45 + Math.random() * 0.3);
+      const to = from.clone().lerp(hitAt, 0.35 + Math.random() * 0.25).setY(from.y + (Math.random() - 0.3) * 0.5);
+      stage.spawnFx("mote", Math.random() < 0.5 ? pale : cold, flip, { from, to, life: 0.28, size: [0.35, 0.12], spin: 0, fade: true });
+    }, s);
+  }
+  stage.later(() => {
+    stage.spawnFx("burst", pale, false, { from: hitAt, to: hitAt, life: 0.22, size: [0.8, 2.4], spin: 0.4, fade: true });
+    stage.later(() => stage.spawnFx("burst", crit ? GOLD : CHILL_DEEP, true, { from: hitAt, to: hitAt, life: 0.4, size: [0.9, 2.6], spin: -0.4, fade: true }), 0.05);
+    // Three pale finger marks drawn down across them, one after another.
+    [-1, 0, 1].forEach((i, n) =>
+      stage.later(() => {
+        const top = offset(hitAt, i * 0.16 * dir, 0.32 - Math.abs(i) * 0.05, 0.02);
+        stage.spawnFx("streak", n === 1 ? pale : cold, flip, { from: top, to: offset(top, i * 0.04 * dir, -0.5, 0), life: 0.32, size: [0.25, 1.2], turn: Math.PI / 2 + i * 0.12, spin: 0, fade: true });
+      }, n * 0.03),
+    );
+    // Frost glinting off them, then drifting slowly down.
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2 + Math.random() * 0.4;
+      const to = offset(hitAt, Math.cos(a) * (0.4 + Math.random() * 0.3), Math.sin(a) * 0.4 - 0.25, 0.05);
+      stage.spawnFx("spark", i % 2 ? pale : cold, Math.cos(a) < 0, { from: hitAt, to, life: 0.55 + Math.random() * 0.25, size: [0.4, 0.15], spin: 2, fade: true });
+    }
+    // A ring of frost spreading over the ground at their feet.
+    const feet = figure.root.getWorldPosition(new THREE.Vector3());
+    const floor = hitAt.clone().setY(feet.y + 0.06);
+    stage.wave({ at: floor, radius: 1.3, life: 0.5, color: cold, width: 0.14 });
+    // The warmth drawn out of them, curling back to the Shade.
+    for (let k = 0; k < 6; k++) {
+      stage.later(() => {
+        const from = offset(hitAt, (Math.random() - 0.5) * 0.4, (Math.random() - 0.3) * 0.4, 0);
+        wisp(stage, from, upFigure(figure, 0.6), (k % 2 ? 1 : -1) * (0.15 + Math.random() * 0.15), k % 2 ? pale : cold, 0.6, [0.4, 0.2]);
+      }, 0.08 + k * 0.05);
+    }
+    stage.jolt();
+    stage.later(() => stage.jolt(), 0.09);
+    onImpact();
+  }, lands);
+}
+
+/** A Wail's rings: as far as they roll (past every hero two hexes off, ENEMY_BURST), how long each takes, and the seconds between them. */
+export const SHADE_WAIL = { radius: 3.9, life: 0.85, apart: 0.12, rings: 4 };
+
+/**
+ * A Shade's Wail: it sinks and huddles in on itself, drawing breath in wisps from all round, then flings itself up and
+ * back and screams, arms flung wide, swelling and trembling (figures.ts WAIL). A dark flash at its head; rings of the
+ * scream roll out over the ground one after another, pale then Fumbling's violet, and a wavering ring goes out level
+ * through the air at its middle too; sound lines burst from its head, three times, each a little turned; wisps swirl
+ * out all round it, curling as they go. Each hero is jolted as the first ring reaches them, a violet flash at their
+ * head and wisps circling it, and the blow on them is told then.
+ */
+function shadeWail(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alone }: MoveCtx) {
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const ground = feet.clone().setY(feet.y + 0.08);
+  const { radius, life, apart, rings } = SHADE_WAIL;
+  const pale = crit ? GOLD : WAIL_PALE;
+  const violet = crit ? GOLD : FUMBLING;
+  // Only the first plays the wail: by the time the others are told, it has already gone out.
+  const peak = echo ? 0 : Math.max(0, figure.strike("wail"));
+  if (!echo) {
+    // Drawing breath: wisps drawn in to it from all round as it huddles.
+    for (let s = 0; s < peak; s += 0.04) {
+      stage.later(() => {
+        const to = upFigure(figure, 0.7);
+        const a = Math.random() * Math.PI * 2;
+        const from = offset(to, Math.cos(a) * 1.8, -0.8 + Math.random() * 1.2, Math.sin(a) * 1.8);
+        stage.spawnFx("mote", Math.random() < 0.5 ? WISP : pale, Math.cos(a) < 0, { from, to, life: 0.3, size: [0.15, 0.35], spin: 0, fade: false });
+      }, s);
+    }
+    stage.later(() => {
+      const head = upFigure(figure, 0.82);
+      const middle = upFigure(figure, 0.45);
+      stage.spawnFx("burst", crit ? GOLD : "#2a1f3d", false, { from: head, to: head, life: 0.35, size: [0.8, 2.6], spin: 0.3, fade: true });
+      stage.spawnFx("burst", pale, true, { from: head, to: head, life: 0.3, size: [0.5, 1.8], spin: -0.5, fade: true });
+      for (let n = 0; n < rings; n++) {
+        stage.later(() => stage.wave({ at: ground, radius: radius * (1 - n * 0.06), life, color: n ? violet : pale, width: n ? 0.05 : 0.09 }), n * apart);
+      }
+      // A ring going out level through the air at its middle, and a fainter one after it a little higher.
+      stage.wave({ at: middle, radius: radius * 0.9, life: life * 1.1, color: pale, width: 0.04 });
+      stage.later(() => stage.wave({ at: offset(middle, 0, 0.35, 0), radius: radius * 0.8, life: life * 1.2, color: violet, width: 0.03 }), apart * 1.5);
+      // Sound lines bursting from its head every way, three times, each turned a little from the last.
+      for (const [n, again] of [0, 0.14, 0.28].entries()) {
+        stage.later(() => {
+          const at = upFigure(figure, 0.82);
+          for (let i = 0; i < 10; i++) {
+            const a = (i / 10) * Math.PI * 2 + n * 0.3;
+            const to = offset(at, Math.cos(a) * 1.5, Math.sin(a) * 1.0, 0);
+            stage.spawnFx("streak", i % 2 ? violet : pale, Math.cos(a) < 0, { from: at, to, life: 0.32, size: [0.6, 1.7], turn: a, spin: 0, fade: true });
+          }
+        }, again);
+      }
+      // Wisps swirling out all round it, curling as they go.
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2 + Math.random() * 0.3;
+        const far = radius * (0.45 + Math.random() * 0.3);
+        const from = offset(middle, Math.cos(a) * 0.4, Math.random() * 0.6, Math.sin(a) * 0.4);
+        const to = offset(ground, Math.cos(a) * far, 0.5 + Math.random() * 0.9, Math.sin(a) * far);
+        stage.later(() => wisp(stage, from, to, 0.25, i % 3 ? WISP : violet, 0.75 + Math.random() * 0.2, [0.45, 0.25]), Math.random() * 0.15);
+      }
+      stage.shake?.(0.04, 0.6);
+    }, peak);
+  }
+  if (alone) return stage.later(onImpact, peak);
+  // Whoever it reaches is caught as the first ring passes under them: a violet flash at their head and wisps round it.
+  const far = Math.hypot(hitAt.x - feet.x, hitAt.z - feet.z);
+  stage.later(() => {
+    const at = offset(hitAt, 0, 0.3, 0);
+    stage.spawnFx("burst", violet, false, { from: at, to: at, life: 0.3, size: [0.5, 1.6], spin: 0.5, fade: true });
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * Math.PI * 2;
+      const from = offset(at, Math.cos(a) * 0.4, 0.1, Math.sin(a) * 0.25);
+      const to = offset(at, Math.cos(a + Math.PI * 0.8) * 0.4, 0.25, Math.sin(a + Math.PI * 0.8) * 0.25);
+      wisp(stage, from, to, 0.5, k % 2 ? violet : WISP, 0.6, [0.35, 0.2]);
+    }
+    stage.jolt();
+    stage.later(() => stage.jolt(), 0.08);
+    onImpact();
+  }, peak + waveReaches(far, radius, life));
+}
+
+const BAT_VIOLET = "#9a6bd6";
+const BAT_DUSK = "#4a3b52";
+const BAT_FANG = "#f4efe2";
+const SWOOP_RED = "#e0313f";
+
+/**
+ * A Cave Bat's Bite: it flicks up and back a little, then darts in, and its needle fangs snap shut on the target once,
+ * quick as a sting: a small pale flash, violet sparks spitting out either side, and the target jolted. The blow is told
+ * as the fangs meet.
+ */
+function batBite(stage: MoveStage, ctx: MoveCtx) {
+  const { hitAt, dir, crit, onImpact } = ctx;
+  // A flick up and back before the dart: a little puff of violet off its wings.
+  const wings = hitAt.clone().setY(hitAt.y + 0.35);
+  stage.spawnFx("streak", crit ? GOLD : BAT_VIOLET, dir < 0, { from: wings, to: wings.clone().setY(wings.y + 0.3), life: 0.14, size: [0.6, 0.9], turn: Math.PI / 2, spin: 0, fade: true });
+  stage.later(() => {
+    stage.lunge();
+    jaws(stage, ctx, QUICK_BITE * 0.75, 0.2, () => {
+      stage.spawnFx("burst", crit ? GOLD : BAT_FANG, false, { from: hitAt, to: hitAt, life: 0.16, size: [0.35, 1], spin: 0.5, fade: true });
+      for (const side of [false, true]) for (const turn of [-0.35, 0.3]) stage.spawnFx("streak", crit ? GOLD : BAT_VIOLET, side, { from: hitAt, to: hitAt, life: 0.18, size: [0.4, 1.2], turn: side ? -turn : turn, spin: 0, fade: true });
+      stage.jolt();
+      onImpact();
+    }, BAT_FANG);
+  }, 0.08);
+}
+
+/** Seconds between each set of speed lines thrown off a swooping bat. */
+const SWOOP_STREAK_EVERY = 0.025;
+
+/**
+ * A Cave Bat's Fell Swoop: its wings snap back with a burst of dusk-violet, and it dives (figures.ts DIVE) in a straight line, low and
+ * fast, dark and violet speed lines streaming off it. Each hero it passes through is raked as it goes: three red claw
+ * lines torn across them with a white slash and a flash, and a jolt. Where it comes to rest, its wings flare out in a
+ * last violet burst. What it does to each is told as their hit is.
+ */
+function fellSwoop(stage: MoveStage, ctx: MoveCtx) {
+  const { figure, hitAt, dir, crit, onImpact } = ctx;
+  const flip = dir < 0;
+  const body = () => {
+    const at = figure.root.getWorldPosition(hitAt.clone());
+    at.y += 0.45;
+    return at;
+  };
+  const start = body();
+  // Back the way it came, along the ground: the way what it throws off goes.
+  const back = start.clone().sub(hitAt).setY(0).normalize();
+  stage.spawnFx("burst", crit ? GOLD : BAT_VIOLET, flip, { from: start, to: start, life: 0.2, size: [0.6, 1.6], spin: 0.4, fade: true });
+  for (const side of [-1, 1]) stage.spawnFx("streak", BAT_DUSK, side > 0, { from: start, to: start.clone().addScaledVector(back, 0.5).setY(start.y + side * 0.3), life: 0.18, size: [0.9, 1.2], spin: 0, fade: true });
+  // A stage with nowhere to dash plays it at its target, as a blow.
+  const way: DashWay = stage.dash?.() ?? { passes: [{ at: hitAt, when: 0.05, jolt: () => stage.jolt() }], over: 0 };
+  // It dives the whole way: nose-down and low, wings swept back, and flares them out to brake as it comes to rest.
+  figure.dive(Math.max(0.15, way.over));
+  for (let s = 0; s < way.over; s += SWOOP_STREAK_EVERY) {
+    stage.later(() => {
+      const at = body();
+      for (let i = 0; i < 3; i++) {
+        const from = at.clone().setY(at.y - 0.25 + Math.random() * 0.5).addScaledVector(back, 0.15 + Math.random() * 0.2);
+        const color = crit ? GOLD : i === 0 ? BAT_DUSK : i === 1 ? BAT_VIOLET : STREAK_PALE;
+        stage.spawnFx("streak", color, flip, { from, to: from.clone().addScaledVector(back, 0.75), life: 0.16, size: [1.3, 0.8], spin: 0, fade: true });
+      }
+    }, s);
+  }
+  for (const pass of way.passes) {
+    stage.later(() => {
+      const red = crit ? GOLD : SWOOP_RED;
+      // Three claw lines raked across them, the way it went, a white slash over them and a flash.
+      for (const [n, lift] of [-0.18, 0, 0.18].entries()) {
+        const at = pass.at.clone().setY(pass.at.y + lift);
+        stage.spawnFx("streak", red, flip, { from: at.clone().addScaledVector(back, -0.25), to: at.clone().addScaledVector(back, 0.35), life: 0.22 + n * 0.03, size: [1.1, 1.3], turn: (flip ? 1 : -1) * 0.25, spin: 0, fade: true });
+      }
+      stage.spawnFx("slash", crit ? GOLD : "#f6ecff", flip, { from: pass.at, to: pass.at, life: 0.2, size: [1, 1.8], spin: -dir * 0.8, fade: true });
+      stage.spawnFx("burst", red, false, { from: pass.at, to: pass.at, life: 0.2, size: [0.5, 1.4], spin: 0.5, fade: true });
+      stage.sound();
+      pass.jolt();
+    }, pass.when);
+  }
+  stage.later(() => {
+    const at = body();
+    stage.spawnFx("burst", crit ? GOLD : BAT_VIOLET, flip, { from: at, to: at, life: 0.24, size: [0.7, 1.8], spin: -0.4, fade: true });
+    for (const side of [false, true]) stage.spawnFx("streak", BAT_DUSK, side, { from: at, to: at, life: 0.2, size: [0.5, 1.4], turn: side ? -1.2 : 1.2, spin: 0, fade: true });
+    onImpact();
+  }, Math.max(0.1, way.over));
+}
+
+/** Death's colours, for a Skeleton's Memento Mori: near black, a deep violet shadow under it, and the pale of the mark it leaves (content.ts EFFECT_INFO). */
+const MORI_BLACK = "#0b0810";
+const MORI_SHADE = "#2b1d3a";
+const MORI_PALE = "#c4b5fd";
+/** Memento Mori's dark rings: as far as they roll (past every hero beside it, its reach of 1), how long each takes, the seconds between them, and how many. */
+export const MEMENTO_MORI = { radius: 2.2, life: 1.05, apart: 0.2, rings: 5 };
+
+/**
+ * A Skeleton's Memento Mori: its skull tips slowly over to one side and it starts to twitch, jerking this way and
+ * that worse and worse (figures.ts SPOOK), shadow gathering into it from all round in black motes as its hollow eyes
+ * glint pale violet. At its worst, still twitching: a black burst at its chest
+ * with deep violet behind it, slow black rings rolling out over the ground one hex all round, one after another, each
+ * thinner and more violet than the last, a dark ring through the air at its middle, and dark wisps creeping out low
+ * over the ground. Each hero the first ring reaches is caught by it: black wisps circle their head with a pale flicker,
+ * and they shiver. It does no harm, so there is no blow to tell, only the mark it leaves.
+ */
+function mementoMori(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alone }: MoveCtx) {
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const ground = feet.clone().setY(feet.y + 0.07);
+  const { radius, life, apart, rings } = MEMENTO_MORI;
+  const black = MORI_BLACK;
+  const shade = crit ? GOLD : MORI_SHADE;
+  const pale = crit ? GOLD : MORI_PALE;
+  // Only the first plays the gathering: by the time the others are told, it has already gone out.
+  const peak = echo ? 0 : Math.max(0.35, figure.strike("spook") || figure.cast());
+  if (!echo) {
+    // Shadow gathering into it from all round, low and wide, as its arms open.
+    for (let s = 0; s < peak; s += 0.04) {
+      stage.later(() => {
+        const to = upFigure(figure, 0.55 + Math.random() * 0.2);
+        const a = Math.random() * Math.PI * 2;
+        const from = offset(ground, Math.cos(a) * 2, 0.1 + Math.random() * 0.8, Math.sin(a) * 2);
+        stage.spawnFx("mote", Math.random() < 0.7 ? black : shade, Math.cos(a) < 0, { from, to, life: 0.42, size: [0.55, 0.2], spin: 0, fade: false });
+      }, s);
+    }
+    // Its hollow eyes glinting pale as it draws it in, quicker toward the end.
+    for (let s = peak * 0.3; s < peak; s += 0.18 - 0.1 * (s / peak)) {
+      stage.later(() => {
+        const at = upFigure(figure, 0.86);
+        stage.spawnFx("spark", pale, false, { from: at, to: offset(at, 0, 0.12, 0), life: 0.16, size: [0.3, 0.1], spin: 1.5, fade: true });
+      }, s);
+    }
+    stage.later(() => {
+      const middle = upFigure(figure, 0.55);
+      stage.spawnFx("burst", black, false, { from: middle, to: middle, life: 0.5, size: [0.9, 3], spin: 0.25, fade: true });
+      stage.later(() => stage.spawnFx("burst", shade, true, { from: middle, to: middle, life: 0.45, size: [0.6, 2.2], spin: -0.4, fade: true }), 0.06);
+      // Slow black rings rolling out over the ground, each thinner and more violet than the last.
+      for (let n = 0; n < rings; n++) {
+        stage.later(() => stage.wave({ at: ground, radius: radius * (1 - n * 0.07), life, color: n < 2 ? black : n < 4 ? shade : pale, width: 0.16 - n * 0.025 }), n * apart);
+      }
+      // A dark ring going out level through the air at its middle.
+      stage.wave({ at: middle, radius: radius * 0.85, life: life * 0.9, color: black, width: 0.06 });
+      // Dark wisps creeping out low over the ground every way, curling as they go.
+      for (let i = 0; i < 14; i++) {
+        const a = (i / 14) * Math.PI * 2 + Math.random() * 0.3;
+        const far = radius * (0.6 + Math.random() * 0.3);
+        const from = offset(ground, Math.cos(a) * 0.3, 0.15 + Math.random() * 0.3, Math.sin(a) * 0.3);
+        const to = offset(ground, Math.cos(a) * far, 0.1 + Math.random() * 0.35, Math.sin(a) * far);
+        stage.later(() => wisp(stage, from, to, 0.3, i % 3 ? black : shade, 0.8 + Math.random() * 0.2, [0.55, 0.3]), Math.random() * 0.2);
+      }
+      stage.shake?.(0.02, 0.5);
+    }, peak);
+  }
+  if (alone) return stage.later(onImpact, peak);
+  // Whoever it reaches is caught as the first ring passes under them: black wisps round their head, a pale flicker.
+  const far = Math.hypot(hitAt.x - feet.x, hitAt.z - feet.z);
+  stage.later(() => {
+    const at = offset(hitAt, 0, 0.3, 0);
+    stage.spawnFx("burst", black, false, { from: at, to: at, life: 0.4, size: [0.5, 1.7], spin: 0.4, fade: true });
+    stage.spawnFx("spark", pale, true, { from: at, to: offset(at, 0, 0.2, 0), life: 0.2, size: [0.35, 0.12], spin: 2, fade: true });
+    for (let k = 0; k < 5; k++) {
+      const a = (k / 5) * Math.PI * 2;
+      const from = offset(at, Math.cos(a) * 0.45, 0.05, Math.sin(a) * 0.3);
+      const to = offset(at, Math.cos(a + Math.PI * 0.8) * 0.45, 0.3, Math.sin(a + Math.PI * 0.8) * 0.3);
+      wisp(stage, from, to, 0.5, k % 2 ? shade : black, 0.7, [0.4, 0.22]);
+    }
+    stage.jolt();
+    onImpact();
+  }, peak + waveReaches(far, radius, life));
+}
+
+// ---------- a Cave Slime's ----------
+
+const ACID = "#a6f04a";
+const ACID_PALE = "#e4ffb0";
+const ACID_DEEP = "#4f9e2a";
+/** The pale steam acid gives off as it eats in. */
+const ACID_STEAM = "#dcefc8";
+
+/** Acid eating into whatever it is on, at `at`: little pale-green spits popping and steam curling up off it, `n` of each over `seconds`. */
+function sizzle(stage: MoveStage, at: THREE.Vector3, n: number, seconds: number, spread = 0.35) {
+  for (let i = 0; i < n; i++) {
+    stage.later(() => {
+      const from = offset(at, (Math.random() - 0.5) * spread * 2, (Math.random() - 0.5) * spread, 0.04);
+      stage.spawnFx("spark", Math.random() < 0.5 ? ACID : ACID_PALE, Math.random() < 0.5, { from, to: offset(from, (Math.random() - 0.5) * 0.2, 0.18, 0), life: 0.22, size: [0.3, 0.1], spin: 2, fade: true });
+      stage.spawnFx("dust", ACID_STEAM, Math.random() < 0.5, { from, to: offset(from, (Math.random() - 0.5) * 0.25, 0.6 + Math.random() * 0.3, 0), life: 0.6, size: [0.3, 0.8], spin: 0, fade: true });
+    }, (i / n) * seconds);
+  }
+}
+
+/**
+ * A Cave Slime's Engulf: it draws itself up tall and thin, ooze dripping off it, then pours itself over the target
+ * (figures.ts ENGULF): a green flash as it lands, a ring of slime spreading over the ground at their feet, and them
+ * held inside it while bubbles rise and they are jolted as it churns; then it lets go with a wet splat, gobs flung off
+ * every way, and slime dripping off them. The blow is told as it lands.
+ */
+function engulf(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const wait = figure.strike("engulf");
+  // Anything that is not an ooze springs at the target, and it lands as it does.
+  if (wait <= 0) stage.lunge();
+  const lands = Math.max(0, wait);
+  const green = crit ? GOLD : ACID;
+  // Drawing itself up: ooze running down off it.
+  for (let s = 0; s < lands; s += 0.06) {
+    stage.later(() => {
+      const from = upFigure(figure, 0.5 + Math.random() * 0.4);
+      from.x += (Math.random() - 0.5) * 0.5;
+      stage.spawnFx("fleck", Math.random() < 0.5 ? ACID : ACID_DEEP, Math.random() < 0.5, { from, to: offset(from, 0, -0.7, 0), life: 0.3, size: [0.3, 0.2], spin: 0, fade: true });
+    }, s);
+  }
+  stage.later(() => {
+    const feet = figure.root.getWorldPosition(new THREE.Vector3());
+    const floor = hitAt.clone().setY(feet.y + 0.06);
+    stage.spawnFx("burst", crit ? GOLD : ACID_PALE, false, { from: hitAt, to: hitAt, life: 0.2, size: [1, 2.6], spin: 0.4, fade: true });
+    // The slime round them: a deep green swell held over them a while, as it churns.
+    const held = ENGULF.over - ENGULF.hit - 0.4;
+    stage.spawnFx("burst", ACID_DEEP, true, { from: hitAt, to: hitAt, life: held + 0.1, size: [2.2, 2.6], spin: -0.3, fade: true });
+    stage.wave({ at: floor, radius: 1.2, life: 0.5, color: green, width: 0.3 });
+    stage.later(() => stage.wave({ at: floor, radius: 0.9, life: 0.6, color: ACID_DEEP, width: 0.5 }), 0.06);
+    // Splashed out sideways as it lands on them.
+    for (const side of [-1, 1]) for (const up of [0.1, 0.35]) stage.spawnFx("splash", green, side < 0, { from: hitAt, to: offset(hitAt, side * 0.7, up, 0), life: 0.3, size: [0.6, 1.1], spin: 0, fade: true });
+    stage.jolt();
+    onImpact();
+    // Held inside it: bubbles rising up through it, and a jolt now and then as it churns.
+    for (let s = 0.04; s < held; s += 0.045) {
+      stage.later(() => {
+        const from = offset(hitAt, (Math.random() - 0.5) * 0.7, -0.35 + Math.random() * 0.2, 0.06);
+        stage.spawnFx("mote", Math.random() < 0.5 ? ACID_PALE : ACID, Math.random() < 0.5, { from, to: offset(from, (Math.random() - 0.5) * 0.15, 0.6 + Math.random() * 0.3, 0), life: 0.4, size: [0.2, 0.35], spin: 0, fade: true });
+      }, s);
+    }
+    stage.later(() => stage.jolt(), held * 0.4);
+    stage.later(() => stage.jolt(), held * 0.8);
+    // Let go: a wet splat, gobs flung out in arcs, and slime dripping off them after.
+    stage.later(() => {
+      stage.spawnFx("burst", ACID, false, { from: hitAt, to: hitAt, life: 0.18, size: [1.2, 2], spin: 0.3, fade: true });
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2 + Math.random() * 0.4;
+        const far = 0.6 + Math.random() * 0.6;
+        stage.spawnFx("fleck", i % 2 ? ACID : ACID_DEEP, Math.cos(a) < 0, { from: hitAt, to: offset(floor, Math.cos(a) * far, 0, Math.sin(a) * far * 0.6), life: 0.4 + Math.random() * 0.15, size: [0.4, 0.25], spin: 0, fade: true, arc: 0.4 + Math.random() * 0.3 });
+      }
+      for (let k = 0; k < 5; k++) {
+        stage.later(() => {
+          const from = offset(hitAt, (Math.random() - 0.5) * 0.5 * dir, (Math.random() - 0.2) * 0.3, 0.05);
+          stage.spawnFx("fleck", ACID, Math.random() < 0.5, { from, to: from.clone().setY(floor.y), life: 0.35, size: [0.25, 0.15], spin: 0, fade: true });
+        }, 0.1 + k * 0.08);
+      }
+    }, held);
+  }, lands);
+}
+
+/** An Acid Splash's gob: seconds in the air, how high it arcs, and how far its splash spreads over the 3 hexes it lands on. */
+export const ACID_SPLASH = { flight: 0.45, arc: 1.3, spread: 1.6 };
+
+/**
+ * A Cave Slime's Acid Splash: it squashes down and springs up to spit (figures.ts SPIT), a gob of acid going up in an arc
+ * from its crown, dripping as it flies, and bursting where it lands: green rings rolling out over the 3 hexes, acid
+ * splashed up and flung out, and the ground left hissing and steaming a moment.
+ */
+function acidSplash(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const ground = hitAt.clone().setY(hitAt.y - 0.45);
+  const wait = Math.max(0, figure.strike("spit") || figure.cast());
+  // Gathering itself: acid beading up and drawn in to its crown.
+  for (let s = 0; s < wait; s += 0.05) {
+    stage.later(() => {
+      const crown = upFigure(figure, 0.95);
+      const a = Math.random() * Math.PI * 2;
+      stage.spawnFx("mote", Math.random() < 0.5 ? ACID : ACID_PALE, Math.cos(a) < 0, { from: offset(crown, Math.cos(a) * 0.45, -0.35, Math.sin(a) * 0.3), to: crown, life: 0.2, size: [0.3, 0.15], spin: 0, fade: true });
+    }, s);
+  }
+  stage.later(() => {
+    const from = upFigure(figure, 0.95);
+    const { flight, arc, spread } = ACID_SPLASH;
+    stage.spawnFx("splash", ACID, dir < 0, { from, to: offset(from, 0, 0.25, 0), life: 0.18, size: [0.5, 0.9], spin: 0, fade: true });
+    stage.spawnFx("burst", crit ? GOLD : ACID, dir < 0, { from, to: ground, life: flight, size: [0.8, 1], spin: dir * 5, fade: false, arc, onEnd: () => land() });
+    // Drips falling off it all the way, along the same arc.
+    for (let s = 0.03; s < flight; s += 0.04) {
+      stage.later(() => {
+        const k = s / flight;
+        const at = from.clone().lerp(ground, k);
+        at.y += arc * 4 * k * (1 - k);
+        stage.spawnFx("fleck", Math.random() < 0.5 ? ACID : ACID_DEEP, Math.random() < 0.5, { from: at, to: offset(at, (Math.random() - 0.5) * 0.2, -0.45, 0), life: 0.3, size: [0.3, 0.18], spin: 0, fade: true });
+      }, s);
+    }
+    const land = () => {
+      stage.sound();
+      const floor = ground.clone().setY(ground.y + 0.05);
+      stage.spawnFx("burst", crit ? GOLD : ACID_PALE, false, { from: ground, to: ground, life: 0.2, size: [1.1, 3], spin: 0.5, fade: true });
+      stage.spawnFx("burst", ACID_DEEP, true, { from: ground, to: ground.clone().setY(ground.y + 0.25), life: 0.4, size: [1, 2.6], spin: -0.4, fade: true });
+      stage.wave({ at: floor, radius: spread, life: 0.45, color: ACID, width: 0.16 });
+      stage.later(() => stage.wave({ at: floor, radius: spread * 0.85, life: 0.6, color: ACID_DEEP, width: 0.35 }), 0.06);
+      // Splashed up all over the hexes it lands on.
+      for (let i = 0; i < 10; i++) {
+        stage.later(() => {
+          const a = Math.random() * Math.PI * 2;
+          const far = Math.sqrt(Math.random()) * spread * 0.6;
+          const at = offset(ground, Math.cos(a) * far, 0.05, Math.sin(a) * far * 0.7);
+          stage.spawnFx("splash", Math.random() < 0.5 ? ACID : ACID_PALE, Math.random() < 0.5, { from: at, to: offset(at, 0, 0.45, 0), life: 0.3, size: [0.4, 0.8], spin: 0, fade: true });
+        }, i * 0.03);
+      }
+      // Gobs flung out every way in arcs.
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2 + Math.random() * 0.4;
+        const far = 0.6 + Math.random() * 0.8;
+        stage.spawnFx("fleck", i % 2 ? ACID : ACID_DEEP, Math.cos(a) < 0, { from: ground, to: offset(ground, Math.cos(a) * far, 0, Math.sin(a) * far * 0.6), life: 0.42 + Math.random() * 0.2, size: [0.38, 0.22], spin: 0, fade: true, arc: 0.4 + Math.random() * 0.4 });
+      }
+      // And the ground hissing after, steam rising off it.
+      stage.later(() => sizzle(stage, ground.clone().setY(ground.y + 0.1), 14, 0.8, spread * 0.4), 0.12);
+      stage.jolt();
+      onImpact();
+    };
+  }, wait);
+}
+
+/**
+ * A Cave Slime's Acid Armor, biting back at whoever struck it by hand: acid spurts off its body at them, a few gobs
+ * that splash on them in green, and they are left hissing, steam rising off them. Told as the acid lands.
+ */
+function acidArmor(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const flip = dir < 0;
+  const flight = 0.16;
+  for (let i = 0; i < 4; i++) {
+    stage.later(() => {
+      const from = upFigure(figure, 0.35 + Math.random() * 0.35);
+      const to = offset(hitAt, (Math.random() - 0.5) * 0.35, (Math.random() - 0.5) * 0.35, 0.05);
+      stage.spawnFx("fleck", i % 2 ? ACID : ACID_DEEP, flip, { from, to, life: flight, size: [0.35, 0.3], spin: 0, fade: false, arc: 0.25 + Math.random() * 0.2 });
+    }, i * 0.03);
+  }
+  stage.later(() => {
+    stage.spawnFx("splash", crit ? GOLD : ACID, flip, { from: hitAt, to: offset(hitAt, dir * 0.25, 0.15, 0), life: 0.26, size: [0.7, 1.4], spin: 0, fade: true });
+    stage.spawnFx("burst", ACID_PALE, false, { from: hitAt, to: hitAt, life: 0.18, size: [0.6, 1.5], spin: 0.4, fade: true });
+    sizzle(stage, hitAt, 8, 0.45, 0.3);
+    stage.jolt();
+    onImpact();
+  }, flight + 0.06);
+}
+
+
+const VENOM = "#9dff5a";
+const VENOM_DEEP = "#3f7d3c";
+const VENOM_PALE = "#e2ffc4";
+const FANG_BONE = "#f1ead2";
+const SILK = "#f4f1e6";
+const SILK_DIM = "#c9c4b4";
+
+/** Where a figure's fangs are as it strikes: a little way from it toward the target, low on it. */
+function fangsOf(figure: Figure, hitAt: THREE.Vector3): THREE.Vector3 {
+  return upFigure(figure, 0.4).lerp(hitAt.clone().setY(upFigure(figure, 0.4).y), 0.35);
+}
+
+/**
+ * A Giant Spider's Venomous Bite: it rears up, front legs thrown wide and fangs spread (figures.ts FANG), venom beading
+ * and dripping off them, then plunges and drives them in: two pale fang streaks stabbing down into the target, a green
+ * flash, venom splashing out either side, then green bubbles rising off them and drops running down to a green ring at
+ * their feet, for the venom it leaves on the ground. The blow is told as the fangs go in.
+ */
+function venomousBite(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const wait = figure.strike("fang");
+  // Anything that is not a spider springs at the target, and the fangs go in as it does.
+  if (wait <= 0) stage.lunge();
+  const lands = Math.max(0.12, wait);
+  const green = crit ? GOLD : VENOM;
+  // Rearing up: venom beading on the fangs and dripping off them.
+  for (let s = 0.04; s < lands - 0.06; s += 0.05) {
+    stage.later(() => {
+      const from = offset(fangsOf(figure, hitAt), (Math.random() - 0.5) * 0.3, (Math.random() - 0.5) * 0.15, 0.05);
+      stage.spawnFx("fleck", Math.random() < 0.6 ? VENOM : VENOM_DEEP, Math.random() < 0.5, { from, to: offset(from, 0, -0.55, 0), life: 0.28, size: [0.28, 0.16], spin: 0, fade: true });
+    }, s);
+  }
+  // The fangs: two pale streaks stabbing down into the target, a little apart, just before they meet it.
+  const stab = 0.08;
+  stage.later(() => {
+    for (const side of [-1, 1]) {
+      const from = offset(hitAt, side * 0.26 * dir, 0.6, 0.06);
+      stage.spawnFx("streak", crit ? GOLD : FANG_BONE, dir < 0, { from, to: offset(hitAt, side * 0.1 * dir, -0.08, 0.06), life: stab, size: [0.5, 0.9], turn: Math.PI / 2 - side * 0.3, spin: 0, fade: false });
+    }
+  }, lands - stab);
+  stage.later(() => {
+    const feet = figure.root.getWorldPosition(new THREE.Vector3());
+    const floor = hitAt.clone().setY(feet.y + 0.06);
+    stage.spawnFx("burst", crit ? GOLD : VENOM_PALE, false, { from: hitAt, to: hitAt, life: 0.18, size: [0.6, 1.7], spin: 0.5, fade: true });
+    stage.spawnFx("burst", VENOM_DEEP, true, { from: hitAt, to: hitAt, life: 0.32, size: [0.7, 1.9], spin: -0.4, fade: true });
+    // Venom splashed out either side of the fangs.
+    for (const side of [-1, 1]) for (const up of [0.05, 0.3]) stage.spawnFx("splash", green, side < 0, { from: hitAt, to: offset(hitAt, side * 0.6, up, 0), life: 0.28, size: [0.5, 1], spin: 0, fade: true });
+    stage.jolt();
+    onImpact();
+    // The venom working in: green bubbles rising off them, and drops running down to the ground.
+    for (let s = 0.05; s < 0.6; s += 0.05) {
+      stage.later(() => {
+        const from = offset(hitAt, (Math.random() - 0.5) * 0.55, (Math.random() - 0.5) * 0.4, 0.06);
+        stage.spawnFx("mote", Math.random() < 0.5 ? VENOM : VENOM_PALE, Math.random() < 0.5, { from, to: offset(from, (Math.random() - 0.5) * 0.15, 0.5 + Math.random() * 0.3, 0), life: 0.4, size: [0.18, 0.32], spin: 0, fade: true });
+      }, s);
+    }
+    for (let i = 0; i < 4; i++) {
+      stage.later(() => {
+        const from = offset(hitAt, (Math.random() - 0.5) * 0.4, -0.1 - Math.random() * 0.15, 0.05);
+        stage.spawnFx("fleck", VENOM, Math.random() < 0.5, { from, to: from.clone().setY(floor.y), life: 0.3, size: [0.26, 0.15], spin: 0, fade: true });
+      }, 0.08 + i * 0.07);
+    }
+    stage.later(() => {
+      stage.wave({ at: floor, radius: 1.1, life: 0.55, color: green, width: 0.22 });
+      stage.later(() => stage.wave({ at: floor, radius: 0.8, life: 0.7, color: VENOM_DEEP, width: 0.45 }), 0.08);
+    }, 0.3);
+  }, lands);
+}
+
+/** An Impaling Fang: the Broodmother's red and the dark violet of her shell, the grey of dented armour, and how far its point goes through. */
+export const IMPALING_FANG = { red: "#e23a30", dark: "#3d2857", iron: "#b8bcc4", through: 0.75 };
+
+/**
+ * A Broodmother's Impaling Fang: one great stab, not a bite. She rears up high, front legs thrown up wide and fangs
+ * spread (figures.ts FANG), a red glint running down each fang as she holds there; then she plunges and both fangs
+ * drive down into the target together as two long red-and-violet streaks, and straight through: a dark violet flash,
+ * the points shown coming out behind them as two short streaks. Their armour is dented: grey chips and sparks burst off
+ * the front of them and fall, a ring of grey and then red crumples in over them, and a cracked red ring lies on the ground.
+ */
+function impalingFang(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const { red, dark, iron, through } = IMPALING_FANG;
+  const wait = figure.strike("fang");
+  if (wait <= 0) stage.lunge();
+  const lands = Math.max(0.12, wait);
+  const fang = crit ? GOLD : red;
+  // Held high a moment: red glints running down the fangs.
+  for (let s = 0.04; s < lands - 0.08; s += 0.07) {
+    stage.later(() => {
+      const from = fangsOf(figure, hitAt);
+      stage.spawnFx("spark", fang, Math.random() < 0.5, { from: offset(from, (Math.random() - 0.5) * 0.3, 0.2, 0.05), to: offset(from, 0, -0.3, 0.05), life: 0.18, size: [0.22, 0.1], spin: 0, fade: true });
+    }, s);
+  }
+  // Both fangs, long and together, from high over the target down into it.
+  const stab = 0.1;
+  stage.later(() => {
+    for (const side of [-1, 1]) {
+      const from = offset(hitAt, side * 0.3 * dir, 1.1, 0.06);
+      stage.spawnFx("streak", fang, dir < 0, { from, to: offset(hitAt, side * 0.08 * dir, -0.05, 0.06), life: stab, size: [0.7, 1.4], turn: Math.PI / 2 - side * 0.25, spin: 0, fade: false });
+      stage.spawnFx("streak", dark, dir < 0, { from: offset(from, 0, 0.15, -0.02), to: offset(hitAt, side * 0.1 * dir, 0.1, 0.04), life: stab * 1.3, size: [1, 1.8], turn: Math.PI / 2 - side * 0.25, spin: 0, fade: true });
+    }
+  }, lands - stab);
+  stage.later(() => {
+    const feet = figure.root.getWorldPosition(new THREE.Vector3());
+    const floor = hitAt.clone().setY(feet.y + 0.06);
+    stage.spawnFx("burst", crit ? GOLD : dark, false, { from: hitAt, to: hitAt, life: 0.3, size: [0.8, 2.4], spin: 0.5, fade: true });
+    stage.spawnFx("burst", fang, true, { from: hitAt, to: hitAt, life: 0.2, size: [0.5, 1.5], spin: -0.5, fade: true });
+    // Straight through: the points coming out behind them.
+    for (const side of [-1, 1]) {
+      const out = offset(hitAt, side * 0.08 * dir + dir * 0.1, -0.15, -0.1);
+      stage.spawnFx("streak", fang, dir < 0, { from: out, to: offset(out, dir * through * 0.4, -through, -0.05), life: 0.14, size: [0.5, 0.9], turn: Math.PI / 2 - side * 0.25, spin: 0, fade: true });
+    }
+    // Their armour dented: grey chips and sparks off the front of them, falling.
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 + Math.random() * 0.4;
+      const to = offset(hitAt, Math.cos(a) * (0.4 + Math.random() * 0.4), Math.sin(a) * 0.35 - 0.2, 0.1);
+      stage.spawnFx(i % 3 ? "spark" : "fleck", i % 2 ? iron : "#ffffff", Math.cos(a) < 0, { from: offset(hitAt, 0, 0, 0.1), to, life: 0.35 + Math.random() * 0.2, size: [0.3, 0.14], spin: 3, fade: true, arc: i % 3 ? 0 : 0.25 });
+    }
+    // A ring crumpling in over them: wide and grey, then tighter and red.
+    stage.wave({ at: hitAt, radius: 0.9, life: 0.3, color: iron, width: 0.08 });
+    stage.later(() => stage.wave({ at: hitAt, radius: 0.6, life: 0.3, color: fang, width: 0.06 }), 0.07);
+    stage.jolt();
+    stage.later(() => stage.jolt(), 0.08);
+    onImpact();
+    stage.later(() => {
+      stage.wave({ at: floor, radius: 1.2, life: 0.55, color: fang, width: 0.18 });
+      stage.later(() => stage.wave({ at: floor, radius: 0.85, life: 0.6, color: dark, width: 0.32 }), 0.08);
+    }, 0.12);
+  }, lands);
+}
+
+/** A thrown web, laid flat on the ground (groundWeb): how many spokes and rings, how thick its threads, and its seconds. */
+export const WEB_LAID = { spokes: 9, rings: 4, thread: 0.05, grow: 0.2, hold: 0.7, fade: 0.55 };
+
+/**
+ * A web laid flat on the ground at `at`, `radius` out (see WEB_LAID): spokes out from the middle and rings of thread
+ * across them, each sagging in a little between spokes, thrown out from small to full size and then fading. Always on
+ * the plane of the ground. `drop`: it starts that far above `at` and comes down onto it as it opens out (a net cast
+ * over the ground), `lies`, if said, is how long it lies there before fading, and `thick` how many times WEB_LAID's
+ * thread it is strung with. Lay it with MoveStage.lay.
+ */
+export function groundWeb(at: THREE.Vector3, radius: number, color: string, drop = 0, lies?: number, thick = 1): (group: THREE.Object3D) => (dt: number) => boolean {
+  return (group) => {
+    const { spokes, rings, grow: opens, hold: held, fade } = WEB_LAID;
+    const thread = WEB_LAID.thread * thick;
+    const grow = drop > 0 ? opens * 2 : opens;
+    const hold = lies ?? held;
+    const positions: number[] = [];
+    const index: number[] = [];
+    /** One thread from a to b (x, z on the ground), as a thin flat strip. */
+    const strand = (ax: number, az: number, bx: number, bz: number, w: number) => {
+      const len = Math.hypot(bx - ax, bz - az) || 1;
+      const [nx, nz] = [(-(bz - az) / len) * (w / 2), ((bx - ax) / len) * (w / 2)];
+      const n = positions.length / 3;
+      positions.push(ax + nx, 0, az + nz, ax - nx, 0, az - nz, bx + nx, 0, bz + nz, bx - nx, 0, bz - nz);
+      index.push(n, n + 1, n + 2, n + 1, n + 3, n + 2);
+    };
+    // Each spoke a little off even, so it looks spun, not drawn.
+    const angles = Array.from({ length: spokes }, (_, i) => ((i + (Math.random() - 0.5) * 0.35) / spokes) * Math.PI * 2);
+    const reach = angles.map(() => radius * (0.88 + Math.random() * 0.14));
+    angles.forEach((a, i) => strand(0, 0, Math.cos(a) * reach[i], Math.sin(a) * reach[i], thread * 1.2));
+    for (let r = 1; r <= rings; r++) {
+      const share = r / rings;
+      for (let i = 0; i < spokes; i++) {
+        const [a, b] = [angles[i], angles[(i + 1) % spokes]];
+        const [ra, rb] = [reach[i] * share, reach[(i + 1) % spokes] * share];
+        const [ax, az, bx, bz] = [Math.cos(a) * ra, Math.sin(a) * ra, Math.cos(b) * rb, Math.sin(b) * rb];
+        // Sagging in toward the middle between the two spokes it is strung across.
+        const sag = 0.86;
+        const [mx, mz] = [((ax + bx) / 2) * sag, ((az + bz) / 2) * sag];
+        strand(ax, az, mx, mz, thread);
+        strand(mx, mz, bx, bz, thread);
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setIndex(index);
+    const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.copy(at);
+    mesh.rotation.y = Math.random() * Math.PI * 2;
+    mesh.renderOrder = 8;
+    group.add(mesh);
+    let age = 0;
+    return (dt) => {
+      age += dt;
+      const g = Math.min(1, age / grow);
+      const size = 0.25 + 0.75 * (1 - (1 - g) * (1 - g));
+      mesh.scale.set(size, 1, size);
+      // Coming down: slow at first, then quicker as it settles.
+      mesh.position.y = at.y + drop * (1 - g * g);
+      const k = Math.max(0, (age - grow - hold) / fade);
+      material.opacity = 0.95 * (1 - k * k);
+      if (k < 1) return true;
+      group.remove(mesh);
+      geometry.dispose();
+      material.dispose();
+      return false;
+    };
+  };
+}
+
+/** A thrown ball of silk (throwWeb): seconds in the air, how high it arcs, and how far the web it bursts into spreads. */
+interface WebThrow {
+  flight: number;
+  arc: number;
+  spread: number;
+}
+
+/** A Giant Spider's Web Spit, over a clump of three hexes. */
+export const WEB_SPIT: WebThrow = { flight: 0.42, arc: 1.5, spread: 1.6 };
+
+
+/**
+ * A spider throwing silk (a Giant Spider's Web Spit): it sinks on braced legs and arches its
+ * abdomen up over its back (figures.ts WEB), silk drawn in to its spinnerets, then throws a spinning ball of silk in a
+ * high arc, a thread trailing behind it; it bursts where it lands into a web thrown out flat over the hexes it covers
+ * (`spread` out), a pale ring rolling out under it, threads flung out round the edge, and wisps of silk drifting down
+ * over it.
+ */
+const throwWeb = (how: WebThrow) => (stage: MoveStage, ctx: MoveCtx) => webThrown(stage, ctx, how);
+
+function webThrown(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx, how: WebThrow) {
+  const ground = hitAt.clone().setY(hitAt.y - 0.45);
+  const wait = Math.max(0, figure.strike("web") || figure.cast());
+  const silk = crit ? GOLD : SILK;
+  // Gathering silk at its spinnerets, high over its back.
+  for (let s = 0; s < wait; s += 0.05) {
+    stage.later(() => {
+      const tip = upFigure(figure, 0.95);
+      const a = Math.random() * Math.PI * 2;
+      stage.spawnFx("mote", Math.random() < 0.6 ? SILK : SILK_DIM, Math.cos(a) < 0, { from: offset(tip, Math.cos(a) * 0.4, -0.3, Math.sin(a) * 0.3), to: tip, life: 0.2, size: [0.25, 0.12], spin: 0, fade: true });
+    }, s);
+  }
+  stage.later(() => {
+    const from = upFigure(figure, 0.95);
+    const { flight, arc, spread } = how;
+    // A wider web throws out more threads and drops more wisps.
+    const more = Math.max(1, spread / WEB_SPIT.spread / 1.4);
+    stage.spawnFx("burst", SILK, dir < 0, { from, to: offset(from, 0, 0.2, 0), life: 0.16, size: [0.5, 1], spin: 0.4, fade: true });
+    stage.spawnFx("burst", silk, dir < 0, { from, to: ground, life: flight, size: [0.7, 0.9], spin: dir * 6, fade: false, arc, onEnd: () => land() });
+    // The thread trailing behind it, hanging a moment along the arc.
+    for (let s = 0.02; s < flight; s += 0.025) {
+      stage.later(() => {
+        const k = s / flight;
+        const at = from.clone().lerp(ground, k);
+        at.y += arc * 4 * k * (1 - k);
+        stage.spawnFx("mote", Math.random() < 0.7 ? SILK : SILK_DIM, false, { from: at, to: offset(at, 0, -0.08, 0), life: 0.35, size: [0.16, 0.1], spin: 0, fade: true });
+      }, s);
+    }
+    const land = () => {
+      stage.sound();
+      const floor = ground.clone().setY(ground.y + 0.05);
+      stage.spawnFx("burst", silk, false, { from: ground, to: ground, life: 0.2, size: [1, 2.6], spin: 0.5, fade: true });
+      stage.lay(groundWeb(floor, spread, silk));
+      stage.wave({ at: floor, radius: spread * 1.1, life: 0.45, color: SILK, width: 0.12 });
+      // Threads flung out round its edge as it spreads.
+      const threads = Math.round(8 * more);
+      for (let i = 0; i < threads; i++) {
+        const a = (i / threads) * Math.PI * 2 + Math.random() * 0.3;
+        const to = offset(floor, Math.cos(a) * spread, 0.05, Math.sin(a) * spread * 0.7);
+        stage.spawnFx("streak", SILK, Math.cos(a) < 0, { from: floor, to, life: 0.2, size: [0.4, 0.9], turn: -a, spin: 0, fade: true });
+      }
+      // Wisps of silk drifting down over it after.
+      for (let i = 0; i < Math.round(10 * more); i++) {
+        stage.later(() => {
+          const a = Math.random() * Math.PI * 2;
+          const far = Math.sqrt(Math.random()) * spread * 0.8;
+          const to = offset(floor, Math.cos(a) * far, 0.02, Math.sin(a) * far * 0.7);
+          stage.spawnFx("mote", Math.random() < 0.5 ? SILK : SILK_DIM, Math.random() < 0.5, { from: offset(to, (Math.random() - 0.5) * 0.3, 0.7, 0), to, life: 0.6, size: [0.22, 0.14], spin: 1, fade: true });
+        }, 0.05 + i * 0.05);
+      }
+      stage.jolt();
+      onImpact();
+    };
+  }, wait);
+}
+
+/** A Haunt's ice: pale blue, the near white at its heart, and the deeper blue in its shadows. */
+const ICE = "#bfeaff";
+const ICE_CORE = "#f2fbff";
+const ICE_DEEP = "#4f8fc4";
+/** A Haunt's dread (its Terror Aura, SpellFx.dread): a cold violet, and the near black under it. */
+export const DREAD = { color: "#7b5cc4", deep: "#1a1024" };
+/** A Ghastly Fetter's grave-iron, and the pale violet glow on it (SpellFx.fetter, while it holds). */
+export const FETTER = { iron: "#4a4658", glow: "#b8a8ff" };
+
+/** Where a figure's feet are, and the way along the ground from them toward `at` (straight ahead, if `at` is right on them). */
+function aheadOf(figure: Figure, at: THREE.Vector3): { feet: THREE.Vector3; ahead: THREE.Vector3 } {
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const ahead = new THREE.Vector3(at.x - feet.x, 0, at.z - feet.z);
+  if (ahead.lengthSq() < 1e-6) ahead.set(1, 0, 0);
+  return { feet, ahead: ahead.normalize() };
+}
+
+/** A see-through, faintly glowing material for what a ghost makes of cold (its hand, its spear). */
+const iceMaterial = (color: string, opacity: number) => new THREE.MeshLambertMaterial({ color, emissive: ICE_DEEP, emissiveIntensity: 0.55, transparent: true, opacity, depthWrite: false });
+
+/**
+ * A ghost's hand of ice, palm down and fingers forward along its own +z: a flattened palm, four long fingers and a
+ * thumb, each finger on a knuckle that `curl` bends down (0 open and spread, 1 a fist). Its pieces are its own, to
+ * dispose of with it.
+ */
+function iceHand(): { hand: THREE.Group; curl(k: number): void; fade(o: number): void; dispose(): void } {
+  const hand = new THREE.Group();
+  const skin = iceMaterial(ICE, 0.85);
+  const shapes: THREE.BufferGeometry[] = [];
+  const piece = (g: THREE.BufferGeometry) => (shapes.push(g), new THREE.Mesh(g, skin));
+  const palm = piece(new THREE.SphereGeometry(1, 12, 8));
+  palm.scale.set(0.42, 0.13, 0.48);
+  hand.add(palm);
+  const knuckles = [-0.27, -0.09, 0.09, 0.27].map((x, i) => {
+    const knuckle = new THREE.Group();
+    knuckle.position.set(x, 0, 0.36);
+    // The middle two longest, as a hand's are, the four fanned a little apart.
+    const long = i === 1 || i === 2 ? 0.5 : 0.4;
+    const finger = piece(new THREE.CapsuleGeometry(0.07, long, 3, 6).rotateX(Math.PI / 2));
+    finger.position.z = long / 2 + 0.05;
+    knuckle.add(finger);
+    knuckle.rotation.y = x * 0.5;
+    hand.add(knuckle);
+    return knuckle;
+  });
+  const thumb = new THREE.Group();
+  thumb.position.set(0.36, 0, 0.05);
+  const digit = piece(new THREE.CapsuleGeometry(0.075, 0.32, 3, 6).rotateX(Math.PI / 2));
+  digit.position.z = 0.2;
+  thumb.add(digit);
+  hand.add(thumb);
+  return {
+    hand,
+    curl(k) {
+      for (const knuckle of knuckles) knuckle.rotation.x = 0.15 + k * 1.9;
+      thumb.rotation.set(0.2 + k * 0.6, 0.9 - k * 1.3, 0);
+    },
+    fade(o) {
+      skin.opacity = 0.85 * o;
+    },
+    dispose() {
+      for (const g of shapes) g.dispose();
+      skin.dispose();
+    },
+  };
+}
+
+/**
+ * A Grave Grasp: how far its hand reaches (to the far row of its cone, EnemyAbilityDef `cone`), and the seconds the hand
+ * takes to reach out, to close on what it caught, and to drag it back.
+ */
+export const GRAVE_GRASP = { reach: HEX * ((ENEMY_ABILITIES.grave_grasp?.cone ?? 3) - 0.1), out: 0.28, close: 0.14, back: 0.55 };
+
+/**
+ * A Haunt's Grave Grasp: it draws up and back, then surges in with its arms stretched long (figures.ts GRASP), and a
+ * great hand of ice reaches out of it low over the ground, opening as it goes. At the far row it slams down, fingers spread: a cold flash, a ring of frost, frost sparks thrown up,
+ * and everyone caught is told (and flinches). Then the fingers close into a fist and it drags back to the Haunt over
+ * the ground, frost and cold wisps pulled along behind it, shrinking and fading as it goes back into it.
+ */
+function graveGrasp(stage: MoveStage, { figure, hitAt, crit, onImpact }: MoveCtx) {
+  const { reach, out, close, back } = GRAVE_GRASP;
+  const wait = Math.max(0, figure.strike("grasp"));
+  if (wait <= 0) stage.lunge();
+  const { feet, ahead } = aheadOf(figure, hitAt);
+  const groundAt = (d: number) => feet.clone().addScaledVector(ahead, d).setY(feet.y + (hitAt.y - 0.45 - feet.y) * Math.min(1, d / reach));
+  const near = groundAt(0.7).setY(feet.y + 0.95);
+  const far = groundAt(reach);
+  const cold = crit ? GOLD : ICE;
+  stage.later(() => {
+    // The hand: out to the far row, a moment to close, and back.
+    stage.lay((group) => {
+      const { hand, curl, fade, dispose } = iceHand();
+      group.add(hand);
+      const at = new THREE.Vector3();
+      let age = 0;
+      let trail = 0;
+      return (dt) => {
+        age += dt;
+        let size: number;
+        if (age < out) {
+          const k = age / out;
+          const e = 1 - (1 - k) * (1 - k);
+          at.lerpVectors(near, far.clone().setY(far.y + 0.35), e);
+          size = 0.6 + 1.1 * e;
+          curl(0.05);
+          fade(Math.min(1, k * 3));
+        } else if (age < out + close) {
+          const k = (age - out) / close;
+          at.copy(far).setY(far.y + 0.35 - 0.12 * Math.sin(Math.PI * k));
+          size = 1.7;
+          curl(k);
+          fade(1);
+        } else {
+          const k = Math.min(1, (age - out - close) / back);
+          const e = k * k * (3 - 2 * k);
+          at.lerpVectors(far.clone().setY(far.y + 0.3), near, e);
+          size = 1.7 - 1.2 * e;
+          curl(1);
+          fade(k < 0.7 ? 1 : (1 - k) / 0.3);
+          // What it caught, dragged along behind it: frost off the ground and cold wisps pulled after it.
+          if (age >= trail) {
+            trail = age + 0.03;
+            const from = at.clone().setY(far.y + 0.1).addScaledVector(ahead, 0.3 + Math.random() * 0.4);
+            stage.spawnFx("mote", Math.random() < 0.5 ? ICE_CORE : cold, ahead.x < 0, { from, to: at.clone().setY(at.y + 0.1), life: 0.3, size: [0.4, 0.15], spin: 0, fade: true });
+            if (Math.random() < 0.5) stage.spawnFx("dust", "#dfefff", Math.random() < 0.5, { from, to: offset(from, 0, 0.3, 0), life: 0.4, size: [0.4, 0.8], spin: 0, fade: true });
+          }
+        }
+        hand.position.copy(at);
+        hand.scale.setScalar(size);
+        hand.lookAt(at.clone().add(ahead));
+        if (age < out + close + back) return true;
+        group.remove(hand);
+        dispose();
+        return false;
+      };
+    });
+    // Cold wisps streaming off the hand as it reaches out.
+    for (let s = 0; s < out; s += 0.03) {
+      stage.later(() => {
+        const at = near.clone().lerp(far, s / out).setY(near.y + (far.y + 0.35 - near.y) * (s / out));
+        stage.spawnFx("mote", Math.random() < 0.5 ? ICE_CORE : cold, ahead.x < 0, { from: at, to: at.clone().addScaledVector(ahead, -0.6).setY(at.y + 0.2), life: 0.3, size: [0.35, 0.12], spin: 0, fade: true });
+      }, s);
+    }
+    // The slam at the far row: a cold flash, a ring of frost, frost sparks thrown up, and everyone caught told.
+    stage.later(() => {
+      const flash = far.clone().setY(far.y + 0.4);
+      stage.spawnFx("burst", crit ? GOLD : ICE_CORE, false, { from: flash, to: flash, life: 0.24, size: [1, 2.8], spin: 0.4, fade: true });
+      stage.later(() => stage.spawnFx("burst", crit ? GOLD : ICE_DEEP, true, { from: flash, to: flash, life: 0.4, size: [1.1, 3], spin: -0.4, fade: true }), 0.05);
+      stage.wave({ at: far.clone().setY(far.y + 0.06), radius: HEX * 1.3, life: 0.5, color: cold, width: 0.14 });
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2 + Math.random() * 0.4;
+        const to = offset(flash, Math.cos(a) * (0.5 + Math.random() * 0.5), 0.3 + Math.random() * 0.5, Math.sin(a) * 0.4);
+        stage.spawnFx("spark", i % 2 ? ICE_CORE : cold, Math.cos(a) < 0, { from: flash, to, life: 0.5 + Math.random() * 0.25, size: [0.4, 0.15], spin: 2, fade: true });
+      }
+      stage.jolt();
+      onImpact();
+    }, out);
+  }, wait);
+}
+
+/**
+ * An Ice Spear: how far it flies (to the end of its line, EnemyAbilityDef `line`), how long it is, how high over its
+ * user's head it forms, and the seconds it takes to fly.
+ */
+export const ICE_SPEAR = { reach: HEX * (ENEMY_ABILITIES.ice_spear?.line ?? 5), length: 2, over: 0.6, fly: 0.3 };
+
+/**
+ * A Haunt's Ice Spear: it rises and leans back with its arms raised high and drawn together (figures.ts HURL), and a
+ * long, solid spear of ice (a faceted shaft, pointed at both ends) grows between its hands over its head, turning slowly, as cold motes are drawn in to it. Then it
+ * flings it: the spear shoots off straight and low down the whole line, a pale streak and frost motes trailing behind
+ * it and a line of frost laid along the ground under it, and everyone on the line is told (and flinches) as it passes
+ * the middle. At the end it shatters: a cold flash, shards and frost thrown every way, and a ring of frost.
+ */
+function iceSpear(stage: MoveStage, { figure, hitAt, crit, onImpact }: MoveCtx) {
+  const { reach, length, over, fly } = ICE_SPEAR;
+  const wait = Math.max(0, figure.strike("hurl"));
+  if (wait <= 0) stage.lunge();
+  const { feet, ahead } = aheadOf(figure, hitAt);
+  const cold = crit ? GOLD : ICE;
+  const above = () => upFigure(figure, 1).setY(upFigure(figure, 1).y + over);
+  const end = feet.clone().addScaledVector(ahead, reach).setY(hitAt.y - 0.45 + 0.6);
+  // Cold motes drawn in to it as it forms.
+  for (let s = 0; s < wait; s += 0.04) {
+    stage.later(() => {
+      const at = above();
+      const a = Math.random() * Math.PI * 2;
+      const from = offset(at, Math.cos(a) * 1.1, (Math.random() - 0.5) * 0.8, Math.sin(a) * 1.1);
+      stage.spawnFx("mote", Math.random() < 0.5 ? ICE_CORE : cold, Math.cos(a) < 0, { from, to: at, life: 0.3, size: [0.35, 0.12], spin: 0, fade: true });
+    }, s);
+  }
+  stage.lay((group) => {
+    // A solid icicle, point first along its own +z: a long six-sided shaft of ice and a short point at its back end, cut
+    // flat so its facets catch the light.
+    const shapes = [
+      new THREE.ConeGeometry(0.27, length, 6).rotateX(Math.PI / 2),
+      new THREE.ConeGeometry(0.27, 0.45, 6).rotateX(-Math.PI / 2).translate(0, 0, -length / 2 - 0.22),
+    ];
+    const outer = new THREE.MeshLambertMaterial({ color: cold, emissive: ICE_DEEP, emissiveIntensity: 0.35, flatShading: true });
+    const spear = new THREE.Group();
+    spear.add(new THREE.Mesh(shapes[0], outer), new THREE.Mesh(shapes[1], outer));
+    group.add(spear);
+    // The frost laid along the ground under it, from where it set off to where it is.
+    const frost = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: cold, transparent: true, opacity: 0, depthWrite: false }));
+    frost.renderOrder = 7;
+    group.add(frost);
+    const frostMaterial = frost.material as THREE.MeshBasicMaterial;
+    let from: THREE.Vector3 | null = null;
+    let age = 0;
+    let trail = 0;
+    return (dt) => {
+      age += dt;
+      if (age < wait) {
+        // Forming over its head: growing, and turning slowly, its point ahead.
+        const k = age / wait;
+        const at = above();
+        spear.position.copy(at);
+        spear.scale.setScalar(Math.max(0.05, k));
+        spear.lookAt(at.clone().add(ahead).setY(at.y + 0.15));
+        spear.rotateZ(age * 4);
+      } else if (age < wait + fly) {
+        from ??= above();
+        const k = (age - wait) / fly;
+        const at = from.clone().lerp(end, k);
+        spear.position.copy(at);
+        spear.scale.setScalar(1);
+        spear.lookAt(end.clone().addScaledVector(ahead, 0.5));
+        const ground = feet.clone().lerp(end, k).setY(feet.y + (end.y - 0.6 - feet.y) * k + 0.05);
+        const start = feet.clone().addScaledVector(ahead, 0.5).setY(feet.y + 0.05);
+        frost.position.lerpVectors(start, ground, 0.5);
+        frost.scale.set(0.45, 1, Math.max(0.01, start.distanceTo(ground)));
+        frost.lookAt(ground.x, frost.position.y, ground.z);
+        frostMaterial.opacity = 0.45;
+        if (age >= trail) {
+          trail = age + 0.015;
+          // Behind it, not over it: the spear itself stays in plain sight. Two speed lines at a time, a little apart.
+          const tail = at.clone().addScaledVector(ahead, -length * 0.75);
+          for (let i = 0; i < 2; i++) {
+            const from = offset(tail, (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4);
+            stage.spawnFx("streak", i ? ICE_CORE : cold, ahead.x < 0, { from, to: from.clone().addScaledVector(ahead, -1.2), life: 0.2, size: [1.7, 0.6], spin: 0, fade: true });
+          }
+          stage.spawnFx("mote", ICE_CORE, ahead.x < 0, { from: tail, to: offset(tail, 0, -0.5, 0), life: 0.45, size: [0.3, 0.1], spin: 0, fade: true });
+        }
+      } else {
+        spear.visible = false;
+        frostMaterial.opacity = 0.45 * Math.max(0, 1 - (age - wait - fly) / 0.8);
+      }
+      if (age < wait + fly + 0.8) return true;
+      group.remove(spear, frost);
+      for (const g of shapes) g.dispose();
+      frost.geometry.dispose();
+      outer.dispose();
+      frostMaterial.dispose();
+      return false;
+    };
+  });
+  // Everyone on the line told as it passes the middle of it.
+  stage.later(() => {
+    stage.jolt();
+    onImpact();
+  }, wait + fly * 0.5);
+  // Shattered at the end of the line.
+  stage.later(() => {
+    stage.spawnFx("burst", crit ? GOLD : ICE_CORE, false, { from: end, to: end, life: 0.22, size: [0.9, 2.6], spin: 0.5, fade: true });
+    stage.wave({ at: end.clone().setY(end.y - 0.55), radius: HEX * 0.9, life: 0.45, color: cold, width: 0.14 });
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2 + Math.random() * 0.3;
+      const to = offset(end, Math.cos(a) * (0.5 + Math.random() * 0.6), Math.sin(a) * 0.5 + 0.1, (Math.random() - 0.5) * 0.4);
+      stage.spawnFx(i % 3 ? "spark" : "fleck", i % 2 ? ICE_CORE : cold, Math.cos(a) < 0, { from: end, to, life: 0.4 + Math.random() * 0.25, size: [0.4, 0.2], spin: 3, fade: true, arc: i % 3 ? 0 : 0.3 });
+    }
+  }, wait + fly);
+}
+
+/**
+ * Where a beast's mouth is as it breathes or bites (just ahead of its middle, toward `ahead`, at its head's height):
+ * near enough for what comes out of it to look as if it does.
+ */
+function muzzle(figure: Figure, feet: THREE.Vector3, ahead: THREE.Vector3): THREE.Vector3 {
+  const box = new THREE.Box3().setFromObject(figure.root);
+  const long = Math.max(box.max.x - box.min.x, box.max.z - box.min.z);
+  return feet.clone().addScaledVector(ahead, long * 0.42).setY(box.min.y + (box.max.y - box.min.y) * 0.62);
+}
+
+/**
+ * Frost laid over the ground in a fan (a cone's spread, `spread` radians wide) from `from` along `ahead`: it runs out
+ * to `reach` over `grow` seconds, holds for `hold`, and fades over `fade`. Its step, for MoveStage.lay.
+ */
+function frostFan(from: THREE.Vector3, ahead: THREE.Vector3, o: { reach: number; spread: number; grow: number; hold: number; fade: number; color: string; opacity: number }) {
+  return (group: THREE.Object3D) => {
+    const material = new THREE.MeshBasicMaterial({ color: o.color, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false });
+    // A sector about +x, laid flat (x stays x, y goes to -z), then turned to face the way it goes.
+    const mesh = new THREE.Mesh(new THREE.CircleGeometry(1, 28, -o.spread / 2, o.spread).rotateX(-Math.PI / 2), material);
+    mesh.position.copy(from);
+    mesh.rotation.y = Math.atan2(-ahead.z, ahead.x);
+    mesh.renderOrder = 7;
+    group.add(mesh);
+    let age = 0;
+    return (dt: number) => {
+      age += dt;
+      const k = Math.min(1, age / o.grow);
+      const r = 0.2 + (o.reach - 0.2) * (1 - (1 - k) * (1 - k));
+      mesh.scale.set(r, 1, r);
+      const gone = Math.max(0, age - o.grow - o.hold) / o.fade;
+      material.opacity = o.opacity * Math.min(1, k * 2) * Math.max(0, 1 - gone);
+      if (gone < 1) return true;
+      group.remove(mesh);
+      mesh.geometry.dispose();
+      material.dispose();
+      return false;
+    };
+  };
+}
+
+/**
+ * A Frost Breath: how far it reaches (to the far row of its cone, EnemyAbilityDef `cone`), how wide it spreads (a
+ * three-row cone on hexes is a sixth of a turn), and how long the frost it lays stays and fades.
+ */
+export const FROST_BREATH = { reach: HEX * ((ENEMY_ABILITIES.frost_breath?.cone ?? 3) - 0.05), spread: Math.PI / 3, hold: 0.7, fade: 0.9 };
+
+/**
+ * A Frost Wolf's Frost Breath: it draws breath, front lifted and head thrown back, as cold motes are pulled in to its
+ * jaws, then thrusts its head out and down and breathes (figures.ts BREATHE). A pale flash bursts at its mouth, and a
+ * blast of freezing mist pours out over the whole cone, billowing wider as it goes, frost motes and glints streaming
+ * through it and ice shards spat out ahead. Frost runs out over the ground under it to the far row, a paler core
+ * inside it, and lies there glinting before it fades. Everyone in it is told (and flinches) as the breath reaches the
+ * far row, a frost ring spreading at the end of it.
+ */
+function frostBreath(stage: MoveStage, { figure, hitAt, crit, onImpact }: MoveCtx) {
+  const { reach, spread, hold, fade } = FROST_BREATH;
+  const wait = Math.max(0, figure.strike("breathe"));
+  const pour = BREATHE.pour;
+  const { feet, ahead } = aheadOf(figure, hitAt);
+  const ground = feet.clone().setY(feet.y + 0.07);
+  const cold = crit ? GOLD : ICE;
+  const core = crit ? GOLD : ICE_CORE;
+  const deep = crit ? GOLD : ICE_DEEP;
+  // Across the way it breathes, along the ground.
+  const across = new THREE.Vector3(-ahead.z, 0, ahead.x);
+  /** A point `d` out along the cone, `side` of the way to its edge (-1 to 1), `up` off the ground. */
+  const inCone = (d: number, side: number, up: number) => ground.clone().addScaledVector(ahead, d).addScaledVector(across, Math.tan(spread / 2) * d * side).setY(ground.y + up);
+  // Drawing breath: cold motes pulled in to its jaws from all round in front of it.
+  for (let s = 0; s < wait; s += 0.03) {
+    stage.later(() => {
+      const mouth = muzzle(figure, feet, ahead);
+      const a = (Math.random() - 0.5) * Math.PI * 1.4;
+      const way = ahead.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), a);
+      const from = mouth.clone().addScaledVector(way, 1 + Math.random() * 0.6).setY(mouth.y + (Math.random() - 0.4) * 0.7);
+      stage.spawnFx("mote", Math.random() < 0.5 ? core : cold, way.x > 0, { from, to: mouth, life: 0.26, size: [0.32, 0.1], spin: 0, fade: true });
+    }, s);
+  }
+  stage.later(() => {
+    const mouth = muzzle(figure, feet, ahead);
+    stage.spawnFx("burst", core, false, { from: mouth, to: mouth, life: 0.22, size: [0.6, 1.8], spin: 0.5, fade: true });
+    stage.later(() => stage.spawnFx("burst", deep, true, { from: mouth, to: mouth, life: 0.32, size: [0.7, 2], spin: -0.4, fade: true }), 0.04);
+    // Frost running out over the ground to the far row, with a paler core inside it.
+    stage.lay(frostFan(ground, ahead, { reach, spread, grow: pour * 0.7, hold, fade, color: cold, opacity: 0.5 }));
+    stage.lay(frostFan(ground.clone().setY(ground.y + 0.01), ahead, { reach: reach * 0.8, spread: spread * 0.6, grow: pour * 0.8, hold: hold * 0.8, fade, color: core, opacity: 0.4 }));
+    // The blast itself: billows of freezing mist poured out over the cone, motes and glints streaming through them,
+    // all the while it breathes.
+    for (let s = 0; s < pour; s += 0.022) {
+      stage.later(() => {
+        const from = muzzle(figure, feet, ahead);
+        const side = (Math.random() * 2 - 1) * 0.9;
+        const far = reach * (0.75 + Math.random() * 0.3);
+        const to = inCone(far, side, 0.15 + Math.random() * 0.45);
+        const left = to.x < from.x;
+        stage.spawnFx("dust", Math.random() < 0.35 ? core : FROST_MIST, left, { from, to, life: 0.5 + Math.random() * 0.2, size: [0.35, 1.6 + Math.random() * 0.6], spin: (Math.random() - 0.5) * 2, fade: true });
+        if (Math.random() < 0.7) stage.spawnFx("mote", Math.random() < 0.5 ? core : cold, left, { from, to: inCone(far * 0.9, side * 0.8, 0.3 + Math.random() * 0.5), life: 0.32, size: [0.4, 0.14], spin: 0, fade: true });
+        if (Math.random() < 0.35) stage.spawnFx("spark", core, left, { from, to: inCone(far, side, 0.2), life: 0.38, size: [0.35, 0.15], spin: 3, fade: true });
+        // Now and then a shard of ice spat out ahead.
+        if (Math.random() < 0.18) stage.spawnFx("fleck", cold, left, { from, to: inCone(far, side * 0.6, 0.05), life: 0.4, size: [0.3, 0.22], spin: 4, fade: true, arc: 0.25 });
+      }, s);
+    }
+    // It reaches the far row: everyone caught is told, and a ring of frost spreads there.
+    stage.later(() => {
+      stage.wave({ at: inCone(reach * 0.8, 0, 0), radius: HEX * 1.4, life: 0.55, color: cold, width: 0.14 });
+      stage.jolt();
+      onImpact();
+    }, pour * 0.55);
+    // Frost glinting on the ground where it lies, until it fades.
+    for (let s = pour * 0.6; s < pour + hold; s += 0.07) {
+      stage.later(() => {
+        const at = inCone(0.6 + Math.random() * (reach - 0.6), Math.random() * 2 - 1, 0.05);
+        stage.spawnFx("spark", Math.random() < 0.5 ? core : cold, Math.random() < 0.5, { from: at, to: offset(at, 0, 0.25, 0), life: 0.4, size: [0.35, 0.1], spin: 2, fade: true });
+      }, s);
+    }
+  }, wait);
+}
+
+/** The freezing mist a Frost Breath billows out in: a pale, cold white. */
+const FROST_MIST = "#dcefff";
+
+/**
+ * A Frost Wolf's Rime Bite: a snap forward, cold breath trailing from its jaws, jaws of ice closing on the target as
+ * two pale blue arches. As they meet, a cold flash with a deeper blue swelling after it, frost streaks bursting out
+ * either side, shards of ice flung off, frost glinting and drifting down, a ring of frost spreading at their feet,
+ * and the target jolted.
+ */
+function rimeBite(stage: MoveStage, ctx: MoveCtx) {
+  const { figure, hitAt, dir, crit, onImpact } = ctx;
+  const cold = crit ? GOLD : ICE;
+  const core = crit ? GOLD : ICE_CORE;
+  const deep = crit ? GOLD : ICE_DEEP;
+  stage.lunge();
+  for (let s = 0; s < 0.12; s += 0.03) {
+    stage.later(() => {
+      const from = hitAt.clone().setY(hitAt.y + (Math.random() - 0.5) * 0.4);
+      stage.spawnFx("mote", core, dir < 0, { from, to: offset(from, -dir * 0.5, 0.15, 0), life: 0.25, size: [0.3, 0.1], spin: 0, fade: true });
+    }, s);
+  }
+  jaws(stage, ctx, QUICK_BITE, 0.34, () => {
+    stage.spawnFx("burst", core, false, { from: hitAt, to: hitAt, life: 0.2, size: [0.6, 1.7], spin: 0.5, fade: true });
+    stage.later(() => stage.spawnFx("burst", deep, true, { from: hitAt, to: hitAt, life: 0.34, size: [0.8, 2.2], spin: -0.4, fade: true }), 0.05);
+    for (const side of [false, true]) for (const [n, turn] of [-0.45, 0, 0.45].entries()) stage.spawnFx("streak", n === 1 ? core : cold, side, { from: hitAt, to: hitAt, life: 0.2, size: [0.5, 1.6], turn: side ? -turn : turn, spin: 0, fade: true });
+    // Shards of ice flung off, and frost glinting, then drifting slowly down.
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + Math.random() * 0.4;
+      const to = offset(hitAt, Math.cos(a) * (0.4 + Math.random() * 0.35), Math.sin(a) * 0.35 - 0.2, 0.05);
+      stage.spawnFx(i % 3 ? "spark" : "fleck", i % 2 ? core : cold, Math.cos(a) < 0, { from: hitAt, to, life: 0.5 + Math.random() * 0.25, size: [0.35, 0.15], spin: 3, fade: true, arc: i % 3 ? 0 : 0.25 });
+    }
+    const feet = figure.root.getWorldPosition(new THREE.Vector3());
+    stage.wave({ at: hitAt.clone().setY(feet.y + 0.06), radius: 1.2, life: 0.45, color: cold, width: 0.14 });
+    stage.jolt();
+    onImpact();
+  }, ICE);
+}
+
+/**
+ * An Ember Burst: how far its fire rolls out (just past every hero its reach away: EnemyAbilityDef `range`, ENEMY_BURST
+ * when not said), how long each ring takes, the seconds between them, and how bright its eyes and coat flare as it
+ * gathers itself (`held`) and as it lets go (`flash`), back to their own over `fade` seconds (Figure.setGlow).
+ */
+export const EMBER_BURST = { radius: HEX * (ENEMY_ABILITIES.ember_burst?.range ?? 2) + 0.5, life: 0.55, apart: 0.1, held: 2.4, flash: 4, fade: 0.7 };
+/** The scorched glow left on the ground round it. */
+const EMBER_SCORCH = "#3a1a10";
+
+/**
+ * An Ember Hound's Ember Burst: it hunkers down, legs splayed and head low, trembling harder and harder (figures.ts
+ * FLARE), as embers are drawn in to it off the ground all round, the glow in it burning brighter, and smoke curling
+ * off its back. Then it springs up stiff-legged and the fire in it bursts out: a white-hot flash on it, three rings of
+ * flame rolling out over the ground one after another, flame tongues licking up off the ground as the first passes,
+ * embers flung out every way in arcs, a glowing scorch spread out under it and left to fade, and smoke rising after.
+ * Each hero caught is jolted, with flame bursting up at their feet, as the first ring reaches them.
+ */
+function emberBurst(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alone }: MoveCtx) {
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const ground = feet.clone().setY(feet.y + 0.07);
+  const { radius, life, apart, held, flash, fade } = EMBER_BURST;
+  const flame = crit ? GOLD : FLAME;
+  const fire = crit ? GOLD : FIRE;
+  const deep = crit ? GOLD : FIRE_DEEP;
+  // Only the first plays the burst: by the time the others are told, it has already gone out.
+  const wait = echo ? 0 : Math.max(0, figure.strike("flare"));
+  if (!echo) {
+    // Gathering itself: embers drawn in off the ground to it, the glow in it building, smoke curling off its back.
+    for (let s = 0; s < wait; s += 0.03) {
+      const k = s / wait;
+      stage.later(() => {
+        figure.setGlow(1 + (held - 1) * k * k);
+        const a = Math.random() * Math.PI * 2;
+        const far = 0.9 + Math.random() * 1.4;
+        const from = offset(ground, Math.cos(a) * far, 0.05, Math.sin(a) * far * 0.7);
+        stage.spawnFx("mote", Math.random() < 0.5 ? flame : fire, Math.cos(a) < 0, { from, to: offset(feet, Math.cos(a) * 0.2, 0.7, Math.sin(a) * 0.15), life: 0.3, size: [0.3, 0.12], spin: 0, fade: true });
+        if (Math.random() < 0.25) {
+          const back = offset(feet, (Math.random() - 0.5) * 0.6, 1, 0);
+          stage.spawnFx("dust", SMOKE, Math.random() < 0.5, { from: back, to: offset(back, 0, 0.6, 0), life: 0.6, size: [0.4, 1], spin: 0, fade: true });
+        }
+      }, s);
+    }
+    stage.later(() => {
+      const heart = offset(feet, 0, 0.8, 0);
+      stage.spawnFx("burst", crit ? GOLD : FIRE_FLASH, false, { from: heart, to: heart, life: 0.2, size: [1, 3], spin: 0.6, fade: true });
+      stage.spawnFx("burst", fire, true, { from: heart, to: heart, life: 0.36, size: [1, 3.2], spin: -0.5, fade: true });
+      for (let s = 0; s <= fade; s += 0.03) stage.later(() => figure.setGlow(1 + (flash - 1) * (1 - s / fade) ** 2), s);
+      stage.later(() => figure.setGlow(1), fade + 0.05);
+      // Three rings of flame rolling out over the ground, and the scorch spread out under them (a fan all the way round).
+      [flame, fire, deep].forEach((color, n) => stage.later(() => stage.wave({ at: ground, radius: radius * (1 - n * 0.07), life, color, width: n ? 0.2 : 0.12 }), n * apart));
+      const round = new THREE.Vector3(1, 0, 0);
+      stage.lay(frostFan(ground.clone().setY(ground.y - 0.01), round, { reach: radius * 0.92, spread: Math.PI * 2, grow: life * 0.8, hold: 0.5, fade: 0.9, color: crit ? GOLD : EMBER_SCORCH, opacity: 0.45 }));
+      stage.lay(frostFan(ground, round, { reach: radius * 0.85, spread: Math.PI * 2, grow: life * 0.8, hold: 0.15, fade: 0.6, color: deep, opacity: 0.3 }));
+      // Flame tongues licking up off the ground as the first ring passes over it.
+      for (let i = 0; i < 26; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const far = 0.5 + Math.sqrt(Math.random()) * (radius - 0.7);
+        stage.later(() => {
+          const at = offset(ground, Math.cos(a) * far, 0, Math.sin(a) * far);
+          stage.spawnFx("streak", Math.random() < 0.5 ? fire : flame, Math.random() < 0.5, { from: at, to: offset(at, 0, 0.55 + Math.random() * 0.45, 0), life: 0.3 + Math.random() * 0.15, size: [0.8, 0.45], turn: Math.PI / 2, spin: 0, fade: true });
+          if (Math.random() < 0.5) stage.spawnFx("burst", fire, Math.random() < 0.5, { from: at, to: offset(at, 0, 0.3, 0), life: 0.28, size: [0.3, 0.8], spin: 0.5, fade: true });
+        }, waveReaches(far, radius, life));
+      }
+      // Embers flung out every way in arcs, and heat lines bursting off it.
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2 + Math.random() * 0.3;
+        const far = radius * (0.45 + Math.random() * 0.4);
+        stage.spawnFx("fleck", i % 2 ? fire : flame, Math.cos(a) < 0, { from: offset(feet, 0, 0.7, 0), to: offset(ground, Math.cos(a) * far, 0, Math.sin(a) * far), life: 0.5 + Math.random() * 0.25, size: [0.4, 0.25], spin: 0, fade: true, arc: 0.6 + Math.random() * 0.5 });
+      }
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2;
+        stage.spawnFx("streak", i % 2 ? flame : FIRE_FLASH, Math.cos(a) < 0, { from: offset(feet, 0, 0.8, 0), to: offset(feet, Math.cos(a) * 1.3, 0.8 + Math.sin(a) * 0.8, 0), life: 0.26, size: [0.7, 1.6], turn: a, spin: 0, fade: true });
+      }
+      // Smoke rising after, slow.
+      stage.later(() => {
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * Math.PI * 2 + Math.random() * 0.5;
+          const at = offset(ground, Math.cos(a) * radius * 0.4, 0.2, Math.sin(a) * radius * 0.3);
+          stage.spawnFx("dust", SMOKE, Math.cos(a) < 0, { from: at, to: offset(at, Math.cos(a) * 0.3, 1.1, 0), life: 1.1, size: [1, 2.4], spin: 0, fade: true });
+        }
+      }, 0.2);
+    }, wait);
+  }
+  if (alone) return stage.later(onImpact, wait);
+  // Whoever it reaches is caught as the first ring passes under them.
+  const far = Math.hypot(hitAt.x - feet.x, hitAt.z - feet.z);
+  stage.later(() => {
+    const at = hitAt.clone().setY(hitAt.y - 0.45);
+    stage.spawnFx("burst", fire, false, { from: at, to: offset(at, 0, 0.5, 0), life: 0.32, size: [0.6, 1.6], spin: 0.5, fade: true });
+    for (const side of [-1, 1]) stage.spawnFx("streak", flame, side > 0, { from: at, to: offset(at, side * 0.2, 0.7, 0), life: 0.3, size: [0.8, 0.5], turn: Math.PI / 2, spin: 0, fade: true });
+    stage.jolt();
+    onImpact();
+  }, wait + waveReaches(far, radius, life));
+}
+
+/**
+ * An Ember Hound's Searing Bite: a snap forward, smoke and embers trailing from its jaws, jaws of glowing embers
+ * closing on the target as two orange arches. As they meet, a white-hot flash with a burst of fire swelling after it,
+ * heat streaks either side, flame tongues licking up off the target, embers flung off in arcs, smoke curling up, a ring
+ * of fire at their feet, and the target jolted.
+ */
+function searingBite(stage: MoveStage, ctx: MoveCtx) {
+  const { figure, hitAt, dir, crit, onImpact } = ctx;
+  const flame = crit ? GOLD : FLAME;
+  const fire = crit ? GOLD : FIRE;
+  stage.lunge();
+  for (let s = 0; s < 0.12; s += 0.03) {
+    stage.later(() => {
+      const from = hitAt.clone().setY(hitAt.y + (Math.random() - 0.5) * 0.4);
+      const smoke = Math.random() < 0.4;
+      stage.spawnFx(smoke ? "dust" : "mote", smoke ? SMOKE : fire, dir < 0, { from, to: offset(from, -dir * 0.5, 0.2, 0), life: 0.25, size: [0.3, 0.2], spin: 0, fade: true });
+    }, s);
+  }
+  jaws(stage, ctx, QUICK_BITE, 0.34, () => {
+    stage.spawnFx("burst", crit ? GOLD : FIRE_FLASH, false, { from: hitAt, to: hitAt, life: 0.18, size: [0.6, 1.6], spin: 0.5, fade: true });
+    stage.later(() => stage.spawnFx("burst", fire, true, { from: hitAt, to: hitAt, life: 0.34, size: [0.8, 2.2], spin: -0.4, fade: true }), 0.05);
+    for (const side of [false, true]) for (const [n, turn] of [-0.45, 0, 0.45].entries()) stage.spawnFx("streak", n === 1 ? FIRE_FLASH : flame, side, { from: hitAt, to: hitAt, life: 0.2, size: [0.5, 1.6], turn: side ? -turn : turn, spin: 0, fade: true });
+    // Flame tongues licking up off them, one after another.
+    for (let i = 0; i < 5; i++) {
+      stage.later(() => {
+        const at = offset(hitAt, (Math.random() - 0.5) * 0.5, -0.2 + Math.random() * 0.3, 0.05);
+        stage.spawnFx("streak", Math.random() < 0.5 ? fire : flame, Math.random() < 0.5, { from: at, to: offset(at, 0, 0.5 + Math.random() * 0.3, 0), life: 0.3, size: [0.7, 0.35], turn: Math.PI / 2, spin: 0, fade: true });
+      }, 0.04 + i * 0.05);
+    }
+    // Embers flung off in arcs, and smoke curling up after.
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + Math.random() * 0.4;
+      const to = offset(hitAt, Math.cos(a) * (0.4 + Math.random() * 0.35), Math.sin(a) * 0.35 - 0.25, 0.05);
+      stage.spawnFx("fleck", i % 2 ? flame : fire, Math.cos(a) < 0, { from: hitAt, to, life: 0.45 + Math.random() * 0.25, size: [0.35, 0.2], spin: 0, fade: true, arc: 0.3 });
+    }
+    stage.later(() => {
+      for (let i = 0; i < 3; i++) {
+        const at = offset(hitAt, (i - 1) * 0.25, 0.1, 0);
+        stage.spawnFx("dust", SMOKE, i % 2 === 0, { from: at, to: offset(at, (i - 1) * 0.15, 0.8, 0), life: 0.8, size: [0.5, 1.3], spin: 0, fade: true });
+      }
+    }, 0.15);
+    const feet = figure.root.getWorldPosition(new THREE.Vector3());
+    stage.wave({ at: hitAt.clone().setY(feet.y + 0.06), radius: 1.2, life: 0.45, color: fire, width: 0.16 });
+    stage.jolt();
+    onImpact();
+  }, FLAME);
+}
+
+/** A Ghastly Fetter: the seconds its chain takes to fly, the stake to come down, and the thrown chain to fade after. */
+export const GHASTLY_FETTER = { fly: 0.28, drop: 0.12, fade: 0.45, links: 14 };
+
+/**
+ * A Haunt's Ghastly Fetter: it rises with its arms raised overhead (figures.ts HURL) as pale violet motes gather to its
+ * hands, then flings a chain of grave-iron at the target, link after link paying out through the air. Where it lands
+ * a stake of iron comes down into the ground at their feet with a violet flash and a ring, the chain wraps round them
+ * in a tightening loop, and the blow is told (and they jolt). The thrown chain then fades, from the Haunt's end; what
+ * holds them after, while they are Fettered, is drawn for as long as it lasts (SpellFx.fetter).
+ */
+function ghastlyFetter(stage: MoveStage, { figure, hitAt, crit, onImpact }: MoveCtx) {
+  const { fly, drop, fade, links: count } = GHASTLY_FETTER;
+  const wait = Math.max(0, figure.strike("hurl"));
+  if (wait <= 0) stage.lunge();
+  const glow = crit ? GOLD : FETTER.glow;
+  const hands = () => upFigure(figure, 0.95);
+  const ground = hitAt.clone().setY(hitAt.y - 0.45);
+  for (let s = 0; s < wait; s += 0.05) {
+    stage.later(() => {
+      const at = hands();
+      const a = Math.random() * Math.PI * 2;
+      stage.spawnFx("mote", glow, Math.cos(a) < 0, { from: offset(at, Math.cos(a) * 0.9, -0.3, Math.sin(a) * 0.9), to: at, life: 0.3, size: [0.35, 0.12], spin: 0, fade: true });
+    }, s);
+  }
+  stage.lay((group) => {
+    const iron = new THREE.MeshLambertMaterial({ color: FETTER.iron, emissive: crit ? GOLD : FETTER.glow, emissiveIntensity: 0.25, transparent: true, opacity: 1 });
+    const shapes = [new THREE.TorusGeometry(0.09, 0.026, 5, 10), new THREE.ConeGeometry(0.12, 0.8, 6), new THREE.TorusGeometry(0.5, 0.04, 6, 20)];
+    const links = Array.from({ length: count }, () => new THREE.Mesh(shapes[0], iron));
+    const stake = new THREE.Mesh(shapes[1], iron);
+    stake.rotation.x = Math.PI;
+    const loop = new THREE.Mesh(shapes[2], iron);
+    loop.rotation.x = Math.PI / 2;
+    for (const m of [...links, stake, loop]) {
+      m.visible = false;
+      group.add(m);
+    }
+    let from: THREE.Vector3 | null = null;
+    let age = 0;
+    return (dt) => {
+      age += dt;
+      if (age >= wait) {
+        from ??= hands();
+        const k = Math.min(1, (age - wait) / fly);
+        // Paid out to where its end has got to, in a shallow arc.
+        const tip = from.clone().lerp(hitAt, k);
+        const way = tip.clone().sub(from);
+        const gone = Math.max(0, (age - wait - fly - drop) / fade);
+        links.forEach((m, i) => {
+          const t = (i + 0.5) / count;
+          m.position.copy(from!).addScaledVector(way, t);
+          m.position.y += 0.4 * k * 4 * t * (1 - t);
+          m.lookAt(m.position.clone().add(way));
+          m.rotateY(Math.PI / 2);
+          if (i % 2) m.rotateX(Math.PI / 2);
+          // Faded from the Haunt's end, once it has landed.
+          m.visible = t <= gone ? false : true;
+        });
+        if (k >= 1) {
+          // The stake coming down at their feet, and the loop round them pulled tight.
+          const d = Math.min(1, (age - wait - fly) / drop);
+          stake.visible = true;
+          stake.position.copy(ground).setY(ground.y + 0.25 + 1.2 * (1 - d * d));
+          loop.visible = gone < 1;
+          loop.position.copy(hitAt).setY(hitAt.y - 0.1);
+          loop.scale.setScalar(Math.max(0.6, 1.6 - 1 * Math.min(1, (age - wait - fly) / 0.18)));
+          iron.opacity = Math.max(0, 1 - Math.max(0, gone - 0.6) / 0.4);
+        }
+      }
+      if (age < wait + fly + drop + fade) return true;
+      for (const m of [...links, stake, loop]) group.remove(m);
+      for (const g of shapes) g.dispose();
+      iron.dispose();
+      return false;
+    };
+  });
+  stage.later(() => {
+    stage.spawnFx("burst", glow, false, { from: ground.clone().setY(ground.y + 0.3), to: ground.clone().setY(ground.y + 0.3), life: 0.26, size: [0.9, 2.4], spin: 0.5, fade: true });
+    stage.wave({ at: ground.clone().setY(ground.y + 0.06), radius: HEX * 0.8, life: 0.45, color: glow, width: 0.12 });
+    for (const side of [-1, 1]) stage.spawnFx("dust", DUST, side > 0, { from: ground, to: offset(ground, side * 0.5, 0.3, 0), life: 0.4, size: [0.5, 1], spin: 0, fade: true });
+    stage.jolt();
+    stage.later(() => stage.jolt(), 0.07);
+    onImpact();
+  }, wait + fly + drop);
+}
+
+/**
+ * A Spin Web: how far out the web reaches (every hex within two of where it lands), how many lines it shoots out to its
+ * edge, the seconds they take to get there, how high the web is held over the ground before it comes down (it takes
+ * twice WEB_LAID.grow to come down), and how long it then lies before the web on the ground takes over.
+ */
+export const SPIN_WEB = { spread: HEX * 2.45, lines: 7, shoot: 0.32, over: 2.6, lies: 1.1, thick: 2.5 };
+
+/** How heavy a thread of silk is drawn (silkLine): its motes' size, how often one is laid, how long each hangs, and a streak at its head or not. */
+interface Thread {
+  size: [number, number];
+  every: number;
+  hangs: number;
+  head: boolean;
+}
+
+/** A fine thread (a Brood Swarm's, let down for the young). */
+const FINE_THREAD: Thread = { size: [0.18, 0.1], every: 0.02, hangs: 0.4, head: false };
+
+/** A heavy line of silk (a Spin Web's, shot out over the ground): thick, close-laid, hanging a good while, a bright streak at its head. */
+export const HEAVY_THREAD: Thread = { size: [0.42, 0.24], every: 0.01, hangs: 0.85, head: true };
+
+/**
+ * A thread of silk drawn from `from` to `to` in a shallow arc, as a run of motes laid along it over `over` seconds, each
+ * hanging a moment (as heavy as `thread` says), with a streak flying at its head for a heavy one.
+ */
+function silkLine(stage: MoveStage, from: THREE.Vector3, to: THREE.Vector3, over: number, arc: number, silk: string, thread: Thread = FINE_THREAD) {
+  const along = (k: number) => {
+    const at = from.clone().lerp(to, k);
+    at.y += arc * 4 * k * (1 - k);
+    return at;
+  };
+  for (let s = 0; s <= over; s += thread.every) {
+    stage.later(() => {
+      const k = s / over;
+      const at = along(k);
+      stage.spawnFx("mote", Math.random() < 0.7 ? silk : SILK_DIM, false, { from: at, to: offset(at, 0, -0.05, 0), life: thread.hangs, size: thread.size, spin: 0, fade: true });
+      if (thread.head && k < 1) {
+        const next = along(Math.min(1, k + 0.08));
+        stage.spawnFx("streak", silk, next.x < at.x, { from: at, to: next, life: 0.08, size: [thread.size[0] * 2, thread.size[1] * 2.5], spin: 0, fade: true });
+      }
+    }, s);
+  }
+}
+
+/**
+ * A Broodmother's Spin Web, not thrown but spun out over the ground: she rears and arches her abdomen high over her back
+ * (figures.ts WEB), silk gathering to her spinnerets, then shoots a fan of lines out over where it is aimed, each landing
+ * at the far edge of it with a small puff and staying strung there. Between them a great web, spokes and rings, opens
+ * out high over the middle and comes down flat over all of it, a ring of silk and dust rolling out from under it as it
+ * settles, the lines going slack, and wisps drifting down after.
+ */
+function spinWeb(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const { spread, lines, shoot, over, lies, thick } = SPIN_WEB;
+  const ground = hitAt.clone().setY(hitAt.y - 0.45);
+  const floor = ground.clone().setY(ground.y + 0.05);
+  const wait = Math.max(0, figure.strike("web") || figure.cast());
+  const silk = crit ? GOLD : SILK;
+  // Silk gathering at her spinnerets, high over her back, quicker as she rears.
+  for (let s = 0; s < wait; s += 0.04) {
+    stage.later(() => {
+      const tip = upFigure(figure, 0.95);
+      const a = Math.random() * Math.PI * 2;
+      stage.spawnFx("mote", Math.random() < 0.6 ? SILK : SILK_DIM, Math.cos(a) < 0, { from: offset(tip, Math.cos(a) * 0.6, -0.4, Math.sin(a) * 0.4), to: tip, life: 0.2, size: [0.25, 0.12], spin: 0, fade: true });
+    }, s);
+  }
+  stage.later(() => {
+    stage.sound();
+    const tip = upFigure(figure, 0.95);
+    stage.spawnFx("burst", SILK, dir < 0, { from: tip, to: offset(tip, 0, 0.25, 0), life: 0.18, size: [0.6, 1.4], spin: 0.4, fade: true });
+    // The fan of lines, out to the far edge of where the web will lie, the near side first.
+    const turn = Math.random() * Math.PI * 2;
+    for (let i = 0; i < lines; i++) {
+      const a = turn + (i / lines) * Math.PI * 2;
+      const end = offset(floor, Math.cos(a) * spread, 0, Math.sin(a) * spread * 0.8);
+      const late = i * 0.03;
+      stage.later(() => silkLine(stage, tip, end, shoot, 1.6, silk, HEAVY_THREAD), late);
+      stage.later(() => {
+        stage.spawnFx("burst", silk, Math.cos(a) < 0, { from: end, to: offset(end, 0, 0.25, 0), life: 0.3, size: [0.6, 1.5], spin: 0.3, fade: true });
+        stage.spawnFx("dust", DUST, Math.cos(a) < 0, { from: end, to: offset(end, Math.cos(a) * 0.3, 0.3, 0), life: 0.4, size: [0.4, 0.9], spin: 0, fade: true });
+        // Strung from the edge up toward where the web is held, till it comes down.
+        silkLine(stage, end, offset(floor, Math.cos(a) * spread * 0.55, over, Math.sin(a) * spread * 0.45), 0.15, 0, SILK_DIM, { ...HEAVY_THREAD, head: false, size: [0.32, 0.18] });
+      }, late + shoot);
+    }
+    // The web itself: opened out high over the middle, then brought down over all of it.
+    const held = shoot + lines * 0.03;
+    stage.later(() => stage.lay(groundWeb(floor, spread, silk, over, lies, thick)), held - 0.1);
+    stage.later(() => {
+      stage.wave({ at: floor, radius: spread * 1.05, life: 0.5, color: SILK, width: 0.14 });
+      stage.later(() => stage.wave({ at: floor, radius: spread * 0.7, life: 0.4, color: SILK_DIM, width: 0.08 }), 0.08);
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2 + Math.random() * 0.3;
+        const at = offset(floor, Math.cos(a) * spread * 0.9, 0, Math.sin(a) * spread * 0.75);
+        stage.spawnFx("dust", DUST, Math.cos(a) < 0, { from: at, to: offset(at, Math.cos(a) * 0.4, 0.3, 0), life: 0.45, size: [0.4, 0.9], spin: 0, fade: true });
+      }
+      for (let i = 0; i < 14; i++) {
+        stage.later(() => {
+          const a = Math.random() * Math.PI * 2;
+          const far = Math.sqrt(Math.random()) * spread * 0.85;
+          const to = offset(floor, Math.cos(a) * far, 0.02, Math.sin(a) * far * 0.8);
+          stage.spawnFx("mote", Math.random() < 0.5 ? SILK : SILK_DIM, Math.random() < 0.5, { from: offset(to, 0, 0.9, 0), to, life: 0.6, size: [0.22, 0.14], spin: 1, fade: true });
+        }, 0.05 + i * 0.04);
+      }
+      stage.jolt();
+      onImpact();
+    }, held - 0.1 + WEB_LAID.grow * 2);
+  }, wait);
+}
+
+/**
+ * A Brood Swarm: seconds she heaves before they come, how many young pour out to each place one of her Spiderlings will
+ * stand, the seconds each takes to get there, and the dark of them and their eyes.
+ */
+export const BROOD_SWARM = { heave: 0.6, young: 9, run: 0.45, black: "#141416", eye: "#c8463a" };
+
+/**
+ * A Broodmother's Brood Swarm, calling her young out of her: she rears and arches her abdomen high (figures.ts WEB) and
+ * it shudders, a dark pulse going over it; then her young pour out of the end of it in streams, tiny black specks with
+ * a red glint, tumbling down in short arcs to where each of her Spiderlings will stand (MoveCtx `calls`; in the lab,
+ * two places either side of her), a silk thread let down with each stream. Where each stream lands they bunch up into a
+ * dark knot with a puff of silk and a small ring, and there the Spiderling is.
+ */
+function broodSwarm(stage: MoveStage, { figure, hitAt, crit, onImpact, calls }: MoveCtx) {
+  const { heave, young, run, black, eye } = BROOD_SWARM;
+  const { feet, ahead } = aheadOf(figure, hitAt);
+  // Where they go: where the fight says they will stand, or either side of her.
+  const side = new THREE.Vector3(-ahead.z, 0, ahead.x);
+  const spots = calls?.length ? calls.map((p) => p.clone().setY(p.y + 0.05)) : [1, -1].map((s) => feet.clone().addScaledVector(side, s * HEX).setY(feet.y + 0.05));
+  const silk = crit ? GOLD : SILK;
+  const wait = Math.max(heave, figure.strike("web") || figure.cast());
+  const rear = () => upFigure(figure, 0.85);
+  // The shudder: dark pulses going out over her abdomen as she heaves.
+  for (let s = 0.1; s < wait; s += 0.16) {
+    stage.later(() => {
+      const at = rear();
+      stage.spawnFx("burst", black, false, { from: at, to: at, life: 0.18, size: [0.5, 1.4], spin: 0.3, fade: true });
+    }, s);
+  }
+  stage.later(() => {
+    stage.sound();
+    const from = rear();
+    stage.spawnFx("burst", silk, false, { from, to: offset(from, 0, 0.2, 0), life: 0.22, size: [0.5, 1.3], spin: 0.4, fade: true });
+    spots.forEach((spot, n) => {
+      const late = n * 0.08;
+      // A thread let down to where they go, and the young pouring down it, one after another.
+      stage.later(() => silkLine(stage, from, spot, run, 0.8, SILK_DIM), late);
+      for (let i = 0; i < young; i++) {
+        stage.later(() => {
+          const land = offset(spot, (Math.random() - 0.5) * 0.5, 0, (Math.random() - 0.5) * 0.4);
+          const up = 0.5 + Math.random() * 0.5;
+          stage.spawnFx("mote", black, land.x < from.x, { from: offset(from, 0, -0.1, 0), to: land, life: run, size: [0.3, 0.24], spin: 0, fade: false, arc: up });
+          stage.spawnFx("spark", eye, false, { from: offset(from, 0, -0.05, 0), to: offset(land, 0, 0.05, 0), life: run, size: [0.1, 0.07], spin: 0, fade: true, arc: up });
+        }, late + i * 0.04);
+      }
+      // Bunched up where they land, and there it is.
+      stage.later(() => {
+        stage.spawnFx("burst", black, false, { from: spot, to: offset(spot, 0, 0.25, 0), life: 0.35, size: [0.6, 1.5], spin: 0.2, fade: true });
+        stage.spawnFx("burst", silk, true, { from: spot, to: offset(spot, 0, 0.3, 0), life: 0.25, size: [0.4, 1.1], spin: -0.3, fade: true });
+        stage.wave({ at: spot, radius: HEX * 0.55, life: 0.35, color: SILK, width: 0.08 });
+      }, late + young * 0.04 + run);
+    });
+    stage.later(onImpact, (spots.length - 1) * 0.08 + young * 0.04 + run + 0.1);
+  }, wait);
+}
+
+const HEX_GREEN = "#9bbf3a";
+const HEX_VIOLET = "#8a4fc7";
+const HEX_DARK = "#3c2a4d";
+const HEX_PALE = "#d9f08a";
+
+/** The hand a person casts from, in the world; for one with no hands, a little over its middle. */
+const castingHand = (figure: Figure) => {
+  const held = figure.hands()?.[0];
+  if (held) return held.getWorldPosition(new THREE.Vector3());
+  const at = figure.root.getWorldPosition(new THREE.Vector3());
+  return at.setY(at.y + 1.1);
+};
+
+/** A Weakening Hex: how long its bolt is in the air, how many strokes its sigil has, and how long the strength runs out of them after. */
+export const WEAKENING_HEX = { flight: 0.38, points: 6, drain: 0.9 };
+
+/**
+ * A Hedge Witch's Weakening Hex: sickly green and violet motes curl in round its casting hand as the staff swings round
+ * (the cast), then a spinning bolt of the hex goes straight at the target, dark motes falling off it. Where it lands a
+ * sigil is drawn round them, six green strokes about a violet flash, pulled in tight; then the strength runs out of
+ * them: pale motes sink off them to the ground, a dark ring closes in at their feet and a violet one goes out after it.
+ * The blow is told as it lands.
+ */
+function weakeningHex(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const wait = Math.max(0, figure.cast());
+  // Winding up: motes curling in to the hand from all round, green and violet by turns.
+  for (let s = 0; s < wait; s += 0.05) {
+    stage.later(() => {
+      const at = castingHand(figure);
+      const a = Math.random() * Math.PI * 2;
+      const from = offset(at, Math.cos(a) * 0.5, (Math.random() - 0.5) * 0.4, Math.sin(a) * 0.5);
+      stage.spawnFx("mote", Math.random() < 0.5 ? HEX_GREEN : HEX_VIOLET, Math.cos(a) < 0, { from, to: at, life: 0.3, size: [0.35, 0.15], spin: 2, fade: true });
+    }, s);
+  }
+  stage.later(() => {
+    const from = castingHand(figure);
+    const { flight, points, drain } = WEAKENING_HEX;
+    stage.spawnFx("burst", HEX_VIOLET, false, { from, to: from, life: 0.14, size: [0.3, 0.9], spin: 0.5, fade: true });
+    const land = () => {
+      const feet = hitAt.clone().setY(hitAt.y - 0.45);
+      const floor = feet.clone().setY(feet.y + 0.05);
+      stage.spawnFx("burst", crit ? GOLD : HEX_VIOLET, false, { from: hitAt, to: hitAt, life: 0.24, size: [0.8, 2.2], spin: 0.7, fade: true });
+      stage.spawnFx("burst", HEX_DARK, true, { from: hitAt, to: hitAt, life: 0.34, size: [0.6, 1.6], spin: -0.5, fade: true });
+      // The sigil: strokes laid round them, each across the way to the middle, drawn in tight as they fade.
+      for (let i = 0; i < points; i++) {
+        const a = (i / points) * Math.PI * 2;
+        const out = offset(hitAt, Math.cos(a) * 0.75, Math.sin(a) * 0.55, 0);
+        const into = offset(hitAt, Math.cos(a) * 0.3, Math.sin(a) * 0.22, 0);
+        stage.spawnFx("streak", crit ? GOLD : HEX_GREEN, Math.cos(a) < 0, { from: out, to: into, life: 0.4, size: [0.8, 0.4], turn: a + Math.PI / 2, spin: 0.6, fade: true });
+      }
+      stage.wave({ at: floor, radius: 1.3, life: 0.4, color: HEX_GREEN, width: 0.18 });
+      // The strength running out of them: pale motes sinking off them to the ground.
+      for (let s = 0.12; s < drain; s += 0.06) {
+        stage.later(() => {
+          const a = Math.random() * Math.PI * 2;
+          const at = offset(hitAt, Math.cos(a) * 0.35, 0.2 + Math.random() * 0.3, Math.sin(a) * 0.2);
+          stage.spawnFx("mote", Math.random() < 0.6 ? HEX_PALE : HEX_GREEN, Math.cos(a) < 0, { from: at, to: offset(feet, Math.cos(a) * 0.25, 0.05, Math.sin(a) * 0.15), life: 0.5, size: [0.32, 0.12], spin: 0, fade: true });
+        }, s);
+      }
+      // A dark ring closing in at their feet, a violet one out after it.
+      stage.later(() => stage.wave({ at: floor, radius: 1.1, life: 0.55, color: HEX_DARK, width: 0.4 }), 0.15);
+      stage.later(() => stage.wave({ at: floor, radius: 1.5, life: 0.6, color: HEX_VIOLET, width: 0.12 }), 0.4);
+      stage.jolt();
+      onImpact();
+    };
+    stage.spawnFx("bolt", crit ? GOLD : HEX_GREEN, dir < 0, { from, to: hitAt, life: flight, size: [1.1, 1.3], spin: dir * 9, fade: false, onEnd: land });
+    // Dark motes dropping off it as it goes.
+    for (let s = 0.03; s < flight; s += 0.04) {
+      stage.later(() => {
+        const at = from.clone().lerp(hitAt, s / flight);
+        stage.spawnFx("mote", HEX_DARK, Math.random() < 0.5, { from: at, to: offset(at, (Math.random() - 0.5) * 0.2, -0.35, 0), life: 0.35, size: [0.3, 0.15], spin: 0, fade: true });
+      }, s);
+    }
+  }, wait);
+}
+
+const BREW = "#6fdc6a";
+const BREW_DEEP = "#2f9e5a";
+const BREW_GLOW = "#e9ffb8";
+const BREW_STEAM = "#cfe8c8";
+/** A Witches' Brew: how long the flask is in the air, how high it goes over the straight line, how far the brew splashes (over a clump of 3 hexes), and how long the mending rises after. */
+export const WITCHES_BREW = { flight: 0.6, arc: 1.4, spread: 1.6, rise: 1.3 };
+
+/**
+ * A Hedge Witch's Witches' Brew: bubbles rise and pop round its casting hand as it swings round (the cast), and as it
+ * points a flask of green brew goes up in a high arc, tumbling, drops and steam falling off it. Where it comes down it
+ * breaks in a soft splash of green: a glow and a splash, a pale ring and a deeper one rolling out over the clump of
+ * hexes, drops flung out in arcs; then the mending rises off all of it, green and pale gold motes drifting up and wisps of
+ * sweet steam, a slow green ring breathing out under them. `hitAt` is over the hex it is thrown at; the heal is told as
+ * it lands.
+ */
+function witchesBrew(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const ground = hitAt.clone().setY(hitAt.y - 0.45);
+  const wait = Math.max(0, figure.cast());
+  // Brewing: bubbles rising round the hand and popping.
+  for (let s = 0; s < wait; s += 0.06) {
+    stage.later(() => {
+      const at = castingHand(figure);
+      const a = Math.random() * Math.PI * 2;
+      const from = offset(at, Math.cos(a) * 0.25, -0.15, Math.sin(a) * 0.25);
+      stage.spawnFx("mote", Math.random() < 0.5 ? BREW : BREW_GLOW, Math.cos(a) < 0, { from, to: offset(from, 0, 0.45, 0), life: 0.35, size: [0.2, 0.4], spin: 0, fade: true });
+    }, s);
+  }
+  stage.later(() => {
+    const from = castingHand(figure);
+    const { flight, arc, spread, rise } = WITCHES_BREW;
+    const splash = () => {
+      const floor = ground.clone().setY(ground.y + 0.05);
+      stage.spawnFx("burst", crit ? GOLD : BREW_GLOW, false, { from: ground, to: ground, life: 0.22, size: [1, 2.6], spin: 0.4, fade: true });
+      stage.spawnFx("splash", BREW, false, { from: ground, to: ground.clone().setY(ground.y + 0.35), life: 0.4, size: [1, 2.4], spin: 0, fade: true });
+      stage.wave({ at: floor, radius: spread, life: 0.5, color: BREW_GLOW, width: 0.12 });
+      stage.later(() => stage.wave({ at: floor, radius: spread * 0.9, life: 0.6, color: BREW_DEEP, width: 0.3 }), 0.06);
+      // Drops of brew flung out every way in arcs.
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2 + Math.random() * 0.4;
+        const far = 0.6 + Math.random() * spread * 0.5;
+        stage.spawnFx("fleck", i % 2 ? BREW : BREW_DEEP, Math.cos(a) < 0, { from: ground, to: offset(ground, Math.cos(a) * far, 0, Math.sin(a) * far * 0.6), life: 0.45 + Math.random() * 0.2, size: [0.35, 0.22], spin: 0, fade: true, arc: 0.4 + Math.random() * 0.4 });
+      }
+      // The mending rising off all of it: motes drifting up, and wisps of steam.
+      for (let s = 0.1; s < rise; s += 0.04) {
+        stage.later(() => {
+          const a = Math.random() * Math.PI * 2;
+          const far = Math.sqrt(Math.random()) * spread * 0.85;
+          const at = offset(ground, Math.cos(a) * far, 0.05, Math.sin(a) * far * 0.7);
+          stage.spawnFx("mote", Math.random() < 0.6 ? BREW : crit ? GOLD : BREW_GLOW, Math.cos(a) < 0, { from: at, to: offset(at, (Math.random() - 0.5) * 0.2, 0.8 + Math.random() * 0.6, 0), life: 0.9, size: [0.3, 0.15], spin: 0, fade: true });
+          if (Math.random() < 0.25) stage.spawnFx("dust", BREW_STEAM, Math.cos(a) < 0, { from: at, to: offset(at, 0, 0.9, 0), life: 1, size: [0.6, 1.4], spin: 0, fade: true });
+        }, s);
+      }
+      stage.later(() => stage.wave({ at: floor, radius: spread, life: 1.1, color: BREW, width: 0.5 }), 0.35);
+      onImpact();
+    };
+    stage.spawnFx("bolt", crit ? GOLD : BREW, dir < 0, { from, to: ground, life: flight, size: [0.9, 1.1], spin: dir * 6, fade: false, arc, onEnd: splash });
+    // Drops and steam falling off it on the way, along the same arc (WorldRenderer's fx: up by arc·4k(1−k)).
+    for (let s = 0.03; s < flight; s += 0.045) {
+      stage.later(() => {
+        const k = s / flight;
+        const at = from.clone().lerp(ground, k);
+        at.y += arc * 4 * k * (1 - k);
+        stage.spawnFx("fleck", BREW, Math.random() < 0.5, { from: at, to: offset(at, (Math.random() - 0.5) * 0.3, -0.3, 0), life: 0.3, size: [0.3, 0.18], spin: 0, fade: true });
+        if (Math.random() < 0.35) stage.spawnFx("dust", BREW_STEAM, Math.random() < 0.5, { from: at, to: offset(at, 0, 0.2, 0), life: 0.4, size: [0.3, 0.6], spin: 0, fade: true });
+      }, s);
+    }
+  }, wait);
+}
+
+/**
+ * A Frost Mote: how big it is, how long it takes to fly a world unit (with the least and most it takes), and how far
+ * it wobbles off the straight line as it drifts.
+ */
+export const FROST_MOTE = { size: 0.15, perUnit: 0.07, least: 0.28, most: 0.62, wobble: 0.22 };
+
+/**
+ * A Rime Wraith's Frost Mote: it draws up and back as cold motes swirl in to a point before its chest, where a little
+ * mote of frost forms, glowing; then it thrusts its hands out (figures.ts GRASP) and sends the mote drifting at the
+ * target, wobbling and turning as it goes, glints and pale motes falling off it. Where it lands: a cold flash with a
+ * deeper blue behind it, frost glinting off and drifting down, and a ring of frost at their feet. The blow is told as
+ * it lands.
+ */
+function frostMote(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const { size, perUnit, least, most, wobble } = FROST_MOTE;
+  const wait = figure.strike("grasp");
+  if (wait <= 0) stage.lunge();
+  const lands = Math.max(0, wait);
+  const flip = dir < 0;
+  const cold = crit ? GOLD : ICE;
+  const core = crit ? GOLD : ICE_CORE;
+  const { feet, ahead } = aheadOf(figure, hitAt);
+  const across = new THREE.Vector3(-ahead.z, 0, ahead.x);
+  /** Where it forms: just before its chest, toward the target. */
+  const palm = () => upFigure(figure, 0.6).addScaledVector(ahead, 0.45);
+  const fly = Math.min(most, Math.max(least, perUnit * feet.distanceTo(hitAt)));
+  // Cold motes swirling in to where it forms.
+  for (let s = 0; s < lands; s += 0.035) {
+    stage.later(() => {
+      const at = palm();
+      const a = Math.random() * Math.PI * 2;
+      const from = offset(at, Math.cos(a) * 0.6, Math.sin(a) * 0.45, (Math.random() - 0.5) * 0.4);
+      wisp(stage, from, at, (Math.random() < 0.5 ? 1 : -1) * 0.15, Math.random() < 0.5 ? core : cold, 0.26, [0.28, 0.1]);
+    }, s);
+  }
+  stage.lay((group) => {
+    // The mote: a bright faceted bead of ice inside a pale glow.
+    const shapes = [new THREE.IcosahedronGeometry(size, 0), new THREE.IcosahedronGeometry(size * 1.9, 1)];
+    const beadMaterial = new THREE.MeshLambertMaterial({ color: core, emissive: crit ? GOLD : ICE, emissiveIntensity: 0.8, flatShading: true });
+    const glowMaterial = iceMaterial(cold, 0.35);
+    const bead = new THREE.Mesh(shapes[0], beadMaterial);
+    const glow = new THREE.Mesh(shapes[1], glowMaterial);
+    const mote = new THREE.Group();
+    mote.add(bead, glow);
+    group.add(mote);
+    let from: THREE.Vector3 | null = null;
+    let age = 0;
+    let trail = 0;
+    return (dt) => {
+      age += dt;
+      if (age < lands) {
+        // Forming: growing out of nothing, turning.
+        mote.position.copy(palm());
+        mote.scale.setScalar(Math.max(0.05, age / Math.max(lands, 1e-3)));
+      } else if (age < lands + fly) {
+        from ??= palm();
+        const k = (age - lands) / fly;
+        // Drifting at them, wobbling off the straight line and back, and a little up over it.
+        const at = from.clone().lerp(hitAt, k).addScaledVector(across, Math.sin(k * Math.PI * 2) * wobble * (1 - k));
+        at.y += Math.sin(k * Math.PI) * 0.25;
+        mote.position.copy(at);
+        mote.scale.setScalar(1 + Math.sin(age * 30) * 0.08);
+        if (age >= trail) {
+          trail = age + 0.025;
+          stage.spawnFx(Math.random() < 0.5 ? "spark" : "mote", Math.random() < 0.5 ? core : cold, flip, { from: at, to: offset(at, (Math.random() - 0.5) * 0.25, -0.3 - Math.random() * 0.2, (Math.random() - 0.5) * 0.2), life: 0.4, size: [0.26, 0.08], spin: 2, fade: true });
+        }
+      } else mote.visible = false;
+      bead.rotation.set(age * 5, age * 7, 0);
+      glow.rotation.set(-age * 3, age * 2, 0);
+      if (age < lands + fly) return true;
+      group.remove(mote);
+      for (const g of shapes) g.dispose();
+      beadMaterial.dispose();
+      glowMaterial.dispose();
+      return false;
+    };
+  });
+  stage.later(() => {
+    stage.spawnFx("burst", core, false, { from: hitAt, to: hitAt, life: 0.2, size: [0.7, 2.1], spin: 0.4, fade: true });
+    stage.later(() => stage.spawnFx("burst", crit ? GOLD : ICE_DEEP, true, { from: hitAt, to: hitAt, life: 0.36, size: [0.8, 2.3], spin: -0.4, fade: true }), 0.05);
+    // Frost glinting off them, then drifting slowly down.
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 + Math.random() * 0.4;
+      const to = offset(hitAt, Math.cos(a) * (0.4 + Math.random() * 0.35), Math.sin(a) * 0.4 - 0.25, 0.05);
+      stage.spawnFx(i % 3 ? "spark" : "fleck", i % 2 ? core : cold, Math.cos(a) < 0, { from: hitAt, to, life: 0.5 + Math.random() * 0.3, size: [0.36, 0.14], spin: 2, fade: true });
+    }
+    stage.wave({ at: hitAt.clone().setY(hitAt.y - 0.39), radius: 1.2, life: 0.5, color: cold, width: 0.14 });
+    stage.jolt();
+    onImpact();
+  }, lands + fly);
+}
+
+/**
+ * An Icy Bomb: how long it is in the air, how high it goes over the straight line, how big the ball is, how far its
+ * ice spreads (over the 3 hexes it lands on), how many crystals jut up out of it, and how long the ice it lays holds
+ * and fades (by then the ice left on the ground is drawn by the map's own surfaces).
+ */
+export const ICY_BOMB = { flight: 0.6, arc: 1.9, ball: 0.34, spread: 1.7, spikes: 8, hold: 0.8, fade: 0.7 };
+
+/**
+ * Crystals of ice jutting up out of the ground round `at`, within `spread` of it, leaning out from the middle: each
+ * grows up out of it quickly, holds, and sinks back into it as it fades. Their step, for MoveStage.lay.
+ */
+export function iceSpikes(at: THREE.Vector3, o: { spread: number; count: number; color: string; grow: number; hold: number; fade: number }) {
+  return (group: THREE.Object3D) => {
+    const material = new THREE.MeshLambertMaterial({ color: o.color, emissive: ICE_DEEP, emissiveIntensity: 0.45, transparent: true, opacity: 0.9, flatShading: true });
+    const spikes = Array.from({ length: o.count }, (_, i) => {
+      const tall = 0.35 + Math.random() * 0.45;
+      const spike = new THREE.Mesh(new THREE.ConeGeometry(0.09 + Math.random() * 0.07, tall, 5).translate(0, tall / 2, 0), material);
+      const a = (i / o.count) * Math.PI * 2 + Math.random() * 0.5;
+      const far = (0.25 + Math.random() * 0.75) * o.spread * 0.6;
+      spike.position.copy(offset(at, Math.cos(a) * far, 0, Math.sin(a) * far * 0.8));
+      spike.rotation.set(Math.sin(a) * 0.35, 0, -Math.cos(a) * 0.35);
+      spike.scale.set(1, 0.01, 1);
+      group.add(spike);
+      return { spike, late: Math.random() * 0.08 };
+    });
+    let age = 0;
+    return (dt: number) => {
+      age += dt;
+      const gone = Math.max(0, age - o.grow - o.hold) / o.fade;
+      for (const { spike, late } of spikes) {
+        const k = Math.min(1, Math.max(0, (age - late) / o.grow));
+        spike.scale.set(1, Math.max(0.01, (1 - (1 - k) * (1 - k)) * (1 - gone * 0.6)), 1);
+      }
+      material.opacity = 0.9 * Math.max(0, 1 - gone);
+      if (gone < 1) return true;
+      for (const { spike } of spikes) {
+        group.remove(spike);
+        spike.geometry.dispose();
+      }
+      material.dispose();
+      return false;
+    };
+  };
+}
+
+/**
+ * A sheet of ice laid flat over the ground round `at`, out to `radius`: it spreads out over `grow` seconds, holds, and
+ * fades. Its step, for MoveStage.lay.
+ */
+export function iceSheet(at: THREE.Vector3, o: { radius: number; color: string; grow: number; hold: number; fade: number }) {
+  return (group: THREE.Object3D) => {
+    const material = new THREE.MeshBasicMaterial({ color: o.color, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false });
+    // Seven-sided, turned at random: a rough, cracked-off edge rather than a neat circle.
+    const sheet = new THREE.Mesh(new THREE.CircleGeometry(1, 7).rotateX(-Math.PI / 2), material);
+    sheet.rotation.y = Math.random() * Math.PI;
+    sheet.position.copy(at);
+    sheet.renderOrder = 7;
+    group.add(sheet);
+    let age = 0;
+    return (dt: number) => {
+      age += dt;
+      const k = Math.min(1, age / o.grow);
+      const r = 0.2 + (o.radius - 0.2) * (1 - (1 - k) * (1 - k));
+      sheet.scale.set(r, 1, r * 0.8);
+      const gone = Math.max(0, age - o.grow - o.hold) / o.fade;
+      material.opacity = 0.55 * Math.min(1, k * 2) * Math.max(0, 1 - gone);
+      if (gone < 1) return true;
+      group.remove(sheet);
+      sheet.geometry.dispose();
+      material.dispose();
+      return false;
+    };
+  };
+}
+
+/**
+ * A Rime Wraith's Icy Bomb: it rises and leans back with its arms raised high (figures.ts HURL), and a ball of ice grows
+ * between its hands over its head, turning, as cold motes are drawn in to it; then it flings it in a high arc, frost
+ * and snow falling off it the whole way. Where it lands it bursts: a white flash and a deep blue one, shards of ice
+ * flung out every way, frost rings rolling out over the 3 hexes, a sheet of ice spreading over the ground there with
+ * crystals of ice jutting up out of it, and cold mist rising after. `hitAt` is over the hex it is thrown at; the blow
+ * (on all it catches) is told as it lands.
+ */
+function icyBomb(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const { flight, arc, ball, spread, spikes, hold, fade } = ICY_BOMB;
+  const wait = Math.max(0, figure.strike("hurl") || figure.cast());
+  const cold = crit ? GOLD : ICE;
+  const core = crit ? GOLD : ICE_CORE;
+  const deep = crit ? GOLD : ICE_DEEP;
+  const ground = hitAt.clone().setY(hitAt.y - 0.45);
+  const above = () => {
+    const top = upFigure(figure, 1);
+    return top.setY(top.y + ball + 0.15);
+  };
+  // Cold motes drawn in to it as it forms.
+  for (let s = 0; s < wait; s += 0.035) {
+    stage.later(() => {
+      const at = above();
+      const a = Math.random() * Math.PI * 2;
+      const from = offset(at, Math.cos(a) * 1, (Math.random() - 0.5) * 0.8, Math.sin(a) * 1);
+      stage.spawnFx("mote", Math.random() < 0.5 ? core : cold, Math.cos(a) < 0, { from, to: at, life: 0.3, size: [0.35, 0.12], spin: 0, fade: true });
+    }, s);
+  }
+  stage.lay((group) => {
+    // The bomb: a faceted ball of ice inside a pale, see-through shell.
+    const shapes = [new THREE.IcosahedronGeometry(ball, 0), new THREE.IcosahedronGeometry(ball * 1.45, 1)];
+    const innerMaterial = new THREE.MeshLambertMaterial({ color: cold, emissive: ICE_DEEP, emissiveIntensity: 0.5, flatShading: true });
+    const shellMaterial = iceMaterial(core, 0.3);
+    const inner = new THREE.Mesh(shapes[0], innerMaterial);
+    const shell = new THREE.Mesh(shapes[1], shellMaterial);
+    const bomb = new THREE.Group();
+    bomb.add(inner, shell);
+    group.add(bomb);
+    let from: THREE.Vector3 | null = null;
+    let age = 0;
+    let trail = 0;
+    return (dt) => {
+      age += dt;
+      if (age < wait) {
+        bomb.position.copy(above());
+        bomb.scale.setScalar(Math.max(0.05, age / Math.max(wait, 1e-3)));
+      } else if (age < wait + flight) {
+        from ??= above();
+        // Along the same arc as any lobbed fx (WorldRenderer's: up by arc·4k(1−k)).
+        const k = (age - wait) / flight;
+        const at = from.clone().lerp(ground, k);
+        at.y += arc * 4 * k * (1 - k);
+        bomb.position.copy(at);
+        bomb.scale.setScalar(1);
+        if (age >= trail) {
+          trail = age + 0.03;
+          stage.spawnFx(Math.random() < 0.5 ? "fleck" : "mote", Math.random() < 0.5 ? core : cold, Math.random() < 0.5, { from: at, to: offset(at, (Math.random() - 0.5) * 0.35, -0.35, (Math.random() - 0.5) * 0.2), life: 0.4, size: [0.3, 0.12], spin: 2, fade: true });
+        }
+      } else bomb.visible = false;
+      inner.rotation.set(age * 3, age * dir * 5, 0);
+      shell.rotation.set(-age * 2, age * 3, 0);
+      if (age < wait + flight) return true;
+      group.remove(bomb);
+      for (const g of shapes) g.dispose();
+      innerMaterial.dispose();
+      shellMaterial.dispose();
+      return false;
+    };
+  });
+  stage.later(() => {
+    const floor = ground.clone().setY(ground.y + 0.05);
+    stage.spawnFx("burst", core, false, { from: ground, to: ground, life: 0.22, size: [1.2, 3.4], spin: 0.6, fade: true });
+    stage.spawnFx("burst", deep, true, { from: ground, to: ground.clone().setY(ground.y + 0.3), life: 0.42, size: [1, 2.8], spin: -0.5, fade: true });
+    stage.wave({ at: floor, radius: spread, life: 0.45, color: core, width: 0.14 });
+    stage.later(() => stage.wave({ at: floor, radius: spread * 0.85, life: 0.6, color: deep, width: 0.3 }), 0.06);
+    // The ice it leaves, spread over the ground, with crystals jutting up out of it.
+    stage.lay(iceSheet(ground.clone().setY(ground.y + 0.04), { radius: spread, color: cold, grow: 0.25, hold, fade }));
+    stage.lay(iceSpikes(ground, { spread, count: spikes, color: cold, grow: 0.14, hold: hold * 0.6, fade }));
+    // Shock lines out from where it struck.
+    for (const side of [false, true]) for (const turn of [-0.6, -0.2, 0.2, 0.6]) stage.spawnFx("streak", core, side, { from: ground, to: ground, life: 0.2, size: [0.7, 2], turn: side ? -turn : turn, spin: 0, fade: true });
+    // Shards of ice flung out every way in arcs.
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2 + Math.random() * 0.4;
+      const far = 0.7 + Math.random() * 0.9;
+      stage.spawnFx(i % 3 ? "fleck" : "spark", i % 2 ? core : cold, Math.cos(a) < 0, { from: ground, to: offset(ground, Math.cos(a) * far, 0, Math.sin(a) * far * 0.6), life: 0.45 + Math.random() * 0.2, size: [0.4, 0.22], spin: 3, fade: true, arc: 0.4 + Math.random() * 0.5 });
+    }
+    // And cold mist rising off it after, slow.
+    stage.later(() => {
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + Math.random() * 0.5;
+        const at = offset(ground, Math.cos(a) * 0.6, 0.15, Math.sin(a) * 0.4);
+        stage.spawnFx("dust", WISP, Math.cos(a) < 0, { from: at, to: offset(at, Math.cos(a) * 0.3, 0.8, 0), life: 1, size: [0.9, 2], spin: 0, fade: true });
+      }
+    }, 0.15);
+    stage.jolt();
+    onImpact();
+  }, wait + flight);
+}
+
+export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
+  "Weakening Hex": { who: "witch", blurb: "Green and violet motes curl in round its hand as it swings its staff round and points, then a spinning bolt of the hex flies straight at the target, dark motes falling off it: a violet flash, a sigil of six green strokes drawn tight round them, the strength sinking out of them in pale motes to the ground, and a dark ring closing in at their feet.", play: weakeningHex },
+  "Witches' Brew": { who: "witch", blurb: "Bubbles rise and pop round its hand as it swings round and points, then a flask of green brew goes up in a high arc, dripping and steaming, and breaks over the 3 hexes where it lands: a soft green glow and a splash, rings rolling out, drops flung every way, then green and pale gold motes and sweet steam rising off all of it as its own are mended.", play: witchesBrew },
+  "Frost Mote": { who: "wraith", blurb: "Draws up and back as cold motes swirl in to a point before its chest, where a little glowing mote of frost forms; then it thrusts its hands out and sends it drifting at the target, wobbling and turning, glints falling off it: a cold flash and a deeper blue one where it lands, frost glinting off and drifting down, and a ring of frost at their feet.", play: frostMote },
+  "Icy Bomb": { who: "wraith", blurb: "Rises with its arms raised high as a ball of ice grows between its hands over its head, cold motes drawn in to it; then it flings it in a high arc, frost and snow falling off it: it bursts where it lands in a white flash and a deep blue one, shards of ice flung out every way, frost rings rolling out over the hexes, a sheet of ice spreading over the ground with crystals jutting up out of it, and cold mist rising after.", play: icyBomb },
+  "Grave Grasp": { who: "haunt", blurb: "Draws up and back and surges in with its arms out, and a great hand of ice reaches out low over the ground: it slams down on the far row with a cold flash and a ring of frost, closes into a fist and drags back to the Haunt over the ground, frost and wisps pulled along behind it.", play: graveGrasp },
+  "Ice Spear": { who: "haunt", blurb: "Rises with its arms raised high and a spear of ice grows over its head, cold motes drawn in to it; then it flings it straight and low down the whole line, a pale streak and frost trailing it and frost laid on the ground under it, and it shatters at the end in a cold flash and a spray of shards.", play: iceSpear },
+  "Frost Breath": { who: "frost_wolf", blurb: "Draws breath with its front lifted and head thrown back, cold motes pulled in to its jaws, then thrusts its head out low and breathes: a pale flash at its mouth, freezing mist billowing out over the whole cone with frost motes, glints and shards of ice streaming through it, frost running out over the ground to the far row and lying there glinting, and a ring of frost where it ends.", play: frostBreath },
+  "Ember Burst": { who: "ember_hound", blurb: "Hunkers down, legs splayed and head low, trembling harder and harder as embers are drawn in to it and the glow in it burns brighter, then springs up stiff-legged and the fire in it bursts out: a white-hot flash, three rings of flame rolling out over the ground, flames licking up as they pass, embers flung every way, a glowing scorch left under it and smoke rising after; each hero is jolted, flame bursting up at their feet, as the first ring reaches them.", play: emberBurst },
+  "Searing Bite": { who: "ember_hound", blurb: "A snap forward, smoke and embers trailing from its jaws, jaws of glowing embers closing on the target as two orange arches: a white-hot flash and a burst of fire, heat streaks either side, flames licking up off the target, embers flung off, smoke curling up and a ring of fire at their feet.", play: searingBite },
+  "Rime Bite": { who: "frost_wolf", blurb: "A snap forward, cold breath trailing from its jaws, jaws of ice closing on the target as two pale blue arches: a cold flash and a deeper blue one, frost streaks either side, shards of ice flung off, frost drifting down and a ring of frost at their feet.", play: rimeBite },
+  "Ghastly Fetter": { who: "haunt", blurb: "Rises with its arms raised overhead as violet motes gather to its hands, then flings a chain of grave-iron at the target, link after link: a stake comes down into the ground at their feet with a violet flash and a ring, a loop of chain pulls tight round them, and the thrown chain fades from the Haunt's end.", play: ghastlyFetter },
+  "Venomous Bite": { who: "spider", blurb: "Rears up, front legs thrown up wide and fangs spread, venom dripping off them, then plunges and drives its fangs in: two pale fang streaks stab down, a green flash, venom splashes out either side, green bubbles rise off the target and drops run down to a green ring at their feet.", play: venomousBite },
+  "Web Spit@spider": { who: "spider", blurb: "Sinks on braced legs and arches its abdomen up over its back, then throws a spinning ball of silk in a high arc, a thread trailing behind it: it bursts where it lands into a web thrown out flat over the hexes, a pale ring rolling out under it, threads flung out round the edge and wisps of silk drifting down.", play: throwWeb(WEB_SPIT) },
+  "Impaling Fang": { who: "broodmother", blurb: "Rears up high, front legs thrown wide and fangs spread, red glints running down them, then plunges and drives both fangs down into the target and through: long red and violet streaks, a dark flash, the points coming out behind them, grey chips and sparks off their dented armour and a ring crumpling in over them.", play: impalingFang },
+  "Spin Web": { who: "broodmother", blurb: "Rears and arches its abdomen high, silk gathering at its tip, then shoots a fan of lines out to the far edge of where it is aimed; between them a great web opens out high over the middle and comes down flat over all of it, a ring of silk and dust rolling out as it settles and wisps drifting down.", play: spinWeb },
+  "Brood Swarm": { who: "broodmother", blurb: "Rears and arches its abdomen high, dark pulses shuddering over it, then its young pour out of it in streams, tiny black specks with red eyes tumbling down silk threads to where each Spiderling will stand, bunching up there into a dark knot with a puff of silk.", play: broodSwarm },
+  Engulf: { who: "slime", blurb: "Draws itself up tall and thin, ooze running off it, then pours itself forward over the target, flattened and spread wide: a green flash, a ring of slime spreading at their feet, bubbles rising through it as it churns them about; then it lets go with a wet splat, gobs flung off every way, and slime dripping off them.", play: engulf },
+  "Acid Splash": { who: "slime", blurb: "Squashes down low and springs up tall, tipping forward to spit a gob of acid in an arc from its crown, dripping as it flies: it bursts on the hexes where it lands, green rings rolling out, acid splashed up and flung out every way, and the ground left hissing and steaming.", play: acidSplash },
+  "Acid Armor": { who: "slime", blurb: "Biting back at whoever struck it by hand: acid spurts off its body at them, splashing on them in green, and they are left hissing with steam rising off them.", play: acidArmor },
+  "Memento Mori": { who: "skeleton", blurb: "Tips its skull slowly over to one side and starts to twitch, jerking this way and that worse and worse, as black shadow gathers into it from all round and its hollow eyes glint pale violet; at its worst, still twitching: a black burst at its chest, slow black rings rolling out over the ground one hex all round, then deep violet ones, a dark ring through the air and dark wisps creeping out low; each hero beside it gets black wisps circling their head and a shiver.", play: mementoMori },
+  "Bite@bat": { who: "bat", blurb: "Flicks up and back, then darts in: its needle fangs snap shut once, quick as a sting, with a small pale flash and violet sparks spitting out either side.", play: batBite },
+  "Fell Swoop": { who: "bat", blurb: "Its wings snap back in a burst of violet and it dives in a straight line, nose-down and low, wings swept back along its sides, dark speed lines streaming off it: each hero it passes through is raked with three red claw lines, a white slash and a flash, and where it comes to rest it throws its wings out wide to brake, and hovers again.", play: fellSwoop },
+  "Chill Touch": { who: "shade", blurb: "Draws up and back, then surges in with its arms stretching out long, wisps streaming off it: a cold flash where its hands land, three pale finger marks drawn down the target, frost glinting and drifting down, a ring of frost at their feet, and wisps of their warmth curling back to it.", play: chillTouch },
+  Wail: { who: "shade", blurb: "Huddles in, drawing breath in wisps, then flings itself up and back and screams, arms wide, swelling and trembling: rings roll out over the ground two hexes all round, pale then violet, a ring goes out through the air, sound lines burst from its head and wisps swirl out every way; each hero is jolted as the first ring reaches them, with violet wisps circling their head.", play: shadeWail },
+  "Slowing Field": { who: "guardian", blurb: "Opens its arms out wide, chest out and head lifted, and holds there trembling as its eyes and chest gem burn brighter and pulse, a halo pulsing bigger round the gem and little rays of light shooting off it, and motes of cyan light are drawn in to it; then lets go: a last burst of long rays, the glow flashes, three slow cyan rings roll out over the ground two hexes past it, and motes drift lazily up all over the field.", play: slowingField },
+  "Stone Fist": { who: "guardian", blurb: "Heaves its fist up overhead and brings it straight down: a pale stone flash and a cyan glint, a pulse at the target's feet, shock lines and chips of stone driven on past them, and the view jolted.", play: stoneFist },
+  Earthquake: {
+    who: "guardian",
+    blurb: "Heaves both fists overhead and drives them into the ground: thin cracks run out over the ground two hexes all round, small ripples of dust follow each other out, little puffs of dust and hopping pebbles all over, and the view trembles.",
+    play: earthquake,
+    again: { blurb: "Its next turn, as the cracked ground heaves on its own, out of the middle of it (the Guardian does nothing): the view shakes hard, wide cracks tear out all round, a bright flash and a heavy wave with rolling dust behind, columns of dust and chunks of rock thrown up all over it, and a second jolt.", play: earthquakeHeave },
+  },
+  "Great Cleave": { who: "brute", sweeps: true, blurb: "A great two-handed sweep from side to side: one great steel-white slash is cut into the ground across both rows of hexes in front of it, dust kicked up along it and grit flung off its far end, and everyone caught is jolted.", play: greatCleave },
+  "Battering Ram": { who: "brute", blurb: "Drops its shoulder and charges in, dust kicked off its heels and speed lines streaming off it: a big flash, a shock pulsing over the ground, grit and shock lines bursting out ahead as it hits.", play: batteringRam },
+  "Rain of Arrows": { who: "archer", blurb: "Draws and looses a sheaf of arrows straight up, then they come down slanting on the hex and all round it, one after another, each landing with a puff of dust and standing in the ground a moment, a pale ring pulsing out as the first hit.", play: rainOfArrows },
+  "Rending Cleave": { who: "great_bear", blurb: "Rears a little and sweeps a forepaw flat across its whole front, a red swoosh behind its claws: one great red slash is cut into the ground through the three hexes before it, dust kicked up along it and red flecks thrown off its far end.", play: rendingCleave },
+  "Thunderous Roar": { who: "great_bear", blurb: "Rears right up, throws its head back and bellows: rings roll out over the ground from its feet, pale then purple, sound lines burst from its mouth every way and dust is blown out all round; each hero is jolted as the first ring reaches them.", play: thunderousRoar },
+  Immolate: { who: "cultist", blurb: "Sparks swirl round its staff as it winds up, then a fireball goes up in a high arc trailing embers and bursts where it lands: a ring of flame rolling out over the hexes round it, flames licking up, embers flung out and smoke rising.", play: immolate },
+  Slam: { who: "ogre", blurb: "Crouches, springs up into the air and lands on its backside: a wave pulses out over the ground from its feet, clouds of dust rolling out after it, and each hero is jolted as it reaches them.", play: seatSlam },
+  "Club Smash": { who: "ogre", blurb: "Heaves its club right up over its head and brings it straight down: the ground bursts where it lands, a pulse rolling out to the hexes round it, dust thrown out all round and chunks of rock flung every way.", play: clubSmash },
+  Maul: { who: "bear", only: BEARS, blurb: "Rears right up on its hind legs and tears into the target with both forepaws by turns, white swooshes behind its claws, every blow tearing three black claw marks across it with white slashes flung off all round.", play: bearMaul },
+  "Rending Swipe": { who: "bear", only: BEARS, blurb: "Rears back on its hind legs and rakes a forepaw down across the target, its claws leaving a red swoosh, and three red claw marks torn across it.", play: rendingSwipe },
+  Chomp: { who: "troll", blurb: "A snap forward, jaws closing on the target as two red arches.", play: trollChomp },
+  Rake: { who: "troll", blurb: "A swing of a long clawed arm, leaving a red swoosh across the target.", play: trollRake },
+  Bite: { who: "wolf", blurb: "A snap forward, jaws closing on the target as two white arches.", play: wolfBite },
+  "Cheap Shot": { who: "bandit", blurb: "Two quick side slashes, a forehand then a backhand: the sword leaves a red trail, and each cut a flat red swipe across the target.", play: cheapShot },
+  Howl: { who: "alpha", blurb: "Sits back on its haunches and throws its head up at the sky: red sound waves pulse out one after another, rings spreading over the ground round it, a red flare at its mouth and lines bursting off its head with each wave.", play: howlMove },
+  "Savage Bite": { who: "alpha", blurb: "A snap forward, wide red jaws closing hard on the target: a red flash and a deeper one after it, red lines bursting out, and the target jolted twice.", play: savageBite },
+  "Great Lunge": { who: "alpha", blurb: "A Lunge with more weight behind it: thicker speed lines, red among them, and where it lands a shock rolling over the ground, dust and grit thrown up all round, and a second, bigger red flash.", play: greatLunge },
+  Lunge: { who: "wolf", blurb: "A crouch and a leap through the air (from up to 3 hexes off, taking the hex beside its target), dust kicked back and speed lines streaming off it the whole way, jaws snapping shut on the target with a flash as it lands.", play: wolfLunge },
+};

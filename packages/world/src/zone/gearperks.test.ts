@@ -3,12 +3,13 @@
 
 import { describe, expect, it } from "vitest";
 import { posKey, type HexPos } from "@gantt-quest/core";
-import { at, fails, flatBoard, has, must, standEnemy, standHero, unit } from "../test/zoneBoard";
+import { at, fails, flatBoard, has, inAFight, must, standEnemy, standHero, unit } from "../test/zoneBoard";
 import { ENEMIES } from "../content";
 import { BLINK_AP, type Perks } from "../gear";
 import type { Tile } from "../map";
 import { makeRng } from "../rng";
 import { addCondition, attackRoll, type Ctx } from "./engine";
+import { standInSurface } from "./surfaces";
 import { stepCost } from "./geometry";
 import { AP_TURN, COMMON_ACTIONS, JUMP_RANGE, enemyStrikes } from "./kit";
 import { enemyAct } from "./combat";
@@ -56,7 +57,10 @@ describe("Cloudstep Boots (hover)", () => {
     const state = board();
     ann(state, at(4, 6), { hover: 1 });
     lay(state, "fire", [at(5, 6)]);
+    // Out of a fight the ground does no harm (engine.ts inPlay); in one, the flames reach up to them.
     const after = must(state, move(at(5, 6)));
+    expect(unit(after, "ann").hp).toBe(unit(after, "ann").maxHp);
+    standInSurface(ctxOf(inAFight(after, "ann")), unit(after, "ann"));
     expect(unit(after, "ann").hp).toBeLessThan(unit(after, "ann").maxHp);
   });
 
@@ -88,7 +92,10 @@ describe("Ice Cleats (sure-footed)", () => {
     const state = board();
     ann(state, at(4, 6), { sure_footed: 1 });
     lay(state, "water", [at(5, 6)]);
-    expect(has(must(state, move(at(5, 6))), "ann", "wet")).toBe(true);
+    // Out of a fight nothing takes hold but Lucky (engine.ts OUTLASTS_FIGHT): the wading is done in one.
+    expect(has(must(state, move(at(5, 6))), "ann", "wet")).toBe(false);
+    addCondition(ctxOf(inAFight(state, "ann")), unit(state, "ann"), "wet", 2);
+    expect(has(state, "ann", "wet")).toBe(true);
   });
 });
 
@@ -204,10 +211,12 @@ describe("what gear keeps off", () => {
     for (const [perk, kind] of cases) {
       const state = board();
       ann(state, at(4, 6), { [perk]: 1 });
+      inAFight(state, "ann");
       addCondition(ctxOf(state), unit(state, "ann"), kind, 2);
       expect(has(state, "ann", kind)).toBe(false);
       const bare = board();
       ann(bare, at(4, 6));
+      inAFight(bare, "ann");
       addCondition(ctxOf(bare), unit(bare, "ann"), kind, 2);
       expect(has(bare, "ann", kind)).toBe(true);
     }

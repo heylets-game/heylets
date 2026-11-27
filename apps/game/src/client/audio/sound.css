@@ -16,10 +16,38 @@
 /* The dev toolbox (DevToolbox.tsx), on a development deployment only: a small spanner in the top-right corner of every screen. What else sits in that corner moves over for it. */
 .dev-corner { position: fixed; bottom: 6px; right: 6px; z-index: 75; width: 26px; height: 26px; padding: 0; display: grid; place-items: center; opacity: 0.6; }
 .dev-corner:hover, .dev-corner.selected { opacity: 1; }
+/* On a map, at the foot of the camera's buttons (render/camera.css), as big as they are and a little apart from them. */
+.camera-rotate .dev-corner.in-column { position: static; width: 34px; height: 34px; margin-top: 6px; opacity: 1; color: var(--brass-hi, #c9c3e6); }
+.camera-rotate .dev-corner.in-column.selected { color: var(--gold, #ffd23f); border-color: var(--gold, #ffd23f); background: #4a4320; }
+@media (pointer: coarse) { .camera-rotate .dev-corner.in-column { width: 44px; height: 44px; } }
 .dev-tools .sound-corner { right: 40px; }
 .dev-tools .hud-corner { right: 40px; max-width: calc(100% - 54px); }
 /* Its window: tabs across the top, for the sky and the engine readout, and for seeding gold and items. */
-.dev-tabs { display: flex; gap: 4px; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+/* The dev toolbox (DevToolbox.tsx): docked down the left side, top to bottom, narrowed (its own `width`) to keep clear
+   of the bottom bar and the turn bar. It is the new UI's timber (.timber, theme.css) with a wooden head: the head
+   (name, tabs, minimize, close) stays put; the body scrolls. */
+.dev-dock { position: fixed; left: 8px; top: 8px; bottom: 8px; z-index: 70; width: min(500px, calc(100vw - 16px)); display: flex; flex-direction: column; font-size: 12px; line-height: 1.4; white-space: normal; cursor: default; }
+.dev-dock.folded { bottom: auto; }
+.dev-dock-top { flex: none; display: flex; align-items: center; gap: 6px; padding: 5px 6px 6px 10px; }
+.dev-dock.folded .dev-dock-top { border-bottom: 0; }
+.dev-dock-title { flex: none; font-family: var(--font-head); font-size: 15px; font-weight: normal; letter-spacing: 0.07em; color: var(--t-brass-hi); text-shadow: 0 1px 0 #000; }
+.dev-dock-top .dev-tabs, .dev-dock-gap { flex: 1; min-width: 0; }
+.dev-dock-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 10px 10px 10px 12px; scrollbar-color: rgba(201, 162, 74, 0.6) transparent; }
+/* A switch that matters (the combat sandbox): the width of its section, and chunkier than the rest. */
+.timber button.dev-big { width: 100%; padding: 8px 12px 9px; font-family: var(--font-head); font-size: 15px; letter-spacing: 0.06em; }
+.dev-dock-btn { flex: none; width: 24px; height: 22px; padding: 0 !important; display: grid; place-items: center; font-size: 15px; font-weight: bold; line-height: 1; }
+.dev-dock .dev-kit-hero { border: 1px solid rgba(107, 53, 36, 0.8); border-radius: 3px; background: rgba(0, 0, 0, 0.18); }
+.dev-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+/* A tab's sections that fold away under their headings (DevSection.tsx). */
+.dev-section { border: 1px solid rgba(107, 53, 36, 0.8); border-radius: 3px; background: rgba(0, 0, 0, 0.18); }
+.dev-section > summary { display: flex; align-items: baseline; gap: 8px; padding: 5px 8px; cursor: pointer; list-style: none; user-select: none; }
+.dev-section > summary::-webkit-details-marker { display: none; }
+.dev-section > summary::before { content: "▸"; flex: none; width: 10px; color: var(--t-brass, #c9a24a); transition: rotate 0.12s; }
+.dev-section[open] > summary::before { rotate: 90deg; }
+.dev-section > summary strong { color: var(--t-brass-hi, #f6e2a1); }
+.dev-section > summary:hover strong { color: #fff6cf; }
+.dev-section[open] > summary { border-bottom: 1px solid rgba(107, 53, 36, 0.6); }
+.dev-section-body { display: flex; flex-direction: column; gap: 8px; padding: 8px; }
 .dev-seed { display: flex; flex-direction: column; gap: 8px; border: none; padding: 0; margin: 0; min-width: 0; }
 .dev-seed h4 { margin: 6px 0 0; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
 .dev-seed p { margin: 0; }
@@ -32,16 +60,12 @@
 .dev-kit-hero p { margin: 0; }
 .dev-abilities { gap: 4px 12px; }
 .dev-said { min-height: 1.4em; }
-.sound-readout { position: fixed; left: 8px; bottom: 8px; z-index: 70; width: min(420px, calc(100vw - 16px)); max-height: 60vh; overflow-y: auto; white-space: normal; font-size: 12px; cursor: default; }
-/* Dev only. It can be dragged by any part of it that is not a control, and resized by its corners (DragPanel). */
-.sound-readout.draggable { cursor: grab; display: flex; flex-direction: column; overflow: hidden; }
-.sound-readout.draggable > .panel-body { display: block; overflow-y: auto; min-height: 0; }
-.sound-readout-head { display: flex; justify-content: space-between; margin-bottom: 6px; padding-right: 50px; }
-.sound-readout dl { margin: 0; }
-.sound-readout dl > div { display: grid; grid-template-columns: 130px 1fr; gap: 8px; padding: 2px 0; border-top: 1px dashed var(--line); }
-.sound-readout dt { color: var(--muted); }
-.sound-readout dd { margin: 0; overflow-wrap: anywhere; }
-.sound-sky { margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+/* The Sky & sound tab's readout of the audio engine. */
+.dev-dock dl { margin: 0; }
+.dev-dock dl > div { display: grid; grid-template-columns: 130px 1fr; gap: 8px; padding: 2px 0; border-top: 1px dashed var(--line); }
+.dev-dock dt { color: var(--muted); }
+.dev-dock dd { margin: 0; overflow-wrap: anywhere; }
+.sound-sky { margin: 0; }
 .sound-sky .sound-row { grid-template-columns: 90px 1fr 40px; }
 .sound-presets { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 2px 0 8px; }
 .sound-presets button.link:disabled { color: var(--muted); }

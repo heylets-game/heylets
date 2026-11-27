@@ -5,12 +5,13 @@
 // nothing of the rules: the view tells it which hexes and what colour.
 
 import * as THREE from "three";
-import { fireField, gooMaterial, poisonFumes, poisonMaterial, tickFumes, tickGround, waterMaterial } from "./groundFx";
+import { fireField, gooMaterial, poisonFumes, poisonMaterial, tickFumes, tickGround, waterMaterial, webField } from "./groundFx";
 import { posKey, type HexPos } from "@gantt-quest/core";
 import { SURFACE_INFO, WEATHER_INFO, tileAt, type SurfaceKind, type WeatherKind, type WorldMap } from "@gantt-quest/world";
 import { OUTLINE } from "./figures";
 import { inkLine } from "./fancy";
 import { setSqualls } from "./wind";
+import { CRACK_DARK, CRACK_EDGE, crackGeometry, crackPaths } from "./cracks";
 import { hexToWorld, tileTop, type WorldRenderer } from "./WorldRenderer";
 
 /**
@@ -153,6 +154,8 @@ export class TacticsLayer {
   /** Markers bobbing over whoever's turn it is: each follows its unit about. */
   private marks: { id: string; mesh: THREE.Mesh }[] = [];
   private markSig = "";
+  /** A big warning sign over the enemy running to ring the alarm bell (see setBellGoer). */
+  private bellArrow: { id: string; arrow: THREE.Sprite } | null = null;
   private overlaySig = "";
   private groundSig = "";
   /** Courses charted (Chart a Course): a red X on each hex marked. */
@@ -175,6 +178,8 @@ export class TacticsLayer {
   private drift: { points: THREE.Points; base: Float32Array; floor: Float32Array }[] = [];
   /** Streaks of wind over the hexes Trade Winds blows across (see streaks). */
   private winds: THREE.InstancedMesh[] = [];
+  /** Cracked ground (an Earthquake's), trembling until it heaves (see cracked). */
+  private quakes: THREE.Group[] = [];
   /** Each rain cloud over the ground, its drops, and when it was first drawn (it grows in from nothing). */
   private clouds: { cloud: THREE.Group; drops: THREE.InstancedMesh; base: Float32Array; floor: Float32Array; born: number; veil: { material: THREE.Material; full: number }[] }[] = [];
   /**
@@ -210,9 +215,20 @@ export class TacticsLayer {
         const head = renderer.unitHead(id);
         mesh.visible = !!head;
         if (!head) continue;
-        // Clear of the name plate that sits over the head.
-        mesh.position.set(head.x, head.y + 1.05 + Math.sin(clock * 3.2) * 0.09, head.z);
+        // Clear of the name plate that sits over the head (and over the bell arrow, if it has one).
+        const above = this.bellArrow?.id === id ? 1.4 : 0;
+        mesh.position.set(head.x, head.y + 1.05 + above + Math.sin(clock * 3.2) * 0.09, head.z);
         mesh.rotation.y = clock * 1.6;
+      }
+      if (this.bellArrow) {
+        const { id, arrow } = this.bellArrow;
+        const head = renderer.unitHead(id);
+        arrow.visible = !!head;
+        if (head) {
+          // Hung over them, bobbing and throbbing like an alarm.
+          arrow.position.set(head.x, head.y + 1.25 + Math.sin(clock * 3) * 0.08, head.z);
+          arrow.scale.setScalar(1.3 * (1 + 0.08 * Math.max(0, Math.sin(clock * 7))));
+        }
       }
     });
   }
@@ -227,6 +243,7 @@ export class TacticsLayer {
     this.clear(this.charts);
     this.setArc(null);
     this.setTurnMarkers([]);
+    this.setBellGoer(null);
     for (const m of this.kept) m.dispose();
     this.kept.clear();
     this.sheets.clear();
@@ -463,6 +480,23 @@ export class TacticsLayer {
     }
   }
 
+  /** A big triangular warning sign over the enemy making for the alarm bell; null for nobody. */
+  setBellGoer(id: string | null) {
+    if ((this.bellArrow?.id ?? null) === id) return;
+    if (this.bellArrow) {
+      this.group.remove(this.bellArrow.arrow);
+      this.bellArrow.arrow.material.map?.dispose();
+      this.bellArrow.arrow.material.dispose();
+      this.bellArrow = null;
+    }
+    if (!id) return;
+    const sign = new THREE.Sprite(new THREE.SpriteMaterial({ map: warningTexture(), depthTest: false, transparent: true }));
+    sign.renderOrder = 7;
+    sign.visible = false;
+    this.group.add(sign);
+    this.bellArrow = { id, arrow: sign };
+  }
+
   /** A marker over the head of everyone whose turn it is, in the colour given: it follows them as they move. */
   setTurnMarkers(marks: { id: string; color: string }[]) {
     const sig = marks.map((m) => `${m.id}:${m.color}`).join("|");
@@ -521,7 +555,8 @@ export class TacticsLayer {
         this.goo.push(water);
         material = water;
       } else {
-        const base = kind === "ice" ? 0.75 : kind === "fire" ? 0.22 : 0.6;
+        // Web is mostly its threads (webField, below): only a faint sheen of silk lies under them.
+        const base = kind === "ice" ? 0.75 : kind === "fire" ? 0.22 : kind === "web" ? 0.14 : 0.6;
         const flat = new THREE.MeshBasicMaterial({ color: SURFACE_INFO[kind].color, transparent: true, opacity: base, depthWrite: false, side: THREE.DoubleSide });
         flat.userData.base = base;
         // Fire stirs; the rest lie still.
@@ -535,11 +570,12 @@ export class TacticsLayer {
         this.flames.push(...fire.flames);
         this.sparks.push(fire.sparks);
       }
+      if (kind === "web") this.ground.add(webField(hexes, (p) => ({ ...hexToWorld(p), y: this.top(p) }), SURFACE_INFO.web.color));
       const mesh = new THREE.Mesh(this.fill(hexes, 0.03, 0.9), material);
       mesh.renderOrder = 1;
       this.ground.add(mesh);
       // Water's edge is soft: its rim only just shows.
-      const rim = new THREE.LineSegments(this.outline(hexes, 0.04), new THREE.LineBasicMaterial({ color: SURFACE_INFO[kind].color, transparent: true, opacity: kind === "water" ? 0.45 : 0.9 }));
+      const rim = new THREE.LineSegments(this.outline(hexes, 0.04), new THREE.LineBasicMaterial({ color: SURFACE_INFO[kind].color, transparent: true, opacity: kind === "water" ? 0.45 : kind === "web" ? 0.5 : 0.9 }));
       rim.renderOrder = 1;
       this.ground.add(rim);
     }
@@ -568,6 +604,7 @@ export class TacticsLayer {
     this.drift = [];
     this.clouds = [];
     this.winds = [];
+    this.quakes = [];
     for (const w of list) {
       const color = WEATHER_INFO[w.kind].color;
       const wash = new THREE.Mesh(this.fill(w.hexes, 0.05, 0.95), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }));
@@ -582,6 +619,10 @@ export class TacticsLayer {
       }
       if (w.kind === "wall") {
         this.sky.add(this.stones(w.hexes, color));
+        continue;
+      }
+      if (w.kind === "quake") {
+        this.sky.add(this.cracked(w.hexes));
         continue;
       }
       if (w.kind === "rain") {
@@ -741,6 +782,31 @@ export class TacticsLayer {
     return mesh;
   }
 
+  /**
+   * Cracked ground (a Guardian's Earthquake): on each hex a few jagged cracks running out from somewhere near its
+   * middle, dark over a pale broken edge, lying on the ground however high it is. It trembles until it heaves (tickSky).
+   */
+  private cracked(hexes: HexPos[]): THREE.Group {
+    const group = new THREE.Group();
+    const edge = new THREE.MeshBasicMaterial({ color: CRACK_EDGE, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false });
+    const dark = new THREE.MeshBasicMaterial({ color: CRACK_DARK, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false });
+    for (const p of hexes) {
+      const { x, z } = hexToWorld(p);
+      const y = this.top(p) + 0.03;
+      const cracks = crackPaths({ count: 3, reach: 0.75, width: 0.07, step: 0.16, wander: 0.55, fork: 0.15 });
+      const at = { x: x + (Math.random() - 0.5) * 0.4, z: z + (Math.random() - 0.5) * 0.4 };
+      for (const [material, wide, lift, order] of [[edge, 2, 0, 2], [dark, 1, 0.004, 3]] as const) {
+        const mesh = new THREE.Mesh(crackGeometry(cracks.map((c) => ({ ...c, width: c.width * wide + (wide > 1 ? 0.02 : 0) }))), material);
+        mesh.position.set(at.x, y + lift, at.z);
+        mesh.rotation.y = Math.random() * Math.PI * 2;
+        mesh.renderOrder = order;
+        group.add(mesh);
+      }
+    }
+    this.quakes.push(group);
+    return group;
+  }
+
   /** A wall (Fortify): courses of rough stone blocks stacked up off each hex, each a little off true, in shades of the colour. */
   private stones(hexes: HexPos[], color: string): THREE.InstancedMesh {
     const courses = 3;
@@ -777,6 +843,11 @@ export class TacticsLayer {
   /** Rain clouds grow in and bob, and their rain falls and starts again at the top; wind blows its motes along and round again. */
   private tickSky(clock: number) {
     const m = SKY_M;
+    // Cracked ground trembles: shivering a little this way and that, now and then harder.
+    for (const g of this.quakes) {
+      const hard = 0.5 + 0.5 * Math.max(0, Math.sin(clock * 1.7)) ** 6;
+      g.position.set(Math.sin(clock * 41) * 0.012 * hard, 0, Math.cos(clock * 37) * 0.012 * hard);
+    }
     for (const c of this.clouds) {
       if (c.born < 0) c.born = clock;
       // Growing in from nothing as the rain begins, then bobbing, each puff swelling and settling on its own.
@@ -833,4 +904,54 @@ export class TacticsLayer {
       pos.needsUpdate = true;
     }
   }
+}
+
+/** The alarm warning sign (setBellGoer): a rounded yellow triangle in a thick red rim, with a dark "!" in it. */
+function warningTexture(): THREE.CanvasTexture {
+  const S = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = S;
+  const g = canvas.getContext("2d")!;
+  const tri = (inset: number) => {
+    const top = { x: S / 2, y: 22 + inset * 1.6 };
+    const left = { x: 18 + inset * 1.4, y: S - 30 - inset * 0.8 };
+    const right = { x: S - 18 - inset * 1.4, y: S - 30 - inset * 0.8 };
+    g.beginPath();
+    g.moveTo(top.x, top.y);
+    g.lineTo(right.x, right.y);
+    g.lineTo(left.x, left.y);
+    g.closePath();
+  };
+  g.lineJoin = "round";
+  // A dark outline, so it reads against bright ground and dark alike.
+  tri(0);
+  g.lineWidth = 34;
+  g.strokeStyle = "#3a0000";
+  g.stroke();
+  g.fillStyle = "#e11d1d";
+  g.lineWidth = 22;
+  g.strokeStyle = "#e11d1d";
+  g.stroke();
+  g.fill();
+  tri(22);
+  g.fillStyle = "#ffd23f";
+  g.lineWidth = 10;
+  g.strokeStyle = "#ffd23f";
+  g.stroke();
+  g.fill();
+  // The "!": a tapered bar and a dot.
+  g.fillStyle = "#1a1208";
+  g.beginPath();
+  g.moveTo(S / 2 - 15, 92);
+  g.lineTo(S / 2 + 15, 92);
+  g.lineTo(S / 2 + 8, 168);
+  g.lineTo(S / 2 - 8, 168);
+  g.closePath();
+  g.fill();
+  g.beginPath();
+  g.arc(S / 2, 193, 13, 0, Math.PI * 2);
+  g.fill();
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }

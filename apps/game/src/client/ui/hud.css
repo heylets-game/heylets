@@ -186,6 +186,8 @@
 
 /* The slots, on a map: two rows of ten (--cols, BAR_ROW in zone/hotbar.ts). */
 .hud-slots { display: grid; grid-template-columns: repeat(var(--cols, 10), calc(var(--u) * 48)); gap: calc(var(--u) * 2); justify-content: center; }
+/* In place of the bottom row (HudBar slotsBelow): as wide as the row, as tall as a slot. */
+.hud-slots-below { grid-column: 1 / -1; height: calc(var(--u) * 48); display: flex; align-items: center; justify-content: center; gap: calc(var(--u) * 10); padding-inline: calc(var(--u) * 8); color: var(--h-parch); font-size: calc(var(--u) * 13); overflow: hidden; }
 
 /* A slot: a socket sunk into the board, rimmed in brass, holding its picture. */
 .hud .hud-slot {

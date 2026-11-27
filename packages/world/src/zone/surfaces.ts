@@ -3,35 +3,59 @@
 // lasts a set number of rounds of a fight. Laying one surface on another
 // combines them: fire runs through oil and sets off poison, water puts
 // fire out, cold turns water to ice, fire burns slime off and water washes
-// it away. Fire burns a crate standing in it, too: when it takes hold under
+// it away. Web is burnt or washed away the same, and nothing else lies over it. Fire burns a crate standing in it, too: when it takes hold under
 // it, and again every round it is still burning, in a fight or out of one.
 
 import { hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/core";
 import { tileAt } from "../map";
 import { cratesOn, hurtCrate } from "./crates";
-import { addCondition, saveRoll, tick, type Ctx } from "./engine";
-import { flies, hovers, perkOf, solid } from "./geometry";
-import type { GroundSurface, SurfaceKind, Unit } from "./types";
+import { addCondition, addStacks, has, inPlay, saveRoll, tick, type Ctx } from "./engine";
+import { flies, hovers, perkOf, solid, span } from "./geometry";
+import type { Condition, GroundSurface, SurfaceKind, Unit } from "./types";
+import { ENEMIES } from "../content";
 import { TORCH_HELD_ROUNDS } from "./kit";
 
 export const SURFACE_INFO: Record<SurfaceKind, { name: string; blurb: string; color: string }> = {
   poison: { name: "Poison", blurb: "Hurts and Poisons whoever enters it or starts a turn in it. Fire sets it off.", color: "#84cc16" },
-  fire: { name: "Fire", blurb: "Burns whoever enters it or starts a turn in it. Water puts it out.", color: "#f97316" },
+  fire: { name: "Fire", blurb: "Whoever enters it or starts a turn in it takes 2 damage and a stack of Burning. Water puts it out.", color: "#f97316" },
   oil: { name: "Oil", blurb: "Slick: costs one more to cross. A spark turns every hex of it to fire.", color: "#57534e" },
   water: { name: "Water", blurb: "Leaves whoever crosses it Wet. Cold freezes it.", color: "#38bdf8" },
   ice: { name: "Ice", blurb: "Save or fall Prone and stop. Fire melts it.", color: "#bae6fd" },
   slime: { name: "Slime", blurb: "Sticky: costs one more to cross, and Slows whoever walks into it. Fire burns it off; water washes it away.", color: "#c9f5b8" },
+  web: { name: "Web", blurb: "Slows whoever walks into it or starts a turn in it, but a spider on it is Hasted. Fire burns it; water washes it away.", color: "#e8e4f0" },
 };
 
-/** Surfaces a creature would rather not walk through. The enemy looks for a way round these. */
-export const HARMFUL: ReadonlySet<SurfaceKind> = new Set(["poison", "fire"]);
+/** Surfaces a creature would rather not walk through: they hurt, or (ice) trip it up. The enemy looks for a way round these. */
+export const HARMFUL: ReadonlySet<SurfaceKind> = new Set(["poison", "fire", "ice"]);
 
 /** Ground that hurts, slows or trips whoever crosses it: what Show the Way sweeps away. Water stays. */
-export const HINDERING: ReadonlySet<SurfaceKind> = new Set(["poison", "fire", "oil", "ice", "slime"]);
+export const HINDERING: ReadonlySet<SurfaceKind> = new Set(["poison", "fire", "oil", "ice", "slime", "web"]);
+
+/** Ground only these lay over: anything else put down on it leaves it as it is (web is burnt or washed away, not covered). */
+const ONLY_GIVES_TO: Partial<Record<SurfaceKind, readonly SurfaceKind[]>> = { web: ["fire", "water"] };
+
+/**
+ * Ground that holds whoever is not at home on it (Slowed for that turn) and speeds whoever is (EnemyDef `homeGround`:
+ * `home` for that turn, a spider on web Hasted). `standing`: it acts as their turn starts there too, not only as they walk on.
+ */
+const HOLDS: Partial<Record<SurfaceKind, { standing: boolean; home: Condition }>> = { web: { standing: true, home: "hasted" } };
+
+/** Whether a unit is at home on this ground (EnemyDef `homeGround`). */
+export const atHome = (unit: Unit, kind: SurfaceKind): boolean => unit.side === "enemy" && !!ENEMIES[unit.kind]?.homeGround?.includes(kind);
+
+/** Whether ground of this kind does nothing at all to a unit (EnemyDef `groundImmune`: an ember hound in fire). */
+export const groundImmune = (unit: Pick<Unit, "side" | "kind">, kind: SurfaceKind): boolean =>
+  unit.side === "enemy" && !!ENEMIES[unit.kind]?.groundImmune?.includes(kind);
+
+/** Whether ground of this kind hurts or trips this unit (HARMFUL, unless it is immune to it): what it steers round. */
+export const harms = (unit: Pick<Unit, "side" | "kind">, kind: SurfaceKind | undefined): boolean =>
+  !!kind && HARMFUL.has(kind) && !groundImmune(unit, kind);
 
 /** What a fire burning through oil or poison lasts. */
 const SPREAD_FIRE_ROUNDS = 2;
 const ICE_SAVE = 12;
+/** What fire does to whoever enters it or starts a turn in it, besides a stack of Burning. */
+export const FIRE_TILE_DAMAGE = 2;
 
 const d = (ctx: Ctx, sides: number) => ctx.rng.int(1, sides);
 
@@ -40,20 +64,35 @@ const d = (ctx: Ctx, sides: number) => ctx.rng.int(1, sides);
  * starts there. Returns true if it must stop where it is (it slipped on ice).
  */
 function act(ctx: Ctx, unit: Unit, kind: SurfaceKind, moving: boolean): boolean {
-  if (unit.down || flies(unit)) return false;
+  // Out of a fight the ground does nobody any harm (inPlay).
+  if (unit.down || flies(unit) || !inPlay(ctx, unit)) return false;
   // Cloudstep Boots float over all of it but the flames.
   if (hovers(unit) && kind !== "fire") return false;
+  if (groundImmune(unit, kind)) return false;
   const sure = perkOf(unit, "sure_footed") > 0;
   if (kind === "poison") {
     tick(ctx, unit, "poison", d(ctx, 4));
     addCondition(ctx, unit, "poisoned", 2);
   } else if (kind === "fire") {
-    tick(ctx, unit, "fire", d(ctx, 6));
-    addCondition(ctx, unit, "burning", 2);
+    // A little at once, and a stack of Burning every time it does.
+    tick(ctx, unit, "fire", FIRE_TILE_DAMAGE);
+    addStacks(ctx, unit, "burning");
   } else if (kind === "water") {
     addCondition(ctx, unit, "wet", 2);
   } else if (kind === "slime" && moving && !sure) {
-    addCondition(ctx, unit, "slowed", 1);
+    // Already Slowed: each further hex of it changes nothing, so nothing is said (no word, no pause, step after step).
+    if (!has(unit, "slowed")) addCondition(ctx, unit, "slowed", 1);
+  } else if (HOLDS[kind] && (moving || HOLDS[kind].standing)) {
+    // At home on it, quicker; anyone else, slower. Only for the turn it is in (or starting): out of it, its next turn
+    // is its own pace again, as in a Slowing Field.
+    const home = atHome(unit, kind);
+    if (!home && sure) return false;
+    const effect = home ? HOLDS[kind].home : "slowed";
+    // Already so: each further hex of it changes nothing, so nothing is said (no word, no pause, step after step).
+    if (has(unit, effect)) return false;
+    addCondition(ctx, unit, effect, 1);
+    const c = unit.conditions.find((x) => x.kind === effect);
+    if (c) delete c.fresh;
   } else if (kind === "ice" && moving && !sure) {
     if (!saveRoll(ctx, unit, "agi", ICE_SAVE, "Keep your feet").ok) {
       addCondition(ctx, unit, "prone", 1);
@@ -63,9 +102,20 @@ function act(ctx: Ctx, unit: Unit, kind: SurfaceKind, moving: boolean): boolean 
   return false;
 }
 
+/**
+ * What a unit stands in: the ground on its hex, or for a big one (geometry.ts span) the worst of what is under any of
+ * its hexes (what harms before what hinders, before water), which acts on it once.
+ */
+function underfoot(state: Ctx["state"], unit: Unit): GroundSurface | undefined {
+  // Ground it is immune to is not counted: a big one half in fire it shrugs off and half in poison is poisoned.
+  const all = span(unit).map((p) => state.surfaces[posKey(p)]).filter((s): s is GroundSurface => !!s && !groundImmune(unit, s.kind));
+  const rank = (s: GroundSurface) => (HARMFUL.has(s.kind) ? 0 : HINDERING.has(s.kind) ? 1 : 2);
+  return all.sort((a, b) => rank(a) - rank(b))[0];
+}
+
 /** A unit has just stepped onto a hex: whatever is on it acts. Returns true if the unit must stop there. */
 export function enterSurface(ctx: Ctx, unit: Unit, flush?: () => void): boolean {
-  const surface = ctx.state.surfaces[posKey(unit.pos)];
+  const surface = underfoot(ctx.state, unit);
   if (!surface) return false;
   flush?.();
   return act(ctx, unit, surface.kind, true);
@@ -73,7 +123,7 @@ export function enterSurface(ctx: Ctx, unit: Unit, flush?: () => void): boolean 
 
 /** A unit's turn starts: whatever it is standing in acts again. */
 export function standInSurface(ctx: Ctx, unit: Unit): void {
-  const surface = ctx.state.surfaces[posKey(unit.pos)];
+  const surface = underfoot(ctx.state, unit);
   if (surface) act(ctx, unit, surface.kind, false);
 }
 
@@ -121,6 +171,7 @@ export function placeSurface(ctx: Ctx, hexes: HexPos[], kind: SurfaceKind, round
   for (const pos of hexes) {
     if (solid(tileAt(map, pos))) continue;
     const there = surfaces[posKey(pos)]?.kind;
+    if (there && ONLY_GIVES_TO[there] && !ONLY_GIVES_TO[there]!.includes(kind)) continue;
     if (kind === "fire") {
       if (there === "oil" || there === "poison") {
         for (const p of joined(surfaces, map.grid, pos, there)) {
@@ -149,18 +200,22 @@ export function placeSurface(ctx: Ctx, hexes: HexPos[], kind: SurfaceKind, round
       // Slime smothers a fire and sticks over anything else.
       if (there === "fire") set(pos, null);
       else set(pos, "slime");
+    } else if (kind === "web") {
+      // Web thrown onto a fire burns up in it; over anything else it is spun anew.
+      if (there !== "fire") set(pos, "web");
     }
   }
   // Told one kind at a time, so the client can draw and sound each change once.
-  for (const to of [null, "poison", "fire", "oil", "water", "ice", "slime"] as const) {
+  for (const to of [null, "poison", "fire", "oil", "water", "ice", "slime", "web"] as const) {
     const group = [...changed.values()].filter((c) => c.kind === to).map((c) => c.pos);
     if (group.length > 0) ctx.events.push({ t: "surface", kind: to, hexes: group });
   }
   if (burst.size > 0) ctx.events.push({ t: "burst", hexes: [...burst.values()] });
   for (const unit of ctx.state.units) {
-    const key = posKey(unit.pos);
-    if (burst.has(key) && !unit.down && !flies(unit)) tick(ctx, unit, "fire", d(ctx, 6));
-    const now = changed.get(key);
+    // A big one is caught once, however many of its hexes it is caught on.
+    const keys = span(unit).map(posKey);
+    if (keys.some((key) => burst.has(key)) && !unit.down && !flies(unit) && inPlay(ctx, unit)) tick(ctx, unit, "fire", d(ctx, 6));
+    const now = keys.map((key) => changed.get(key)).find((c) => c?.kind);
     if (now?.kind) act(ctx, unit, now.kind, false);
   }
   const burning = [...changed.values()].filter((c) => c.kind === "fire").map((c) => c.pos);
@@ -174,10 +229,10 @@ export function clearSurfaces(ctx: Ctx, hexes: HexPos[]): void {
   if (gone.length > 0) ctx.events.push({ t: "surface", kind: null, hexes: gone });
 }
 
-/** A flame touches a hex: oil or poison on it catches, and slime burns off. */
+/** A flame touches a hex: oil or poison on it catches, and slime and web burn off. */
 export function ignite(ctx: Ctx, pos: HexPos, by: string | null): void {
   const there = ctx.state.surfaces[posKey(pos)]?.kind;
-  if (there === "oil" || there === "poison" || there === "slime") placeSurface(ctx, [pos], "fire", SPREAD_FIRE_ROUNDS, by);
+  if (there === "oil" || there === "poison" || there === "slime" || there === "web") placeSurface(ctx, [pos], "fire", SPREAD_FIRE_ROUNDS, by);
 }
 
 /**

@@ -21,7 +21,8 @@ export type Range = [low: number, high: number];
 export interface SoundEvent {
   /**
    * The files to choose from: paths under apps/game/audio, without the extension.
-   * A `*` in the last part matches anything, so "sfx/footsteps/cobble_*" picks up every take you add.
+   * A `#` matches a take number, so "sfx/footsteps/cobble_#" picks up every take you add (cobble_01, cobble_02...)
+   * and nothing else. A `*` matches anything but a slash, so "cobble_*" would catch "cobble_wet_01" too.
    */
   files: string | string[];
   /**

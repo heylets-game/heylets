@@ -5,13 +5,13 @@
 // puts them on a map. A test fails if an ability or an enemy has no entry.
 
 import type { StatKey, Stats } from "@gantt-quest/core";
-import { ABILITIES, EFFECT_INFO, ENEMIES, SUNDERED_DEFENCE, type AbilityDef, type EffectKind } from "../content";
+import { ABILITIES, EFFECT_INFO, EFFECT_TICK, ENEMIES, STACK_TURNS, SUNDERED_DEFENCE, REELING_AP, WEAKENED_SAVES, type AbilityDef, type EffectKind, type Inflict, type Retort } from "../content";
 import type { BehaviourId } from "./behaviours";
 import { ENEMY_ABILITIES, type EnemyAbilityDef } from "./enemyabilities";
 import { BLINK_AP } from "../gear";
 import { modsOf } from "./mods";
-import { diceFor, type Dice } from "./rules";
-import type { CommonAction, Condition, ShantyKind, SurfaceKind, Throwable, Unit, WeatherKind, ZoneState } from "./types";
+import { DEFAULT_SCALE, diceFor, scaled, type Dice } from "./rules";
+import type { CommonAction, Condition, ShantyKind, SurfaceKind, Throwable, Unit, UnitCondition, WeatherKind, ZoneState } from "./types";
 
 /**
  * - `single`: one enemy, an attack roll.
@@ -77,8 +77,8 @@ export interface Tactic {
   standStrong?: typeof STAND_STRONG;
   /** Single: a hit leaves the target Taunted by the user for this many of its turns, unless it saves (Goading Strike). */
   goad?: number;
-  /** Single: a hit also sets the target Burning for this many turns if it is lit by Guiding Light (Focus Light). */
-  kindleLit?: number;
+  /** Single: a hit also adds a stack of Burning to the target if it is lit by Guiding Light (Focus Light). */
+  kindleLit?: boolean;
   /** With `guide`: the enemy saves against being lit (Starbeam). */
   guideSave?: boolean;
   /** Ally: leaves the ally with North Star for this many of their turns, no strike (St. Elmo's Fire). */
@@ -103,7 +103,7 @@ export interface Tactic {
   cleanse?: boolean;
   /** Extra damage when the roll to hit had advantage (Stab). */
   edge?: number;
-  /** Leaves the target (the user, for a self ability) Inspired, their next roll to hit with advantage, for this many of their turns (Take Aim, Second Wind). */
+  /** Leaves the target (the user, for a self ability) this many stacks of Inspired, each a roll to hit with advantage (Take Aim, Second Wind). */
   steady?: number;
   /** Single: landed, drags the target this many hexes straight toward the user, as far as the way is open (Throw Pike). */
   pull?: number;
@@ -199,12 +199,13 @@ export const BOLSTER = { range: 2, shield: 10 };
  * The Warden's. Endure: a shield of `shield` plus the Warden's level on themselves (and they are Guarded: content.ts).
  * Overwhelm drives an enemy `hexes` back, and Stuns it `stun` of its turns if it is driven into a wall. Fortify raises a wall of
  * `hexes` hexes for `rounds` rounds; the user's side gets `defence` more Defence beside it. Bulwark Strike shields the Warden
- * `shield` plus their level first, then adds `perShield` of their shield to the damage. Taunt reaches `range` hexes, for `rounds`.
+ * `shield` plus their level first, then adds `perShield` of their shield to the damage, but never more than `upTo` times
+ * the most the blow could roll without it (1d8 + 2: 10). Taunt reaches `range` hexes, for `rounds`.
  */
 export const ENDURE = { range: 0, shield: 10 };
 export const OVERWHELM = { hexes: 2, stun: 1 };
 export const FORTIFY = { hexes: 3, rounds: 3, defence: 1 };
-export const BULWARK = { shield: 4, perShield: 0.5 };
+export const BULWARK = { shield: 4, perShield: 0.5, upTo: 1 };
 export const TAUNT = { range: 2, rounds: 2 };
 /** Sturdy Blow (the maul): a shield of `shield` plus the user's level, on top of any they have, hit or miss. */
 export const STURDY = { shield: 3 };
@@ -224,6 +225,9 @@ export const WEATHER = {
   coral: { rounds: 4, damage: { n: 1, d: 6, plus: 1 } satisfies Dice },
   // Fortify: a wall, standing where it was raised.
   wall: { rounds: FORTIFY.rounds },
+  // An Earthquake's cracked ground: it heaves as its maker's next turn begins, and is gone (weather.ts quakeAtTurn).
+  // Should that turn not come in the next round, it settles at the round's end.
+  quake: { rounds: 1 },
 };
 
 /** Aqueous Regeneration: the heal again at the start of each of the ally's turns for `rounds`, and `water` more on each heal for one standing in water. */
@@ -321,7 +325,7 @@ export const SMUGGLED: Throwable = "fire";
 export const GUIDING_LIGHT = { rounds: 3 };
 export const CONSTELLATION = { link: 4 };
 export const CHART = { range: 8, speed: 1, rounds: 4 };
-export const NORTH_STAR = { rounds: 3, burn: 2 };
+export const NORTH_STAR = { rounds: 3 };
 
 /**
  * The Warlock's (drowning.ts). Drowning is stacks on an enemy, for `rounds` of its turns, each stack laid on starting the count
@@ -405,7 +409,7 @@ export const TACTICS: Record<string, Tactic> = {
   turtle_bite: melee({ wading: 4 }),
   // Bard
   dissonance: spell(5),
-  encore: mend(5, { cost: 1, steady: 2, cooldown: 1 }),
+  encore: mend(5, { cost: 1, steady: 1, cooldown: 1 }),
   blasting_tone: spell(4, { shape: "line", length: 4, foesOnly: true }),
   soothing_tone: { cost: 2, reach: "spell", range: 0, shape: "self", cooldown: 2, soothe: { range: 2 } },
   peal: spell(4, { knockback: 1, knockSave: true }),
@@ -420,7 +424,7 @@ export const TACTICS: Record<string, Tactic> = {
   lead_by_example: spell(5, { cooldown: 3, inspire: true }),
   // Sage
   moonlight: spell(7, { shape: "blast", cluster: 3, foesOnly: true, guide: GUIDING_LIGHT.rounds, dice: { n: 1, d: 4, plus: 2 } }),
-  focus_light: spell(5, { cost: 1, kindleLit: 3, cooldown: 1, dice: { n: 1, d: 4, plus: 2 } }),
+  focus_light: spell(5, { cost: 1, kindleLit: true, cooldown: 1, dice: { n: 1, d: 4, plus: 2 } }),
   starbeam: spell(6, { guide: GUIDING_LIGHT.rounds, guideSave: true, dice: { n: 1, d: 6, plus: 3 } }),
   st_elmos_fire: mend(4, { cost: 1, cooldown: 3, starlit: NORTH_STAR.rounds }),
   water_burst: spell(5, { spray: 4 }),
@@ -497,9 +501,12 @@ export const SAVE_STAT: Record<Condition, StatKey> = {
   taunting: "vit",
   slowed: "str",
   hasted: "agi",
-  glitched: "int_stat",
+  fumbling: "int_stat",
   exposed: "agi",
   sundered: "str",
+  memento_mori: "int_stat",
+  reeling: "vit",
+  weakened: "vit",
   poisoned: "vit",
   prone: "agi",
   wet: "agi",
@@ -526,25 +533,34 @@ export const SAVE_STAT: Record<Condition, StatKey> = {
   red_sky: "int_stat",
   tailwind: "agi",
   lucky: "dex",
+  frenzied: "int_stat",
+  slowing_field: "vit",
+  blizzard_aura: "vit",
+  fettered: "str",
 };
 
 const info = (kind: EffectKind, blurb: string) => ({ name: EFFECT_INFO[kind].name, color: EFFECT_INFO[kind].color, blurb });
 
 /** Every condition as it works on the tiles. Names and colours are the old ones where there was one. */
 export const CONDITION_INFO: Record<Condition, { name: string; blurb: string; color: string }> = {
-  bleeding: info("bleeding", "Loses 2 HP at the start of each of its turns."),
-  burning: info("burning", "Loses 3 HP at the start of each of its turns, 3 more for each stack past the first. Water puts it out."),
-  stunned: info("stunned", "Loses its next turn. Attacks against it have advantage."),
+  bleeding: info("bleeding", `Loses ${EFFECT_TICK.bleeding} HP for each stack at the start of each of its turns. Lasts ${STACK_TURNS.bleeding} turns; a new stack starts them all over. Any healing closes one stack.`),
+  burning: info("burning", `Loses ${EFFECT_TICK.burning} HP for each stack at the start of each of its turns. Each stack burns out ${STACK_TURNS.burning} turns after it caught. Water puts it all out.`),
+  stunned: info("stunned", "Loses its next turn, and cannot strike at anyone passing it until then. Attacks against it have advantage."),
   guarded: info("guarded", "Takes half damage until its next turn."),
-  taunting: info("taunting", "Enemies that can reach it go for it, until its next turn."),
+  taunting: info("taunting", "Draws the enemy: they would far sooner attack it than anyone else, until its next turn."),
   slowed: info("slowed", "Half movement for each AP."),
   hasted: info("hasted", "Double movement for each AP."),
-  glitched: info("glitched", "Its next attack is rolled with disadvantage."),
+  // Its stacks are the rolls to hit left to fumble: they do not run down with the turns, only with the rolls.
+  fumbling: info("fumbling", "Each of its next rolls to hit, one for each stack, is made with disadvantage. Gone when the fight ends."),
   exposed: info("exposed", "Attacks against it have advantage."),
   poisoned: { name: "Poisoned", blurb: "Its attacks are rolled with disadvantage.", color: "#a3e635" },
-  prone: info("prone", "Flat on the ground: standing up costs 1 AP. Melee attacks against it have advantage, ranged attacks disadvantage."),
+  prone: info("prone", "Flat on the ground: getting up takes 1 AP of its next turn, and it cannot strike at anyone passing it until then. Melee attacks against it have advantage, ranged attacks disadvantage."),
   sundered: info("sundered", `Its armor is dented: ${SUNDERED_DEFENCE} less Defence.`),
-  wet: { name: "Wet", blurb: "Soaked through: lightning hits harder, and it cannot burn.", color: "#7dd3fc" },
+  memento_mori: info("memento_mori", "Each time it takes damage it starts Fumbling, unless it is Fumbling already."),
+  reeling: info("reeling", `Shaken by a heavy blow: as much less AP on each of its turns while it lasts as its number says (${REELING_AP} unless said).`),
+  weakened: info("weakened", `Hexed: as much less on every save while it lasts as its number says (${WEAKENED_SAVES} unless said).`),
+  fettered: { name: "Fettered", blurb: "Chained to a spot: it cannot go more than a hex from it by its own doing.", color: "#8fa8c8" },
+  wet: { name: "Wet", blurb: "Soaked through: lightning hits it harder, and it cannot catch fire.", color: "#7dd3fc" },
   beacon: { name: "Beacon", blurb: `Gives light, and it and allies within 2 hexes get +${AURAS.beaconHit} to hit.`, color: "#fff7d6" },
   mending: { name: "Healing Aura", blurb: "At the start of each of its turns, it and every ally within 2 hexes heal a little.", color: "#5dffa0" },
   bolstered: { name: "Bolstered", blurb: "A shield takes the damage of blows before its HP does, until it is spent or the fight ends.", color: "#9ec9ff" },
@@ -557,12 +573,17 @@ export const CONDITION_INFO: Record<Condition, { name: string; blurb: string; co
   lively_shanty: { name: "Lively Shanty", blurb: `Singing: allies within reach get +${SHANTY.lively.hit} to hit and a little more damage. Each who joins widens it a hex and adds +${SHANTY.lively.surge} to hit until the Bard's next turn.`, color: "#ffb020" },
   dour_shanty: { name: "Dour Shanty", blurb: `Singing: allies within reach get +${SHANTY.dour.defence} Defence. Each who joins widens it a hex and adds +${SHANTY.dour.perJoin} Defence until the Bard's next turn.`, color: "#6f8fff" },
   windgod_shanty: { name: "Wind-god's Shanty", blurb: `Singing: allies within reach move ${SHANTY.windgod.move} further for each AP of movement and cannot be Slowed. Each who joins widens it a hex and adds ${SHANTY.windgod.perJoin} more for each AP until the Bard's next turn.`, color: "#3fe0c5" },
-  inspired: { name: "Inspired", blurb: "Its next roll to hit has advantage.", color: "#ffe08a" },
-  // Its rounds are the lucky rolls left: they do not run down with the turns, only with the rolls.
+  // Its stacks are the inspired rolls left: they do not run down with the turns, only with the rolls.
+  inspired: { name: "Inspired", blurb: "Each of its next rolls to hit, one for each stack, has advantage. Gone when the fight ends.", color: "#ffe08a" },
+  // Its stacks are the lucky rolls left: they do not run down with the turns, only with the rolls.
   lucky: { name: "Lucky", blurb: "A coin in the town well: each of its next rolls to hit, one for each coin, has advantage.", color: "#f6d365" },
+  slowing_field: { name: "Slowing Field", blurb: "Every foe within 2 hexes of it is Slowed: as their turn starts in it, or as they step into it.", color: "#7fe3ff" },
+  blizzard_aura: { name: "Blizzard Aura", blurb: "A blizzard whirls round it: every foe beside it is cut by the ice as their turn starts there or the first time in a turn they step in, and must save or be Reeling.", color: "#e4f4ff" },
+  // Its stacks are the attacks it has left: they do not run down with the turns, only with the attacks (engine.ts SPURS).
+  frenzied: { name: "Frenzied", blurb: "Driven on by a howl: each of its next attacks, one for each stack, has advantage, and every one that draws blood leaves a stack of Bleeding.", color: "#e0322b" },
   guiding_light: { name: "Guiding Light", blurb: "Lit up by a star: every attack against it has advantage.", color: "#fff3a8" },
   north_star: { name: "North Star", blurb: "Every blow it lands sets the target Burning, one stack more if the blow would have set it Burning anyway.", color: "#ffd166" },
-  taunted: { name: "Taunted", blurb: "Goaded: it must go for the one who taunted it, if it can reach them.", color: "#ff5a3c" },
+  taunted: { name: "Taunted", blurb: "Goaded: it attacks no one but the one who taunted it, and comes at them if it cannot reach them yet.", color: "#ff5a3c" },
   charted: { name: "Course Charted", blurb: `A mark on the map: it and its allies move ${CHART.speed} further each turn, on steps that bring them nearer the mark.`, color: "#ff4d4d" },
   drowning: { name: "Drowning", blurb: `Loses ${DROWNING.tick} HP a stack at the start of each of its turns, then must hold its breath (harder for every stack) or lose ${ACTION_AP} AP. A new stack keeps them all going ${DROWNING.rounds} more turns.`, color: "#2fa4c9" },
   drowning_curse: { name: "Curse of Drowning", blurb: "Takes a stack of Drowning each time it starts or ends a turn standing in water.", color: "#1f7fa0" },
@@ -570,6 +591,53 @@ export const CONDITION_INFO: Record<Condition, { name: string; blurb: string; co
   tailwind: { name: "Tailwind", blurb: "The wind at its back: more movement for each AP on its next turn.", color: "#bfe8ff" },
   red_sky: { name: "Red Sky at Morning", blurb: "A bad omen: its attacks are rolled with disadvantage.", color: "#e2483d" },
 };
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+/** The next `n` of something: "its next roll to hit", "each of its next 3 rolls to hit". */
+const nextOf = (n: number, one: string, many: string) => (n === 1 ? `its next ${one}` : `each of its next ${n} ${many}`);
+
+/**
+ * What one condition does, told with the numbers it has on the unit that bears it (its stacks, its AP, its reach),
+ * for the closer look at a unit (holding Alt over it). `by` is the name of whoever laid it (Taunted, the Black Spot).
+ * A condition with no numbers of its own is not here: CONDITION_INFO's blurb says all it does.
+ */
+const CONDITION_DETAIL: Partial<Record<Condition, (c: UnitCondition, by?: string) => string>> = {
+  bleeding: (c) => {
+    const n = c.amount ?? 1;
+    return `Loses ${EFFECT_TICK.bleeding * n} HP at the start of each of its turns (${EFFECT_TICK.bleeding} for each of its ${plural(n, "stack")}), for ${plural(c.rounds, "more turn")}. A new stack starts them all over. Any healing closes one stack.`;
+  },
+  burning: (c) => {
+    const turns = (c.stacks ?? [{ rounds: c.rounds }]).map((s) => s.rounds).sort((a, b) => b - a);
+    const n = turns.length;
+    const left = n === 1 ? `It burns out in ${plural(turns[0], "turn")}` : `Each stack burns out on its own: in ${turns.join(", ")} turns`;
+    return `Loses ${EFFECT_TICK.burning * n} HP at the start of each of its turns (${EFFECT_TICK.burning} for each of its ${plural(n, "stack")}). ${left}. Water puts it all out.`;
+  },
+  reeling: (c) => `Shaken by a heavy blow: ${c.amount ?? REELING_AP} AP less to spend on ${c.rounds > 1 ? `each of its next ${c.rounds} turns` : "its next turn"}.`,
+  weakened: (c) => `Hexed: ${c.amount ?? WEAKENED_SAVES} less on every save, for ${plural(c.rounds, "more turn")}.`,
+  fettered: (c) => `Chained to a spot: it cannot go more than ${plural(c.amount ?? 1, "hex", "hexes")} from it by its own doing, for ${plural(c.rounds, "more turn")}.`,
+  fumbling: (c) => `${nextOf(c.amount ?? c.rounds, "roll to hit is", "rolls to hit is")} made with disadvantage. Gone when the fight ends.`.replace(/^./, (x) => x.toUpperCase()),
+  inspired: (c) => `${nextOf(c.amount ?? c.rounds, "roll to hit has", "rolls to hit has")} advantage. Gone when the fight ends.`.replace(/^./, (x) => x.toUpperCase()),
+  lucky: (c) => `A coin in the town well: ${nextOf(c.amount ?? c.rounds, "roll to hit has", "rolls to hit, one for each coin, has")} advantage.`,
+  frenzied: (c) => `Driven on by a howl: ${nextOf(c.amount ?? c.rounds, "attack has", "attacks has")} advantage, and every one that draws blood leaves a stack of Bleeding.`,
+  drowning: (c) => {
+    const n = c.amount ?? 1;
+    return `Loses ${DROWNING.tick * n} HP at the start of each of its turns (${DROWNING.tick} for each of its ${plural(n, "stack")}), then must hold its breath (a save of ${DROWNING.dc + DROWNING.perStack * n} or better) or lose ${ACTION_AP} AP. A new stack keeps them all going ${DROWNING.rounds} more turns.`;
+  },
+  tailwind: (c) => `The wind at its back: ${c.amount ?? 1} more movement for each AP on its next turn.`,
+  slowing_field: (c) => `Every foe within ${plural(c.amount ?? 2, "hex", "hexes")} of it is Slowed: as their turn starts in it, or as they step into it.`,
+  blizzard_aura: (c) => `A blizzard whirls round it: every foe within ${plural(c.amount ?? 1, "hex", "hexes")} of it is cut by the ice as their turn starts there or the first time in a turn they step in, and must save or be Reeling.`,
+  contraband: (c) => `${plural(c.amount ?? 1, "smuggled fire bomb")} in the pack, to throw before they are found out.`,
+  taunted: (_c, by) => `Goaded${by ? ` by ${by}` : ""}: it attacks no one but ${by ?? "the one who taunted it"}, and comes at them if it cannot reach them yet.`,
+  black_spot: (_c, by) => `${CONDITION_INFO.black_spot.blurb}${by ? ` Laid by ${by}.` : ""}`,
+  drowning_curse: (_c, by) => `${CONDITION_INFO.drowning_curse.blurb}${by ? ` Laid by ${by}.` : ""}`,
+  lively_shanty: (c) => `Singing, to every ally within ${plural(SHANTY.radius + (c.joined?.length ?? 0), "hex", "hexes")}: +${SHANTY.lively.hit + (c.surge ?? 0) * SHANTY.lively.surge} to hit and a little more damage. Each who joins widens it a hex and adds +${SHANTY.lively.surge} to hit until the Bard's next turn.`,
+  dour_shanty: (c) => `Singing, to every ally within ${plural(SHANTY.radius + (c.joined?.length ?? 0), "hex", "hexes")}: +${SHANTY.dour.defence + (c.surge ?? 0) * SHANTY.dour.perJoin} Defence. Each who joins widens it a hex and adds +${SHANTY.dour.perJoin} Defence until the Bard's next turn.`,
+  windgod_shanty: (c) => `Singing, to every ally within ${plural(SHANTY.radius + (c.joined?.length ?? 0), "hex", "hexes")}: ${SHANTY.windgod.move + (c.surge ?? 0) * SHANTY.windgod.perJoin} more movement for each AP, and none of them can be Slowed. Each who joins widens it a hex and adds ${SHANTY.windgod.perJoin} more until the Bard's next turn.`,
+};
+
+/** What a condition on a unit does, in full, with its own numbers (CONDITION_DETAIL), or what CONDITION_INFO says of its kind. */
+export const conditionText = (c: UnitCondition, nameOf?: (id: string) => string | undefined): string =>
+  CONDITION_DETAIL[c.kind]?.(c, c.by ? nameOf?.(c.by) : undefined) ?? CONDITION_INFO[c.kind].blurb;
 
 // ---------- common actions ----------
 
@@ -687,7 +755,15 @@ export function commonCostFor(unit: Pick<Unit, "kind" | "perks">, what: CommonAc
 // ---------- enemies ----------
 
 /** What an enemy's ability does besides its damage, when it lands. */
-export type EnemyAttackKit = Pick<EnemyAbilityDef, "surface" | "push" | "chills">;
+export type EnemyAttackKit = Pick<EnemyAbilityDef, "surface" | "push" | "chills" | "splash" | "drain" | "area" | "blast" | "sweep" | "cone" | "line" | "dash" | "onSave" | "rally" | "field" | "summon" | "tether" | "saves"> & {
+  /** What it heals each of its side it lands on (EnemyAbilityDef `heal`), grown with level. */
+  heal?: Dice;
+  /** Its second shaking (EnemyAbilityDef `aftershock`), its damage grown with level as the first's is. */
+  aftershock?: { dice: Dice; saveOr?: Inflict };
+};
+
+/** The share of a blow that splashes onto each other hero beside its target (EnemyAbilityDef `splash`). */
+export const SPLASH_SHARE = 0.5;
 
 /**
  * How an enemy likes to fight, whatever it carries: what the turn (ai.ts) and its abilities' behaviours
@@ -701,11 +777,17 @@ export interface Mind {
   height: number;
   /** How much it minds harm on the way: fire and poison underfoot, and blows drawn by walking out of reach. 1 is the usual; 0 does not care. */
   caution: number;
-  /** What it adds for a blow at someone one of its own is already beside. */
-  flank: number;
+  /**
+   * What ending its move beside the one that called it into the fight costs it, while that one can call more of its side
+   * (a Spiderling and its Broodmother): it leaves the hexes round its caller free for more to come. 0 does not care.
+   */
+  clear: number;
 }
 
-export const DEFAULT_MIND: Mind = { spacing: 0, height: 0, caution: 1, flank: 1 };
+export const DEFAULT_MIND: Mind = { spacing: 0, height: 0, caution: 1, clear: 0 };
+
+/** What a creature called into a fight minds about standing beside its caller (Mind `clear`): less than a blow, so it still strikes from there if that is the only place it can. */
+export const CLEAR_OF_CALLER = 2;
 
 /** Those that shoot: they like room, and to look down on what they shoot at. */
 const SHOOTER: Partial<Mind> = { spacing: 0.4, height: 0.5 };
@@ -717,36 +799,35 @@ export interface EnemyKit {
   fly?: boolean;
   /** Advantage on an attack when one of its own is next to the target. */
   pack?: boolean;
-  /** It has the hands and the wit for it: it will shove someone beside it over a drop or into a pit (its bonus action). */
-  shoves?: boolean;
 }
 
 export const ENEMY_KIT: Record<string, EnemyKit> = {
   dummy: {},
-  bandit: { shoves: true },
+  bandit: {},
   wolf: { pack: true },
-  bear: { shoves: true },
-  // Its Stomp, like anything that strikes the whole crew, is a burst around it.
-  ogre: { shoves: true },
-  // It rakes up close, and will throw a rock at whoever keeps away. (Its wounds closing is in zone.ts, at the start of its turn.)
-  troll: { shoves: true },
+  bear: {},
+  // Its Slam, like anything that strikes the whole crew, is a burst around it.
+  ogre: {},
+  // It rakes and chomps up close, and will throw a rock at whoever keeps away. (Its wounds closing is in zone.ts, at the start of its turn.)
+  troll: {},
   cultist: { mind: SHOOTER },
-  brute: { shoves: true },
+  brute: {},
   archer: { mind: SHOOTER },
   alpha: { pack: true },
-  great_bear: { shoves: true },
-  guardian: { shoves: true },
+  great_bear: {},
+  guardian: {},
   shade: {},
   bat: { fly: true },
-  skeleton: { shoves: true },
+  skeleton: {},
   slime: {},
   haunt: {},
-  villain: { shoves: true },
   spider: { pack: true },
   broodmother: {},
+  // A Broodmother's young: they keep off the hexes round her, so she has room to call more.
+  spiderling: { pack: true, mind: { clear: CLEAR_OF_CALLER } },
   frost_wolf: { pack: true },
   ember_hound: { pack: true },
-  snow_bear: { shoves: true },
+  snow_bear: {},
   wraith: { mind: SHOOTER },
   witch: { mind: SHOOTER },
 };
@@ -759,19 +840,22 @@ export function mindOf(kind: string): Mind {
   return mind;
 }
 
-/** How far an attack on every hero reaches out from the enemy making it. */
+/** How far an attack on every hero reaches out from the enemy making it, unless it says (EnemyAbilityDef `range`). */
 export const ENEMY_BURST = 2;
 
 export interface EnemyStrike {
   /** The ability's id (enemyabilities.ts). */
   id: string;
   name: string;
-  /** 1 for a blow; more needs a clear line. An attack on every hero is a burst around the enemy. */
+  /** 1 for a blow; more needs a clear line. An attack on every hero is a burst around the enemy, reaching this far. */
   range: number;
   burst: boolean;
   dice: Dice;
-  bonus: number;
-  perfect?: EnemyAbilityDef["perfect"];
+  /** It does no harm when it lands (a shove): only what it does besides. */
+  harmless: boolean;
+  /** Its potency at this level, with edge: added to its roll to hit, and the DC of saves against it is 8 + this. */
+  potency: number;
+  saveOr?: EnemyAbilityDef["saveOr"];
   weight: number;
   /** Which behaviour weighs it up (behaviours.ts BEHAVIOURS). */
   behaviour: BehaviourId;
@@ -781,41 +865,59 @@ export interface EnemyStrike {
   kit: EnemyAttackKit;
 }
 
+/**
+ * How far an enemy's fancy sways what it does: each time it picks an attack, what each ability on each target is worth
+ * to it is taken up or down by as much as this share, at random, so it does not do the same thing every time.
+ */
+export const ENEMY_WHIM = 0.35;
+
 /** What every enemy adds to the damage and the to-hit of its abilities, and to the saves against what it does. */
 export const ENEMY_EDGE = 0;
 
 /**
  * Enemy abilities (by id) as they work on the tiles, for an enemy of this level. `more` is what
- * the map's modifiers add to every attack's damage and its bonus to hit (zone/mods.ts). An id the pool does not
- * have is passed over.
+ * the map's modifiers add to every attack's damage and its potency (zone/mods.ts). An id the pool does not
+ * have is passed over, and so is a passive one (an `aura`): it is never used, only had (engine.ts saveRoll).
  */
 export function abilityStrikes(ids: readonly string[], level: number, more = 0): EnemyStrike[] {
   const edge = ENEMY_EDGE + more;
   return ids.flatMap((id) => {
     const a = ENEMY_ABILITIES[id];
-    if (!a) return [];
+    if (!a || a.aura) return [];
     const burst = a.shape === "burst";
     return [
       {
         id,
         name: a.name,
-        range: burst ? ENEMY_BURST : (a.range ?? 1),
+        range: burst ? (a.range ?? ENEMY_BURST) : (a.range ?? 1),
         burst,
-        dice: diceFor(a.damage + Math.floor(level / 2) + edge),
-        bonus: a.toHit + Math.floor((Math.max(1, level) - 1) / 4) + edge,
-        perfect: a.perfect,
+        dice: diceFor(scaled(a.damage, a.scales?.damage ?? DEFAULT_SCALE, level) + edge),
+        harmless: a.damage <= 0,
+        potency: a.potency + Math.floor((Math.max(1, level) - 1) / 4) + edge,
+        saveOr: a.saveOr,
         weight: a.weight,
-        behaviour: (a.behaviour ?? (burst ? "burst" : "strike")) as BehaviourId,
+        behaviour: (a.behaviour ?? (a.summon ? "summon" : burst ? "burst" : "strike")) as BehaviourId,
         cost: a.cost ?? ACTION_AP,
         cooldown: a.cooldown ?? 0,
-        kit: { surface: a.surface, push: a.push, chills: a.chills },
+        kit: {
+          surface: a.surface, push: a.push, chills: a.chills, splash: a.splash, drain: a.drain, area: a.area, blast: a.blast, sweep: a.sweep, cone: a.cone, line: a.line, dash: a.dash, onSave: a.onSave, rally: a.rally, field: a.field, summon: a.summon, tether: a.tether, saves: a.saves,
+          ...(a.heal ? { heal: diceFor(scaled(a.heal, a.scales?.heal ?? DEFAULT_SCALE, level)) } : {}),
+          ...(a.aftershock ? { aftershock: { dice: diceFor(scaled(a.aftershock.damage, a.scales?.damage ?? DEFAULT_SCALE, level) + edge), saveOr: a.aftershock.saveOr } } : {}),
+        },
       },
     ];
   });
 }
 
+/** The dice an enemy's retort (EnemyDef `retort`: a slime's Acid Armor) hurts with at this level, with the map's `more` and the edge added, as an ability's damage is. */
+export const retortDice = (retort: Retort, level: number, more = 0): Dice => diceFor(scaled(retort.damage, retort.scale ?? DEFAULT_SCALE, level) + ENEMY_EDGE + more);
+
 /** What an enemy kind starts with, as abilityStrikes makes them. */
 export const enemyStrikes = (kind: string, level: number, more = 0): EnemyStrike[] => abilityStrikes(ENEMIES[kind]?.abilities ?? [], level, more);
+
+/** One of this enemy's own abilities as it works on this map, ready or not (a dev order uses it either way). */
+export const unitStrike = (state: Pick<ZoneState, "options">, unit: Unit, id: string): EnemyStrike | undefined =>
+  unit.abilities.includes(id) ? abilityStrikes([id], unit.level, modsOf(state.options).edge)[0] : undefined;
 
 /** What this enemy can do just now: its own abilities, those that are ready, on this map. */
 export const unitStrikes = (state: Pick<ZoneState, "options">, unit: Unit): EnemyStrike[] =>

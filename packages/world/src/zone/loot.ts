@@ -128,13 +128,25 @@ export function payBounty(ctx: Ctx, by?: Unit): void {
   ctx.events.push({ t: "bounty", spot: SPOILS_ID });
 }
 
-/** Why `unit` cannot look into (or take from) this, in words, or null if it can. */
+/**
+ * What is searched together with `spot`: a body and every other body within a hex of it (one on the same hex too), so a
+ * heap of the fallen is gone through at once. Anything else on its own. `spot` first.
+ */
+export function lootGroup(state: Pick<ZoneState, "loot">, spot: LootSpot): LootSpot[] {
+  if (spot.kind !== "body") return [spot];
+  return [spot, ...(state.loot ?? []).filter((s) => s !== spot && s.kind === "body" && hexDistance(s.pos, spot.pos) <= 1)];
+}
+
+/**
+ * Why `unit` cannot look into (or take from) this, in words, or null if it can. A body is in reach from beside it, or
+ * from beside another body searched with it (lootGroup).
+ */
 export function checkLoot(state: ZoneState, unit: Unit, spot: LootSpot | undefined): string | null {
   if (!spot) return "There is nothing there to search.";
   if (unit.side !== "hero" || unit.controller || unit.summon) return "Only your own hero can search it.";
   if (unit.down) return "Not while you are down.";
   if (inFight(state, unit.id)) return "Not in the middle of a fight: it will keep.";
-  if (hexDistance(unit.pos, spot.pos) > 1) return "Go up to it first.";
+  if (!lootGroup(state, spot).some((s) => hexDistance(unit.pos, s.pos) <= 1)) return "Go up to it first.";
   return null;
 }
 

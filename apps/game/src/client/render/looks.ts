@@ -156,9 +156,6 @@ export const LOOKS: Record<string, Look> = {
   guardian: { skin: "#9aa4b2", hair: "#7b8494", body: "#6b7280", legs: "#4b5563", accent: "#7fe3ff", hat: "none", weapon: "none", barnacles: true, sash: "#3d6b2e", glowEyes: "#7fe3ff" },
   // The Hedge Witch: sallow and hook-nosed under a wide bent hat, in a ragged moss-green robe to the ankles, with a gnarled staff of root.
   witch: { skin: "#c3c79c", hair: "#9a9f8e", body: "#4c6134", legs: "#2c3122", accent: "#9fcb46", hat: "wizard", hatColor: "#33402a", weapon: "root_staff", coat: true, nose: "hooked", eyes: "narrow" },
-  // The Villain captains a ghost ship: a black tricorn, a pale face with eyes alight, a long black coat edged in
-  // silver with silver epaulettes, a blood-red sash, and a cutlass.
-  villain: { skin: "#9fb2b0", hair: "#101010", body: "#1a1d22", legs: "#15151c", accent: "#e23b3b", hat: "tricorn", hatColor: "#121216", weapon: "cutlass", coat: true, coatColor: "#20242b", coatTrim: "#8a8a9a", epaulettes: "#8a8a9a", sash: "#5a1a1a", glowEyes: "#9fe8ff", boots: "#111114" },
 };
 
 /** The colour fields of a look, which an admin palette override may change. */

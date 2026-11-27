@@ -410,3 +410,44 @@ input::placeholder { color: #a5765a; }
 .badge.offered { color: #3a1d20; background: var(--gold); font-weight: bold; padding: 1px 4px; }
 .hut-box-row { display: flex; align-items: center; gap: 8px; }
 .hut-box-row > .with-icon { flex: 1; min-width: 0; }
+
+/* ==========================================================================
+   The new UI: timber. Use it for anything new (and anything being reworked),
+   not the pixel frames above. The fight interface's look (zone/fight.css,
+   the combat log): a dark board, a hard dark edge with a thin rim, and soft
+   controls. Put `timber` on the box; a head strip inside it takes
+   `timber-head`. Everything in it (buttons, fields, tick boxes) follows.
+   ========================================================================== */
+.timber {
+  --t-out: #1c0d0e; --t-rim: #6b3524; --t-wood-hi: #3d231d; --t-brass: #c9a24a; --t-brass-hi: #f6e2a1;
+  color: var(--text, #fbe6c8);
+  background: linear-gradient(180deg, rgba(255, 214, 170, 0.05), rgba(0, 0, 0, 0) 30%, rgba(0, 0, 0, 0.25)), linear-gradient(180deg, rgba(40, 20, 17, 0.96), rgba(24, 12, 10, 0.94));
+  border: 3px solid var(--t-out); border-image: none; border-radius: 0;
+  box-shadow: 0 0 0 1px var(--t-rim), 0 8px 20px rgba(0, 0, 0, 0.5);
+}
+.timber-head {
+  border-bottom: 2px solid var(--t-out);
+  background: linear-gradient(180deg, rgba(255, 214, 170, 0.12), rgba(0, 0, 0, 0.2)), linear-gradient(rgba(96, 30, 24, 0.34), rgba(96, 30, 24, 0.34)), var(--tex-wood, none) 0 0 / 128px 128px, var(--t-wood-hi);
+  box-shadow: inset 0 1px 0 rgba(214, 150, 96, 0.3);
+}
+.timber button {
+  padding: 2px 9px 3px; border: 1px solid var(--t-out); border-radius: 3px; color: var(--text, #fbe6c8); text-shadow: 0 1px 0 rgba(0, 0, 0, 0.7);
+  background: linear-gradient(180deg, rgba(255, 220, 180, 0.16), rgba(0, 0, 0, 0.22)), #8a4a2c;
+  box-shadow: inset 0 1px 0 rgba(255, 214, 170, 0.25), 0 0 0 1px rgba(107, 53, 36, 0.7);
+}
+.timber button:hover:not(:disabled) { border-color: var(--t-out); background: linear-gradient(180deg, rgba(255, 220, 180, 0.24), rgba(0, 0, 0, 0.14)), #a3593a; box-shadow: inset 0 1px 0 rgba(255, 214, 170, 0.35), 0 0 0 1px var(--t-brass); }
+.timber button:active:not(:disabled) { box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(107, 53, 36, 0.7); }
+.timber button.selected, .timber button[aria-selected="true"], .timber button[aria-pressed="true"] { color: #2a1406; text-shadow: none; background: linear-gradient(180deg, #fbe7a6, #e0b04a); border-color: #6b4a12; box-shadow: inset 0 1px 0 #fff7d6, 0 0 0 1px #6b4a12; }
+.timber button.primary { color: #f1f6e6; background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(0, 0, 0, 0.18)), #3e7a52; border-color: #142a1a; box-shadow: inset 0 1px 0 rgba(220, 255, 220, 0.3), 0 0 0 1px #2f5a3c; font-family: inherit; font-size: inherit; letter-spacing: 0; }
+.timber button.primary:hover:not(:disabled) { background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(0, 0, 0, 0.1)), #4a8d60; }
+.timber button.link { padding: 0; border: none; background: none; box-shadow: none; color: var(--t-brass-hi); text-decoration: underline; }
+.timber button:disabled { opacity: 0.5; }
+.timber input:not([type="checkbox"]):not([type="range"]), .timber select {
+  padding: 2px 6px; border: 1px solid var(--t-out); border-radius: 3px; color: var(--text, #fbe6c8); background: rgba(10, 5, 4, 0.55);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(107, 53, 36, 0.55);
+}
+.timber input:focus, .timber select:focus, .timber button:focus-visible { outline: 1px solid var(--t-brass-hi); outline-offset: 1px; }
+.timber input[type="checkbox"] { width: 15px; height: 15px; border-radius: 3px; vertical-align: -3px; border: 1px solid var(--t-out); background: rgba(10, 5, 4, 0.55); box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--t-rim); }
+.timber input[type="checkbox"]:checked { border-color: #6b4a12; box-shadow: 0 0 0 1px var(--t-brass); background: linear-gradient(180deg, #fbe7a6, #e0b04a); }
+.timber input[type="checkbox"]:checked::after { content: ""; display: block; width: 4px; height: 8px; margin: 1px auto 0; border: solid #2a1406; border-width: 0 2px 2px 0; rotate: 45deg; }
+.timber kbd { padding: 0 5px; border: 1px solid var(--t-out); border-radius: 3px; background: rgba(10, 5, 4, 0.55); box-shadow: 0 0 0 1px var(--t-rim); }

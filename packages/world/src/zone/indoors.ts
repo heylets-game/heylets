@@ -34,7 +34,7 @@ import { GROUP_EXTRAS } from "./kit";
 import type { Laid, LaidGroup } from "./lay";
 import { modsOf } from "./mods";
 import { propOf } from "./props";
-import { SITES, backdropOf, bandOf, bandsBeside, factionsOf, type SiteDef, type SiteId } from "./sites";
+import { SITES, backdropOf, bandOf, bandsBeside, factionsOf, spaced, type SiteDef, type SiteId } from "./sites";
 import type { GroundSurface, ZoneOptions } from "./types";
 
 const LASTING_ROUNDS = 99;
@@ -625,9 +625,12 @@ export function layInside(seed: string, options: ZoneOptions, siteId: SiteId, gr
     // The band for the party the map is made for, and what it would be for every other (sites.ts bandsBeside).
     const band = bandAt(i, sizeFor(options.party), rng.pick);
     const bands = bandsBeside(band, options.party, (p, pick) => bandAt(i, sizeFor(p), pick), `${seed}|${i}`);
+    // Its own posts by part first, then the floor nearest; spread out (sites.ts spaced) where the room allows.
     for (const member of band) {
-      const mine = room.posts.find((o) => o.role === member.role && standable(o.pos));
-      const spot = mine?.pos ?? (member.role === "shot" ? near.filter(standable).sort((a, b) => elev(b) - elev(a) || hexDistance(a, room.centre) - hexDistance(b, room.centre))[0] : near.find(standable));
+      const pick = (fits: (p: HexPos) => boolean): HexPos | undefined =>
+        room.posts.find((o) => o.role === member.role && fits(o.pos))?.pos ??
+        (member.role === "shot" ? near.filter(fits).sort((a, b) => elev(b) - elev(a) || hexDistance(a, room.centre) - hexDistance(b, room.centre))[0] : near.find(fits));
+      const spot = pick((p) => standable(p) && spaced(p, posts)) ?? pick(standable);
       if (!spot) continue;
       taken.add(posKey(spot));
       kinds.push(member.kind);

@@ -1,50 +1,62 @@
-// The dev toolbox: a small spanner in the top-right corner of every screen,
-// there only on a development deployment (the worker's ENVIRONMENT is "dev":
-// local and staging; see devTools.ts). It opens a window with a tab for each
+// The dev toolbox: a small spanner at the foot of the camera's buttons on the
+// right edge of a map (in the bottom-right corner where there is none), there
+// only on a development deployment (the worker's ENVIRONMENT is "dev":
+// local and staging; see devTools.ts). It opens a window docked down the left
+// side of the screen, top to bottom, and no wider than leaves the bottom bar
+// and the turn bar over it clear (dockWidth), in the fight
+// interface's timber (the combat log's: zone/fight.css): its name, its tabs
+// and its close and minimize buttons stay put at the top, and only the tab
+// under them scrolls. Minimized, it is that top alone. It has a tab for each
 // kind of tool:
 //
-//   Sky & sound   hold the time of day and the weather where you want them,
-//                 and see what the audio engine is doing. Your own tab only.
-//   Gold          add gold to your hero's purse, or take it away.
-//   Items         put a chosen piece of gear, or some of a material, in
-//                 your hero's pack, or take a material away.
-//   Figures       open the figure lab, a stage for trying any figure's
-//                 animations (FigureLab.tsx), or switch the people back to
-//                 their old boxes (this browser only; it reloads the page).
-//   Maps          make a zone (a map to walk and fight on) and walk into it;
+//   Audio/visual  open the model preview, a stage for trying any figure's
+//                 animations (FigureLab.tsx), or the sound lab, every sound
+//                 in the game to search and play (SoundLab.tsx); hold the time of day and the
+//                 weather where you want them, and see what the audio engine
+//                 is doing. Your own tab only.
+//   Items         add gold to your hero's purse, or take it away; put a
+//                 chosen piece of gear, or some of a material, in your
+//                 hero's pack, or take a material away.
+//   Maps/combat   make a zone (a map to walk and fight on) and walk into it;
 //                 while one is on screen, place enemies, paint the ground and
 //                 the rest (zone/MapsTab.tsx).
 //
 // Gold and items are changed on the server (server/dev.ts), which refuses
 // outside a development deployment. They are your own hero's alone.
 //
-// Open or shut, and the tab it was on, it stays that way from view to view
-// and across a reload.
+// T opens it in full (from shut or minimized), and shuts it when it is open.
+//
+// Open or shut, minimized or not, and the tab it was on, it stays that way
+// from view to view and across a reload.
 
-import { Suspense, lazy, useState, type ReactNode } from "react";
+import { Suspense, lazy, useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { GEAR_BASES, HERO_CLASSES, RARITIES, RESOURCE_KINDS, SLOTS, SLOT_LABEL, WEAPONS, slotOfRef, type Rarity, type ResourceKind, type Slot } from "@gantt-quest/world";
 import { api, type Me } from "./api";
-import { SkyAndSound } from "./audio/SoundButton";
-import { DragPanel } from "./DragPanel";
+import { SkyControls, SoundReadout } from "./audio/SoundButton";
 import { itemName, label } from "./labels";
 import { PixelIcon } from "./PixelIcon";
 import { BLOCKY_KEY } from "./render/figures";
+import { DevSection } from "./DevSection";
 import { WRENCH } from "./ui/menuIcons";
 import { MapsTab } from "./zone/MapsTab";
 
 /** Loaded only when it is opened: it is a dev tool, and no part of the game. */
 const FigureLab = lazy(() => import("./FigureLab"));
+const SoundLab = lazy(() => import("./SoundLab"));
 
 const OPEN_KEY = "gq.dev.readout";
 const TAB_KEY = "gq.dev.tab";
+const FOLDED_KEY = "gq.dev.folded";
 const TABS = [
-  ["sky", "Sky & sound"],
-  ["gold", "Gold"],
+  ["av", "Audio/visual"],
   ["items", "Items"],
-  ["figures", "Figures"],
-  ["maps", "Maps"],
+  ["maps", "Maps/combat"],
 ] as const;
 type Tab = (typeof TABS)[number][0];
+
+/** Tabs there once were, and where what was on them is now. */
+const FORMER_TABS: Record<string, Tab> = { gold: "items", sky: "av", figures: "av" };
 
 const recall = (key: string): string | null => {
   try {
@@ -62,10 +74,97 @@ const remember = (key: string, value: string | null) => {
   }
 };
 
+/**
+ * The camera's column of buttons on the right edge of the map on screen (render/WorldRenderer.ts builds it, outside
+ * React), so the spanner can sit at its foot. Null on a screen with no map. A window's view in a hut is drawn by a
+ * renderer of its own, with a column nobody sees, so only one that is laid out counts.
+ */
+function useCameraColumn(): HTMLElement | null {
+  const [column, setColumn] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    const find = () => {
+      const shown = [...document.querySelectorAll<HTMLElement>(".camera-rotate")].filter((el) => el.getClientRects().length > 0);
+      const next = shown[shown.length - 1] ?? null;
+      setColumn((prev) => (prev === next ? prev : next));
+    };
+    find();
+    // Looked for again once a frame at most, however much of the page changes in it.
+    let frame = 0;
+    const watch = new MutationObserver(() => {
+      if (!frame) frame = requestAnimationFrame(() => ((frame = 0), find()));
+    });
+    watch.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      watch.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }, []);
+  return column;
+}
+
+/** The bottom bar and the turn bar over it: the toolbox stays to the left of both. */
+const BARS = ".hud.full .hud-rack, .fight-turn-bar";
+/** The toolbox's widest, and the gap it keeps from the bars. */
+const DOCK_MAX = 500;
+const DOCK_GAP = 10;
+
+/**
+ * How wide the docked toolbox may be: DOCK_MAX, or less where the bars on screen come nearer the left edge than
+ * that. Measured on the screen (the toolbox is outside the views the UI scale zooms), looked at again twice a
+ * second and on resizing, as the bars come and go with fights. Null: as wide as it likes.
+ */
+function useDockWidth(): number | null {
+  const [width, setWidth] = useState<number | null>(null);
+  useEffect(() => {
+    const measure = () => {
+      const lefts = [...document.querySelectorAll<HTMLElement>(BARS)].map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0).map((r) => r.left);
+      const room = lefts.length > 0 ? Math.floor(Math.min(...lefts)) - 8 - DOCK_GAP : null;
+      const next = room === null || room >= DOCK_MAX ? null : Math.max(260, room);
+      setWidth((prev) => (prev === next ? prev : next));
+    };
+    measure();
+    const timer = setInterval(measure, 500);
+    addEventListener("resize", measure);
+    return () => {
+      clearInterval(timer);
+      removeEventListener("resize", measure);
+    };
+  }, []);
+  return width;
+}
+
 export function DevToolbox({ me, refresh }: { me: Me; refresh(): Promise<void> }) {
+  const column = useCameraColumn();
   const [open, setOpen] = useState(() => recall(OPEN_KEY) === "1");
-  const [tab, setTab] = useState<Tab>(() => TABS.find(([id]) => id === recall(TAB_KEY))?.[0] ?? "sky");
+  // (Gold, Sky & sound and Figures had tabs of their own once: they are on Items and Audio/visual now.)
+  const [tab, setTab] = useState<Tab>(() => TABS.find(([id]) => id === (FORMER_TABS[recall(TAB_KEY) ?? ""] ?? recall(TAB_KEY)))?.[0] ?? "av");
   const [lab, setLab] = useState(false);
+  const [soundLab, setSoundLab] = useState(false);
+  // The old box people had a switch here once; with it gone, nobody is left stuck with them (from the next reload).
+  useEffect(() => {
+    if (recall(BLOCKY_KEY) === "1") remember(BLOCKY_KEY, null);
+  }, []);
+  const width = useDockWidth();
+  const [folded, setFolded] = useState(() => recall(FOLDED_KEY) === "1");
+  const fold = (on: boolean) => {
+    remember(FOLDED_KEY, on ? "1" : null);
+    setFolded(on);
+  };
+  // T: open in full, from shut or minimized; open, shut. Not while typing, or with a modifier held.
+  const shown = open && !folded;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== "t" || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+      const at = e.target as HTMLElement | null;
+      if (at?.closest?.("input, textarea, select, [contenteditable]")) return;
+      e.preventDefault();
+      if (shown) return show(false);
+      fold(false);
+      show(true);
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, [shown]);
   const show = (on: boolean) => {
     remember(OPEN_KEY, on ? "1" : null);
     setOpen(on);
@@ -74,67 +173,79 @@ export function DevToolbox({ me, refresh }: { me: Me; refresh(): Promise<void> }
     remember(TAB_KEY, id);
     setTab(id);
   };
+  const spanner = (
+    <button type="button" className={`dev-corner ${column ? "in-column" : ""} ${open ? "selected" : ""}`} title="Dev toolbox (T)" aria-label="Dev toolbox" aria-keyshortcuts="T" aria-pressed={open} onClick={() => show(!open)}>
+      <PixelIcon rows={WRENCH} size={column ? 18 : 14} />
+    </button>
+  );
   return (
     <>
-      <button className={`dev-corner ${open ? "selected" : ""}`} title="Dev toolbox" aria-label="Dev toolbox" aria-pressed={open} onClick={() => show(!open)}>
-        <PixelIcon rows={WRENCH} size={14} />
-      </button>
+      {column ? createPortal(spanner, column) : spanner}
       {open && (
-        <DragPanel id="dev.readout" title="Dev toolbox" compact resizable className="sound-readout panel">
-          <div className="sound-readout-head">
-            <strong>Dev toolbox</strong>
-            <button className="link" onClick={() => show(false)}>
-              Close
+        <aside className={`dev-dock timber ${folded ? "folded" : ""}`} role="dialog" aria-label="Dev toolbox" style={width ? { width } : undefined}>
+          {/* Stays put while the tab under it scrolls. */}
+          <div className="dev-dock-top timber-head">
+            <strong className="dev-dock-title">Dev toolbox</strong>
+            {/* Minimized, the name and the two buttons are all there is. */}
+            {folded ? <span className="dev-dock-gap" /> : (
+              <div className="dev-tabs" role="tablist" aria-label="Dev tools">
+                {TABS.map(([id, name]) => (
+                  <button key={id} role="tab" aria-selected={tab === id} className={`small ${tab === id ? "selected" : ""}`} onClick={() => (pick(id), fold(false))}>
+                    {name}
+                  </button>
+                ))}
+              </div>
+            )}
+            <button className="dev-dock-btn" aria-expanded={!folded} aria-label={folded ? "Show the dev toolbox" : "Minimize the dev toolbox"} title={folded ? "Show" : "Minimize"} onClick={() => fold(!folded)}>
+              {folded ? "+" : "–"}
             </button>
+            <button className="dev-dock-btn" aria-label="Close" title="Close" onClick={() => show(false)}>×</button>
           </div>
-          <div className="dev-tabs" role="tablist" aria-label="Dev tools">
-            {TABS.map(([id, name]) => (
-              <button key={id} role="tab" aria-selected={tab === id} className={`small ${tab === id ? "selected" : ""}`} onClick={() => pick(id)}>
-                {name}
-              </button>
-            ))}
-          </div>
-          {tab === "sky" && <SkyAndSound />}
-          {tab === "gold" && <Seeding key="gold" me={me} refresh={refresh}>{(seed) => <GoldSeed me={me} seed={seed} />}</Seeding>}
-          {tab === "figures" && <FigureStyle openLab={() => setLab(true)} />}
+          {!folded && (
+            <div className="dev-dock-body">
+          {tab === "av" && (
+            <div className="dev-seed">
+              <DevSection id="av.models" title="Model preview" open>
+                <p className="muted">A stage for any hero, townsperson or enemy: walk, strike, shoot, sit, row, slowed or a frame at a time.</p>
+                <div className="dev-row">
+                  <button className="small primary" onClick={() => setLab(true)}>Open the model preview</button>
+                </div>
+              </DevSection>
+              <DevSection id="av.sound" title="Sound" open>
+                <p className="muted">Every sound in the game, to search and play at will: each event as the game plays it, each of its takes, and all the music and atmosphere.</p>
+                <div className="dev-row">
+                  <button className="small primary" onClick={() => setSoundLab(true)}>Open the sound lab</button>
+                </div>
+                <SoundReadout />
+              </DevSection>
+              <DevSection id="av.sky" title="Sky" open>
+                <SkyControls />
+              </DevSection>
+            </div>
+          )}
           {tab === "maps" && (me.character?.status === "active" ? <MapsTab /> : <p className="muted">Create a character first: there is no hero to walk in.</p>)}
-          {tab === "items" && <Seeding key="items" me={me} refresh={refresh}>{(seed) => <ItemSeed me={me} seed={seed} />}</Seeding>}
-        </DragPanel>
+          {tab === "items" && <Seeding key="items" me={me} refresh={refresh}>{(seed) => (
+            <>
+              <h4>Gold</h4>
+              <GoldSeed me={me} seed={seed} />
+              <ItemSeed me={me} seed={seed} />
+            </>
+          )}</Seeding>}
+            </div>
+          )}
+        </aside>
       )}
       {lab && (
         <Suspense fallback={null}>
           <FigureLab me={me} onClose={() => setLab(false)} />
         </Suspense>
       )}
+      {soundLab && (
+        <Suspense fallback={null}>
+          <SoundLab onClose={() => setSoundLab(false)} />
+        </Suspense>
+      )}
     </>
-  );
-}
-
-/** Switch the people (in this browser) back to their old box models, to compare. Every figure is built afresh, so it reloads. */
-function FigureStyle({ openLab }: { openLab(): void }) {
-  const blocky = recall(BLOCKY_KEY) === "1";
-  const flip = () => {
-    remember(BLOCKY_KEY, blocky ? null : "1");
-    location.reload();
-  };
-  return (
-    <div className="dev-seed">
-      <p>The figure lab is a stage for any hero, townsperson or enemy: walk, strike, shoot, sit, row, slowed or a frame at a time.</p>
-      <div className="dev-row">
-        <button className="small primary" onClick={openLab}>
-          Open the figure lab
-        </button>
-      </div>
-      <p>
-        People are drawn <strong>{blocky ? "in the old boxes" : "low-poly"}</strong>.
-      </p>
-      <p className="muted">Heroes who chose how they look stay low-poly either way. Creatures (wolves, bears, bats, ghosts, slimes, skeletons) are still boxes.</p>
-      <div className="dev-row">
-        <button className="small primary" onClick={flip}>
-          {blocky ? "Back to low-poly" : "Show the old boxes"}
-        </button>
-      </div>
-    </div>
   );
 }
 

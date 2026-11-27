@@ -10,7 +10,7 @@ import type { Ctx } from "./engine";
 import { freeHexNear } from "./gen";
 import { tileAt } from "../map";
 import { has } from "./engine";
-import { solid, zoneReach, type Reached } from "./geometry";
+import { big, solid, zoneReach, type Reached } from "./geometry";
 import type { Budget, Unit, ZoneState } from "./types";
 
 /** What ringing it costs the enemy that does: a whole turn's AP (AP_TURN). */
@@ -28,6 +28,9 @@ export const BELL_RUSH = [0, 0.25, 0.6, 1];
 
 /** Never closer than this to where the heroes arrive, so it is not rung on the first turn. */
 const BELL_SAFE = 4;
+
+/** How likely an enemy is to be the one sent for the bell, beside the others: one over its distance to it, in hexes. */
+export const BELL_PULL = (distance: number): number => 1 / Math.max(1, distance);
 
 /** Nor on or beside an enemy: the closest its hex may be to one. */
 const BELL_APART = 2;
@@ -81,8 +84,9 @@ function canReachBell(state: ZoneState, enemy: Unit, bell: Poi): boolean {
 /**
  * At the start of a round, from the second: if no enemy is going for the bell, the enemy side rolls (BELL_RUSH, once a
  * round), and on a success one is picked to go and told to everyone (`bell_goer`). Whoever it is, it must have a way
- * to the bell. The pick is the one nearest the bell, unless some are not beside a hero: then the nearest of those, so the
- * one sent is not the one holding the line. Nobody is picked if there is nobody to send.
+ * to the bell, and not be Taunted (it has a hero to go for: ai.ts). The pick is at random from those not beside a hero or a summon (so the one sent is not the one holding the
+ * line), or from all of them if every one is beside one, by the same odds either way: the nearer the bell, the likelier. Nothing big (geometry.ts span) is sent: it has better to do
+ * (BELL_PULL). Nobody is picked if there is nobody to send.
  */
 export function pickBellGoer(ctx: Ctx): void {
   const { state } = ctx;
@@ -97,11 +101,13 @@ export function pickBellGoer(ctx: Ctx): void {
   mark.rolled = enc.round;
   if (!ctx.rng.chance(BELL_RUSH[Math.min(enc.round - 1, BELL_RUSH.length - 1)])) return;
   const heroes = state.units.filter((u) => u.side === "hero" && !u.down);
-  const fighters = state.units.filter((u) => u.side === "enemy" && !u.down && enc.order.includes(u.id) && !has(u, "prone") && canReachBell(state, u, bell));
+  const fighters = state.units.filter((u) => u.side === "enemy" && !u.down && enc.order.includes(u.id) && !big(u) && !has(u, "prone") && !has(u, "taunted") && canReachBell(state, u, bell));
   const free = fighters.filter((u) => !heroes.some((h) => hexDistance(h.pos, u.pos) <= 1));
-  const pool = free.length > 0 ? free : fighters;
-  const pick = pool.sort((a, b) => hexDistance(a.pos, bell.pos) - hexDistance(b.pos, bell.pos) || (a.id < b.id ? -1 : 1))[0];
-  if (!pick) return;
+  const pool = (free.length > 0 ? free : fighters).sort((a, b) => (a.id < b.id ? -1 : 1));
+  if (pool.length === 0) return;
+  const odds = pool.map((u) => BELL_PULL(hexDistance(u.pos, bell.pos)));
+  let roll = ctx.rng.next() * odds.reduce((a, b) => a + b, 0);
+  const pick = pool.find((_, i) => (roll -= odds[i]) < 0) ?? pool[pool.length - 1];
   mark.goer = pick.id;
   ctx.events.push({ t: "bell_goer", id: pick.id });
 }

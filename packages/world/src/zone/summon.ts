@@ -1,18 +1,51 @@
-// Creatures a hero calls into a fight (Summon Sea Turtle, Summon Sunken
-// Sailors). Each is a unit on the hero's side, played by the hero's player
-// on the hero's initiative: it stands right after them in the order, and
-// takes its own turn as soon as theirs is over. It is gone when it falls, when its caller calls again
-// (everything they called before goes), or when the fight is over; it never
-// walks the map out of a fight.
+// Creatures called into a fight: by a hero (Summon Sea Turtle, Summon Sunken
+// Sailors), or by an enemy calling more of its own kind (a Broodmother's Brood
+// Swarm, callKin). Each goes on its caller's initiative: it stands right after
+// them in the order, and takes its own turn as soon as theirs is over. A hero's
+// is on their side, played by their player. It is gone when it falls, when the
+// fight is over, and (a hero's) when its caller calls again (everything they
+// called before goes); it never walks the map out of a fight, and an enemy's
+// is worth nothing when it falls: no XP, nothing to search.
 
-import { hexDistance, hexNeighbors, type HexPos } from "@gantt-quest/core";
+import { hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/core";
+import { ENEMIES } from "../content";
 import { tileAt } from "../map";
 import type { Ctx } from "./engine";
-import { blockerAt, sameHex, solid, unitAt } from "./geometry";
-import { SUMMON_AP_TURN, SUMMONS, SUMMON_CALLS, type SummonCall } from "./kit";
-import { enterSurface } from "./surfaces";
+import { HEX_ROOM, blockerAt, isDead, sameHex, solid, span, unitAt, unitsAt } from "./geometry";
+import { SUMMON_AP_TURN, SUMMONS, SUMMON_CALLS, enemyHp, type SummonCall } from "./kit";
+import type { KinCall } from "./enemyabilities";
+import { modsOf } from "./mods";
+import { enterSurface, harms } from "./surfaces";
 import type { Unit, ZoneState } from "./types";
 import { enterWeather } from "./weather";
+
+/** An enemy's HP at full health, for its kind at this level on this map. */
+export const enemyMaxHp = (state: ZoneState, kind: string, level: number): number => Math.round(enemyHp(kind, level) * modsOf(state.options).hp);
+
+/** An enemy of this kind standing at `pos` in `group`, at the map's level or at `level`. */
+export function enemyUnit(state: ZoneState, kind: string, pos: HexPos, group: string, level = state.options.level): Unit {
+  const hp = enemyMaxHp(state, kind, level);
+  return {
+    id: `e${++state.seq}`,
+    side: "enemy",
+    name: ENEMIES[kind].name,
+    kind,
+    level,
+    pos,
+    hp,
+    maxHp: hp,
+    armor: 0,
+    power: 0,
+    // Its own copy of what its kind starts with: one enemy can be given more, or fewer, than the rest.
+    abilities: [...(ENEMIES[kind].abilities ?? [])],
+    conditions: [],
+    down: false,
+    cooldowns: {},
+    items: {},
+    group,
+    home: pos,
+  };
+}
 
 /** The creatures `by` has called that are still about. */
 export const summonsOf = (state: ZoneState, by: string): Unit[] => state.units.filter((u) => u.summon?.by === by);
@@ -95,21 +128,86 @@ export function summonCall(ctx: Ctx, caller: Unit, call: SummonCall, at: HexPos)
       summon: { by: caller.id },
     };
     state.units.push(unit);
-    ctx.events.push({ t: "summoned", id: unit.id, by: caller.id });
-    const enc = state.encounter;
-    if (enc && enc.order.includes(caller.id)) {
-      // Just behind its caller in the order, on their initiative: its own turn comes as soon as theirs is over.
-      enc.order.splice(enc.order.indexOf(caller.id) + 1 + called.length, 0, unit.id);
-      enc.init[unit.id] = enc.init[caller.id];
-      if (enc.tie?.[caller.id] !== undefined) enc.tie[unit.id] = enc.tie[caller.id] - 0.01 * (1 + called.length);
-      // (The tests' switch for shared turns: called in the middle of its caller's turn, it shares what is left of it.)
-      if (state.shareTurns && enc.acting.includes(caller.id)) {
-        enc.acting.push(unit.id);
-        enc.budgets[unit.id] = { ap: SUMMON_AP_TURN, move: 0, stride: def.move, disengaged: false };
-      }
-    }
+    ctx.events.push({ t: "summoned", id: unit.id, by: caller.id, at: { ...unit.pos } });
+    joinBehind(ctx, caller, unit, called.length, def.move);
     called.push(unit);
   });
+  arrive(ctx, called);
+  return called;
+}
+
+/**
+ * A creature just called goes into the fight's order just behind its caller, on their initiative, after the `before`
+ * called with it; if the caller's turn is underway (and turns are shared, as in the tests), it has one too, starting now.
+ */
+function joinBehind(ctx: Ctx, caller: Unit, unit: Unit, before: number, stride: number): void {
+  const enc = ctx.state.encounter;
+  if (!enc || !enc.order.includes(caller.id)) return;
+  enc.order.splice(enc.order.indexOf(caller.id) + 1 + before, 0, unit.id);
+  enc.init[unit.id] = enc.init[caller.id];
+  if (enc.tie?.[caller.id] !== undefined) enc.tie[unit.id] = enc.tie[caller.id] - 0.01 * (1 + before);
+  // (The tests' switch for shared turns: called in the middle of its caller's turn, it shares what is left of it.)
+  if (ctx.state.shareTurns && enc.acting.includes(caller.id)) {
+    enc.acting.push(unit.id);
+    enc.budgets[unit.id] = { ap: SUMMON_AP_TURN, move: 0, stride, disengaged: false };
+  }
+}
+
+/** Those just called meet the ground and the weather where they stand. */
+function arrive(ctx: Ctx, called: Unit[]): void {
   for (const unit of called) if (!enterSurface(ctx, unit) && !unit.down) enterWeather(ctx, unit);
+}
+
+/**
+ * Where an enemy calling more of its side (EnemyDef ability `summon`) would put them: hexes beside it (any of its
+ * hexes, for a big one) with nobody on them, or as many of the kind called as the call `share`s (and room for one more),
+ * one to a hex: empty ones first, then ground that does no harm, then nearest its anchor. As many as there are, up to
+ * the call's `count`, and only as many more as keep those it called standing to its `most`.
+ */
+export function kinSpots(state: ZoneState, caller: Unit, call: KinCall, from: HexPos = caller.pos): HexPos[] {
+  const out = summonsOf(state, caller.id).filter((u) => !u.down && u.kind === call.kind).length;
+  const count = Math.min(call.count, call.most === undefined ? Infinity : Math.max(0, call.most - out));
+  if (count <= 0) return [];
+  const mine = span(caller, from);
+  const seen = new Set(mine.map(posKey));
+  const open: HexPos[] = [];
+  /** How many stand on each hex looked at already. */
+  const crowd = new Map<string, number>();
+  for (const p of mine.flatMap((h) => hexNeighbors(h, state.map.grid))) {
+    const key = posKey(p);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const tile = tileAt(state.map, p);
+    if (!tile || solid(tile) || blockerAt(state, p)) continue;
+    const there = unitsAt(state, p).filter((u) => !isDead(u) && u.id !== caller.id);
+    const shared = there.length > 0 && there.length <= (call.share ?? 0) && there.every((u) => !u.down && u.side === caller.side && u.kind === call.kind);
+    if (there.length === 0 || (shared && there.length < HEX_ROOM)) open.push(p);
+    crowd.set(key, there.length);
+  }
+  // Ground that would hurt what is called (not what calls it).
+  const harmful = (p: HexPos) => (harms({ side: caller.side, kind: call.kind }, state.surfaces[posKey(p)]?.kind) ? 1 : 0);
+  const held = (p: HexPos) => crowd.get(posKey(p)) ?? 0;
+  return open.sort((a, b) => held(a) - held(b) || harmful(a) - harmful(b) || hexDistance(a, from) - hexDistance(b, from) || a.q - b.q || a.r - b.r).slice(0, count);
+}
+
+/**
+ * An enemy calls more of its side (a Broodmother's Brood Swarm): the call's `count` of its `kind`, at its level, in its
+ * group, on open hexes beside it (kinSpots: fewer if there is no room, or it has its `most` out). Each goes in the
+ * order just behind it (joinBehind).
+ */
+export function callKin(ctx: Ctx, caller: Unit, call: KinCall): Unit[] {
+  const { state } = ctx;
+  const kind = call.kind;
+  if (!ENEMIES[kind]) return [];
+  const called: Unit[] = [];
+  for (const pos of kinSpots(state, caller, call)) {
+    const unit = enemyUnit(state, kind, { q: pos.q, r: pos.r }, caller.group ?? "", caller.level);
+    unit.summon = { by: caller.id };
+    state.units.push(unit);
+    ctx.events.push({ t: "summoned", id: unit.id, by: caller.id, at: { ...unit.pos } });
+    joinBehind(ctx, caller, unit, called.length, ENEMIES[kind].move);
+    called.push(unit);
+  }
+  arrive(ctx, called);
   return called;
 }

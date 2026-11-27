@@ -133,8 +133,9 @@ describe("a map's modifiers", () => {
       const plain = enemyStrikes(kind, 3);
       const savage = enemyStrikes(kind, 3, more);
       savage.forEach((s, i) => {
-        expect(s.bonus).toBe(plain[i].bonus + 1);
-        expect(diceAverage(s.dice)).toBeGreaterThan(diceAverage(plain[i].dice));
+        expect(s.potency).toBe(plain[i].potency + 1);
+        // A shove does no harm, Savage or not.
+        if (!s.harmless) expect(diceAverage(s.dice)).toBeGreaterThan(diceAverage(plain[i].dice));
       });
     }
   });

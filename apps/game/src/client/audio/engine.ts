@@ -52,6 +52,13 @@ export interface StartedTake {
   elapsed(): number;
 }
 
+/** A sound the lab started: which file, how long it lasts, and a way to cut it off. */
+export interface Audition {
+  key: string;
+  seconds: number;
+  stop(): void;
+}
+
 interface Voice {
   event: string;
   src: AudioBufferSourceNode;
@@ -263,6 +270,8 @@ export class AudioEngine {
   private lib: Library | null = null;
   private bus: Bus | null = null;
   private indexed = false;
+  /** The index loading at boot, for anything that must wait until it is known what can be played. */
+  private indexing: Promise<void> | null = null;
   private voices: Voice[] = [];
   private loops = new Map<string, LoopVoice>();
   private takes = new Map<string, TakePicker>();
@@ -470,7 +479,7 @@ export class AudioEngine {
     this.reverb = { input, units, active: 0 };
 
     this.lib = new Library(ctx, memoryBudget());
-    void this.lib.loadIndex().then(() => {
+    this.indexing = this.lib.loadIndex().then(() => {
       this.indexed = true;
       this.applyScene();
       this.preloadEffects();
@@ -547,7 +556,7 @@ export class AudioEngine {
     return files;
   }
 
-  private voice(name: string, ev: SoundEvent, buffer: AudioBuffer, when: number, gain: number, rate: number, placed?: Placed) {
+  private voice(name: string, ev: SoundEvent, buffer: AudioBuffer, when: number, gain: number, rate: number, placed?: Placed): Voice | undefined {
     const { ctx, bus } = this;
     if (!ctx || !bus) return;
     const same = this.voices.filter((v) => v.event === name);
@@ -587,6 +596,7 @@ export class AudioEngine {
       send?.disconnect();
     };
     src.start(when);
+    return voice;
   }
 
   /** Fade a one-shot out quickly to make room for another. */
@@ -1203,6 +1213,67 @@ export class AudioEngine {
     clearTimeout(this.zoneTimer);
     void this.ctx?.close().catch(() => undefined);
     this.ctx = null;
+  }
+
+  // ---------- auditioning (the sound lab, SoundLab.tsx) ----------
+
+  /** Start the engine if it has not started, and wait until it knows every file it can play. False when this browser has no audio. */
+  async whenIndexed(): Promise<boolean> {
+    if (!this.ctx) this.boot();
+    await this.indexing;
+    return this.indexed;
+  }
+
+  /** The takes an event plays from, best first (what `play` chooses among), or none before the index is in. */
+  takesFor(name: string): string[] {
+    return this.indexed ? this.takesOf(name) : [];
+  }
+
+  /** Every file the engine knows, sorted (none before the index is in). */
+  fileKeys(): string[] {
+    return this.indexed ? (this.lib?.keys() ?? []) : [];
+  }
+
+  /** What a file is: a recording, a built-in synth sound, a placeholder, or missing from the index. */
+  fileKind(key: string): "recording" | "built-in" | "placeholder" | "missing" {
+    const f = this.lib?.file(key);
+    return !f ? "missing" : f.synth ? "built-in" : f.placeholder ? "placeholder" : "recording";
+  }
+
+  /**
+   * Play an event now, as the game would but heard from where you stand: no cooldown, not placed in the
+   * world. `take` picks one of its files, else the next take is chosen as in a game. Call it from a click:
+   * it wakes a sleeping engine. When nothing can play, it says why.
+   */
+  async audition(name: string, take?: string): Promise<Audition | { why: string }> {
+    const ev = this.manifest.events[name];
+    if (!ev) return { why: "not in the manifest" };
+    const files = this.takesFor(name);
+    const picker = this.takes.get(name) ?? new TakePicker();
+    this.takes.set(name, picker);
+    const key = take ?? files[picker.next(files.length, ev.order)];
+    if (!key) return { why: "no file to play" };
+    const gain = dbToGain((ev.gainDb ?? 0) + inRange(ev.volume));
+    return this.sound(name, ev, key, gain, 2 ** (inRange(ev.pitch) / 12));
+  }
+
+  /** Play a single file once, start to end, through a group's slider: a piece of music or a bed of atmosphere. */
+  auditionFile(key: string, group: Group, gainDb = 0): Promise<Audition | { why: string }> {
+    return this.sound(`audition:${key}`, { files: key, group, maxVoices: 1 }, key, dbToGain(gainDb), 1);
+  }
+
+  private async sound(name: string, ev: SoundEvent, key: string, gain: number, rate: number): Promise<Audition | { why: string }> {
+    if (!(await this.whenIndexed())) return { why: "this browser has no audio" };
+    const { ctx, lib } = this;
+    if (!ctx || !lib) return { why: "the audio has not started" };
+    if (ctx.state !== "running") await ctx.resume().catch(() => undefined);
+    if (ctx.state !== "running") return { why: "the browser has not let the page play sound yet: click the page" };
+    const buffer = await lib.load(key);
+    if (!buffer) return { why: `${key} would not load` };
+    const at = ctx.currentTime + 0.01;
+    const voice = this.voice(name, ev, buffer, at, gain, rate);
+    if (!voice) return { why: "the audio has not started" };
+    return { key, seconds: buffer.duration / rate, stop: () => this.voices.includes(voice) && this.release(voice) };
   }
 
   /** A snapshot for poking at from the console (`__gqAudio.debug()`). */

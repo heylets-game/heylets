@@ -40,7 +40,7 @@
 // written on the socket itself, which outlives the room's hibernation.
 
 import { DurableObject } from "cloudflare:workers";
-import { EMOTE_MIN_MS, HARBOR_MAX_SAY, THROWABLE_KINDS, ZONE_CLIENT_ACTIONS, createZone, hiddenEnemies, loadZone, nextTick, stepZone, zoneAwaiting, zoneHero, zoneOptions, zoneView, validEmote, type ZoneAction, type ZoneEvent, type ZoneState } from "@gantt-quest/world";
+import { EMOTE_MIN_MS, HARBOR_MAX_SAY, THROWABLE_KINDS, ZONE_CLIENT_ACTIONS, createZone, hiddenEnemies, loadZone, nextTick, stepZone, zoneAwaiting, zoneHero, zoneOptions, zoneUntimed, zoneView, validEmote, type ZoneAction, type ZoneEvent, type ZoneState } from "@gantt-quest/world";
 import { consumablesOf, gainConsumables, kitStatements, spendConsumables, type Consumables } from "./consumables";
 import { returnLuck, takeLuck } from "./well";
 import { applyZoneGrant, crewFor, heroInitFor, refreshHarbor, type Env } from "./db";
@@ -85,22 +85,36 @@ export function zoneActionFrom(raw: unknown, by: string, dev: boolean): ZoneActi
   if (a.type === "dev") {
     const d = (a.dev && typeof a.dev === "object" ? a.dev : {}) as Record<string, unknown>;
     if (!dev) return null;
-    if (d.op === "spawn" && Array.isArray(d.kinds) && isHex(d.at)) return { type: "dev", by, dev: { op: "spawn", kinds: d.kinds.filter(text).slice(0, 6), at: hex(d.at)! } };
+    if (d.op === "spawn" && Array.isArray(d.kinds) && isHex(d.at)) return { type: "dev", by, dev: { op: "spawn", kinds: d.kinds.filter(text).slice(0, 6), at: hex(d.at)!, ...(Number.isFinite(d.level) ? { level: Number(d.level) } : {}) } };
+    if (d.op === "set_level" && text(d.unit) && Number.isFinite(d.level)) return { type: "dev", by, dev: { op: "set_level", unit: d.unit, level: Number(d.level) } };
+    if (d.op === "hero_levels" && Number.isFinite(d.level)) return { type: "dev", by, dev: { op: "hero_levels", level: Number(d.level) } };
     if (d.op === "paint" && Array.isArray(d.hexes) && (d.kind === null || SURFACES.includes(d.kind as string))) {
       return { type: "dev", by, dev: { op: "paint", kind: d.kind as never, hexes: d.hexes.filter(isHex).slice(0, 60).map((p) => hex(p)!) } };
     }
     if (d.op === "standin" && text(d.classId)) return { type: "dev", by, dev: { op: "standin", classId: d.classId } };
     if (d.op === "ai") return { type: "dev", by, dev: { op: "ai", off: !!d.off } };
+    if (d.op === "strike" && text(d.unit) && text(d.ability)) {
+      return { type: "dev", by, dev: { op: "strike", unit: d.unit, ability: d.ability, ...(text(d.target) ? { target: d.target } : {}), ...(isHex(d.at) ? { at: hex(d.at)! } : {}), ...(d.anywhere ? { anywhere: true } : {}) } };
+    }
+    if (d.op === "place" && text(d.unit) && isHex(d.at)) return { type: "dev", by, dev: { op: "place", unit: d.unit, at: hex(d.at)! } };
+    if (d.op === "set_turn" && text(d.unit)) return { type: "dev", by, dev: { op: "set_turn", unit: d.unit } };
+    if (d.op === "sandbox") return { type: "dev", by, dev: { op: "sandbox", on: !!d.on } };
+    if (d.op === "next_turn") return { type: "dev", by, dev: { op: "next_turn", ...(d.round ? { round: true } : {}) } };
+    if (d.op === "undying") return { type: "dev", by, dev: { op: "undying", on: !!d.on } };
+    if (d.op === "heroes_idle") return { type: "dev", by, dev: { op: "heroes_idle", on: !!d.on } };
+    if (d.op === "timer") return { type: "dev", by, dev: { op: "timer", off: !!d.off } };
     if (d.op === "kit" && text(d.unit) && text(d.classId) && text(d.weapon) && Array.isArray(d.abilities)) {
       return { type: "dev", by, dev: { op: "kit", unit: d.unit, classId: d.classId, weapon: d.weapon, level: Number(d.level) || 1, abilities: d.abilities.filter(text).slice(0, 20) } };
     }
-    if (d.op === "heal" || d.op === "end_fight" || d.op === "start_fight" || d.op === "clear_surfaces") return { type: "dev", by, dev: { op: d.op } };
+    if (d.op === "heal" || d.op === "end_fight" || d.op === "start_fight" || d.op === "clear_surfaces" || d.op === "clear_enemies") return { type: "dev", by, dev: { op: d.op } };
     return null;
   }
   if (!text(a.unit)) return null;
   // `from`: where the hero has got to on a walk still being played, to call it off there (the reducer decides whether it may).
   if (a.type === "move") return isHex(a.to) ? { type: "move", by, unit: a.unit, to: hex(a.to)!, ...(isHex(a.from) ? { from: hex(a.from)! } : {}) } : null;
-  if (a.type === "use") return text(a.ability) ? { type: "use", by, unit: a.unit, ability: a.ability, target, at: hex(a.at) } : null;
+  // `lean`: where in `at` it is aimed; the rules keep it inside that hex (leanWithin).
+  const lean = a.lean && typeof a.lean === "object" && Number.isFinite((a.lean as { q: unknown }).q) && Number.isFinite((a.lean as { r: unknown }).r) ? { q: Number((a.lean as { q: number }).q), r: Number((a.lean as { r: number }).r) } : undefined;
+  if (a.type === "use") return text(a.ability) ? { type: "use", by, unit: a.unit, ability: a.ability, target, at: hex(a.at), ...(lean ? { lean } : {}) } : null;
   if (a.type === "common") return text(a.what) ? { type: "common", by, unit: a.unit, what: a.what as never, target, at: hex(a.at) } : null;
   if (a.type === "throw") return text(a.item) && isHex(a.at) ? { type: "throw", by, unit: a.unit, item: a.item as never, at: hex(a.at)! } : null;
   if (a.type === "drink") return text(a.item) ? { type: "drink", by, unit: a.unit, item: a.item as never } : null;
@@ -314,6 +328,8 @@ export class ZoneRoom extends DurableObject<Env> {
         return;
       }
       const deadline = zone.encounter?.deadline ?? null;
+      // No time limit on turns (DevOp "timer", or the sandbox): nothing to run out.
+      if (zoneUntimed(zone)) return;
       if (deadline && Date.now() < deadline - 500) {
         await this.ctx.storage.setAlarm(deadline);
         return;
@@ -363,7 +379,8 @@ export class ZoneRoom extends DurableObject<Env> {
       return res.error;
     }
     const next = res.state;
-    if (zoneAwaiting(next) !== zoneAwaiting(prev)) await this.armTimer(next);
+    // A new turn, or turns timed or untimed again (DevOp "timer", "sandbox").
+    if (zoneAwaiting(next) !== zoneAwaiting(prev) || zoneUntimed(next) !== zoneUntimed(prev)) await this.armTimer(next);
     // Out of a fight, the clock's next round.
     if (!zoneAwaiting(next)) await this.armClock(next);
     this.zone = next;
@@ -502,9 +519,9 @@ export class ZoneRoom extends DurableObject<Env> {
     }
   }
 
-  /** A new turn is being waited on (or none is): set its deadline and the alarm that ends it. */
+  /** A new turn is being waited on (or none is): set its deadline and the alarm that ends it. None while the dev switch has turns untimed. */
   private async armTimer(zone: ZoneState) {
-    const deadline = zoneAwaiting(zone) ? Date.now() + ZONE_TURN_MS : null;
+    const deadline = zoneAwaiting(zone) && !zoneUntimed(zone) ? Date.now() + ZONE_TURN_MS : null;
     if (zone.encounter) zone.encounter.deadline = deadline;
     if (deadline) await this.ctx.storage.setAlarm(deadline);
     else await this.ctx.storage.deleteAlarm();
@@ -527,7 +544,7 @@ export class ZoneRoom extends DurableObject<Env> {
     if (!zoneAwaiting(zone)) return this.armClock(zone);
     const deadline = zone.encounter?.deadline ?? null;
     const alarm = await this.ctx.storage.getAlarm();
-    if (alarm === null || !deadline || deadline < Date.now()) {
+    if (!zoneUntimed(zone) && (alarm === null || !deadline || deadline < Date.now())) {
       await this.armTimer(zone);
       await saveZoneStatement(this.env.DB, zone).run();
     }

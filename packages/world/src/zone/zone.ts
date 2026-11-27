@@ -20,7 +20,7 @@
 
 import { STARTING_STATS, hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/core";
 import { classAbilitiesOf, poolFor, withClassAbilities } from "../classabilities";
-import { ABILITIES, DRUID_REGEN, EFFECT_TICK, ENEMIES, HERO_CLASSES, WEAPONS, abilitiesFor } from "../content";
+import { ABILITIES, DRUID_REGEN, EFFECT_TICK, ENEMIES, HERO_CLASSES, REELING_AP, WEAPONS, abilitiesFor } from "../content";
 import { weaponItem } from "../gear";
 import { tileAt } from "../map";
 import type { HeroSheet } from "../hero";
@@ -28,56 +28,34 @@ import { addStats, maxHpFor } from "../progression";
 import { makeRng, seedFromString } from "../rng";
 import { enemyTurn } from "./ai";
 import { pickBellGoer, placeBell } from "./bell";
-import { abilityArea, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, doCommon, drinkItem, isBlink, moveLeft, resolveAbility, throwItem, walk } from "./combat";
-import { UNTIMED, burnOf, dropShield, has, heal, regrow, removeCondition, tick, unseen, type Ctx } from "./engine";
-import { ALERT_RANGE, JOIN_RANGE, freeHexNear, generateZone } from "./gen";
+import { abilityArea, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, doCommon, drinkItem, enemyAct, fieldsCatch, isBlink, moveLeft, resolveAbility, throwItem, walk } from "./combat";
+import { checkStrike } from "./strikes";
+import { UNTIMED_KEEPS, countDown, has, leaveFight, heal, regrow, removeCondition, tick, tickStacks, unseen, usesLeft, type Ctx } from "./engine";
+import { ALERT_RANGE, freeHexNear, generateZone } from "./gen";
 import { generateDelve } from "./delve";
-import { checkLoot, checkOpen, leaveBody, look, lootFor, openChest, payBounty, take } from "./loot";
-import { PARTY_SIZES, siteOpen } from "./sites";
-import { FREE_WALK, blast, blockerAt, inFight, isDead, pathIn, perkOf, roomAt, sameHex, sees, solid, unitAt, unitById, zoneReach } from "./geometry";
-import { AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, ENEMY_MOVE_AP, FLEE_RANGE, ITEM_AP, STROLL_GRACE_MS, STROLL_STEP_MS, SUMMONS, STARTING_ITEMS, THROWABLES, THROWABLE_KINDS, cleanItems, commonCostFor, enemyHp, enemyMove, tacticOf } from "./kit";
+import { checkLoot, checkOpen, leaveBody, look, lootFor, lootGroup, openChest, payBounty, take } from "./loot";
+import { PARTY_SIZES, siteOpen, spaced } from "./sites";
+import { FREE_WALK, big, blast, blockerAt, caught, covers, gap, inFight, isDead, meet, noWayThere, pathIn, perkOf, roomAt, sameHex, sees, solid, span, unitAt, unitById, zoneReach } from "./geometry";
+import { AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, ENEMY_MOVE_AP, FLEE_RANGE, ITEM_AP, STROLL_GRACE_MS, STROLL_STEP_MS, SUMMONS, STARTING_ITEMS, THROWABLES, THROWABLE_KINDS, cleanItems, unitStrike, commonCostFor, enemyMove, tacticOf } from "./kit";
+import { ENEMY_ABILITIES } from "./enemyabilities";
 import { d20, heroMove, mod, rollDice, statOf } from "./rules";
 import { hiddenEnemies, sentToClient } from "./light";
-import { tickWeather, weatherAtTurn } from "./weather";
+import { quakeAtTurn, tickWeather, weatherAtTurn } from "./weather";
 import { checkPickup, checkStow, clearSurfaces, lightTorch, pickUpTorch, placeSurface, stowTorch, standInSurface, tickLights, tickSurfaces } from "./surfaces";
 import { exploreRound, passTime } from "./clock";
 import { checkUnlock, dropKeys, heardBy, workDoor } from "./doors";
 import { checkForage, forage } from "./forage";
-import { dismiss } from "./summon";
+import { dismiss, enemyMaxHp, enemyUnit } from "./summon";
 import { drown, drowningAtStart, drowningOwed, holdBreath } from "./drowning";
 import { shantyOf, songMove, windward } from "./song";
 import { courseMarks } from "./stars";
 import { modsOf } from "./mods";
-import type { Budget, DevOp, Encounter, Throwable, Unit, ZoneAction, ZoneEffect, ZoneEvent, ZoneHero, ZoneOptions, ZoneState, ZoneStep, ZoneView } from "./types";
+import type { Budget, Condition, DevOp, Encounter, JoinCause, Throwable, Unit, ZoneAction, ZoneEffect, ZoneEvent, ZoneHero, ZoneOptions, ZoneState, ZoneStep, ZoneView } from "./types";
 
 /** Rounds a surface painted from the dev toolbox lasts. */
 const PAINT_ROUNDS = 6;
 
 // ---------- making a zone ----------
-
-function enemyUnit(state: ZoneState, kind: string, pos: HexPos, group: string): Unit {
-  const hp = Math.round(enemyHp(kind, state.options.level) * modsOf(state.options).hp);
-  return {
-    id: `e${++state.seq}`,
-    side: "enemy",
-    name: ENEMIES[kind].name,
-    kind,
-    level: state.options.level,
-    pos,
-    hp,
-    maxHp: hp,
-    armor: 0,
-    power: 0,
-    // Its own copy of what its kind starts with: one enemy can be given more, or fewer, than the rest.
-    abilities: [...(ENEMIES[kind].abilities ?? [])],
-    conditions: [],
-    down: false,
-    cooldowns: {},
-    items: {},
-    group,
-    home: pos,
-  };
-}
 
 /**
  * The most heroes on a map at once, and the most its groups are ever sized for. A hero whose player has gone (`away`)
@@ -118,14 +96,44 @@ export function growGroups(state: ZoneState): string[] {
     const post = standing.home ?? standing.pos;
     for (const kind of beyond(group.bands[to - 1] ?? [], group.bands[from - 1] ?? [])) {
       if (!ENEMIES[kind]) continue;
-      const pos = freeHexNear(state.map, post, (p) => !!unitAt(state, p) || blockerAt(state, p), (p) => tileAt(state.map, p));
+      // Round its post, spread out from the rest of its band (sites.ts spaced) where there is room, else the nearest free hex.
+      const held = (p: HexPos) => !!unitAt(state, p) || blockerAt(state, p);
+      const band = state.units.filter((u) => u.side === "enemy" && u.group === id && !u.down).map((u) => u.pos);
+      const tile = (p: HexPos) => tileAt(state.map, p);
+      const pos = freeHexNear(state.map, post, (p) => held(p) || !spaced(p, band) || hexDistance(p, post) > 3, tile) ?? freeHexNear(state.map, post, held, tile);
       if (!pos) break;
       const enemy = enemyUnit(state, kind, pos, id);
       state.units.push(enemy);
       added.push(enemy.id);
     }
   }
+  makeRoom(state);
   return added;
+}
+
+/**
+ * The nearest place to `near` where `unit` can stand (all of it, for a big one: geometry.ts span), on ground, clear of
+ * everyone else and of anything that stands in the way. Null if there is none near.
+ */
+function placeFor(state: ZoneState, unit: Unit, near: HexPos): HexPos | null {
+  const clear = (p: HexPos) => !solid(tileAt(state.map, p)) && !blockerAt(state, p) && !state.units.some((u) => u.id !== unit.id && !isDead(u) && covers(u, p));
+  return freeHexNear(state.map, near, (p) => !span(unit, p).every(clear), (p) => tileAt(state.map, p));
+}
+
+/**
+ * Every big enemy (geometry.ts span) has room for all of itself where it stands: one made where its post leaves no
+ * room for the rest of it (the map was laid out with posts of one hex), or saved from before it was big, is moved to
+ * the nearest place that has, and keeps that as its post. Out of a fight only. Returns the same state, changed in place.
+ */
+export function makeRoom(state: ZoneState): ZoneState {
+  for (const u of state.units) {
+    if (!big(u) || u.down || inFight(state, u.id)) continue;
+    const there = placeFor(state, u, u.pos);
+    if (!there || sameHex(there, u.pos)) continue;
+    u.pos = there;
+    u.home = there;
+  }
+  return state;
 }
 
 /**
@@ -140,16 +148,34 @@ export function ensureMouth(state: ZoneState): ZoneState {
 }
 
 /**
- * An enemy saved before enemies carried their own abilities has none: it is given what its kind starts with. Run on
+ * A saved enemy is given its kind's abilities as they are now when what it was saved with no longer works: none at all
+ * (from before enemies carried their own), or any ability since retired (a kit reworked since, which would otherwise
+ * leave it nothing to use, so it stood idle on its turns). One whose abilities all still exist keeps them. Run on
  * every saved zone as it is loaded (loadZone). Returns the same state, changed in place.
  */
 export function ensureEnemyAbilities(state: ZoneState): ZoneState {
-  for (const u of state.units) if (u.side === "enemy" && (u.abilities?.length ?? 0) === 0) u.abilities = [...(ENEMIES[u.kind]?.abilities ?? [])];
+  for (const u of state.units) {
+    const kit = u.side === "enemy" ? ENEMIES[u.kind]?.abilities : undefined;
+    if (kit && ((u.abilities?.length ?? 0) === 0 || u.abilities.some((id) => !ENEMY_ABILITIES[id]))) u.abilities = [...kit];
+  }
   return state;
 }
 
-/** A saved zone, brought up to date as it is loaded: a way out of a cave (ensureMouth), and enemies' abilities (ensureEnemyAbilities). */
-export const loadZone = (state: ZoneState): ZoneState => ensureEnemyAbilities(ensureMouth(state));
+/** Conditions saved under a name they no longer go by, and the one they go by now. */
+const RENAMED: Record<string, Condition> = { glitched: "fumbling" };
+
+/**
+ * A zone saved with conditions under an old name (RENAMED) has them under the new one; and one saved from before
+ * conditions were things of fights alone has none left on anyone out of a fight but what outlasts fights (shedOutside).
+ */
+function renameConditions(state: ZoneState): ZoneState {
+  for (const u of state.units) for (const c of u.conditions) c.kind = RENAMED[c.kind] ?? c.kind;
+  shedOutside(state, state.units);
+  return state;
+}
+
+/** A saved zone, brought up to date as it is loaded: conditions under their new names (renameConditions), a way out of a cave (ensureMouth), enemies' abilities (ensureEnemyAbilities), and room for the big ones (makeRoom). */
+export const loadZone = (state: ZoneState): ZoneState => makeRoom(ensureEnemyAbilities(ensureMouth(renameConditions(state))));
 
 export function createZone(code: string, seed: string, options: ZoneOptions): ZoneState {
   const plan = options.delve ? generateDelve(seed, options) : generateZone(seed, options);
@@ -162,6 +188,7 @@ export function createZone(code: string, seed: string, options: ZoneOptions): Zo
     group.kinds.forEach((kind, i) => state.units.push(enemyUnit(state, kind, group.posts[i], id)));
   }
   ensureMouth(state);
+  makeRoom(state);
   if (!options.delve && open(state)) placeBell(state);
   return state;
 }
@@ -182,6 +209,9 @@ export function zoneView(state: ZoneState, you: string, hidden: readonly string[
   const fighting = hidden.filter((id) => inFight(state, id));
   return { ...rest, ...mine, units: rest.units.filter(sentToClient(state, new Set(hidden))), you, ...(fighting.length > 0 ? { dark: fighting } : {}) };
 }
+
+/** Whether a fight's turns go untimed: the dev switch for it, or the combat sandbox. */
+export const zoneUntimed = (state: Pick<ZoneState, "timerOff" | "sandbox">): boolean => !!state.timerOff || !!state.sandbox;
 
 /** Whose turn the server is waiting on, as a key that changes when the wait does. Null out of a fight. */
 export function zoneAwaiting(state: ZoneState): string | null {
@@ -210,7 +240,7 @@ function heroUnit(hero: ZoneHero, pos: HexPos, controller?: string): Unit {
     outfit: hero.outfit,
     ...(hero.lantern ? { lantern: true } : {}),
     ...(hero.perks ? { perks: hero.perks } : {}),
-    conditions: hero.luck && hero.luck > 0 ? [{ kind: "lucky", rounds: hero.luck }] : [],
+    conditions: hero.luck && hero.luck > 0 ? [{ kind: "lucky", rounds: UNTIMED_KEEPS, amount: hero.luck }] : [],
     down: false,
     cooldowns: {},
     items: { ...(hero.items ?? STARTING_ITEMS) },
@@ -300,13 +330,15 @@ function enter(ctx: Ctx, enc: Encounter, unit: Unit): void {
 }
 
 /**
- * Whether a hero out of the fight is near enough to be drawn into it: within JOIN_RANGE of anyone in it.
- * One who fled it has got clear, and only an enemy in it coming within FLEE_RANGE brings them back.
+ * Who in the fight draws a hero out of it into it, if anyone: the nearest standing in it within ALERT_RANGE (the
+ * range a band sees and hears from). One who fled it has got clear, and only an enemy in it coming within FLEE_RANGE brings them back.
  */
-function drawnIn(state: ZoneState, enc: Encounter, hero: Unit): boolean {
+function drawnBy(state: ZoneState, enc: Encounter, hero: Unit): Unit | undefined {
   const fled = !!enc.fled?.includes(hero.id);
-  return state.units.some((f) => enc.order.includes(f.id) && !f.down && (fled ? f.side !== hero.side && hexDistance(f.pos, hero.pos) <= FLEE_RANGE : hexDistance(f.pos, hero.pos) <= JOIN_RANGE));
+  const near = state.units.filter((f) => enc.order.includes(f.id) && !f.down && (fled ? f.side !== hero.side && gap(f, hero) <= FLEE_RANGE : gap(f, hero) <= ALERT_RANGE));
+  return near.sort((a, b) => gap(a, hero) - gap(b, hero))[0];
 }
+const drawnIn = (state: ZoneState, enc: Encounter, hero: Unit): boolean => !!drawnBy(state, enc, hero);
 
 /** Heroes near anyone in the fight are in it. */
 function pullIn(ctx: Ctx): void {
@@ -314,9 +346,10 @@ function pullIn(ctx: Ctx): void {
   if (!enc) return;
   for (const hero of standing(ctx.state, "hero")) {
     // Nobody is dragged into a fight while their player is not there to play it.
-    if (hero.away || enc.order.includes(hero.id) || !drawnIn(ctx.state, enc, hero)) continue;
+    const by = hero.away || enc.order.includes(hero.id) ? undefined : drawnBy(ctx.state, enc, hero);
+    if (!by) continue;
     enter(ctx, enc, hero);
-    ctx.events.push({ t: "fight_join", id: hero.id });
+    ctx.events.push({ t: "fight_join", id: hero.id, why: { kind: "near", near: by.id } });
   }
 }
 
@@ -327,9 +360,22 @@ function pullIn(ctx: Ctx): void {
 function reachIn(ctx: Ctx, unit: Unit, touched: Unit[]): void {
   const enc = ctx.state.encounter;
   if (!enc || unit.side !== "hero" || unit.down || enc.order.includes(unit.id)) return;
-  if (!touched.some((u) => u.id !== unit.id && enc.order.includes(u.id))) return;
+  const on = touched.find((u) => u.id !== unit.id && enc.order.includes(u.id));
+  if (!on) return;
   enter(ctx, enc, unit);
-  ctx.events.push({ t: "fight_join", id: unit.id });
+  ctx.events.push({ t: "fight_join", id: unit.id, why: { kind: "acted", on: on.id } });
+}
+
+/**
+ * Whether what a unit does to these (an ability, a throw, a shove) opens a fight or joins one: it reaches a band
+ * (`struck`, the groups it is about to rouse), or someone already in a fight. Then what it leaves takes hold
+ * (Ctx.opening) on whoever it touches, though the fight begins only once it is done.
+ */
+const opens = (state: ZoneState, struck: string[], touched: Unit[]): boolean => struck.length > 0 || touched.some((u) => inFight(state, u.id));
+
+/** After an opening (opens): whoever it touched who is in no fight after all keeps nothing it left them (leaveFight). */
+function shedOutside(state: ZoneState, units: Unit[]): void {
+  for (const u of units) if (!inFight(state, u.id)) leaveFight(u);
 }
 
 /**
@@ -361,35 +407,39 @@ function flee(ctx: Ctx, unit: Unit): void {
   if (acting && enc.acting.length === 0) enc.resume = enc.order[at] ?? null;
   enc.fled = [...(enc.fled ?? []), unit.id];
   enc.waits = [...(enc.waits ?? []), unit.id];
-  // Out of the fight, out from behind their shield: it does not come with them.
-  dropShield(unit);
+  // Out of the fight: what it left on them does not come with them (bar their luck).
+  leaveFight(unit);
   endTurn(ctx, unit);
   ctx.events.push({ t: "fled", id: unit.id });
 }
 
 /**
  * Enemy groups have noticed someone: they are in a fight. One starts if none is on, and in the open that rouses the
- * rest of the place (rouse). `quiet`: they come as one crowd, and are not each announced.
+ * rest of the place (rouse). Each band is told once (`alert`), with who of it comes and why (`why`, a cause per
+ * band, or one for them all); a hero who set it off and was not in the fight joins it with them.
  */
-function engage(ctx: Ctx, groups: string[], by: Unit, quiet = false): void {
+function engage(ctx: Ctx, groups: string[], why: JoinCause | ((group: string) => JoinCause)): void {
   const { state } = ctx;
   const fresh = groups.filter((g) => state.groups[g] && !state.groups[g].alerted);
   if (fresh.length === 0) return;
+  const members = state.units.filter((u) => u.group && fresh.includes(u.group) && !u.down);
   for (const g of fresh) {
     state.groups[g].alerted = true;
-    ctx.events.push({ t: "alert", group: g, by: by.id });
+    ctx.events.push({ t: "alert", group: g, units: members.filter((u) => u.group === g).map((u) => u.id), why: typeof why === "function" ? why(g) : why });
   }
-  const members = state.units.filter((u) => u.group && fresh.includes(u.group) && !u.down);
   if (members.length === 0) return;
   const starting = !state.encounter;
   const enc: Encounter = state.encounter ?? { round: 1, order: [], init: {}, acting: [], done: [], budgets: {}, reacted: [], turnNo: 0, deadline: null };
   state.encounter = enc;
-  const joining = [...members, ...(by.side === "hero" && !by.down ? [by] : [])];
+  const cause = typeof why === "function" ? null : why;
+  const by = cause && cause.kind !== "heard" ? unitById(state, cause.by) : undefined;
+  const joining = [...members, ...(by && by.side === "hero" && !by.down ? [by] : [])];
   if (starting) ctx.events.push({ t: "fight_start", units: joining.map((u) => u.id) });
   for (const u of joining) {
     if (enc.order.includes(u.id)) continue;
     enter(ctx, enc, u);
-    if (!starting && !quiet) ctx.events.push({ t: "fight_join", id: u.id });
+    // The band was told as one (alert); a hero coming in with it is told on their own.
+    if (!starting && u.side === "hero") ctx.events.push({ t: "fight_join", id: u.id, why: { kind: "band", group: fresh[0] } });
   }
   pullIn(ctx);
 }
@@ -408,7 +458,7 @@ const open = (state: ZoneState) => !!state.scene && siteOpen(state.scene.site);
  * roused: walls keep the noise in, and only those near enough to hear come. Called when the bell is rung, and by nothing else:
  * a fight no longer rouses the place of itself.
  */
-function rouse(ctx: Ctx): void {
+function rouse(ctx: Ctx, ringer: Unit): void {
   const { state } = ctx;
   const enc = state.encounter;
   if (!enc || !open(state)) return;
@@ -435,30 +485,32 @@ function rouse(ctx: Ctx): void {
   }
   if (coming.length === 0) return;
   ctx.events.push({ t: "roused", groups: coming, units: coming.flatMap((g) => bands.get(g)!.map((u) => u.id)) });
-  engage(ctx, coming, hero, true);
+  engage(ctx, coming, { kind: "bell", by: ringer.id });
 }
 
-/** How near a fight a band has to be to hear it: at the start of each round, one that near comes to join it. */
-export const HEAR_RANGE = 5;
-
 /**
- * A fight is heard. Any band that has noticed nobody, with one of its own within HEAR_RANGE of someone still
- * standing in the fight, turns on the party: it is in the fight from now on. Called as each new round begins.
+ * A fight is heard. Any band that has noticed nobody, with one of its own within ALERT_RANGE of someone still
+ * standing in the fight (either side), turns on the party: it is in the fight from now on. Hearing reaches as far
+ * as sight does (noticedBy), by the one value, but needs no line to the fight: walls do not stop it. Called as
+ * each new round begins.
  */
-function reinforce(ctx: Ctx): void {
+function reinforce(ctx: Ctx, only?: readonly string[]): void {
   const { state } = ctx;
   const enc = state.encounter;
   if (!enc) return;
   const fighters = state.units.filter((u) => enc.order.includes(u.id) && !u.down);
   const hero = fighters.find((u) => u.side === "hero");
   if (!hero) return;
-  const heard = new Set<string>();
+  // Each band heard, and the one in the fight nearest any of it (whom it heard).
+  const heard = new Map<string, { near: string; gap: number }>();
   for (const e of standing(state, "enemy")) {
-    if (!e.group || state.groups[e.group]?.alerted || heard.has(e.group)) continue;
-    if (fighters.some((f) => hexDistance(f.pos, e.pos) <= HEAR_RANGE)) heard.add(e.group);
+    if (!e.group || state.groups[e.group]?.alerted || (only && !only.includes(e.group))) continue;
+    for (const f of fighters) {
+      const d = gap(f, e);
+      if (d <= ALERT_RANGE && d < (heard.get(e.group)?.gap ?? Infinity)) heard.set(e.group, { near: f.id, gap: d });
+    }
   }
-  for (const group of heard) ctx.events.push({ t: "noise", group });
-  if (heard.size > 0) engage(ctx, [...heard], hero);
+  if (heard.size > 0) engage(ctx, [...heard.keys()], (g) => ({ kind: "heard", near: heard.get(g)!.near }));
 }
 
 /** The groups, not yet alerted, with someone who can see `unit` from close by. */
@@ -468,13 +520,16 @@ function noticedBy(state: ZoneState, unit: Unit): string[] {
   if (unseen(unit)) return [];
   for (const e of standing(state, "enemy")) {
     if (!e.group || state.groups[e.group]?.alerted) continue;
-    if (hexDistance(e.pos, unit.pos) <= ALERT_RANGE && sees(state.map, e.pos, unit.pos)) out.add(e.group);
+    if (gap(e, unit) <= ALERT_RANGE && sees(state.map, ...meet(e, unit))) out.add(e.group);
   }
   return [...out];
 }
 
 /** After each step: has this unit walked into a fight, or brought one to somebody? True stops it where it is. */
 function onStep(ctx: Ctx, unit: Unit, flush: () => void): boolean {
+  // Into a field of the other side's: a Slowing Field makes the rest of the way slower; a Blizzard Aura bites.
+  fieldsCatch(ctx, unit);
+  if (unit.down) return true;
   if (unit.side !== "hero") {
     // An enemy closing in draws nearby heroes into the fight; it carries on.
     pullIn(ctx);
@@ -483,7 +538,7 @@ function onStep(ctx: Ctx, unit: Unit, flush: () => void): boolean {
   const noticed = noticedBy(ctx.state, unit);
   if (noticed.length > 0) {
     flush();
-    engage(ctx, noticed, unit);
+    engage(ctx, noticed, { kind: "seen", by: unit.id });
     return true;
   }
   const enc = ctx.state.encounter;
@@ -497,13 +552,17 @@ function onStep(ctx: Ctx, unit: Unit, flush: () => void): boolean {
 
 /** Start a unit's turn: its conditions and the ground act on it, and it gets its budget. False if it has no turn to take. */
 function beginTurn(ctx: Ctx, enc: Encounter, unit: Unit): boolean {
+  // A new turn of its own: the fields it is in may catch it again.
+  delete unit.caughtBy;
   removeCondition(unit, "guarded");
   removeCondition(unit, "taunting");
   // A Lively Shanty's lift from those who joined it lasts until its Bard's turn comes round again.
   const song = shantyOf(unit);
   if (song) song.surge = 0;
-  for (const kind of ["bleeding", "burning"] as const) if (has(unit, kind)) tick(ctx, unit, kind, kind === "burning" ? burnOf(unit) : (EFFECT_TICK[kind] ?? 0));
+  tickStacks(ctx, unit);
   if (unit.down) return false;
+  // The ground it cracked on its last turn heaves (an Earthquake), whether or not it is fit to do anything else.
+  quakeAtTurn(ctx, unit);
   // A Druid mends a little every turn.
   if (unit.kind === "backend_druid" && unit.hp < unit.maxHp) heal(ctx, unit, DRUID_REGEN, { actor: unit.id, what: "regen" });
   // A Healing Aura mends the bearer and everyone of theirs standing beside them.
@@ -526,8 +585,10 @@ function beginTurn(ctx: Ctx, enc: Encounter, unit: Unit): boolean {
     ctx.events.push({ t: "skip", id: unit.id, kind: "stunned" });
     return false;
   }
+  // Its turn starting in fields of the other side's: Slowed for it, or bitten.
+  fieldsCatch(ctx, unit, true);
   // What 1 AP of movement buys it.
-  const base = unit.summon ? (SUMMONS[unit.kind]?.move ?? 1) : unit.side === "hero" && unit.stats ? heroMove(unit.stats) : enemyMove(unit.kind, modsOf(ctx.state.options).move);
+  const base = strideOf(ctx.state, unit);
   // A Wind-god's Shanty: further, and no Slowing.
   const sung = base > 0 ? songMove(ctx.state, unit) : 0;
   // A Tailwind given since its last turn: the wind at its back.
@@ -537,7 +598,7 @@ function beginTurn(ctx: Ctx, enc: Encounter, unit: Unit): boolean {
   if (has(unit, "slowed") && stride > 0) stride = Math.max(1, Math.floor(stride / 2));
   if (has(unit, "hasted")) stride *= 2;
   // Fresh AP on top of what was saved from its last turn.
-  let ap = Math.min(AP_MAX, (enc.banked?.[unit.id] ?? 0) + (unit.summon ? SUMMON_AP_TURN : AP_TURN));
+  let ap = Math.min(AP_MAX, (enc.banked?.[unit.id] ?? 0) + (unit.summon && unit.side === "hero" ? SUMMON_AP_TURN : AP_TURN));
   if (enc.banked) delete enc.banked[unit.id];
   // Getting up off the ground takes an AP.
   if (has(unit, "prone")) {
@@ -546,10 +607,20 @@ function beginTurn(ctx: Ctx, enc: Encounter, unit: Unit): boolean {
     // Said, so the getting up is seen before anything else it does this turn.
     ctx.events.push({ t: "stood", id: unit.id });
   }
+  // Still reeling from a heavy blow: this turn comes with less to spend, and so does each after it while it lasts (it
+  // runs down with the turns, as any condition does).
+  const reel = unit.conditions.find((c) => c.kind === "reeling");
+  if (reel) {
+    const lost = Math.min(reel.amount ?? REELING_AP, Math.max(0, ap));
+    ap -= lost;
+    // Said, so the turn is seen to start short before anything else it does.
+    ctx.events.push({ t: "reeled", id: unit.id, ap: lost });
+  }
+  ap = Math.max(0, ap);
   // Windrunner Leggings: a few steps free at the start of every turn (none for one knocked flat).
   enc.budgets[unit.id] = { ap, move: stride > 0 ? perkOf(unit, "fleet") : 0, stride, disengaged: false, ...(sung > 0 ? { song: sung } : {}) };
   // An enemy puts only so much of a turn into getting about.
-  if (unit.side === "enemy" && !unit.summon) enc.budgets[unit.id].walk = ENEMY_MOVE_AP;
+  if (unit.side === "enemy") enc.budgets[unit.id].walk = ENEMY_MOVE_AP;
   // A course charted by one of its side: further, on the steps that bring it nearer the mark.
   if (courseMarks(ctx.state, unit).length > 0) enc.budgets[unit.id].course = 0;
   // Weather it stands in acts now its turn is underway, with a budget for the winds to change.
@@ -569,12 +640,7 @@ function endTurn(ctx: Ctx, unit: Unit): void {
     if (unit.cooldowns[key] <= 0) delete unit.cooldowns[key];
   }
   const owed = drowningOwed(ctx.state, unit);
-  for (const c of unit.conditions) {
-    if (UNTIMED.has(c.kind)) continue;
-    if (c.fresh) c.fresh = false;
-    else c.rounds -= 1;
-  }
-  unit.conditions = unit.conditions.filter((c) => c.rounds > 0);
+  countDown(unit);
   drown(ctx, unit, owed);
 }
 
@@ -603,8 +669,8 @@ function settle(ctx: Ctx): boolean {
   // What was called into it goes with it.
   for (const u of state.units.filter((x) => x.summon)) dismiss(ctx, u);
   state.encounter = null;
-  // A shield lasts the fight and no longer: it goes from everyone, those who fled it and the enemy too.
-  for (const u of state.units) dropShield(u);
+  // Nothing it left on anyone outlasts it (bar luck): it goes from everyone who was in it, those who fled it too.
+  for (const u of state.units) if (fighters.includes(u) || enc.fled?.includes(u.id)) leaveFight(u);
   // However it ended, every hero who was in it is whole again: the fallen get up, and nobody carries a wound out.
   for (const h of heroes) {
     if (h.down) {
@@ -612,7 +678,6 @@ function settle(ctx: Ctx): boolean {
       ctx.events.push({ t: "up", id: h.id });
     }
     h.hp = h.maxHp;
-    h.conditions = [];
     h.cooldowns = {};
   }
   // Those who got away took part too: what they were waiting on in it is over with it, and they are whole again too.
@@ -627,7 +692,8 @@ function settle(ctx: Ctx): boolean {
     // them: they lie where they fell, to be searched (loot.ts).
     // On a map the atlas made, the fallen are worth more the higher their level, as they took more killing.
     const worth = (f: Unit) => (ENEMIES[f.kind]?.xp ?? 0) * (state.options.tier ? 1 + 0.15 * Math.max(0, f.level - 1) : 1);
-    const xp = Math.round(foes.reduce((sum, f) => sum + worth(f), 0));
+    // What an enemy called into the fight (a Broodmother's brood) is worth nothing of its own.
+    const xp = Math.round(foes.filter((f) => !f.summon).reduce((sum, f) => sum + worth(f), 0));
     for (const h of heroes) {
       if (h.controller) continue;
       ctx.effects.push({ type: "grant", heroId: h.id, xp, resources: {} });
@@ -642,12 +708,12 @@ function settle(ctx: Ctx): boolean {
     // Off the board for a moment, so each finds its own post, or the nearest free hex if a hero stands on it.
     for (const f of back) {
       f.hp = f.maxHp;
-      f.conditions = [];
+      leaveFight(f);
       f.pos = { q: -99, r: -99 };
     }
     for (const f of back) {
       const post = f.home ?? was.get(f.id)!;
-      f.pos = freeHexNear(state.map, post, (p) => !!unitAt(state, p) || blockerAt(state, p), (p) => tileAt(state.map, p)) ?? was.get(f.id)!;
+      f.pos = placeFor(state, f, post) ?? was.get(f.id)!;
     }
   } else {
     const groups = new Set(foes.map((f) => f.group));
@@ -661,13 +727,13 @@ function settle(ctx: Ctx): boolean {
     for (const f of band) {
       f.down = false;
       f.hp = f.maxHp;
-      f.conditions = [];
+      leaveFight(f);
       f.pos = { q: -99, r: -99 };
     }
     for (const h of heroes) h.pos = { q: -99, r: -99 };
     for (const f of band) {
       const post = f.home ?? was.get(f.id)!;
-      f.pos = freeHexNear(state.map, post, (p) => !!unitAt(state, p) || blockerAt(state, p), (p) => tileAt(state.map, p)) ?? post;
+      f.pos = placeFor(state, f, post) ?? post;
     }
     for (const h of heroes) h.pos = freeHexNear(state.map, state.start, (p) => !!unitAt(state, p) || blockerAt(state, p), (p) => tileAt(state.map, p)) ?? state.start;
   }
@@ -758,9 +824,10 @@ function advance(ctx: Ctx): void {
     enc.done = next.filter((u) => !ready.includes(u)).map((u) => u.id);
     if (settle(ctx)) return;
     if (ready.length === 0) continue;
-    if (next[0].side === "enemy") {
+    // In the sandbox an enemy's turn waits on the dev, as a hero's does.
+    if (next[0].side === "enemy" && !state.sandbox) {
       // The bell, rung: the whole place is roused.
-      if (enemyTurn(ctx, next[0], enc.budgets[next[0].id])) rouse(ctx);
+      if (enemyTurn(ctx, next[0], enc.budgets[next[0].id])) rouse(ctx, next[0]);
       enc.done = [next[0].id];
       continue;
     }
@@ -771,18 +838,46 @@ function advance(ctx: Ctx): void {
 
 // ---------- actions ----------
 
-/** The unit a player is acting as: their own hero, or a stand-in they control. */
+/** The unit a player is acting as: their own hero, or a stand-in they control. In the combat sandbox, anyone in its fight. */
 function mine(state: ZoneState, by: string, id: string): Unit | string {
   const unit = unitById(state, id);
-  if (!unit || unit.side !== "hero" || (unit.id !== by && unit.controller !== by)) return "That is not yours to move.";
+  const sandboxed = !!unit && sandboxing(state, unit);
+  if (!unit || (!sandboxed && (unit.side !== "hero" || (unit.id !== by && unit.controller !== by)))) return "That is not yours to move.";
   if (unit.down) return `${unit.name} is down.`;
   return unit;
+}
+
+/** In the combat sandbox, and in its fight: the dev may act as this unit whenever they like, for nothing. */
+const sandboxing = (state: ZoneState, unit: Unit): boolean => !!state.sandbox && !!state.encounter?.order.includes(unit.id);
+
+/**
+ * In the combat sandbox, what everyone in the fight has to spend, every time: as much AP as a turn can hold, movement
+ * bought as it would be at the start of a turn (stride, with nothing to hold an enemy to its usual walk), and every
+ * ability ready. Put right after every action, so nothing is ever spent.
+ */
+function topUp(ctx: Ctx): void {
+  const { state } = ctx;
+  const enc = state.encounter;
+  if (!state.sandbox || !enc) return;
+  for (const u of state.units) {
+    if (!enc.order.includes(u.id) || u.down) continue;
+    const b = (enc.budgets[u.id] ??= { ap: AP_MAX, move: 0, stride: strideOf(state, u), disengaged: false });
+    b.ap = AP_MAX;
+    delete b.walk;
+    u.cooldowns = {};
+  }
+}
+
+/** What 1 AP of movement buys a unit, before anything that hastens or slows it. */
+function strideOf(state: ZoneState, unit: Unit): number {
+  return unit.summon && unit.side === "hero" ? (SUMMONS[unit.kind]?.move ?? 1) : unit.side === "hero" && unit.stats ? heroMove(unit.stats) : enemyMove(unit.kind, modsOf(state.options).move);
 }
 
 /** What `unit` has left this turn, if it is in a fight: an error if it is not its turn, null if it is in no fight. */
 function budgetOf(state: ZoneState, unit: Unit): Budget | null | string {
   const enc = state.encounter;
   if (!enc || !enc.order.includes(unit.id)) return null;
+  if (sandboxing(state, unit)) return enc.budgets[unit.id] ?? "It has nothing to spend.";
   if (!enc.acting.includes(unit.id) || enc.done.includes(unit.id)) return "It is not your turn.";
   return enc.budgets[unit.id] ?? "It is not your turn.";
 }
@@ -801,6 +896,10 @@ function spend(budget: Budget | null, cost: number): string | null {
   return null;
 }
 
+/** The highest level the dev tools put an enemy at (DevOp "spawn", "set_level"). */
+export const ENEMY_DEV_MAX_LEVEL = 60;
+const devLevel = (n: unknown, max = ENEMY_DEV_MAX_LEVEL): number => Math.max(1, Math.min(max, Math.floor(Number(n)) || 1));
+
 /** The highest level a dev kit (DevOp "kit") will make a hero. */
 export const KIT_MAX_LEVEL = 20;
 
@@ -817,8 +916,22 @@ function dev(ctx: Ctx, by: string, op: DevOp): string | null {
     const first = roomAt(state, op.at, { id: "", side: "enemy" }) && !blockerAt(state, op.at) ? op.at : null;
     kinds.forEach((kind, i) => {
       const pos = (i === 0 && first) || free(op.at);
-      if (pos) state.units.push(enemyUnit(state, kind, pos, group));
+      if (!pos) return;
+      const enemy = enemyUnit(state, kind, pos, group, op.level === undefined ? undefined : devLevel(op.level));
+      // A big one goes where all of it has room, as near as there is.
+      if (big(enemy)) {
+        const room = placeFor(state, enemy, pos);
+        if (!room) return;
+        enemy.pos = enemy.home = room;
+      }
+      state.units.push(enemy);
     });
+    // Put down where it can see a hero (by the rule a hero's step is noticed by): it is on them at once, starting a
+    // fight if none is on, as if they had walked into its sight.
+    const spotted = standing(state, "hero").find((h) => noticedBy(state, h).includes(group));
+    if (spotted) engage(ctx, [group], { kind: "seen", by: spotted.id });
+    // Put down near enough to a fight to hear it: it is in it at once, as it would be at the end of the round.
+    reinforce(ctx, [group]);
   } else if (op.op === "paint") {
     const hexes = op.hexes.filter((p) => tileAt(state.map, p)).slice(0, 60);
     if (op.kind) placeSurface(ctx, hexes, op.kind, PAINT_ROUNDS, null);
@@ -850,7 +963,7 @@ function dev(ctx: Ctx, by: string, op: DevOp): string | null {
       .filter((u) => u.side === "enemy" && !u.down && u.group && !state.groups[u.group]?.alerted)
       .sort((a, b) => hexDistance(a.pos, owner?.pos ?? state.start) - hexDistance(b.pos, owner?.pos ?? state.start))[0];
     if (!owner || !nearest) return "There is nobody to fight.";
-    engage(ctx, [nearest.group!], owner);
+    engage(ctx, [nearest.group!], { kind: "seen", by: owner.id });
   } else if (op.op === "kit") {
     const u = unitById(state, op.unit);
     if (!u || u.side !== "hero" || u.summon || (u.id !== by && u.controller !== by)) return "That is not one of your heroes.";
@@ -869,8 +982,104 @@ function dev(ctx: Ctx, by: string, op: DevOp): string | null {
     else u.abilities = abilities;
   } else if (op.op === "ai") {
     state.aiOff = op.off;
+  } else if (op.op === "heroes_idle") {
+    if (op.on) state.heroesIdle = true;
+    else delete state.heroesIdle;
+  } else if (op.op === "sandbox") {
+    if (op.on) {
+      state.sandbox = true;
+      return null;
+    }
+    delete state.sandbox;
+    // Back to the fight's own flow: nobody carries the sandbox's AP on, and an enemy whose turn it was plays it now.
+    const enc = state.encounter;
+    if (enc) {
+      delete enc.banked;
+      for (const [id, b] of Object.entries(enc.budgets)) if (!enc.acting.includes(id)) delete enc.budgets[id];
+    }
+    const foe = enc?.acting.map((id) => unitById(state, id)).find((u) => u?.side === "enemy" && !u.down && !enc.done.includes(u.id));
+    if (enc && foe && enc.budgets[foe.id]) {
+      if (enemyTurn(ctx, foe, enc.budgets[foe.id])) rouse(ctx, foe);
+      enc.done.push(foe.id);
+    }
+  } else if (op.op === "strike") {
+    const foe = unitById(state, op.unit);
+    if (!foe || foe.side !== "enemy" || foe.down || !sandboxing(state, foe)) return "Pick an enemy in the fight, in the sandbox.";
+    const attack = unitStrike(state, foe, op.ability);
+    if (!attack) return `${foe.name} has no such ability.`;
+    const target = op.target ? unitById(state, op.target) : undefined;
+    const why = checkStrike(state, foe, attack, { target, at: op.at }, op.anywhere);
+    if (why) return why;
+    enemyAct(ctx, foe, attack, target ?? null, op.at);
+  } else if (op.op === "place") {
+    const u = unitById(state, op.unit);
+    if (!u || u.down) return "There is nobody standing to put there.";
+    // All of a big one (geometry.ts span) has to have room.
+    if (span(u, op.at).some((p) => solid(tileAt(state.map, p)) || blockerAt(state, p) || !roomAt(state, p, u))) return "There is no room there.";
+    const from = u.pos;
+    u.pos = { q: op.at.q, r: op.at.r };
+    ctx.events.push({ t: "blinked", id: u.id, from, to: u.pos });
+  } else if (op.op === "set_level") {
+    const u = unitById(state, op.unit);
+    if (!u || u.side !== "enemy" || u.summon || !sandboxing(state, u)) return "Pick an enemy in the fight, in the sandbox.";
+    // As hurt as it was, as a share of its health: what it can do is worked out from its level as it is used (kit.ts).
+    const level = devLevel(op.level);
+    const maxHp = enemyMaxHp(state, u.kind, level);
+    if (!u.down) u.hp = Math.max(1, Math.min(maxHp, Math.round((u.hp / Math.max(1, u.maxHp)) * maxHp)));
+    Object.assign(u, { level, maxHp });
+  } else if (op.op === "hero_levels") {
+    // Every hero on the map at this level, their class, weapon and abilities as they are; whole. As a dev kit, it holds
+    // through a reload and leaves the characters themselves as they are.
+    const level = devLevel(op.level, KIT_MAX_LEVEL);
+    for (const u of state.units) {
+      if (u.side !== "hero" || u.summon) continue;
+      const sheet = standInHero(u.kind, u.id, level);
+      if (!sheet) continue;
+      Object.assign(u, { level, stats: sheet.stats, maxHp: sheet.maxHp, devKit: true });
+      if (!u.down) u.hp = sheet.maxHp;
+    }
+  } else if (op.op === "set_turn") {
+    const enc = state.encounter;
+    const u = unitById(state, op.unit);
+    if (!enc || !state.sandbox || !u || !enc.order.includes(u.id)) return "Pick someone in the fight, in the sandbox.";
+    if (u.down) return `${u.name} is down.`;
+    if (enc.acting.includes(u.id)) return null;
+    // Their turns over, and the fight moved on from just before this one (Encounter.resume), so theirs is the next.
+    for (const id of enc.acting) {
+      const was = unitById(state, id);
+      if (was) endTurn(ctx, was);
+    }
+    enc.acting = [];
+    enc.done = [];
+    enc.budgets = {};
+    enc.resume = u.id;
+    advance(ctx);
+  } else if (op.op === "next_turn") {
+    const enc = state.encounter;
+    if (!enc) return "There is no fight on.";
+    // A round: on until the turn comes back round to whoever has it now (or, theirs passed over, to whoever is next after them).
+    const round = enc.round;
+    const from = enc.order.indexOf(enc.acting[0]);
+    for (let turns = 0; state.encounter === enc && turns < (op.round ? enc.order.length * 2 : 1); turns++) {
+      enc.done = [...enc.acting];
+      advance(ctx);
+      if (op.round && enc.round > round && (enc.round > round + 1 || enc.order.indexOf(enc.acting[0]) >= from)) break;
+    }
+  } else if (op.op === "undying") {
+    if (op.on) state.undying = true;
+    else delete state.undying;
+  } else if (op.op === "timer") {
+    if (op.off) state.timerOff = true;
+    else delete state.timerOff;
+  } else if (op.op === "clear_enemies") {
+    // Gone, not killed: no bodies, nothing to loot, no XP. A fight they were in is won with nobody left in it (settle).
+    state.units = state.units.filter((u) => u.side !== "enemy");
+    for (const g of Object.keys(state.groups)) if (!state.units.some((u) => u.group === g)) delete state.groups[g];
   } else if (op.op === "clear_surfaces") {
     clearSurfaces(ctx, Object.keys(state.surfaces).map((key) => ({ q: Number(key.split(",")[0]), r: Number(key.split(",")[1]) })));
+    // And everything there is to loot: the bodies of the fallen, open chests' contents, the spoils. (One who falls in a
+    // fight still on lies where they fell until it is over, and is a body then.)
+    delete state.loot;
   }
   return null;
 }
@@ -941,8 +1150,8 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
       // Luck brought back from the well is added to whatever they still had.
       if (hero.luck && hero.luck > 0 && !here.down) {
         const held = here.conditions.find((c) => c.kind === "lucky");
-        if (held) held.rounds += hero.luck;
-        else here.conditions.push({ kind: "lucky", rounds: hero.luck });
+        if (held) Object.assign(held, { rounds: UNTIMED_KEEPS, amount: usesLeft(held) + hero.luck });
+        else here.conditions.push({ kind: "lucky", rounds: UNTIMED_KEEPS, amount: hero.luck });
       }
       // Back again, perhaps with different gear: the sheet is refreshed, and where they stand and how hurt they are is kept.
       // Not in a fight, though: that is fought in the gear it was started in. Nor a hero given a dev kit.
@@ -1003,7 +1212,7 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
     // Only the hex asked for and the way to it are read, so the flood stops at it (zoneReach `enough`).
     const reach = zoneReach(state, unit, budget ? moveLeft(budget) : FREE_WALK, undefined, courseFor(state, unit, budget), (r) => sameHex(r.pos, action.to));
     const end = reach.get(posKey(action.to));
-    if (!end) return budget ? "You cannot get there with the AP you have left." : "You cannot get there.";
+    if (!end) return noWayThere(state, unit, action.to) ?? (budget ? "You cannot get there with the AP you have left." : "You cannot get there.");
     if (!end.stop) return "Someone is standing there.";
     walk(ctx, unit, pathIn(reach, action.to) ?? [], budget);
     if (cut) {
@@ -1016,12 +1225,12 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
   if (action.type === "use") {
     const def = ABILITIES[action.ability];
     const tactic = tacticOf(action.ability);
-    const aim = { target: action.target, at: action.at };
+    const aim = { target: action.target, at: action.at, lean: action.lean };
     const wrong = checkAbility(state, unit, action.ability, aim);
     if (wrong) return wrong;
     // Something that takes a shape can catch a group that had not noticed anyone: it has now. A mark on the map touches nobody.
-    const area = new Set(tactic.chart ? [] : abilityArea(state, unit, action.ability, action.at, action.target).map(posKey));
-    const touched = state.units.filter((u) => u.id === action.target || area.has(posKey(u.pos)));
+    const area = new Set(tactic.chart ? [] : abilityArea(state, unit, action.ability, action.at, action.target, action.lean).map(posKey));
+    const touched = state.units.filter((u) => u.id === action.target || caught(u, area));
     const back = reachBack(state, unit, touched);
     if (back) return back;
     // Out of a fight too: there its cooldown runs down a round at a time on the clock (clock.ts).
@@ -1031,9 +1240,12 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
     if (tactic.cooldown) unit.cooldowns[action.ability] = tactic.cooldown;
     // A heal splashed among enemies is a kindness, as a healing potion thrown is: it starts nothing.
     const struck = tactic.splash ? [] : touched.filter((u) => u.side === "enemy" && !u.down).map((u) => u.group!);
+    ctx.opening = opens(state, struck, touched);
     resolveAbility(ctx, unit, action.ability, aim);
-    engage(ctx, struck, unit);
+    ctx.opening = false;
+    engage(ctx, struck, { kind: "struck", by: unit.id });
     reachIn(ctx, unit, touched);
+    shedOutside(state, [unit, ...touched]);
     return null;
   }
   if (action.type === "common") {
@@ -1045,9 +1257,13 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
     if (back) return back;
     const cost = spend(budget, commonCostFor(unit, action.what, action.what === "jump" && isBlink(state, unit, aim.at)));
     if (cost) return cost;
+    const struck = action.what === "shove" && target?.group ? [target.group] : [];
+    ctx.opening = !!target && opens(state, struck, [target]);
     doCommon(ctx, unit, action.what, aim, budget);
-    if (action.what === "shove" && target?.group) engage(ctx, [target.group], unit);
+    ctx.opening = false;
+    engage(ctx, struck, { kind: "struck", by: unit.id });
     if (target) reachIn(ctx, unit, [target]);
+    shedOutside(state, [unit, ...(target ? [target] : [])]);
     if (action.what === "flee") flee(ctx, unit);
     return null;
   }
@@ -1088,7 +1304,8 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
     const wrong = checkLoot(state, unit, spot);
     if (wrong) return wrong;
     if (action.type === "take") return take(ctx, unit, spot!, { index: action.index, uid: action.uid });
-    look(ctx, unit, spot!);
+    // A body: the others beside it are gone through with it (lootGroup), all in the one window.
+    for (const s of lootGroup(state, spot!)) if (!checkLoot(state, unit, s)) look(ctx, unit, s);
     ctx.events.push({ t: "looked", id: unit.id, spot: spot!.id });
     return null;
   }
@@ -1110,10 +1327,7 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
     // A key is quiet. Forcing it is heard, whether the door gives or not: the nearest band that has not noticed anyone comes.
     const { forced } = workDoor(ctx, unit, door!);
     const heard = forced ? heardBy(state, door!.pos) : undefined;
-    if (heard) {
-      ctx.events.push({ t: "noise", group: heard });
-      engage(ctx, [heard], unit);
-    }
+    if (heard) engage(ctx, [heard], { kind: "noise", by: unit.id });
     return null;
   }
   if (action.type === "light") {
@@ -1138,16 +1352,19 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
   if (wrong) return wrong;
   const def = THROWABLES[action.item];
   const area = new Set(blast(state.map, action.at, def.radius).map(posKey));
-  const touched = state.units.filter((u) => area.has(posKey(u.pos)));
+  const touched = state.units.filter((u) => caught(u, area));
   const back = reachBack(state, unit, touched);
   if (back) return back;
   const cost = spend(budget, ITEM_AP.throw);
   if (cost) return cost;
   // A healing potion among enemies is a kindness; anything else is a declaration.
   const struck = def.heal ? [] : touched.filter((u) => u.side === "enemy" && !u.down).map((u) => u.group!);
+  ctx.opening = opens(state, struck, touched);
   throwItem(ctx, unit, action.item, action.at);
-  engage(ctx, struck, unit);
+  ctx.opening = false;
+  engage(ctx, struck, { kind: "struck", by: unit.id });
   reachIn(ctx, unit, touched);
+  shedOutside(state, [unit, ...touched]);
   return null;
 }
 
@@ -1160,6 +1377,7 @@ export function stepZone(prev: ZoneState, action: ZoneAction): ZoneStep {
   const ctx: Ctx = { state, rng: makeRng(state.rng), events: [] as ZoneEvent[], effects: [] as ZoneEffect[] };
   ctx.onStep = (unit, flush) => onStep(ctx, unit, flush);
   const was = "unit" in action ? unitById(state, action.unit)?.pos : undefined;
+  topUp(ctx);
   const error = act(ctx, action);
   if (error) return { ok: false, error };
   pullIn(ctx);
@@ -1175,12 +1393,13 @@ export function stepZone(prev: ZoneState, action: ZoneAction): ZoneStep {
     // Its last AP spent, the unit that acted has had its turn.
     const id = "unit" in action ? action.unit : undefined;
     const left = id ? enc.budgets[id] : undefined;
-    if (id && left && enc.acting.includes(id) && !enc.done.includes(id) && spentOut(left)) enc.done.push(id);
+    if (id && left && enc.acting.includes(id) && !enc.done.includes(id) && spentOut(left) && !state.sandbox) enc.done.push(id);
     const waiting = enc.acting.some((id) => !enc.done.includes(id) && !unitById(state, id)?.down);
     if (!waiting) advance(ctx);
   }
   // A called creature that has fallen is gone.
   for (const u of state.units.filter((x) => x.summon && x.down)) dismiss(ctx, u);
+  topUp(ctx);
   // A band beaten that carried a key: it goes on the ring.
   dropKeys(ctx);
   sweep(state);

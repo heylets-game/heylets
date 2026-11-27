@@ -18,10 +18,14 @@ describe("the bear", () => {
     expect(bear.init).toBeLessThanOrEqual(brute.init);
     const hardest = Math.max(...attacksOf(bear).map((a) => a.damage));
     expect(hardest).toBeGreaterThan(Math.max(...attacksOf(wolf).map((a) => a.damage)));
-    // Its heavy blow makes them bleed; only its roar stuns.
-    const swipe = attacksOf(bear).find((a) => a.damage === hardest)!;
-    expect(swipe.perfect?.effect).toBe("bleeding");
-    expect(attacksOf(bear).some((a) => a.name === "Roar" && a.perfect?.effect === "stunned")).toBe(true);
+    // It never stuns: its swipe tears (bleeding), and its favourite, the Maul, is a slow, heavy blow that leaves its
+    // target reeling (2 less AP next turn), once every few turns.
+    expect(attacksOf(bear).some((a) => a.saveOr?.effect === "stunned")).toBe(false);
+    const swipe = attacksOf(bear).find((a) => a.name === "Rending Swipe")!;
+    expect(swipe.saveOr?.effect).toBe("bleeding");
+    const maul = attacksOf(bear).find((a) => a.name === "Maul")!;
+    expect(maul).toMatchObject({ damage: swipe.damage, cost: 3, cooldown: 3, saveOr: { effect: "reeling" } });
+    expect(maul.weight).toBeGreaterThan(swipe.weight);
   });
 
   it("has a boss of its own: bigger, and its roar shakes the whole party", () => {
@@ -29,7 +33,7 @@ describe("the bear", () => {
     expect(big.boss).toBe(true);
     expect(big.hp).toBeGreaterThan(ENEMIES.bear.hp);
     expect(big.move).toBeLessThan(ENEMIES.alpha.move);
-    expect(attacksOf(big).some((a) => a.shape === "burst" && a.perfect?.effect === "stunned")).toBe(true);
+    expect(attacksOf(big).some((a) => a.shape === "burst" && a.saveOr?.effect === "reeling")).toBe(true);
   });
 
   it("roams alone, or as a pair for a full party", () => {
@@ -50,9 +54,13 @@ describe("the ogre", () => {
     expect(ogre.init).toBeLessThan(bear.init);
     const rank = Object.values(ENEMIES).filter((e) => !e.boss && e.kind !== "dummy");
     expect(Math.max(...attacksOf(ogre).map((a) => a.damage))).toBe(Math.max(...rank.flatMap((e) => attacksOf(e).map((a) => a.damage))));
-    expect(attacksOf(ogre).find((a) => a.name === "Club Smash")?.perfect?.effect).toBe("stunned");
-    // Its stomp reaches the whole party, and leaves them slow.
-    expect(attacksOf(ogre).some((a) => a.shape === "burst" && a.perfect?.effect === "slowed")).toBe(true);
+    // Its club does not stun: it batters whoever stands beside its target too.
+    const smash = attacksOf(ogre).find((a) => a.name === "Club Smash")!;
+    expect(smash).toMatchObject({ splash: true, weight: 1 });
+    expect(smash.saveOr).toBeUndefined();
+    // Its favourite, every few turns, is the slam: it reaches the whole party, and leaves them slow.
+    const slam = attacksOf(ogre).find((a) => a.name === "Slam")!;
+    expect(slam).toMatchObject({ shape: "burst", damage: 10, cooldown: 4, weight: 2, saveOr: { effect: "slowed" } });
     expect(ogre.xp).toBeGreaterThan(brute.xp);
   });
 
@@ -71,6 +79,13 @@ describe("the troll", () => {
   it("keeps a cave chamber to itself", () => {
     expect(LURKERS).toContainEqual(["troll"]);
   });
+
+  it("rakes, chomps for 1 AP every few turns, and throws a rock that leaves you reeling", () => {
+    const [rake, chomp, rock] = ["Rake", "Chomp", "Hurl Rock"].map((name) => attacksOf(ENEMIES.troll).find((a) => a.name === name)!);
+    expect(rake).toMatchObject({ weight: 1, saveOr: { effect: "bleeding" } });
+    expect(chomp).toMatchObject({ damage: 6, drain: 0.5, cost: 1, cooldown: 2, weight: 1 });
+    expect(rock).toMatchObject({ range: 5, cooldown: 2, weight: 1, saveOr: { effect: "reeling", amount: 2 } });
+  });
 });
 
 describe("the training dummy", () => {
@@ -78,8 +93,28 @@ describe("the training dummy", () => {
     const dummy = ENEMIES.dummy;
     expect(dummy.xp).toBe(0);
     expect(dummy.boss).toBeFalsy();
-    const softest = Math.min(...Object.values(ENEMIES).filter((e) => e.kind !== "dummy").flatMap((e) => attacksOf(e).map((a) => a.damage)));
+    const softest = Math.min(...Object.values(ENEMIES).filter((e) => e.kind !== "dummy").flatMap((e) => attacksOf(e).map((a) => a.damage).filter((d) => d > 0)));
     for (const a of attacksOf(dummy)) expect(a.damage).toBeLessThan(softest);
     expect(dummy.hp).toBeGreaterThan(Math.max(...Object.values(ENEMIES).filter((e) => !e.boss && e.kind !== "dummy").map((e) => e.hp)));
+  });
+});
+
+describe("the rime wraith", () => {
+  it("shoots Frost Motes from range, and every few turns throws an Icy Bomb that ices a clump of three hexes", () => {
+    const { wraith } = ENEMIES;
+    expect(attacksOf(wraith).map((a) => a.name)).toEqual(["Frost Mote", "Icy Bomb"]);
+    expect(attacksOf(wraith).find((a) => a.name === "Frost Mote")).toMatchObject({ damage: 6, range: 5, saveOr: { effect: "slowed" }, chills: true });
+    const bomb = attacksOf(wraith).find((a) => a.name === "Icy Bomb")!;
+    expect(bomb).toMatchObject({ damage: 8, range: 5, area: 3, cooldown: 3, surface: { kind: "ice" } });
+    expect(bomb.saveOr).toBeUndefined();
+  });
+});
+
+describe("the cultist", () => {
+  it("bolts from range, and every few turns throws fire onto a clump of four hexes", () => {
+    const { cultist } = ENEMIES;
+    const immolate = attacksOf(cultist).find((a) => a.name === "Immolate")!;
+    expect(immolate).toMatchObject({ damage: 7, range: 5, area: 4, cooldown: 3, weight: 2, saveOr: { effect: "burning" }, surface: { kind: "fire" } });
+    expect(attacksOf(cultist).find((a) => a.name === "Dark Bolt")).toMatchObject({ weight: 2 });
   });
 });

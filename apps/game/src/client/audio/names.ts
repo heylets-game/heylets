@@ -20,7 +20,7 @@ export interface Fighter {
 }
 
 const BIOMES: Record<Biome, true> = { plains: true, forest: true, hills: true, water: true, dock: true, cobble: true, mud: true, rampart: true, floor: true, wall: true, cave: true, rock: true, gate: true, fog: true, sand: true, paved: true };
-const EFFECTS: Record<EffectKind, true> = { bleeding: true, burning: true, stunned: true, guarded: true, taunting: true, slowed: true, hasted: true, glitched: true, exposed: true, prone: true, sundered: true };
+const EFFECTS: Record<EffectKind, true> = { bleeding: true, burning: true, stunned: true, guarded: true, taunting: true, slowed: true, hasted: true, fumbling: true, exposed: true, prone: true, sundered: true, reeling: true, memento_mori: true, weakened: true };
 
 const voice = (f: Fighter, what: "attack" | "hurt" | "down") =>
   f.side === "enemy" ? [`enemy.${f.kind}.${what}`, `enemy.${what}`] : [`hero.${f.kind}.${what}`, `hero.${what}`];
@@ -29,10 +29,10 @@ export const FISHING_SOUNDS = ["cast", "plop", "nibble", "plunge", "bite", "spla
 export type FishingSound = (typeof FISHING_SOUNDS)[number];
 
 /** A fight on the tiles (a zone): the d20 and what it came to, the fight starting, and the things only the tiles have; in a delve, a chest creaking open and a crate struck and broken. */
-export const ZONE_SOUNDS = ["roll", "roll.crit", "initiative", "turn.yours", "turn.enemy", "reaction", "shove", "fall", "jump", "throw", "shatter", "burst", "chest_open", "crate_hit", "crate_break"] as const;
+export const ZONE_SOUNDS = ["roll", "initiative", "turn.yours", "turn.enemy", "reaction", "shove", "fall", "jump", "throw", "shatter", "burst", "chest_open", "crate_hit", "crate_break", "bell"] as const;
 export type ZoneSound = (typeof ZONE_SOUNDS)[number];
 /** What can lie on the ground in a zone, and the conditions the tiles add to the old fights' effects. */
-export const SURFACE_SOUNDS = ["poison", "fire", "oil", "water", "ice", "slime"] as const;
+export const SURFACE_SOUNDS = ["poison", "fire", "oil", "water", "ice", "slime", "web"] as const;
 export const ZONE_CONDITION_SOUNDS = ["poisoned", "prone", "wet"] as const;
 
 /** The pub's game tables. */
@@ -48,8 +48,8 @@ export const soundName = {
   attackVoice: (f: Fighter) => voice(f, "attack"),
   /** A blow landing. */
   impact: (ability: string, style: AttackStyle) => [`impact.${slug(ability)}`, `impact.${style}`, "impact"],
-  /** Laid over the impact when the roll was perfect. */
-  crit: () => ["impact.crit"],
+  /** Laid over the impact of a critical hit, by the side that landed it: a hero's crit and an enemy's sound nothing alike. */
+  crit: (by: Fighter["side"]) => [`impact.crit.${by}`],
   /** The target's voice as it is hit. */
   hurt: (f: Fighter) => voice(f, "hurt"),
   miss: (ability: string, style: AttackStyle) => [`miss.${slug(ability)}`, `miss.${style}`, "miss"],
@@ -125,7 +125,7 @@ export function soundNames(): Set<string> {
   for (const s of SURFACE_SOUNDS) add(soundName.surface(s));
   for (const c of ZONE_CONDITION_SOUNDS) add(soundName.effect(c));
   for (const t of ["poison", "fire"]) add(soundName.tick(t));
-  [soundName.crit(), soundName.healFailed(), soundName.flee(true), soundName.flee(false), soundName.yourTurn(), soundName.blip(), soundName.levelUp(), soundName.thunder()].forEach(add);
+  [soundName.crit("hero"), soundName.crit("enemy"), soundName.healFailed(), soundName.flee(true), soundName.flee(false), soundName.yourTurn(), soundName.blip(), soundName.levelUp(), soundName.thunder()].forEach(add);
   add(["stinger.boss", "stinger.battle_start", "stinger.victory", "stinger.defeat"]);
   // On file, with nothing playing them yet: loot taken, gold paid and something picked up.
   add(["loot", ...RARITIES.map((r) => `loot.${r}`), "gold", "pickup", ...RESOURCE_KINDS.map((k) => `pickup.${k}`)]);

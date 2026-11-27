@@ -7,6 +7,7 @@ import { hexDistance, hexNeighbors, inBounds, posKey, type HexPos } from "@gantt
 import { MOVE_COST, tileAt, tilesByKey, type Tile, type WorldMap } from "../map";
 import { crateAt } from "./crates";
 import { ENEMY_KIT } from "./kit";
+import { ENEMIES } from "../content";
 import { propOf } from "./props";
 import type { Side, Unit, Weather, ZoneState } from "./types";
 import type { GearPerk } from "../gear";
@@ -22,6 +23,85 @@ export const HEX_DIRS: readonly HexPos[] = [
 ];
 
 export const sameHex = (a: HexPos, b: HexPos): boolean => a.q === b.q && a.r === b.r;
+
+// ---------- how much ground a unit stands on ----------
+//
+// Most stand on one hex. A few great enemies stand on three (ENEMIES `size`): a triangle of hexes all touching, its
+// `pos` (the anchor) and the hexes to the east and the south-east of it, never turned. Wherever the rules ask where a
+// unit is, how far it is from something, or whether something reaches it, a big one is all three of its hexes: it is
+// as near as its nearest. It walks only where all three can go, and nothing pushes it.
+
+/** How a unit of three hexes lies, from its anchor: the anchor, the hex east of it and the one south-east. */
+export const SPAN3: readonly HexPos[] = [{ q: 0, r: 0 }, { q: 1, r: 0 }, { q: 0, r: 1 }];
+
+type Placed = Pick<Unit, "kind" | "side" | "pos">;
+
+/** How many hexes a unit stands on (ENEMIES `size`): 1 for all but a few great enemies. */
+export const bulk = (unit: Pick<Unit, "kind" | "side">): number => (unit.side === "enemy" ? (ENEMIES[unit.kind]?.size ?? 1) : 1);
+
+/** Whether a unit is bigger than a hex: too heavy for anything to push. */
+export const big = (unit: Pick<Unit, "kind" | "side">): boolean => bulk(unit) > 1;
+
+/** The hexes a unit of `size` stands on with its anchor at `pos`. */
+export const spanAt = (pos: HexPos, size: number): HexPos[] => (size > 1 ? SPAN3.map((o) => ({ q: pos.q + o.q, r: pos.r + o.r })) : [pos]);
+
+/** The hexes a unit stands on: where it is, or where it would be with its anchor at `at`. */
+export const span = (unit: Placed, at: HexPos = unit.pos): HexPos[] => spanAt(at, bulk(unit));
+
+/** Whether a unit stands on this hex (any of its hexes, for a big one), or would with its anchor at `at`. */
+export function covers(unit: Placed, p: HexPos, at: HexPos = unit.pos): boolean {
+  if (at.q === p.q && at.r === p.r) return true;
+  if (!big(unit)) return false;
+  return SPAN3.some((o) => at.q + o.q === p.q && at.r + o.r === p.r);
+}
+
+/** Of the hexes a unit stands on (anchored at `at`), the one nearest `to`: the anchor itself for one of a single hex. */
+export function nearOf(unit: Placed, to: HexPos, at: HexPos = unit.pos): HexPos {
+  if (!big(unit)) return at;
+  let best = at;
+  let d = hexDistance(at, to);
+  for (const p of span(unit, at)) {
+    const k = hexDistance(p, to);
+    if (k < d) [best, d] = [p, k];
+  }
+  return best;
+}
+
+/** How far a hex is from a unit: from the nearest of its hexes. */
+export const gapTo = (unit: Placed, to: HexPos, at: HexPos = unit.pos): number => hexDistance(nearOf(unit, to, at), to);
+
+/** The nearest pair of hexes between two units, `a`'s (anchored at `aAt`) first: what a blow, a shot or a look goes between. */
+export function meet(a: Placed, b: Placed, aAt: HexPos = a.pos): [HexPos, HexPos] {
+  if (!big(a) && !big(b)) return [aAt, b.pos];
+  let best: [HexPos, HexPos] = [aAt, b.pos];
+  let d = Infinity;
+  for (const p of span(a, aAt)) {
+    for (const q of span(b)) {
+      const k = hexDistance(p, q);
+      if (k < d) [best, d] = [[p, q], k];
+    }
+  }
+  return best;
+}
+
+/** Whether any hex a unit stands on is one of `keys` (posKey): whether an area catches it. */
+export const caught = (unit: Placed, keys: ReadonlySet<string>): boolean => span(unit).some((p) => keys.has(posKey(p)));
+
+/**
+ * Whether a blow by hand reaches between two units (strikes), from any hex of one to any of the other: `a` anchored
+ * at `aAt`, `b` at `bAt`.
+ */
+export function reaches(map: WorldMap, a: Placed, b: Placed, aAt: HexPos = a.pos, bAt: HexPos = b.pos): boolean {
+  if (!big(a) && !big(b)) return strikes(map, aAt, bAt);
+  const theirs = span(b, bAt);
+  return span(a, aAt).some((p) => theirs.some((q) => strikes(map, p, q)));
+}
+
+/** How far apart two units are: between their nearest hexes (`a` anchored at `aAt`). */
+export function gap(a: Placed, b: Placed, aAt: HexPos = a.pos): number {
+  const [p, q] = meet(a, b, aAt);
+  return hexDistance(p, q);
+}
 
 /** How far a hero may be sent in one click while walking freely. */
 export const FREE_WALK = 80;
@@ -147,7 +227,7 @@ export function seesFor(state: Pick<ZoneState, "map" | "weather">, side: Side, f
 export const isDead = (unit: Unit): boolean => unit.down && unit.side === "enemy";
 
 /** Everyone on a hex, standing or fallen. */
-export const unitsAt = (state: Pick<ZoneState, "units">, pos: HexPos): Unit[] => state.units.filter((u) => sameHex(u.pos, pos));
+export const unitsAt = (state: Pick<ZoneState, "units">, pos: HexPos): Unit[] => state.units.filter((u) => covers(u, pos));
 
 /** Someone on a hex: one still standing, if anyone there is; else a hero who is down there. Never the dead. */
 export const unitAt = (state: Pick<ZoneState, "units">, pos: HexPos): Unit | undefined => {
@@ -160,22 +240,44 @@ export const unitAt = (state: Pick<ZoneState, "units">, pos: HexPos): Unit | und
  * Nobody enters a hex held against them, by any means: on foot, by a leap, or shoved.
  */
 export const heldAgainst = (state: Pick<ZoneState, "units">, pos: HexPos, side: Side): boolean =>
-  state.units.some((u) => u.side !== side && !isDead(u) && sameHex(u.pos, pos));
+  state.units.some((u) => u.side !== side && !isDead(u) && covers(u, pos));
 
 /**
  * Whether there is room on a hex for `who` to stand: nobody of the other side is on it, and fewer than `HEX_ROOM`
  * of their own (not counting `who`, if they are there already). With nobody named: whether it is free of everyone.
- * The dead take up no room.
+ * The dead take up no room. Nobody shares a hex with a big unit, nor a big unit with anyone: for one, this is room
+ * on this one hex of its; whether it has room on all of them is roomFor.
  */
-export const roomAt = (state: Pick<ZoneState, "units">, pos: HexPos, who?: Pick<Unit, "id" | "side">): boolean => {
+export const roomAt = (state: Pick<ZoneState, "units">, pos: HexPos, who?: Pick<Unit, "id" | "side"> & Partial<Pick<Unit, "kind">>): boolean => {
+  const huge = !!who?.kind && big(who as Unit);
   let own = 0;
   for (const u of state.units) {
-    if (isDead(u) || u.id === who?.id || !sameHex(u.pos, pos)) continue;
-    if (!who || u.side !== who.side) return false;
+    if (isDead(u) || u.id === who?.id || !covers(u, pos)) continue;
+    if (!who || u.side !== who.side || huge || big(u)) return false;
     own += 1;
   }
   return own < HEX_ROOM;
 };
+
+/** Whether `who` has room to stand with its anchor at `at`: on every one of its hexes (roomAt), all of them ground. */
+export const roomFor = (state: Pick<ZoneState, "units" | "map">, who: Unit, at: HexPos): boolean =>
+  span(who, at).every((p) => !solid(tileAt(state.map, p)) && roomAt(state, p, who));
+
+/**
+ * Why `unit` cannot walk to `to` however much it had to spend, in words, or null if it could (and it is only too far):
+ * Fettered, and it is further from the spot than the chain lets it go; a unit bigger than a hex with no room there, or no
+ * way through wide enough for it; or no way through at all.
+ */
+export function noWayThere(state: ZoneState, unit: Unit, to: HexPos): string | null {
+  // Off the map: nothing more to say than that it cannot be got to.
+  if (!tileAt(state.map, to)) return null;
+  const fetter = fetterOf(unit);
+  if (fetter && fetterBars(unit, unit.pos, to)) return `You are chained to a spot: you cannot go more than ${fetter.reach === 1 ? "a hex" : `${fetter.reach} hexes`} from it.`;
+  const huge = big(unit);
+  if (huge && !roomFor(state, unit, to)) return `There is no room for all of ${unit.name} there.`;
+  if (zoneReach(state, unit, FREE_WALK, undefined, undefined, (r) => sameHex(r.pos, to)).has(posKey(to))) return null;
+  return huge ? `You cannot get there: there is no way through wide enough for all of ${unit.name}.` : "You cannot get there: there is no way through.";
+}
 
 export const unitById = (state: ZoneState, id: string): Unit | undefined => state.units.find((u) => u.id === id);
 
@@ -245,16 +347,39 @@ export interface Footing {
 /** The footing for `unit` over `state`: the same answers stepCost comes to by looking, hex by hex. */
 function footingFor(state: ZoneState, unit: Unit): Footing {
   const held = new Map<string, number>();
+  // A big walker shares no hex with anyone, nor anyone with a big unit: those are barred as the other side is.
+  const huge = big(unit);
   for (const u of state.units) {
     if (u.id === unit.id || isDead(u)) continue;
-    const key = posKey(u.pos);
-    if (u.side !== unit.side) held.set(key, -1);
-    else if (held.get(key) !== -1) held.set(key, (held.get(key) ?? 0) + 1);
+    const bar = huge || big(u) || u.side !== unit.side;
+    for (const p of span(u)) {
+      const key = posKey(p);
+      if (bar) held.set(key, -1);
+      else if (held.get(key) !== -1) held.set(key, (held.get(key) ?? 0) + 1);
+    }
   }
   const blocked = new Set<string>();
   for (const p of state.map.pois) if (p.kind === "cache" || (p.kind === "crate" && !p.cleared)) blocked.add(posKey(p.pos));
   for (const w of state.weather ?? []) if (w.kind === "wall") for (const p of w.hexes) blocked.add(posKey(p));
   return { held, blocked, tiles: tilesByKey(state.map), air: flies(unit) };
+}
+
+/** Where a Fettered unit is chained (a Haunt's Ghastly Fetter): the hex, and how far from it it may go by its own doing. Null: it is free. */
+export function fetterOf(unit: Unit): { at: HexPos; reach: number } | null {
+  const c = unit.conditions.find((x) => x.kind === "fettered");
+  return c?.at ? { at: c.at, reach: c.amount ?? 1 } : null;
+}
+
+/**
+ * Whether a Fettered unit is held back from going from `from` to `to` by its own doing (a step, a jump, a blink): it
+ * may go anywhere within its chain's reach of its spot, and, if something has put it further off, only nearer the spot.
+ * What is done to it (a shove, a pull) it cannot stop.
+ */
+export function fetterBars(unit: Unit, from: HexPos, to: HexPos): boolean {
+  const fetter = fetterOf(unit);
+  if (!fetter) return false;
+  const far = hexDistance(to, fetter.at);
+  return far > fetter.reach && far >= hexDistance(from, fetter.at);
 }
 
 /**
@@ -266,12 +391,29 @@ function footingFor(state: ZoneState, unit: Unit): Footing {
  * their place; a dead enemy takes up no room and bars nobody), cannot be stepped onto, so it is neither stopped on
  * nor passed through. A unit's own side does not: up to `HEX_ROOM` of them stand on one hex, and a full one can
  * still be walked through, though not stopped on. What flies is barred the same way. Chests, crates and whatever
- * else stands in the way bar it too.
+ * else stands in the way bar it too. One Fettered goes no further from its spot than its chain lets it (fetterBars).
  *
  * A flood hands in what it worked out beforehand (`footing`; `fromElev`, how high `from` stands; and `toKey`, the
  * key of `to`): the answer is the same with them as without, only sooner.
+ *
+ * A big unit (span) steps with all of its hexes at once, `from` and `to` its anchor's: each of them makes the same
+ * step, and it costs what the dearest of them does.
  */
 export function stepCost(state: ZoneState, unit: Unit, from: HexPos, to: HexPos, shut?: ReadonlySet<string>, footing?: Footing, fromElev?: number, toKey: string = posKey(to)): { cost: number; stop: boolean } {
+  if (fetterBars(unit, from, to)) return { cost: Infinity, stop: false };
+  if (!big(unit)) return hexStep(state, unit, from, to, shut, footing, fromElev, toKey);
+  let cost = 0;
+  let stop = true;
+  for (const o of SPAN3) {
+    const step = hexStep(state, unit, { q: from.q + o.q, r: from.r + o.r }, { q: to.q + o.q, r: to.r + o.r }, shut, footing);
+    if (!Number.isFinite(step.cost)) return step;
+    cost = Math.max(cost, step.cost);
+    stop &&= step.stop;
+  }
+  return { cost, stop };
+}
+
+function hexStep(state: ZoneState, unit: Unit, from: HexPos, to: HexPos, shut?: ReadonlySet<string>, footing?: Footing, fromElev?: number, toKey: string = posKey(to)): { cost: number; stop: boolean } {
   const tile = footing ? footing.tiles.get(toKey) : tileAt(state.map, to);
   const air = footing ? footing.air : flies(unit);
   const none = { cost: Infinity, stop: false };
@@ -293,11 +435,12 @@ export function stepCost(state: ZoneState, unit: Unit, from: HexPos, to: HexPos,
     const there = footing.held.get(toKey) ?? 0;
     return there < 0 ? none : { cost, stop: there < HEX_ROOM };
   }
-  // Who is there already (as roomAt counts them): any of the other side, and there is no going there at all.
+  // Who is there already (as roomAt counts them): any of the other side, or anyone big (or anyone at all, for a big
+  // walker), and there is no going there at all.
   let own = 0;
   for (const u of state.units) {
-    if (u.id === unit.id || isDead(u) || !sameHex(u.pos, to)) continue;
-    if (u.side !== unit.side) return none;
+    if (u.id === unit.id || isDead(u) || !covers(u, to)) continue;
+    if (u.side !== unit.side || big(u) || big(unit)) return none;
     own += 1;
   }
   return { cost, stop: own < HEX_ROOM };
@@ -539,4 +682,50 @@ export function blast(map: WorldMap, center: HexPos, radius: number): HexPos[] {
     }
   }
   return out;
+}
+
+/**
+ * Where in a hex something is aimed: how far off its middle, in hexes along q and r (fractions of a step). A shape that
+ * turns with the pointer (nearestHexes) is laid about that spot, not the hex's middle.
+ */
+export type Lean = { q: number; r: number };
+
+/** A spot on the ground, in hexes along q and r, as a flat point: the same spacing in every direction (hexToWorld on the client). */
+const flat = (q: number, r: number) => ({ x: Math.sqrt(3) * (q + r / 2), y: 1.5 * r });
+
+/** How far it is from the spot `lean` off the middle of `at` to the middle of `p`, squared, measured flat. */
+function spotTo(at: HexPos, lean: Lean, p: HexPos): number {
+  const a = flat(at.q + lean.q, at.r + lean.r);
+  const b = flat(p.q, p.r);
+  return (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+}
+
+/**
+ * The `lean` brought in toward the middle of `at` until the spot it names lies in `at` (no other hex's middle nearer):
+ * aimed at a hex, a shape is aimed somewhere in it. Nothing that cannot be a number gets through.
+ */
+export function leanWithin(at: HexPos, lean: Lean): Lean {
+  if (!Number.isFinite(lean.q) || !Number.isFinite(lean.r)) return { q: 0, r: 0 };
+  let k = 1;
+  for (let i = 0; i < 40; i++, k *= 0.9) {
+    const l = { q: lean.q * k, r: lean.r * k };
+    if (HEX_DIRS.every((d) => spotTo(at, l, { q: at.q + d.q, r: at.r + d.r }) > spotTo(at, l, at))) return l;
+  }
+  return { q: 0, r: 0 };
+}
+
+/**
+ * The `n` hexes on the map whose middles lie nearest a spot in `at` (`lean` off its middle, kept within it: leanWithin),
+ * nearest first. So the shape is always the same for the same `n` (three: a triangle; four: a diamond; seven: a hex and
+ * its ring), and only turns as the spot moves about the hex: it is laid where the pointer is. `at` is always one of them.
+ * Hexes as near as each other go by q, then r.
+ */
+export function nearestHexes(map: WorldMap, at: HexPos, lean: Lean, n: number): HexPos[] {
+  const l = leanWithin(at, lean);
+  const far = Math.ceil(Math.sqrt(n)) + 1;
+  return blast(map, at, far)
+    .map((p) => ({ p, d: spotTo(at, l, p) }))
+    .sort((a, b) => a.d - b.d || a.p.q - b.p.q || a.p.r - b.p.r)
+    .slice(0, n)
+    .map((x) => x.p);
 }

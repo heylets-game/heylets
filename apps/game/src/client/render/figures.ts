@@ -643,6 +643,13 @@ class Part {
    * from the joint, and a piece of the limb that crosses the joint is cut in two there (see place).
    */
   private bend: { at: number; lower: Part } | null = null;
+  /**
+   * Loose fur and the like, riding on the part it hangs from: it falls with that part but is not a body of its own
+   * when the figure falls dead (see ragdoll), so spikes standing off a hide do not prop it up on its feet.
+   */
+  fluff = false;
+  /** What its glowing pieces are called, for an effect to find them where they are (Figure.glowAt): a Guardian's "eyes", its "gem". */
+  glowTag?: string;
 
   constructor(parent: THREE.Object3D, x = 0, y = 0, z = 0) {
     this.joint.position.set(x, y, z);
@@ -900,6 +907,7 @@ class Part {
     if (this.lit.length > 0) {
       const mesh = new THREE.Mesh(merged(this.lit), mats.glow);
       mesh.userData.selfLit = true;
+      if (this.glowTag) mesh.userData.glowTag = this.glowTag;
       this.skin.add(mesh);
     }
     if (this.inked.length > 0) {
@@ -1228,6 +1236,7 @@ function bodyCapsules(parts: Part[]): BodyCapsule[] {
   const size = new THREE.Vector3();
   const mid = new THREE.Vector3();
   for (const part of parts) {
+    if (part.fluff) continue;
     box.makeEmpty();
     part.skin.updateMatrix();
     for (const o of part.skin.children) {
@@ -1571,10 +1580,10 @@ const GET_UP_HIPS = -1;
  * `n` counts the figure's actions, so two flinches in a row need not be the same.
  */
 interface Act {
-  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
+  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "slam" | "drop" | "pound" | "channel" | "spook" | "claw" | "flurry" | "howl" | "breathe" | "flare" | "rake" | "roar" | "grasp" | "wail" | "hurl" | "engulf" | "spit" | "fang" | "web" | "dive" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
   t: number;
   n: number;
-  /** A jump's seconds off the ground (see JUMP). */
+  /** A jump's seconds off the ground (see JUMP), or how long a dive is held (see DIVE). */
   air?: number;
 }
 
@@ -1631,6 +1640,384 @@ const SWING: Blow = {
   crouch: [[0, 0], [0.17, 0.3], [0.3, 0.24], [0.52, 0]],
   off: [[0, 0], [0.11, -0.45], [0.17, 0.4], [0.52, 0]],
   step: [[0, 0], [0.1, 0.3], [0.17, 1], [0.32, 1], [0.52, 0]],
+};
+
+/**
+ * Two side slashes in one breath, quick and flat: the arm lifted level and wound out to the figure's right, the
+ * shoulders turned with it, swept across the front at chest height and on past the left, where the follow-through
+ * is the wind-up of a backhand that sweeps it straight back across and out to the right; then back to guard. The
+ * first cut lands at `hit` and the second at `second`. A Bandit's Cheap Shot (signatureMoves.ts).
+ */
+const SLICES: Blow & { second: number } = {
+  hit: 0.15,
+  second: 0.3,
+  over: 0.62,
+  arm: [[0, -0.4], [0.08, -1.3], [0.15, -1.4], [0.22, -1.3], [0.3, -1.4], [0.39, -1.3], [0.62, -0.3]],
+  bend: [[0, -1.2], [0.08, -0.9], [0.15, -0.15], [0.22, -1.1], [0.3, -0.15], [0.39, -0.3], [0.62, -1.2]],
+  out: [[0, 0.1], [0.08, 1.3], [0.15, 0.2], [0.22, -0.9], [0.3, -0.2], [0.39, 1.2], [0.62, 0.1]],
+  blade: [[0, 0.3], [0.08, 1.45], [0.15, 1.2], [0.22, 1.4], [0.3, 1.2], [0.39, 1.25], [0.62, 0.3]],
+  lean: [[0, 0], [0.08, -0.05], [0.15, 0.12], [0.3, 0.14], [0.42, 0.1], [0.62, 0]],
+  twist: [[0, 0], [0.08, -0.6], [0.15, 0.3], [0.22, 0.75], [0.3, -0.1], [0.39, -0.6], [0.62, 0]],
+  rise: [[0, 0], [0.62, 0]],
+  crouch: [[0, 0], [0.15, 0.12], [0.3, 0.14], [0.42, 0.1], [0.62, 0]],
+  off: [[0, 0], [0.08, -0.3], [0.15, 0.3], [0.22, 0.3], [0.3, -0.3], [0.62, 0]],
+  step: [[0, 0], [0.08, 0.3], [0.15, 1], [0.42, 1], [0.62, 0]],
+};
+/** Seconds from the first of the two side slashes landing to the second. */
+export const SLICES_APART = SLICES.second - SLICES.hit;
+
+/**
+ * An overhead slam: the weapon heaved right up over the head and laid back behind it, the free arm thrown up with it
+ * and the body rising onto its toes and leaning back; then brought straight down on the mark with the whole weight
+ * behind it, the body driven forward and deep into the knees as it lands, held there a moment, and gathered back up.
+ * An Ogre's Club Smash (signatureMoves.ts).
+ */
+const SLAM: Blow = {
+  hit: 0.42,
+  over: 1.0,
+  arm: [[0, -0.4], [0.3, -3.0], [0.34, -3.05], [0.42, -1.0], [0.6, -0.9], [1.0, -0.3]],
+  bend: [[0, -1.2], [0.3, -0.5], [0.34, -0.45], [0.42, -0.1], [0.6, -0.2], [1.0, -1.2]],
+  out: [[0, 0.1], [0.3, 0.25], [0.42, 0.05], [1.0, 0.1]],
+  blade: [[0, 0.3], [0.3, -1.3], [0.34, -1.4], [0.42, 2.1], [0.6, 2.0], [1.0, 0.3]],
+  lean: [[0, 0], [0.3, -0.25], [0.34, -0.28], [0.42, 0.5], [0.62, 0.45], [1.0, 0]],
+  twist: [[0, 0], [0.3, -0.15], [0.42, 0.1], [1.0, 0]],
+  rise: [[0, 0], [0.3, 0.25], [0.36, 0.22], [0.42, 0], [1.0, 0]],
+  crouch: [[0, 0], [0.3, 0], [0.42, 0.55], [0.62, 0.45], [1.0, 0]],
+  off: [[0, 0], [0.3, -2.6], [0.34, -2.65], [0.42, -1.0], [0.62, -0.9], [1.0, 0]],
+  step: [[0, 0], [0.3, 0.3], [0.42, 1], [0.65, 1], [1.0, 0]],
+};
+
+/**
+ * A seat drop: a deep crouch with the arms swung back, a spring straight up off both feet with the arms thrown high,
+ * the legs swinging out ahead in the air, and down flat on its backside at `hit` (FLOOR's seat, legs out in front),
+ * the body rocking back and the legs bouncing up off the ground with the weight of it, the arms flung out wide.
+ * It sits there a moment, then heaves itself back up. `up` is how high off the ground it is, in the figure's own
+ * units; `seat` how far into the sit, 0 to 1; `coil` the crouch; `arms` -1 swung back to 1 thrown up; `jolt` the
+ * shock of landing, dying away; `rise` the crouch it gets back up through. An Ogre's Slam (signatureMoves.ts).
+ */
+/**
+ * A ground-pound with both fists (a Guardian's Earthquake): both arms heaved up overhead together, the body drawn up
+ * tall, and then a deep crouch, bent right forward, both fists driven down into the ground before its feet (at `hit`),
+ * held there a moment as the ground takes it, jolted, and up again. Keys by seconds in: `lift` the arms overhead,
+ * `rise` up on its toes with them, `down` them driven to the ground, `crouch` the knees, `lean` forward, `jolt` the shock of it.
+ */
+const POUND = {
+  hit: 0.5,
+  over: 1.25,
+  lift: [[0, 0], [0.3, 1], [0.38, 1.05], [0.5, 0], [1.25, 0]] as Keys,
+  down: [[0, 0], [0.38, 0], [0.5, 1], [0.85, 1], [1.2, 0]] as Keys,
+  rise: [[0, 0], [0.3, 1], [0.38, 1], [0.46, 0]] as Keys,
+  crouch: [[0, 0], [0.38, 0], [0.5, 0.85], [0.85, 0.75], [1.2, 0]] as Keys,
+  lean: [[0, 0], [0.3, -0.25], [0.38, -0.25], [0.5, 0.75], [0.85, 0.65], [1.2, 0]] as Keys,
+  jolt: [[0, 0], [0.5, 0], [0.56, 1], [0.72, 0.2], [0.9, 0]] as Keys,
+};
+
+/**
+ * Channelling (a Guardian's Slowing Field): the arms opened out wide to either side and a little up, hands open, the
+ * chest thrown out and the head lifted, held there as something is drawn through it, trembling with it; let go at
+ * `hit` with a jolt, held a moment more, and back. Keys by seconds in: `open` the arms out, `lift` the chest and head,
+ * `shiver` the tremble while it is held, `jolt` the letting go.
+ */
+const CHANNEL = {
+  hit: 1.05,
+  over: 1.9,
+  open: [[0, 0], [0.35, 1], [1.05, 1.05], [1.15, 1.15], [1.5, 1], [1.9, 0]] as Keys,
+  lift: [[0, 0], [0.35, 0.7], [1.0, 0.85], [1.12, 1.1], [1.5, 0.8], [1.9, 0]] as Keys,
+  shiver: [[0, 0], [0.3, 0], [0.5, 0.6], [1.0, 1], [1.08, 0], [1.9, 0]] as Keys,
+  jolt: [[0, 0], [1.05, 0], [1.11, 1], [1.3, 0.2], [1.5, 0]] as Keys,
+};
+
+/**
+ * Spooking (a Skeleton's Memento Mori): the head tipped slowly over to one side and held there, and the whole body
+ * twitching in sharp, uneven jerks, a little at first and worse as it goes on: the skull snapping this way and that,
+ * the shoulders and arms flicking, a shudder through the hips. Not a tremble but a stutter, each jerk held a moment
+ * (`rate` a second, at random). It is at its worst from `hit`, as what it puts off goes out, and settles by `over`.
+ * Keys by seconds in: `tilt` the head over, `jerk` how hard it twitches.
+ */
+const SPOOK = {
+  hit: 0.6,
+  over: 1.9,
+  rate: 14,
+  tilt: [[0, 0], [0.45, 1], [1.5, 1.05], [1.9, 0]] as Keys,
+  jerk: [[0, 0], [0.2, 0.35], [0.55, 0.6], [0.65, 1], [1.4, 0.85], [1.75, 0.2], [1.9, 0]] as Keys,
+};
+
+/** A steady random number in -1..1 for each whole `i` and `salt`: the same every frame, so a jerk holds until the next. */
+const twitch = (i: number, salt: number) => {
+  const x = Math.sin(i * 127.1 + salt * 311.7) * 43758.5453;
+  return (x - Math.floor(x)) * 2 - 1;
+};
+
+const SEAT_DROP = {
+  hit: 0.62,
+  over: 1.65,
+  /** Off the ground from `spring` till it lands at `hit`, `high` at the top: a true arc, so it comes down hard. */
+  spring: 0.26,
+  high: 6.5,
+  seat: [[0, 0], [0.3, 0], [0.56, 1], [1.15, 1], [1.5, 0]] as Keys,
+  coil: [[0, 0], [0.2, 0.8], [0.3, 0]] as Keys,
+  arms: [[0, 0], [0.2, -0.8], [0.34, 1], [0.62, 0.2], [0.9, 0]] as Keys,
+  jolt: [[0, 0], [0.62, 0], [0.7, 1], [0.84, 0.25], [1.0, 0]] as Keys,
+  rise: [[0, 0], [1.15, 0], [1.3, 0.6], [1.5, 0.3], [1.65, 0]] as Keys,
+  lean: [[0, 0], [0.2, 0.35], [0.3, 0], [0.62, -0.1], [1.15, 0], [1.3, 0.4], [1.65, 0]] as Keys,
+};
+
+/**
+ * A beast's claw swipe, for one on four legs with a forepaw to swipe with (Rig.claws): it rears back onto its hind
+ * legs, `rear` radians nose-up, and raises the paw high and out to its side (`lift`, the paw's turn forward and up from
+ * hanging; `sweep`, how far across its front, inward from its own side, below 0 out past it); then it comes down
+ * on the mark, the paw raking down and across its front as the body drops and lurches forward (`step`, as SLICES'),
+ * the head kept on the mark however far it rears, and dipped down a little more into the blow (`head`, nose-down). Back on all fours by `over`. A Cave Bear's Rending
+ * Swipe (signatureMoves.ts).
+ */
+const CLAW = {
+  hit: 0.3,
+  over: 0.7,
+  /** When the paw starts down from on high, and when the rake is through: its claws leave a swoosh only between. */
+  rake: [0.2, 0.42] as const,
+  rear: [[0, 0], [0.2, 0.42], [0.3, 0.1], [0.42, 0.06], [0.7, 0]] as Keys,
+  lift: [[0, 0], [0.2, -2.3], [0.3, -0.85], [0.42, -0.55], [0.7, 0]] as Keys,
+  sweep: [[0, 0], [0.2, -0.55], [0.3, 0.7], [0.42, 0.95], [0.7, 0]] as Keys,
+  head: [[0, 0], [0.2, 0.1], [0.3, 0.3], [0.45, 0.2], [0.7, 0]] as Keys,
+  step: [[0, 0], [0.2, 0.1], [0.3, 1], [0.45, 1], [0.7, 0]] as Keys,
+};
+
+/** Seconds into a bear's flurry (FLURRY) that each of its blows lands: right paw, left, right, left. */
+export const FLURRY_BLOWS = [0.34, 0.46, 0.58, 0.7] as const;
+/** A paw's swing in a flurry: held high, and for each of its own blows (`own`) whipped down and across and back up. */
+function flurryPaw(own: readonly number[]): { lift: Keys; sweep: Keys } {
+  const lift: [number, number][] = [[0, 0], [0.22, -2.3]];
+  const sweep: [number, number][] = [[0, 0], [0.22, -0.5]];
+  for (const h of own) {
+    lift.push([h - 0.06, -2.45], [h, -0.95], [h + 0.05, -1.25]);
+    sweep.push([h - 0.06, -0.6], [h, 0.75], [h + 0.05, 0.9]);
+  }
+  lift.push([0.86, -0.5], [1.1, 0]);
+  sweep.push([0.86, 0.2], [1.1, 0]);
+  return { lift, sweep };
+}
+/**
+ * A bear's flurry: it rears right up onto its hind legs, both forepaws raised high, and rakes them down across its
+ * front one after the other, right, left, right, left (FLURRY_BLOWS), lurching in as it goes; then drops back onto
+ * all fours by `over`, its head on the mark throughout (`head`, as CLAW's). Each paw's swing is as CLAW's (`paws`, right then left), and its claws leave a swoosh from
+ * `trail[0]` before each of its blows to `trail[1]` after. A Cave Bear's Maul (signatureMoves.ts).
+ */
+const FLURRY = {
+  hit: FLURRY_BLOWS[0],
+  over: 1.1,
+  rear: [[0, 0], [0.24, 0.62], [0.74, 0.58], [0.88, 0.2], [1.1, 0]] as Keys,
+  head: [[0, 0], [0.24, 0.15], [0.34, 0.28], [0.74, 0.28], [0.88, 0.2], [1.1, 0]] as Keys,
+  step: [[0, 0], [0.24, 0.05], [0.34, 0.7], [0.74, 0.9], [1.1, 0]] as Keys,
+  paws: [flurryPaw([FLURRY_BLOWS[0], FLURRY_BLOWS[2]]), flurryPaw([FLURRY_BLOWS[1], FLURRY_BLOWS[3]])],
+  trail: [0.07, 0.06] as const,
+};
+/**
+ * A beast's wide rake, as CLAW's swipe but flat and wide: it rears a little and carries the paw right out to its side,
+ * held up level, then sweeps it all the way across its front through everything before it, the body lurching in after
+ * it. Its claws leave a red swoosh from `rake[0]` to `rake[1]`. A Great Bear's Rending Cleave (signatureMoves.ts).
+ */
+const RAKE = {
+  hit: 0.34,
+  over: 0.8,
+  rake: [0.22, 0.46] as const,
+  rear: [[0, 0], [0.22, 0.32], [0.34, 0.12], [0.46, 0.08], [0.8, 0]] as Keys,
+  lift: [[0, 0], [0.22, -1.75], [0.34, -1.45], [0.46, -1.35], [0.8, 0]] as Keys,
+  sweep: [[0, 0], [0.22, -1.05], [0.34, 0.55], [0.46, 1.35], [0.8, 0]] as Keys,
+  head: [[0, 0], [0.22, 0.05], [0.34, 0.25], [0.5, 0.15], [0.8, 0]] as Keys,
+  step: [[0, 0], [0.22, 0.05], [0.34, 0.6], [0.5, 0.6], [0.8, 0]] as Keys,
+};
+/**
+ * A beast's roar: it rears right up onto its hind legs, forepaws off the ground, throws its head back (`head`, below 0
+ * nose-up) and bellows at `hit`, shaking with it until `shake[1]`, then drops back onto all fours by `over`. A Great
+ * Bear's Thunderous Roar (signatureMoves.ts).
+ */
+export const ROAR = {
+  hit: 0.32,
+  over: 1.05,
+  shake: [0.3, 0.8] as const,
+  rear: [[0, 0], [0.26, 0.6], [0.8, 0.55], [1.05, 0]] as Keys,
+  head: [[0, 0], [0.26, -0.45], [0.32, -0.55], [0.8, -0.45], [1.05, 0]] as Keys,
+  step: [[0, 0], [1.05, 0]] as Keys,
+};
+/**
+ * A ghost's grasp, for one that floats (Rig.spectral): it draws up and back, then surges in at the target, leaning
+ * into it, its arms reaching out level and stretching long (`stretch`, how much longer they are drawn) to lay its
+ * hands on them at `hit`; it hangs there a moment and drifts back to where it was by `over`. `step` is how far in it
+ * surges, in strides. A Shade's Chill Touch (signatureMoves.ts).
+ */
+export const GRASP = {
+  hit: 0.34,
+  over: 0.8,
+  step: [[0, 0], [0.18, -0.35], [0.34, 1.1], [0.48, 1.05], [0.8, 0]] as Keys,
+  rise: [[0, 0], [0.18, 1.3], [0.34, 0.4], [0.48, 0.5], [0.8, 0]] as Keys,
+  lean: [[0, 0], [0.18, -0.2], [0.34, 0.4], [0.48, 0.36], [0.8, 0]] as Keys,
+  arms: [[0, -0.25], [0.18, -0.75], [0.34, 0.12], [0.48, 0.1], [0.8, -0.25]] as Keys,
+  stretch: [[0, 1], [0.18, 0.85], [0.34, 1.6], [0.48, 1.55], [0.8, 1]] as Keys,
+};
+/**
+ * A ghost's wail, for one that floats (Rig.spectral): it sinks and huddles in on itself, arms drawn across its front,
+ * then flings itself up and back at `peak`, head thrown back and arms flung up and wide, swelling as it screams and
+ * trembling as it holds it (`shake`), and settles back by `over`. A Shade's Wail (signatureMoves.ts).
+ */
+export const WAIL = {
+  peak: 0.38,
+  over: 1.35,
+  rise: [[0, 0], [0.28, -0.8], [0.38, 2.6], [1.0, 2.3], [1.35, 0]] as Keys,
+  lean: [[0, 0], [0.28, 0.28], [0.38, -0.5], [1.0, -0.42], [1.35, 0]] as Keys,
+  lift: [[0, -0.25], [0.28, 0.25], [0.38, -1.25], [1.0, -1.15], [1.35, -0.25]] as Keys,
+  wide: [[0, 0], [0.28, -0.7], [0.38, 0.85], [1.0, 0.8], [1.35, 0]] as Keys,
+  swell: [[0, 1], [0.28, 0.92], [0.38, 1.1], [1.0, 1.06], [1.35, 1]] as Keys,
+  shake: [[0, 0], [0.36, 0], [0.42, 1], [0.95, 1], [1.1, 0]] as Keys,
+};
+/**
+ * A ghost's hurl, for one that floats (Rig.spectral): it rises and leans back, both arms raised high overhead and drawn
+ * together (`wide` below 0), gathering what it throws between its hands; then at `hit` it flings it forward, leaning
+ * in, arms swept down level at the mark, and settles back by `over`. `step` is how far in it lurches, in strides. A
+ * Haunt's Ice Spear and Ghastly Fetter (signatureMoves.ts).
+ */
+export const HURL = {
+  hit: 0.46,
+  over: 1,
+  rise: [[0, 0], [0.32, 1.1], [0.46, 0.3], [0.62, 0.4], [1, 0]] as Keys,
+  lean: [[0, 0], [0.32, -0.38], [0.46, 0.45], [0.62, 0.32], [1, 0]] as Keys,
+  arms: [[0, -0.25], [0.32, -1.7], [0.46, 0.2], [0.62, 0.12], [1, -0.25]] as Keys,
+  wide: [[0, 0], [0.32, -0.38], [0.46, 0.05], [1, 0]] as Keys,
+  step: [[0, 0], [0.32, -0.3], [0.46, 0.5], [0.62, 0.45], [1, 0]] as Keys,
+};
+/** The moves a ghost (Rig.spectral) plays as animations of its own. */
+const SPECTRAL_ACTS = new Set<Act["kind"]>(["grasp", "wail", "hurl"]);
+
+/**
+ * An ooze's engulf, for one that is all one wet blob (Rig.oozes): it draws itself up tall and thin and leans back, then
+ * pours itself forward over the target at `hit`, flattened and spread wide over them (`reach` world units out),
+ * churning as it holds them (`churn`), and draws back into shape by `over`. `tall` and `wide` are its height and
+ * breadth, as shares of its own. A Cave Slime's Engulf (signatureMoves.ts).
+ */
+export const ENGULF = {
+  hit: 0.46,
+  over: 1.25,
+  tall: [[0, 1], [0.3, 1.38], [0.46, 0.6], [0.88, 0.64], [1.08, 1.1], [1.25, 1]] as Keys,
+  wide: [[0, 1], [0.3, 0.8], [0.46, 1.42], [0.88, 1.36], [1.08, 0.94], [1.25, 1]] as Keys,
+  reach: [[0, 0], [0.3, -0.25], [0.46, 1.0], [0.88, 0.95], [1.25, 0]] as Keys,
+  churn: [[0, 0], [0.46, 0], [0.52, 1], [0.86, 1], [0.98, 0]] as Keys,
+};
+/**
+ * An ooze's spit (Rig.oozes): it squashes down low and wide, gathering itself, then springs up tall and tips forward at
+ * `hit`, throwing a gob from its crown, and wobbles back into shape by `over`. A Cave Slime's Acid Splash.
+ */
+export const SPIT = {
+  hit: 0.34,
+  over: 0.85,
+  tall: [[0, 1], [0.22, 0.7], [0.34, 1.34], [0.5, 1.18], [0.66, 0.92], [0.85, 1]] as Keys,
+  wide: [[0, 1], [0.22, 1.24], [0.34, 0.8], [0.5, 0.9], [0.66, 1.06], [0.85, 1]] as Keys,
+  tip: [[0, 0], [0.22, -0.16], [0.34, 0.28], [0.5, 0.22], [0.85, 0]] as Keys,
+};
+/** The moves an ooze (Rig.oozes) plays as animations of its own. */
+const OOZE_ACTS = new Set<Act["kind"]>(["engulf", "spit"]);
+
+/**
+ * A spider's fang strike (Rig.spins): it rears up (`rear`, nose up), its first pair of legs thrown up and wide (`legs`)
+ * and its fangs spread open (`gape`), then plunges down and in at `hit` (`reach`, in its own units over 2.8), driving
+ * its fangs into the target (`gape` below 0), holds there a moment and draws back by `over`. A Giant Spider's
+ * Venomous Bite (signatureMoves.ts).
+ */
+export const FANG = {
+  hit: 0.36,
+  over: 0.85,
+  rear: [[0, 0], [0.26, 1], [0.36, -0.45], [0.52, -0.4], [0.85, 0]] as Keys,
+  reach: [[0, 0], [0.26, -0.4], [0.36, 1], [0.52, 0.95], [0.85, 0]] as Keys,
+  legs: [[0, 0], [0.22, 1], [0.33, 0.15], [0.6, 0.1], [0.85, 0]] as Keys,
+  gape: [[0, 0], [0.24, 1], [0.34, -0.35], [0.52, -0.35], [0.85, 0]] as Keys,
+};
+/**
+ * A spider's silk throw (Rig.spins): it sinks low (`sink`) on legs set wide (`brace`), nose down (`pitch`), and arches
+ * its abdomen up over its back (`arch`, radians), spinnerets aimed ahead; then snaps it on over at `hit`, throwing a
+ * ball of silk, shuddering with it (`shake`), and settles by `over`. A Giant Spider's Web Spit (signatureMoves.ts).
+ */
+export const WEB = {
+  hit: 0.4,
+  over: 1.0,
+  arch: [[0, 0], [0.3, 1.2], [0.4, 1.5], [0.62, 1.3], [1.0, 0]] as Keys,
+  pitch: [[0, 0], [0.3, 0.14], [0.4, 0.24], [0.62, 0.2], [1.0, 0]] as Keys,
+  sink: [[0, 0], [0.3, -0.55], [0.4, -0.7], [0.62, -0.55], [1.0, 0]] as Keys,
+  brace: [[0, 0], [0.3, 1], [0.62, 1], [1.0, 0]] as Keys,
+  shake: [[0, 0], [0.38, 0], [0.42, 1], [0.6, 1], [0.72, 0]] as Keys,
+};
+/** The moves a spider (Rig.spins) plays as animations of its own. */
+const SPIN_ACTS = new Set<Act["kind"]>(["fang", "web"]);
+
+/** The blows a beast with claws (Rig.claws) plays as animations of its own. */
+const CLAW_ACTS = new Set<Act["kind"]>(["claw", "flurry", "rake", "roar"]);
+
+/**
+ * A dive, for a flier that dives (Rig.dives, Figure.dive): in `into` seconds it pitches nose-down (`pitch`), drops low
+ * (`drop`, in its own units) and sweeps its wings back along its sides (`sweep`, folded up a little by `fold`), and holds
+ * so, barely fluttering, for as long as the dive is (the act's `air`); then in `flare` seconds it throws its head up
+ * and its wings out wide to brake (`brake`), and in `settle` more is hovering as before. A Cave Bat's Fell Swoop
+ * (signatureMoves.ts).
+ */
+export const DIVE = { into: 0.08, flare: 0.12, settle: 0.22, pitch: 0.8, drop: -3, sweep: 1.05, fold: 0.45, brake: -0.45 };
+
+/** Where a dive held for `air` seconds is, `t` seconds in (see DIVE): its pitch, drop, wing sweep and fold. */
+export function diveAt(t: number, air: number): { pitch: number; drop: number; sweep: number; fold: number } {
+  const held = Math.max(DIVE.into, air);
+  const up = held + DIVE.flare;
+  const end = up + DIVE.settle;
+  return {
+    pitch: along([[0, 0], [DIVE.into, DIVE.pitch], [held, DIVE.pitch], [up, DIVE.brake], [end, 0]], t),
+    drop: along([[0, 0], [DIVE.into, DIVE.drop], [held, DIVE.drop], [up, DIVE.drop * 0.3], [end, 0]], t),
+    sweep: along([[0, 0], [DIVE.into, DIVE.sweep], [held, DIVE.sweep], [up, -0.25], [end, 0]], t),
+    fold: along([[0, 0], [DIVE.into, DIVE.fold], [held, DIVE.fold], [up, -0.2], [end, 0]], t),
+  };
+}
+
+/**
+ * A beast's howl, for one on four legs that howls (Rig.howls): it drops its head and draws breath, then sits back on
+ * its haunches (`rear`, nose-up, the hind feet kept on the ground) and throws its head right up at the sky (`head`,
+ * on top of keeping level as the body tips), holding the note with a tremble in it (`shake`), and comes back down
+ * onto all fours by `over`. `peak` is when the head is right up and the howl rings out. A Pack Leader's Howl
+ * (signatureMoves.ts).
+ */
+export const HOWL = {
+  peak: 0.42,
+  over: 1.55,
+  rear: [[0, 0], [0.18, -0.05], [0.42, 0.38], [1.2, 0.36], [1.55, 0]] as Keys,
+  head: [[0, 0], [0.18, 0.35], [0.42, -1.35], [1.2, -1.25], [1.55, 0]] as Keys,
+  shake: [[0, 0], [0.42, 0], [0.5, 1], [1.15, 1], [1.3, 0]] as Keys,
+};
+
+/**
+ * A beast breathing something out over what is in front of it, for one on four legs that does (Rig.breathes): it
+ * draws breath, front lifted and head thrown up and back (`rear`, `head`, the body settled back on its haunches by
+ * `step`), then thrusts its head out and down at what it breathes on, braced and leant in, the front dipped, and holds
+ * it there with a tremble (`shake`) for as long as the breath pours out, coming back to stand by `over`. `hit` is when
+ * the breath bursts from its mouth, and it pours on for `pour`. Any four-legged beast's breath can use it (a Frost
+ * Wolf's Frost Breath, signatureMoves.ts).
+ */
+export const BREATHE = {
+  hit: 0.42,
+  pour: 0.6,
+  over: 1.4,
+  rear: [[0, 0], [0.32, 0.14], [0.42, -0.07], [1.02, -0.06], [1.4, 0]] as Keys,
+  head: [[0, 0], [0.32, -0.55], [0.42, 0.22], [1.02, 0.25], [1.4, 0]] as Keys,
+  step: [[0, 0], [0.32, -0.3], [0.42, 0.35], [1.02, 0.32], [1.4, 0]] as Keys,
+  shake: [[0, 0], [0.42, 0], [0.46, 1], [0.98, 1], [1.1, 0]] as Keys,
+};
+
+/**
+ * A beast on four legs letting what burns in it out all round at once, for one that does (Rig.flares): it hunkers
+ * down, legs splayed wide and the body sunk between them (`crouch`, `splay`), head low (`head`, nose-down) and
+ * trembling harder and harder as it gathers itself (`shake`); then at `hit` it springs up stiff-legged off the ground
+ * (`crouch` below 0: lifted), legs flung out and head thrown up, as it bursts out of it, and comes back to stand by
+ * `over`. Any four-legged beast's pulse round itself can use it (an Ember Hound's Ember Burst, signatureMoves.ts).
+ */
+export const FLARE = {
+  hit: 0.52,
+  over: 1.35,
+  crouch: [[0, 0], [0.42, 1], [0.52, -0.6], [0.66, -0.15], [1, -0.05], [1.35, 0]] as Keys,
+  splay: [[0, 0], [0.42, 0.42], [0.52, 0.5], [0.95, 0.38], [1.35, 0]] as Keys,
+  head: [[0, 0], [0.42, 0.42], [0.52, -0.5], [0.95, -0.38], [1.35, 0]] as Keys,
+  shake: [[0, 0], [0.12, 0.3], [0.48, 1], [0.52, 0], [1.35, 0]] as Keys,
 };
 
 /**
@@ -1987,7 +2374,12 @@ function makeSmoke(big: number) {
  * The swoosh behind a swung weapon: how long it lingers, how fast the weapon's tip must be going (in the figure's
  * own units a second) to leave one at all and to leave it at full strength, and the most of it kept.
  */
-const SWOOSH = { life: 0.13, slow: 45, fast: 110, most: 64, bright: 0.55, inner: 0.5, arc: 0.12 };
+const SWOOSH = { life: 0.13, slow: 45, fast: 110, most: 64, bright: 0.55, inner: 0.5, arc: 0.12, color: "#f4f8ff" };
+/**
+ * Blows whose swoosh is a colour of its own, not the usual pale light, and how strong it is at its brightest (the
+ * usual is SWOOSH.bright): a Bandit's Cheap Shot (SLICES) leaves a thick red one, and a bear's claws (CLAW) too; its flurry's (FLURRY) are a bright white.
+ */
+const SWOOSH_TINT: Partial<Record<Act["kind"], { color: string; bright: number }>> = { slices: { color: "#e0313f", bright: 0.85 }, claw: { color: "#e0313f", bright: 0.9 }, rake: { color: "#e0313f", bright: 0.95 }, flurry: { color: SWOOSH.color, bright: 0.9 } };
 
 /**
  * A swoosh: a ribbon of light left in the air where a swung weapon has just been, between where its tip was and
@@ -2006,7 +2398,7 @@ function makeSwoosh() {
   const index: number[] = [];
   for (let i = 0; i < n - 1; i++) index.push(2 * i, 2 * i + 1, 2 * i + 2, 2 * i + 1, 2 * i + 3, 2 * i + 2);
   geometry.setIndex(index);
-  const material = new THREE.MeshBasicMaterial({ color: "#f4f8ff", vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  const material = new THREE.MeshBasicMaterial({ color: SWOOSH.color, vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.frustumCulled = false;
   mesh.visible = false;
@@ -2015,8 +2407,14 @@ function makeSwoosh() {
   const was = { hand: new THREE.Vector3(), tip: new THREE.Vector3(), a: 0 };
   const arm = { from: new THREE.Vector3(), to: new THREE.Vector3(), at: new THREE.Vector3(), hand: new THREE.Vector3() };
   let seen = -Infinity;
+  let bright = SWOOSH.bright;
   return {
     mesh,
+    /** The colour it is drawn in from now on, and how strong at its brightest. */
+    tint(color: string, strong: number) {
+      material.color.set(color);
+      bright = strong;
+    },
     hide() {
       trail.length = 0;
       mesh.visible = false;
@@ -2054,7 +2452,7 @@ function makeSwoosh() {
       trail.forEach((s, i) => {
         s.tip.toArray(positions, i * 6);
         s.mid.toArray(positions, i * 6 + 3);
-        colors[i * 8 + 3] = SWOOSH.bright * s.a * (1 - (t - s.t) / SWOOSH.life);
+        colors[i * 8 + 3] = bright * s.a * (1 - (t - s.t) / SWOOSH.life);
         colors[i * 8 + 7] = 0;
       });
       geometry.setDrawRange(0, (trail.length - 1) * 6);
@@ -2223,9 +2621,9 @@ const RECORDER_LENGTH = 6.4;
 const HAMMER = { hit: 0.4, over: 0.86, up: [[0, 0.25], [0.3, 1], [0.4, 0], [0.48, 0.18], [0.86, 0.25]] as Keys };
 const STIR = { over: 30, turns: 25 };
 /** How long each kind of action lasts. */
-const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
+const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, slam: SLAM.over, drop: SEAT_DROP.over, pound: POUND.over, channel: CHANNEL.over, spook: SPOOK.over, claw: CLAW.over, flurry: FLURRY.over, howl: HOWL.over, breathe: BREATHE.over, flare: FLARE.over, rake: RAKE.over, roar: ROAR.over, grasp: GRASP.over, wail: WAIL.over, hurl: HURL.over, engulf: ENGULF.over, spit: SPIT.over, fang: FANG.over, web: WEB.over, dive: DIVE.into + DIVE.flare + DIVE.settle, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
 /** When each kind of blow lands. */
-const ACT_HIT = { strike: SWING.hit, stab: THRUST.hit, pounce: POUNCE.hit, heavy: SWEEP.hit, twin: TWIN.hit };
+const ACT_HIT = { strike: SWING.hit, stab: THRUST.hit, slices: SLICES.hit, slam: SLAM.hit, pounce: POUNCE.hit, heavy: SWEEP.hit, twin: TWIN.hit };
 /**
  * The weapons whose ordinary blow is not a cut, by weapon or by the icon in the hand: a dagger's is a leap and a
  * stab downward (see POUNCE), a rapier's a straight thrust at arm's length (see THRUST). An archer strikes with
@@ -2233,7 +2631,7 @@ const ACT_HIT = { strike: SWING.hit, stab: THRUST.hit, pounce: POUNCE.hit, heavy
  */
 const LIGHT: Record<string, "pounce" | "stab"> = { daggers: "pounce", dirk: "pounce", rapier: "stab", shortbow: "pounce", crossbow: "pounce", pistol: "pounce", blunderbuss: "pounce", harpoon_gun: "pounce", bow: "pounce", none: "stab" };
 /** The blows a knife kept out of sight is drawn for (see biped's sidearm). */
-const DRAWN = new Set<Act["kind"]>(["strike", "stab", "pounce", "heavy", "twin"]);
+const DRAWN = new Set<Act["kind"]>(["strike", "stab", "pounce", "heavy", "twin", "slices", "slam"]);
 /** Things cast with by being held up, not swung: lifted high beside the head, then presented to the mark in both hands, upright all the while. */
 const FOCUS = new Set(["orb", "astrolabe", "bilge-chalice"]);
 
@@ -2252,6 +2650,25 @@ interface Rig {
   loose?: () => number;
   /** Plays strikes and hits as timed animations of its own (see Act); a rig without is leant into them, as it always was. */
   acts?: boolean;
+  /**
+   * A beast that swipes with a forepaw (see CLAW): it plays that one blow as an animation of its own, though it is
+   * leant into every other, as a rig without `acts` is.
+   */
+  claws?: boolean;
+  /** A beast that howls (see HOWL, Figure.howl): it plays that as an animation of its own. */
+  howls?: boolean;
+  /** A beast on four legs that breathes something out (see BREATHE, Figure.strike "breathe"): it plays that as an animation of its own. */
+  breathes?: boolean;
+  /** A beast on four legs that lets what burns in it out all round (see FLARE, Figure.strike "flare"): it plays that as an animation of its own. */
+  flares?: boolean;
+  /** A flier that dives (see DIVE, Figure.dive): it plays that as an animation of its own. */
+  dives?: boolean;
+  /** A ghost: it plays its grasp and its wail (see GRASP, WAIL) as animations of its own, and is leant into the rest. */
+  spectral?: boolean;
+  /** An ooze: it plays its engulf and its spit (see ENGULF, SPIT) as animations of its own, and is leant into the rest. */
+  oozes?: boolean;
+  /** A spider: it plays its fang strike and its silk throw (see FANG, WEB) as animations of its own, and is leant into the rest. */
+  spins?: boolean;
   /** Its ordinary strike, where what it carries does not cut (see LIGHT): a leaping stab, or a straight thrust. */
   light?: "pounce" | "stab";
   /** It carries an instrument, and plays it (see Figure.play). */
@@ -2488,7 +2905,10 @@ function biped(top: THREE.Group, parts: Part[], drawnElbow = ELBOW) {
         swung.push({ hold: held.joint, tipAt: new THREE.Vector3(0, far, 0), handAt: new THREE.Vector3(), tip: new THREE.Vector3(), hand: new THREE.Vector3(), swoosh });
       }
     }
+    // Each blow leaves its own colour, kept as it fades after the blow is done.
+    const tint = striking ? (SWOOSH_TINT[a.act!.kind] ?? { color: SWOOSH.color, bright: SWOOSH.bright }) : null;
     for (const s of swung) {
+      if (tint) s.swoosh.tint(tint.color, tint.bright);
       if (a.lying || !top.parent) s.swoosh.hide();
       else s.swoosh.track(a.t, placeOf(s.hold, s.handAt, s.hand, top.parent), placeOf(s.hold, s.tipAt, s.tip, top.parent), striking);
     }
@@ -2643,7 +3063,111 @@ function biped(top: THREE.Group, parts: Part[], drawnElbow = ELBOW) {
       if (levels.length === 0) heldL.joint.rotation.x -= lift * left;
       return;
     }
-    const k = act.kind === "stab" ? THRUST : act.kind === "pounce" ? POUNCE : act.kind === "twin" ? TWIN : SWING;
+    if (act.kind === "channel") {
+      const c = CHANNEL;
+      const open = along(c.open, t);
+      const lift = along(c.lift, t);
+      const shiver = along(c.shiver, t) * Math.sin(t * 55) * 0.035;
+      const jolt = along(c.jolt, t);
+      // Leant back, the chest out to what it is drawing in; the head lifted with it.
+      bow(-0.28 * lift + shiver, 0);
+      head.joint.rotation.x -= 0.35 * lift;
+      // Both arms swung out wide to the sides and a little up and forward, the elbows nearly straight, the hands open
+      // to the front; trembling while it is held, and thrown a little wider as it is let go.
+      const wide = 1.25 * open + 0.25 * jolt;
+      armL.joint.rotation.z += wide + shiver;
+      armR.joint.rotation.z -= wide + shiver;
+      armL.joint.rotation.x -= 0.35 * open;
+      armR.joint.rotation.x -= 0.35 * open;
+      foreL.joint.rotation.x *= 1 - 0.85 * open;
+      foreR.joint.rotation.x *= 1 - 0.85 * open;
+      // Feet set apart and planted: a little down into the knees.
+      knees(0.18 * open);
+      top.position.y -= 0.25 * jolt;
+      return;
+    }
+    if (act.kind === "spook") {
+      const k = SPOOK;
+      const tilt = along(k.tilt, t);
+      const jerk = along(k.jerk, t);
+      // Which jerk it is on: each held until the next, and the next comes a little early or late.
+      const i = Math.floor(t * k.rate + 0.4 * twitch(Math.floor(t * k.rate), 9));
+      const j = (salt: number) => twitch(i, salt) * jerk;
+      // The head tipped over to one side (the same side each time for one figure, turn about between goes), and
+      // snapping about on top of that.
+      const side = act.n % 2 ? 1 : -1;
+      head.joint.rotation.z += side * 0.6 * tilt + 0.28 * j(1);
+      head.joint.rotation.y += 0.35 * j(2);
+      head.joint.rotation.x += 0.15 * j(3) - 0.12 * tilt;
+      // A shudder through the body, and the shoulders and arms flicking.
+      bow(0.12 * j(4), 0.25 * j(5));
+      top.rotation.z += 0.05 * j(6) - side * 0.04 * tilt;
+      top.position.x += 0.12 * j(7);
+      armL.joint.rotation.z += 0.18 + 0.3 * j(8);
+      armR.joint.rotation.z -= 0.18 + 0.3 * j(9);
+      armL.joint.rotation.x += 0.25 * j(10);
+      armR.joint.rotation.x += 0.25 * j(11);
+      foreL.joint.rotation.x -= 0.35 * Math.abs(j(12));
+      foreR.joint.rotation.x -= 0.35 * Math.abs(j(13));
+      knees(0.1 * tilt + 0.06 * Math.abs(j(14)));
+      return;
+    }
+    if (act.kind === "pound") {
+      const p = POUND;
+      const lift = along(p.lift, t);
+      const down = along(p.down, t);
+      const jolt = along(p.jolt, t);
+      const lean = along(p.lean, t);
+      knees(along(p.crouch, t));
+      // Drawn up tall as the fists go up: a little up on its toes.
+      top.position.y += 0.5 * along(p.rise, t);
+      bow(lean, 0);
+      head.joint.rotation.x -= lean * 0.45;
+      // Both arms together: straight up overhead, then driven down and forward to the ground before its feet, fists
+      // close together; the forearms straight for the blow.
+      const arm = -2.9 * lift - 1.05 * down;
+      const close = 0.22 * (lift + down);
+      armL.joint.rotation.x += arm;
+      armR.joint.rotation.x += arm;
+      armL.joint.rotation.z -= close;
+      armR.joint.rotation.z += close;
+      foreL.joint.rotation.x *= 1 - 0.8 * Math.max(lift, down);
+      foreR.joint.rotation.x *= 1 - 0.8 * Math.max(lift, down);
+      // The shock of it: the body thrown down a little, and the head jerked.
+      top.position.y -= 0.35 * jolt;
+      head.joint.rotation.x += 0.2 * jolt;
+      return;
+    }
+    if (act.kind === "drop") {
+      const d = SEAT_DROP;
+      const seat = along(d.seat, t);
+      const jolt = along(d.jolt, t);
+      const arms = along(d.arms, t);
+      // Crouched to spring and to get back up: the feet on the ground for both, then the legs go out ahead to sit.
+      // The sit sets the hips' height itself, so what the knees take off them goes as far into it as it is.
+      const hips = top.position.y;
+      knees(0.75 * along(d.coil, t) + along(d.rise, t));
+      top.position.y = hips + (top.position.y - hips) * (1 - seat);
+      bow(along(d.lean, t), 0);
+      head.joint.rotation.x -= along(d.lean, t) * 0.5;
+      floorSit(seat);
+      const air = (t - d.spring) / (d.hit - d.spring);
+      if (air > 0 && air < 1) top.position.y += 4 * d.high * air * (1 - air);
+      // Down on its backside: rocked back, the legs bounced up off the ground, the hips squashed into it.
+      torso.joint.rotation.x -= 0.35 * jolt;
+      head.joint.rotation.x += 0.3 * jolt;
+      for (const thigh of [thighL, thighR]) thigh.joint.rotation.x -= 0.3 * jolt;
+      top.position.y -= 0.4 * jolt;
+      // The arms: swung back in the crouch, thrown up with the spring, and flung out wide as it lands.
+      const lift = arms < 0 ? -0.9 * arms : -2.6 * arms;
+      const wide = 0.3 * Math.max(0, arms) + 1.1 * jolt;
+      armL.joint.rotation.x += lift;
+      armR.joint.rotation.x += lift;
+      armL.joint.rotation.z += wide;
+      armR.joint.rotation.z -= wide;
+      return;
+    }
+    const k = act.kind === "stab" ? THRUST : act.kind === "pounce" ? POUNCE : act.kind === "twin" ? TWIN : act.kind === "slices" ? SLICES : act.kind === "slam" ? SLAM : SWING;
     // Eased in over the first moments and back out over the last, so it starts and ends wherever the figure was.
     const over = act.kind === "heavy" ? SWEEP.over : act.kind === "cast" ? CAST.over : act.kind === "play" ? PLAY.over : act.kind === "guard" ? GUARD.over : act.kind === "taunt" ? TAUNT.over : act.kind === "hammer" || act.kind === "stir" ? ACT_OVER[act.kind] : k.over;
     const fade = Math.min(1, Math.max(0, (over - t) / 0.18));
@@ -3860,7 +4384,7 @@ let face: Face | null = null;
 /** The kinds that are townsfolk, each given a face of their own (see faceFor). */
 const TOWNSFOLK = /^(npc|dealer|regular_|salesman_|keeper_)/;
 /** The enemies drawn as people, each given a face of its own by its id (see faceFor), so no two in a fight are twins. */
-const FACED_FOES = new Set(["bandit", "brute", "archer", "cultist", "guardian", "villain"]);
+const FACED_FOES = new Set(["bandit", "brute", "archer", "cultist"]);
 /** Of those, the living raiders, who also get their own skin, hair colour and facial hair; the drowned and the stone keep their look's. */
 const COLOURED_FOES = new Set(["bandit", "brute", "archer"]);
 /** Whether a kind's figure picks its face from a key (makeFigure's `face`): townsfolk and the enemies drawn as people. */
@@ -8995,6 +9519,83 @@ function troll(top: THREE.Group): Rig {
   return { parts, animate: stooped(b, 0.42, 0.1), acts: true, getUp: BIPED_GET_UP };
 }
 
+/**
+ * A guardian: a golem of sea-worn stone, only roughly a body. A great craggy boulder of a chest, hunched forward,
+ * with boulders heaped up over each shoulder; a small blunt block of a head sunk low between them, no face but two
+ * slits of cyan light; long arms of stacked stones ending in fists bigger than its head, hanging near the ground;
+ * short stumps of legs on slab feet. A seam of cyan light glows out of its chest and along the joins of its stones,
+ * and it is crusted with barnacles and patched with weed from the sea.
+ */
+function golem(top: THREE.Group): Rig {
+  const parts: Part[] = [];
+  const b = giant(top, parts, { ...USUAL, legs: 0.8, girth: 1.5, shoulders: 1.7, hips: 1.3, head: 1 }, 1.3, -3.0);
+  const stone = "#8b9097";
+  const pale = tone(stone, 0.1);
+  const dark = tone(stone, -0.14);
+  const weed = "#4f6b34";
+  const shell = "#e2dccb";
+  const glow = "#7fe3ff";
+  // Stumps of legs: a block of a thigh, a boulder of a knee, a pillar of a shin, and a slab of a foot.
+  for (const [thigh, shin, foot] of [[b.thighR, b.shinR, b.footR], [b.thighL, b.shinL, b.footL]] as const) {
+    thigh.loft(stone, [[-2.8, 1.55, 1.6], [-1.2, 1.85, 1.9, 0.1], [0.7, 1.7, 1.75]], 5);
+    shin.ball(dark, 1.25, 0, 0.1, 0.35, 0, [1, 0.85, 0.9]);
+    shin.loft(stone, [[-2.4, 1.75, 1.8], [-1, 1.55, 1.6], [0.2, 1.3, 1.35]], 5);
+    foot.box(dark, 3.6, 1.3, 4.4, 0, 0.6, 0.9);
+    foot.box(stone, 3.2, 0.7, 1.6, 0, 1.35, 1.9, [0.25, 0, 0]);
+  }
+  // The trunk: a craggy boulder, broad and deep, its front pushed out like a cliff.
+  const t = b.torso;
+  t.loft(stone, [[-0.9, 3.8, 3.0, 0.1], [1, 4.6, 3.5, 0.35], [3.3, 5.6, 3.9, 0.55], [5.3, 6.0, 3.6, 0.2], [6.7, 4.6, 3.0, -0.3], [7.5, 2.4, 2.0, -0.5]], 6);
+  // Stones set into it: slabs over the chest and the belly, a great one over the back.
+  t.box(pale, 3.6, 2.6, 1.2, -1.6, 4.6, 3.75, [0.1, -0.25, 0.08]);
+  t.box(pale, 3.4, 2.4, 1.1, 1.8, 4.4, 3.8, [0.05, 0.3, -0.1]);
+  t.box(dark, 4.2, 2.2, 1.0, 0, 1.2, 3.4, [-0.15, 0, 0.05]);
+  t.box(dark, 6.4, 4.6, 1.4, 0, 4.5, -3.4, [-0.15, 0, 0.04]);
+  // Boulders heaped over each shoulder, and one more across the top of the back.
+  for (const s of [-1, 1]) {
+    t.ball(stone, 2.5, s * 4.7, 6.6, -0.2, 0, [1, 0.85, 1]);
+    t.ball(pale, 1.5, s * 3.4, 7.7, -1.3, 0, [1.1, 0.8, 1]);
+  }
+  t.ball(dark, 2.0, 0, 7.4, -1.8, 0, [1.4, 0.7, 1]);
+  // The seam of light: a core glowing out of a crack in the chest, and thin lines of it along the joins.
+  // The core is a piece of its own, riding on the chest, so an effect can find it apart from the seams (Figure.glowAt).
+  const gem = new Part(t.skin);
+  gem.fluff = true;
+  gem.glowTag = "gem";
+  parts.push(gem);
+  gem.glowBall(glow, 0.85, 0, 4.4, 4.15);
+  t.glowBox(glow, 0.22, 2.4, 0.2, 0.05, 3.1, 4.05, [0, 0, 0.25]);
+  t.glowBox(glow, 1.8, 0.16, 0.2, -1.3, 4.0, 4.05, [0, 0, -0.35]);
+  t.glowBox(glow, 1.5, 0.16, 0.2, 1.3, 5.0, 4.0, [0, 0, 0.3]);
+  // From the sea: barnacles crusted over a shoulder and the back, and weed hanging off the other.
+  for (const [x, y, z, r] of [[4.2, 7.9, 1.2, 0.42], [5.1, 7.4, 1.6, 0.34], [3.6, 7.0, 2.0, 0.3], [-1.6, 6.2, -3.9, 0.36], [-0.6, 5.4, -4.0, 0.3], [1.4, 3.2, -4.0, 0.32], [-2.8, 1.6, 3.4, 0.3]] as const) {
+    t.cone(shell, r, r * 1.1, x, y, z, 6);
+  }
+  t.ball(weed, 1.4, -4.6, 7.7, 0.3, 0, [1.3, 0.4, 1.3]);
+  for (const [x, z] of [[-5.6, 1.2], [-4.8, 1.9], [-3.7, 1.6]] as const) t.shape(weed, [[x - 0.3, 7.6, z], [x + 0.3, 7.6, z], [x, 7.6, z - 0.4], [x + 0.2, 4.6, z + 0.5]]);
+  // The head: a small blunt block of stone sunk low and forward between the shoulders, a ledge of brow over two
+  // slits of light, and no more face than that.
+  const h = b.head;
+  h.joint.position.set(0, 6.4, 2.2);
+  h.loft(stone, [[0, 1.9, 1.7, 0.2], [1.3, 2.2, 1.9, 0.15], [2.5, 1.9, 1.7, 0], [3.1, 1.1, 1.1, -0.1]], 5);
+  h.shape(dark, sym([[2.0, 2.05, 1.5], [2.1, 2.55, 1.4], [0, 2.15, 2.25], [0, 2.7, 2.1], [1.0, 1.9, 2.15]]));
+  h.glowTag = "eyes";
+  for (const s of [-1, 1]) h.glowBox(glow, 0.8, 0.24, 0.2, s * 0.85, 1.6, 1.98, [0, 0, s * -0.12]);
+  // Long arms of stacked stones, the elbows boulders, ending in fists bigger than its head.
+  for (const arm of [b.armR, b.armL]) {
+    arm.ball(stone, 1.6, 0, -0.4, 0, 0, [1, 1.1, 1]);
+    arm.loft(dark, [[-0.6, 1.2, 1.2], [-2.4, 1.0, 1.05]], 5);
+    arm.ball(stone, 1.25, 0, -3.0, 0.1, 0, [1, 0.9, 1]);
+    arm.loft(stone, [[-3.6, 1.25, 1.3], [-4.6, 1.5, 1.5], [-5.6, 1.3, 1.35]], 5);
+    arm.glowBox(glow, 0.15, 0.16, 2.2, 0, -3.0, 0, [0, 0, 0]);
+    arm.box(stone, 2.7, 2.6, 2.7, 0, -6.9, 0.25, [0.12, 0.25, 0.05]);
+    arm.box(pale, 2.0, 0.9, 1.0, 0, -6.4, 1.6, [0.12, 0.25, 0.05]);
+  }
+  b.rest.armR = -0.15;
+  b.rest.armL = -0.15;
+  return { parts, animate: stooped(b, 0.32, 0.12), acts: true, getUp: BIPED_GET_UP };
+}
+
 // ---------- creatures ----------
 
 /** Rings for a loft lying along z, nose toward +z: each its z, half-width, half-height, and how high its middle is. */
@@ -9045,10 +9646,12 @@ function spot(part: Part, color: string, rx: number, ry: number, depth: number, 
 
 /**
  * The four-legged gait a wolf and a bear share. `across` is half the body's width, `tall` the back's height,
- * and `stoop` how far (radians) the head is carried nose-down: a wolf's, low and growling.
+ * and `stoop` how far (radians) the head is carried nose-down: a wolf's, low and growling. `paws`, for a beast that
+ * swipes (see CLAW, FLURRY): its forepaws, right then left, each with the point at its claws' tips and the swoosh
+ * they leave. A single swipe is the right's.
  */
-function fourLegs(top: THREE.Group, legs: Part[], head: Part, tail: Part | null, across: number, tall: number, stoop = 0) {
-  return (a: Anim) => {
+function fourLegs(top: THREE.Group, legs: Part[], head: Part, tail: Part | null, across: number, tall: number, stoop = 0, paws: Paw[] = []) {
+  const pose = (a: Anim) => {
     if (a.getUp) {
       // On its belly, the forelegs out in front and the hind legs tucked forward beside it, the head up.
       top.rotation.set(0, 0, 0);
@@ -9069,6 +9672,88 @@ function fourLegs(top: THREE.Group, legs: Part[], head: Part, tail: Part | null,
       head.joint.rotation.set(0, 0, 0);
       return;
     }
+    if (a.act?.kind === "breathe") {
+      // Drawing breath with its front lifted and head thrown back, then braced and leant in, head thrust out and down,
+      // trembling as the breath pours out. The forelegs splay a little to brace it.
+      const t = a.act.t;
+      const rear = along(BREATHE.rear, t);
+      const behind = -Math.min(...legs.map((leg) => leg.joint.position.z));
+      const hips = legs[0].joint.position.y;
+      const shake = along(BREATHE.shake, t) * Math.sin(t * 50) * 0.035;
+      const brace = Math.max(0, along(BREATHE.step, t));
+      top.rotation.set(-rear, 0, shake * 0.4);
+      top.position.set(0, (a.breath + 1) * 0.06 + Math.max(0, behind * Math.sin(rear) + hips * (1 - Math.cos(rear))), along(BREATHE.step, t) * STRIDE * 0.5 * a.scale);
+      for (const leg of legs) {
+        const fore = leg.joint.position.z > 0;
+        const side = Math.sign(leg.joint.position.x) || 1;
+        leg.joint.rotation.set(fore ? -rear * 0.6 - brace * 0.25 : rear + brace * 0.15, 0, fore ? -side * brace * 0.18 : 0);
+      }
+      head.joint.rotation.set(stoop + rear + along(BREATHE.head, t) + shake, shake * 0.5, 0);
+      if (tail) tail.joint.rotation.set(0, 0, 0);
+      return;
+    }
+    if (a.act?.kind === "flare") {
+      // Hunkered down, legs splayed out wide and fore and hind spread apart, the body sunk between them (by as much as
+      // they lower the hips) and the head held low, trembling; then sprung up stiff-legged, legs flung out, head up.
+      const t = a.act.t;
+      const crouch = along(FLARE.crouch, t);
+      const splay = along(FLARE.splay, t);
+      const hips = legs[0].joint.position.y;
+      const shake = along(FLARE.shake, t) * Math.sin(t * 60) * 0.05;
+      const out = splay * 0.6;
+      const spread = splay * 0.5;
+      const sunk = hips * (1 - Math.cos(out) * Math.cos(spread)) * Math.max(0, Math.min(1, crouch + 0.6));
+      top.rotation.set(shake * 0.3, 0, shake);
+      top.position.set(shake * 0.4, (a.breath + 1) * 0.06 - sunk + Math.max(0, -crouch) * hips * 0.45, 0);
+      for (const leg of legs) {
+        const fore = leg.joint.position.z > 0;
+        const side = Math.sign(leg.joint.position.x) || 1;
+        leg.joint.rotation.set(fore ? -spread : spread, 0, -side * out);
+      }
+      head.joint.rotation.set(stoop + along(FLARE.head, t) + shake, shake * 0.6, 0);
+      if (tail) tail.joint.rotation.set(Math.max(0, -crouch) * -0.6, 0, 0);
+      return;
+    }
+    if (a.act?.kind === "howl") {
+      // Sat back on its haunches (lifted as it tips, so the hind feet stay on the ground), forelegs reaching a little,
+      // the head thrown right up at the sky and trembling as it holds the note.
+      const t = a.act.t;
+      const rear = along(HOWL.rear, t);
+      const behind = -Math.min(...legs.map((leg) => leg.joint.position.z));
+      const hips = legs[0].joint.position.y;
+      top.rotation.set(-rear, 0, 0);
+      top.position.set(0, (a.breath + 1) * 0.06 + behind * Math.sin(rear) + hips * (1 - Math.cos(rear)), 0);
+      for (const leg of legs) leg.joint.rotation.set(leg.joint.position.z > 0 ? -rear * 0.6 : rear, 0, 0);
+      const shake = along(HOWL.shake, t) * Math.sin(t * 55) * 0.04;
+      head.joint.rotation.set(stoop + rear + along(HOWL.head, t) + shake, 0, shake * 0.5);
+      if (tail) tail.joint.rotation.set(0, 0, 0);
+      return;
+    }
+    if (paws.length > 0 && a.act && CLAW_ACTS.has(a.act.kind)) {
+      // Reared back on the hind legs (lifted as it tips, so their feet stay on the ground), a paw (or both) raised and raked down.
+      const t = a.act.t;
+      const kind = a.act.kind;
+      const blow = kind === "flurry" ? FLURRY : kind === "rake" ? RAKE : kind === "roar" ? ROAR : CLAW;
+      const rear = along(blow.rear, t);
+      const behind = -Math.min(...legs.map((leg) => leg.joint.position.z));
+      const hips = legs[0].joint.position.y;
+      top.rotation.set(-rear, 0, 0);
+      top.position.set(0, (a.breath + 1) * 0.06 + behind * Math.sin(rear) + hips * (1 - Math.cos(rear)), along(blow.step, t) * STRIDE * 0.5 * a.scale);
+      for (const leg of legs) {
+        const i = paws.findIndex((p) => p.leg === leg);
+        const swing = kind === "flurry" ? FLURRY.paws[i] : i === 0 && kind === "claw" ? CLAW : i === 0 && kind === "rake" ? RAKE : undefined;
+        const side = Math.sign(leg.joint.position.x) || 1;
+        if (swing) leg.joint.rotation.set(along(swing.lift, t), 0, -side * along(swing.sweep, t));
+        // A foreleg not swiping comes up off the ground with the rest of the front, reaching a little; the hind legs stay upright.
+        else leg.joint.rotation.set(leg.joint.position.z > 0 ? -rear * 0.8 : rear, 0, 0);
+      }
+      // The head kept on the target as the body rears (turned down by as much as it tips up), and dipped into each blow.
+      // A roar shakes the head as it bellows.
+      const shake = kind === "roar" && t > ROAR.shake[0] && t < ROAR.shake[1] ? Math.sin(t * 46) * 0.07 : 0;
+      head.joint.rotation.set(stoop + rear + along(blow.head, t) + shake, shake * 0.6, 0);
+      if (tail) tail.joint.rotation.set(0, 0, 0);
+      return;
+    }
     top.rotation.set(-a.strike * 0.3, 0, 0);
     top.position.set(0, (a.breath + 1) * 0.06 + a.strike * 1.2, 0);
     // (Every turn of a joint is set, not one of them: getting up from a fall, it is eased back from however it lay.)
@@ -9076,28 +9761,139 @@ function fourLegs(top: THREE.Group, legs: Part[], head: Part, tail: Part | null,
     head.joint.rotation.set(stoop + a.breath * 0.04 + a.strike * 0.35, 0, 0);
     if (tail) tail.joint.rotation.set(0, Math.sin(a.t * 3.1) * 0.3, 0);
   };
+  return (a: Anim) => {
+    pose(a);
+    paws.forEach((paw, i) => clawTrail(top, paw, i, a));
+  };
 }
 
 /**
- * A wolf, nose toward +z. The pack leader is the same animal, darker, with a red eye. `ember` is the fire in an
- * Ember Hound: it shows through cracks down its back and lights its mouth.
+ * A beast's leg rings (top first) with its top rounded off into a dome, a haunch or a shoulder: a flat-cut top
+ * showed its square edge wherever the leg stood out past the body.
  */
-function wolf(top: THREE.Group, fur = "#7d8793", dark = "#59616c", eye = "#ffd23f", ember?: string): Rig {
+function domed(rings: Ring[]): Ring[] {
+  const [y, rx, rz, dz = 0] = rings[0];
+  const h = Math.min(rx, rz) * 0.9;
+  return [[y + h, rx * 0.2, rz * 0.2, dz], [y + h * 0.8, rx * 0.62, rz * 0.62, dz], [y + h * 0.45, rx * 0.9, rz * 0.9, dz], ...rings];
+}
+
+/** A forepaw a beast swipes with (see fourLegs): the leg, where its claws' tips are on it, and the swoosh they leave. */
+interface Paw {
+  leg: Part;
+  tip: THREE.Vector3;
+  swoosh: ReturnType<typeof makeSwoosh>;
+}
+
+/** A forepaw to swipe with: the swoosh is made now, with the figure, so it is put away with it. */
+function pawOf(leg: Part, tip: THREE.Vector3): Paw {
+  return { leg, tip, swoosh: makeSwoosh() };
+}
+
+const pawAt = { shoulder: new THREE.Vector3(), claws: new THREE.Vector3() };
+/**
+ * The swoosh behind a swiping paw's claws, tracked each frame from the shoulder (what the paw turns about) to the
+ * claws' tips, in the frame `top` hangs in (the figure's own units, as a held weapon's). `which` paw: 0 the right.
+ */
+function clawTrail(top: THREE.Group, paw: Paw, which: number, a: Anim) {
+  const root = top.parent;
+  if (!root) return;
+  if (!paw.swoosh.mesh.parent) root.add(paw.swoosh.mesh);
+  if (a.lying || a.getUp) return paw.swoosh.hide();
+  // Only the rakes down leave one, not the paw going up.
+  const t = a.act?.t ?? 0;
+  const swiping =
+    a.act?.kind === "claw" ? which === 0 && t >= CLAW.rake[0] && t <= CLAW.rake[1]
+    : a.act?.kind === "rake" ? which === 0 && t >= RAKE.rake[0] && t <= RAKE.rake[1]
+    : a.act?.kind === "flurry" ? FLURRY_BLOWS.some((h, n) => n % 2 === which && t >= h - FLURRY.trail[0] && t <= h + FLURRY.trail[1])
+    : false;
+  if (swiping) paw.swoosh.tint(SWOOSH_TINT[a.act!.kind]!.color, SWOOSH_TINT[a.act!.kind]!.bright);
+  // (`track` keeps copies of what it is given.)
+  paw.swoosh.track(a.t, placeIn(paw.leg.joint, ORIGIN, pawAt.shoulder, root), placeIn(paw.leg.joint, paw.tip, pawAt.claws, root), swiping);
+}
+
+const ORIGIN = new THREE.Vector3();
+const chainOf = new THREE.Matrix4();
+/** Where `at`, a point in `frame`, is in the frame of `root`, one of the joints it hangs from. */
+function placeIn(frame: THREE.Object3D, at: THREE.Vector3, out: THREE.Vector3, root: THREE.Object3D) {
+  chainOf.identity();
+  for (let joint: THREE.Object3D | null = frame; joint && joint !== root; joint = joint.parent) {
+    joint.updateMatrix();
+    chainOf.premultiply(joint.matrix);
+  }
+  return out.copy(at).applyMatrix4(chainOf);
+}
+
+/** A number from 0 to 1 that is the same every time for the same `i` and `salt`: where a tuft of fur falls. */
+const jitter = (i: number, salt: number) => {
+  const s = Math.sin(i * 127.1 + salt * 311.7) * 43758.5453;
+  return s - Math.floor(s);
+};
+
+/**
+ * A spike of ragged fur standing off a hide at `at`: it points along `out` (x and y, outward from the body),
+ * `len` long, swept back toward -z by `back`, `w` wide at its root. Its root is sunk into the hide.
+ */
+function tuft(part: Part, color: string, at: Pt, out: readonly [number, number], len: number, w: number, back: number) {
+  const [x, y, z] = at;
+  const n = Math.hypot(out[0], out[1]) || 1;
+  const ox = out[0] / n;
+  const oy = out[1] / n;
+  const base: Pt = [x - ox * 0.25, y - oy * 0.25, z];
+  part.shape(color, [
+    [base[0] + oy * w, base[1] - ox * w, z + w * 0.6],
+    [base[0] - oy * w, base[1] + ox * w, z + w * 0.6],
+    [base[0], base[1], z - w * 0.8],
+    [x + ox * len, y + oy * len, z - back],
+  ]);
+}
+
+/**
+ * A wolf, nose toward +z. `ember` is the fire in an Ember Hound: it shows through cracks down its back and lights
+ * its mouth. `mangy` is the Pack Leader's: a heavier build, most of all in the chest and shoulders, with thicker
+ * legs and a broader head, a mane of spikes round the neck and taller hackles the length of its back.
+ */
+function wolf(top: THREE.Group, fur = "#7d8793", dark = "#59616c", eye = "#ffd23f", ember?: string, mangy = false): Rig {
   const parts: Part[] = [];
   const part = (parent: THREE.Object3D, x: number, y: number, z: number) => (parts[parts.length] = new Part(parent, x, y, z));
   const body = part(top, 0, 0, 0);
   // Lean hips, a tucked belly and a deep chest, a ruff of paler fur at the shoulders; dark down the back and under.
-  const trunk: Span[] = [[-5.1, 1.2, 1.2, 6.9], [-4.4, 1.95, 1.85, 6.6], [-2.6, 2, 1.7, 6.6], [-0.6, 2.1, 1.95, 6.45], [1.6, 2.4, 2.35, 6.4], [3.4, 2.35, 2.3, 6.55], [4.5, 1.5, 1.6, 6.8]];
-  const ruff: Span[] = [[0.9, 2.3, 2.25, 6.5], [2.3, 2.7, 2.6, 6.6], [3.9, 2.6, 2.5, 6.85], [4.9, 1.8, 1.9, 7.2]];
+  // A mangy one is broader all through, and most of all in the chest and shoulders (from about the middle forward).
+  const bulk = (spans: Span[], wide: number, deep: number): Span[] => {
+    if (!mangy) return spans;
+    const front = (z: number) => Math.min(1, Math.max(0, (z + 1) / 4));
+    return spans.map(([z, rx, ry, up]) => [z, rx * (wide + front(z) * 0.18), ry * (deep + front(z) * 0.12), up] as const);
+  };
+  const trunk = bulk([[-5.1, 1.2, 1.2, 6.9], [-4.4, 1.95, 1.85, 6.6], [-2.6, 2, 1.7, 6.6], [-0.6, 2.1, 1.95, 6.45], [1.6, 2.4, 2.35, 6.4], [3.4, 2.35, 2.3, 6.55], [4.5, 1.5, 1.6, 6.8]], 1.15, 1.08);
+  const ruff = bulk([[0.9, 2.3, 2.25, 6.5], [2.3, 2.7, 2.6, 6.6], [3.9, 2.6, 2.5, 6.85], [4.9, 1.8, 1.9, 7.2]], 1.22, 1.15);
   lengthwise(body, fur, trunk);
   lengthwise(body, tone(fur, 0.05), ruff);
   pelt(body, dark, trunk, -4.3, 1.2, -0.7, 0.7, 0.12);
   pelt(body, dark, trunk, -3.2, 1.2, Math.PI - 0.7, Math.PI + 0.7, 0.1);
+  // Loose fur rides on its own parts (see Part.fluff), on whatever it grows from.
+  const fluff = (on: Part) => {
+    const coat = part(on.joint, 0, 0, 0);
+    coat.fluff = true;
+    return coat;
+  };
+  if (mangy) {
+    const coat = fluff(body);
+    // The mane: a collar of spikes round the neck, swept back over the shoulders.
+    for (const [z, len, salt] of [[4.5, 1.6, 5], [3.6, 1.9, 6]] as const) {
+      for (let i = 0; i < 10; i++) {
+        const a = -Math.PI + (i + 0.5 + (salt === 6 ? 0.5 : 0)) * ((Math.PI * 2) / 10);
+        // Not under the throat, where it would bury the forelegs.
+        if (Math.abs(a) > 2.5) continue;
+        const l = len * (0.75 + jitter(i, salt) * 0.5) * (Math.abs(a) < 1.2 ? 1 : 0.8);
+        tuft(coat, i % 3 === 1 ? dark : tone(fur, 0.05 + (i % 2) * 0.04), onHide(ruff, z, a), [Math.sin(a), Math.cos(a)], l, 0.5, 1.6 + jitter(i, salt + 10) * 0.5);
+      }
+    }
+  }
   // The hackles up, a crest of spiky fur from the nape back over the shoulders, tallest at the withers.
-  for (let i = 0; i < 9; i++) {
+  // A mangy one's run the length of its back to the hips, and stand taller.
+  for (let i = 0; i < (mangy ? 13 : 9); i++) {
     const z = 4.6 - i * 0.75;
     const r = ringAt((z > 0.9 ? ruff : trunk) as readonly Ring[], z);
-    const rise = Math.max(0.7, 2.3 - Math.abs(z - 2.2) * 0.42);
+    const rise = Math.max(0.7, 2.3 - Math.abs(z - 2.2) * 0.42) * (mangy ? 1.3 : 1);
     for (const s of i % 2 ? [-1, 1] : [0]) {
       const x = s * 0.7;
       const y = r.dz + r.rz - 0.4 - Math.abs(x) * 0.35;
@@ -9118,6 +9914,8 @@ function wolf(top: THREE.Group, fur = "#7d8793", dark = "#59616c", eye = "#ffd23
   }
   // Head down, snarling (see fourLegs' stoop).
   const head = part(top, 0, 7.7, 4.4);
+  // A mangy one's is heavier: broader across the skull and jaw.
+  if (mangy) head.skin.scale.set(1.15, 1.08, 1.05);
   // A long skull, a dark tapering snout with a black nose, ears pinned back, bright eyes, and bared fangs.
   lengthwise(head, fur, [[-0.6, 1.6, 1.6, 1], [0.5, 2.25, 2.1, 0.95], [1.9, 2.25, 1.95, 0.85], [3, 1.7, 1.5, 0.55], [3.5, 1, 0.95, 0.35]]);
   lengthwise(head, dark, [[2.3, 1.3, 1.1, 0.2], [4, 1.08, 0.9, 0.05], [5.15, 0.8, 0.65, -0.05], [5.5, 0.45, 0.42, -0.05]]);
@@ -9140,22 +9938,36 @@ function wolf(top: THREE.Group, fur = "#7d8793", dark = "#59616c", eye = "#ffd23
   lengthwise(tail, fur, [[0.6, 0.6, 0.6], [-0.6, 0.85, 0.85], [-2.4, 1.05, 1], [-3.6, 0.9, 0.85]], 6, 0, 0, 0, 0.61);
   lengthwise(tail, dark, [[-3.3, 0.96, 0.9], [-4.6, 0.7, 0.66], [-5.2, 0.2, 0.2]], 6, 0, 0, 0, 0.61);
   const legs = [[-1.5, 3], [1.5, 3], [-1.5, -3.6], [1.5, -3.6]].map(([x, z]) => {
-    const leg = part(top, x, 4.6, z);
+    const fore = z > 0;
+    const leg = part(top, x * (mangy ? (fore ? 1.3 : 1.05) : 1), 4.6, z);
+    // A mangy one's are thicker, the forelegs most (see bulk).
+    if (mangy) leg.skin.scale.set(fore ? 1.35 : 1.15, 1, fore ? 1.25 : 1.15);
     // The hind legs bend back at the hock.
     const rings: Ring[] = z > 0 ? [[1.2, 1.05, 1.2, 0.1], [-0.6, 0.88, 0.98, 0.05], [-2.6, 0.68, 0.72, 0.05], [-3.9, 0.62, 0.68, 0.1]] : [[1.4, 1.2, 1.55, -0.25], [-0.6, 0.98, 1.12, -0.4], [-2.3, 0.66, 0.75, -0.6], [-3.1, 0.58, 0.66, -0.45], [-3.9, 0.62, 0.68, -0.15]];
-    leg.loft(dark, rings, 6);
+    leg.loft(dark, domed(rings), 6);
     leg.shape(tone(dark, -0.06), sym([[0.72, -4.6, -0.55], [0.82, -4.6, 0.7], [0.5, -4.6, 1.35], [0, -4.6, 1.5], [0.58, -3.7, -0.5], [0.58, -3.8, 0.4], [0, -4, 1.2]]));
     return leg;
   });
-  return { parts, animate: fourLegs(top, legs, head, tail, 2.6, 9, 0.3), getUp: BEAST_GET_UP };
+  return { parts, animate: fourLegs(top, legs, head, tail, mangy ? 3.2 : 2.6, 9, 0.3), getUp: BEAST_GET_UP, howls: true, breathes: true, flares: true };
+}
+
+/**
+ * A tuft of fur lying back over a lengthwise loft (see Span): a short wedge rooted at `z`, `a` round it (radians from
+ * straight up, toward +x), its point `long` further back toward -z, raised only a little off the fur.
+ */
+function furTuft(part: Part, color: string, spans: readonly Span[], z: number, a: number, long: number) {
+  const on = (turn: number, by: number, along: number): Pt => {
+    const r = ringAt(spans as readonly Ring[], along);
+    return [Math.sin(turn) * (r.rx + by), r.dz + Math.cos(turn) * (r.rz + by), along];
+  };
+  part.shape(color, [on(a - 0.14, -0.1, z), on(a + 0.14, -0.1, z), on(a, 0.3, z - long * 0.35), on(a, 0.1, z - long)]);
 }
 
 /**
  * A bear on all fours: heavier than the wolf, with a hump at the shoulders, round ears, a pale muzzle and
- * thick clawed legs. `frost` greys the hump and brow for the old Great Bear; `claw` is the colour of its claws
- * (a Snow Bear's are dark against its white).
+ * thick clawed legs. `mane` is the Great Bear's: tufts of slightly darker fur lying back along its body from the shoulders over the rump. `claw` is the colour of its claws (a Snow Bear's are dark against its white).
  */
-function bear(top: THREE.Group, fur = "#7a5232", dark = "#4f3420", muzzle = "#b98a5a", eye = "#f2a33a", frost?: string, claw: string = GEAR.paper): Rig {
+function bear(top: THREE.Group, fur = "#7a5232", dark = "#4f3420", muzzle = "#b98a5a", eye = "#f2a33a", mane?: string, claw: string = GEAR.paper): Rig {
   const parts: Part[] = [];
   const part = (parent: THREE.Object3D, x: number, y: number, z: number) => (parts[parts.length] = new Part(parent, x, y, z));
   const body = part(top, 0, 0, 0);
@@ -9164,7 +9976,14 @@ function bear(top: THREE.Group, fur = "#7a5232", dark = "#4f3420", muzzle = "#b9
   lengthwise(body, fur, trunk);
   pelt(body, dark, trunk, -4.6, 3.2, Math.PI - 0.75, Math.PI + 0.75, 0.12);
   body.ball(dark, 1, 0, 8.8, -6, 0);
-  if (frost) pelt(body, frost, trunk, -1, 3.8, -0.8, 0.8, 0.14);
+  // The mane: rows of tufts from the front of the shoulders all the way back over the rump, over the top and down
+  // the sides; none on the very back of it, where it rounds off to the tail.
+  if (mane) {
+    for (let row = 0; row < 10; row++) {
+      const z = 4.4 - row * 0.9;
+      for (let i = 0; i < 9; i++) furTuft(body, mane, trunk, z, -1.75 + (3.5 * (i + (row % 2) * 0.5)) / 9, 1.1 + ((i + row) % 3) * 0.2);
+    }
+  }
   const head = part(top, 0, 9.4, 4.2);
   const skull: Span[] = [[-0.6, 2.5, 2.45, 0.8], [0.5, 3.1, 2.9, 0.75], [2.2, 3.05, 2.75, 0.6], [3.5, 2.4, 2.1, 0.25], [4.1, 1.45, 1.3, 0]];
   lengthwise(head, fur, skull);
@@ -9174,24 +9993,41 @@ function bear(top: THREE.Group, fur = "#7a5232", dark = "#4f3420", muzzle = "#b9
     head.ball(dark, 1.1, s * 2.4, 3.7, 1.1, 0, [1, 1, 0.7]);
     head.glowBall(eye, 0.44, s * 1.6, 1.6, 3.4);
   }
-  if (frost) pelt(head, frost, skull, 0, 3, -0.85, 0.85, 0.13);
   const legs = [[-2.3, 3.2], [2.3, 3.2], [-2.3, -4], [2.3, -4]].map(([x, z]) => {
     const leg = part(top, x, 4.8, z);
     const rings: Ring[] = z > 0 ? [[1.5, 1.55, 1.75], [-0.8, 1.35, 1.55, 0.1], [-3, 1.25, 1.45, 0.2], [-4.2, 1.35, 1.6, 0.35]] : [[1.8, 1.75, 2.2, -0.3], [-0.6, 1.45, 1.7, -0.3], [-2.8, 1.25, 1.45, -0.05], [-4.2, 1.35, 1.6, 0.25]];
-    leg.loft(dark, rings, 8);
+    leg.loft(dark, domed(rings), 8);
     leg.shape(tone(dark, -0.05), sym([[1.4, -4.8, -1.25], [1.5, -4.8, 1], [1.1, -4.8, 1.85], [0, -4.8, 2.05], [1.35, -3.9, -1.15], [1.4, -3.9, 0.9], [0, -3.9, 1.7]]));
     for (const cx of [-0.8, 0, 0.8]) leg.shape(claw, [[cx - 0.25, -4.8, 1.55], [cx + 0.25, -4.8, 1.55], [cx, -4.25, 1.6], [cx, -4.75, 2.55]]);
     return leg;
   });
-  return { parts, animate: fourLegs(top, legs, head, null, 3.6, 12), getUp: BEAST_GET_UP };
+  // It swipes with its forepaws, right then left: the middle claw's tip leads each swoosh.
+  const paws = [legs[0], legs[1]].map((leg) => pawOf(leg, new THREE.Vector3(0, -4.75, 2.55)));
+  return { parts, animate: fourLegs(top, legs, head, null, 3.6, 12, 0, paws), getUp: BEAST_GET_UP, claws: true, breathes: true, flares: true };
 }
 
 /**
  * A ghost of the Haunted Caverns: a pale hooded shape with a ragged hem, hollow eyes and reaching hands,
- * hanging in the air. `crown` gives the bound Haunt the tarnished crown of whoever it was in life. `rime` is the
- * ice on a Rime Wraith: shards of it stand from its shoulders and back, and it is the cold light in its eyes.
+ * hanging in the air. What sets one ghost apart from another is in `look` (GhostLook).
  */
-function ghost(top: THREE.Group, pale = "#dfe8f2", shade = "#a7b6cc", eye = "#24203a", crown?: string, rime?: string): Rig {
+interface GhostLook {
+  /** The tarnished crown of whoever it was in life. */
+  crown?: string;
+  /** A gem set in the front of the crown, glowing. */
+  gem?: string;
+  /** Ice on it: shards stand from its shoulders and back, and it is the cold light in its eyes. */
+  rime?: string;
+  /** A light burning in its eyes (rime's light when not said). */
+  glare?: string;
+  /** A high collar standing up behind its head and a cape down its back: the state it kept in life. */
+  mantle?: string;
+  /** Iron on its wrists, each with a broken chain hanging from it: what binds it here. */
+  shackles?: string;
+}
+
+function ghost(top: THREE.Group, pale = "#dfe8f2", shade = "#a7b6cc", eye = "#24203a", look: GhostLook = {}): Rig {
+  const { crown, rime, mantle, shackles } = look;
+  const glare = look.glare ?? rime;
   const parts: Part[] = [];
   const body = (parts[0] = new Part(top, 0, 2, 0));
   // One shape from the hem up over a round head, narrowing at the neck.
@@ -9206,8 +10042,22 @@ function ghost(top: THREE.Group, pale = "#dfe8f2", shade = "#a7b6cc", eye = "#24
   }
   for (const s of [-1, 1]) body.ball(eye, 1, s * 1.5, 13, 3.35, 1, [0.92, 1.12, 0.55]);
   body.ball(eye, 1, 0, 10.2, 3.42, 1, [1.15, 0.8, 0.5]);
+  if (glare) for (const s of [-1, 1]) body.glowBall(glare, 0.55, s * 1.5, 13, 3.72);
+  if (mantle) {
+    // The cape: from the shoulders to the hem, widening as it falls, over the back only (half a turn about y puts a
+    // front loft behind). Its top is closed to its middle, so it stops below the head, inside the shoulders.
+    body.frontLoft(mantle, [[4.4, 4.85, 4.75, 0.05], [7, 4.5, 4.4, 0.05], [10, 3.98, 3.88, 0.12], [12.4, 3.98, 3.88, 0.1]], [1.25, 1.2, 1.15, 1.25], 10, [0, Math.PI, 0]);
+    // The collar: thin panels standing round the back of the neck and flaring out, each rising to a point, so
+    // it is open above and the head shows through (a loft would be closed over the top of the head).
+    for (let i = 0; i < 7; i++) {
+      // As wide round as the cape's top (1.25 either side of straight back), so the two meet edge to edge.
+      const a = Math.PI + (i - 3) * 0.33;
+      const at = (r: number, y: number, turn = 0): Pt => [Math.sin(a + turn) * r, y, Math.cos(a + turn) * r];
+      const panel = (out: number): Pt[] => [at(3.95 + out, 12.3, -0.26), at(3.95 + out, 12.3, 0.26), at(4.85 + out, 15.9, -0.3), at(4.85 + out, 15.9, 0.3), at(5.05 + out, 16.9 - Math.abs(i - 3) * 0.2)];
+      body.shape(mantle, [...panel(0), ...panel(0.3)]);
+    }
+  }
   if (rime) {
-    for (const s of [-1, 1]) body.glowBall(rime, 0.55, s * 1.5, 13, 3.72);
     // Shards of ice round the shoulders and down the back (not the front, where the arms reach), long and short by turns.
     for (let i = 0; i < 7; i++) {
       const a = Math.PI + (i - 3) * 0.42;
@@ -9224,25 +10074,70 @@ function ghost(top: THREE.Group, pale = "#dfe8f2", shade = "#a7b6cc", eye = "#24
       const at = (r: number, y: number, turn = 0): Pt => [Math.sin(a + turn) * r, y, Math.cos(a + turn) * r - 0.1];
       body.shape(crown, [at(3.05, 16.1, -0.3), at(3.05, 16.1, 0.3), at(2.6, 16.1), at(2.85, 17.55)]);
     }
+    if (look.gem) body.glowBall(look.gem, 0.5, 0, 15.75, 3.12);
   }
   const arms = [-1, 1].map((s) => {
     const arm = (parts[parts.length] = new Part(body.joint, s * 3.6, 9.6, 1));
     // A sleeve reaching forward, flaring at the cuff, and a pale hand with long fingers.
     lengthwise(arm, shade, [[-0.6, 1, 1], [1.5, 0.92, 0.88], [3.6, 0.82, 0.78], [4.4, 1.02, 0.95]], 6);
     arm.shape(pale, [[-0.7, 0.35, 4.2], [0.7, 0.35, 4.2], [-0.7, -0.45, 4.2], [0.7, -0.45, 4.2], [-0.75, 0.05, 5.55], [0, 0.2, 5.95], [0.75, 0.05, 5.55], [0, -0.55, 5.3]]);
+    if (shackles) {
+      // A cuff of iron round the sleeve, and a few links hanging from it, each turned across the last, ending broken.
+      arm.ring(shackles, 1.02, 0.24, 0, 0, 3.05);
+      for (let i = 0; i < 4; i++) arm.ring(shackles, 0.36, 0.11, 0, -1.4 - i * 0.6, 3.05 - i * 0.08, i % 2 ? [0, HALF_PI, 0] : undefined);
+    }
     return arm;
   });
   const animate = (a: Anim) => {
+    // A wail swells it and a grasp stretches its arms: back to size, unless one is under way.
+    body.joint.scale.setScalar(1);
+    for (const arm of arms) arm.joint.scale.set(1, 1, 1);
     if (a.lying) {
       top.rotation.set(-HALF_PI, 0, 0);
       top.position.set(0, 4.2, 10);
       return;
     }
+    const hover = Math.sin(a.t * 1.8) * 0.7 + 0.7;
+    const drift = (i: number) => Math.sin(a.t * 1.3 + i * 2) * 0.15;
+    if (a.act?.kind === "grasp") {
+      // Drawn up and back, then surged in at the target, leaning into it with its arms out level, stretched long.
+      const t = a.act.t;
+      top.rotation.set(along(GRASP.lean, t), 0, 0);
+      top.position.set(0, hover + along(GRASP.rise, t), along(GRASP.step, t) * STRIDE * 0.5 * a.scale);
+      const stretch = along(GRASP.stretch, t);
+      arms.forEach((arm, i) => {
+        arm.joint.rotation.set(along(GRASP.arms, t) + drift(i) * 0.3, 0, 0);
+        arm.joint.scale.set(1, 1, stretch);
+      });
+      return;
+    }
+    if (a.act?.kind === "hurl") {
+      // Risen and leaning back, arms high overhead and drawn together, then flung forward and down level at the mark.
+      const t = a.act.t;
+      top.rotation.set(along(HURL.lean, t), 0, 0);
+      top.position.set(0, hover + along(HURL.rise, t), along(HURL.step, t) * STRIDE * 0.5 * a.scale);
+      arms.forEach((arm, i) => arm.joint.rotation.set(along(HURL.arms, t) + drift(i) * 0.3, (i === 0 ? -1 : 1) * along(HURL.wide, t), 0));
+      return;
+    }
+    if (a.act?.kind === "wail") {
+      // Huddled in, then flung up and back, arms up and wide, swelling and trembling as it screams.
+      const t = a.act.t;
+      const shake = along(WAIL.shake, t);
+      const tremble = (k: number) => shake * Math.sin(t * 61 + k) * 0.05;
+      top.rotation.set(along(WAIL.lean, t) + tremble(0), 0, tremble(1.7));
+      top.position.set(tremble(3) * 6, hover + along(WAIL.rise, t), 0);
+      body.joint.scale.setScalar(along(WAIL.swell, t));
+      arms.forEach((arm, i) => {
+        const s = i === 0 ? -1 : 1;
+        arm.joint.rotation.set(along(WAIL.lift, t) + tremble(i * 2.3) * 2, s * along(WAIL.wide, t), 0);
+      });
+      return;
+    }
     top.rotation.set(a.strike * 0.35, 0, 0);
-    top.position.set(0, Math.sin(a.t * 1.8) * 0.7 + 0.7, 0);
-    arms.forEach((arm, i) => arm.joint.rotation.set(-0.25 + Math.sin(a.t * 1.3 + i * 2) * 0.15 - a.strike * 0.6, 0, 0));
+    top.position.set(0, hover, 0);
+    arms.forEach((arm, i) => arm.joint.rotation.set(-0.25 + drift(i) - a.strike * 0.6, 0, 0));
   };
-  return { parts, animate, clean: true };
+  return { parts, animate, clean: true, spectral: true };
 }
 
 /** A cave bat, wings spread, hanging in the air: small, dark and red-eyed. */
@@ -9285,12 +10180,18 @@ function bat(top: THREE.Group): Rig {
       wings.forEach((p, i) => p.joint.rotation.set(0, 0, (i ? -1 : 1) * 0.2));
       return;
     }
-    top.rotation.set(a.strike * 0.5, 0, 0);
-    top.position.set(0, Math.sin(a.t * 5) * 0.6, 0);
-    const flap = Math.sin(a.t * 15) * 0.6;
-    wings.forEach((p, i) => p.joint.rotation.set(0, 0, (i ? 1 : -1) * flap));
+    // Diving (a Fell Swoop): nose-down and low, wings swept back along its sides and barely fluttering, then a flare.
+    const dive = a.act?.kind === "dive" ? diveAt(a.act.t, a.act.air ?? 0) : null;
+    const tuck = dive ? Math.min(1, Math.abs(dive.sweep) / DIVE.sweep) : 0;
+    top.rotation.set(a.strike * 0.5 + (dive?.pitch ?? 0), 0, 0);
+    top.position.set(0, Math.sin(a.t * 5) * 0.6 * (1 - tuck) + (dive?.drop ?? 0), 0);
+    const flap = Math.sin(a.t * 15) * 0.6 * (1 - tuck * 0.85);
+    wings.forEach((p, i) => {
+      const s = i ? 1 : -1;
+      p.joint.rotation.set(0, s * (dive?.sweep ?? 0), s * (flap + (dive?.fold ?? 0)));
+    });
   };
-  return { parts, animate, clean: true };
+  return { parts, animate, clean: true, dives: true };
 }
 
 /** A cave slime: a green blob with a shine on it, two dark eyes, and a drip. */
@@ -9306,11 +10207,25 @@ function slime(top: THREE.Group): Rig {
   spot(body, "#c9f5b8", 0.36, 0.72, 0.6, -3.6, 5.6, 4.3, [-0.45, -0.65, 0]);
   for (const s of [-1, 1]) body.ball("#14301a", 1, s * 1.9, 4.6, 5.45, 1, [0.78, 0.95, 0.45]);
   const animate = (a: Anim) => {
+    const act = a.act?.kind === "engulf" || a.act?.kind === "spit" ? a.act : null;
+    if (act && !a.lying) {
+      // Its own moves (ENGULF, SPIT): stretched and squashed as their keys say, and churning as it holds what it engulfs.
+      const t = act.t;
+      const engulf = act.kind === "engulf";
+      const churn = engulf ? along(ENGULF.churn, t) * Math.sin(t * 30) * 0.07 : 0;
+      const tall = along(engulf ? ENGULF.tall : SPIT.tall, t) + churn;
+      const wide = along(engulf ? ENGULF.wide : SPIT.wide, t) - churn * 0.5;
+      top.scale.set(wide, tall, wide);
+      top.position.set(0, 0, engulf ? along(ENGULF.reach, t) * a.scale : 0);
+      top.rotation.x = engulf ? 0 : along(SPIT.tip, t);
+      return;
+    }
     const squash = a.lying ? -0.6 : a.breath * 0.05 + Math.abs(a.swing) * 0.18 - a.strike * 0.25;
     top.scale.set(1 - squash * 0.5, 1 + squash, 1 - squash * 0.5);
     top.position.set(0, 0, a.strike * 1.5);
+    top.rotation.x = 0;
   };
-  return { parts: [body], animate, clean: true };
+  return { parts: [body], animate, clean: true, oozes: true };
 }
 
 /** A Druid's sea turtle, nose toward +z: a high domed shell over four broad flippers, a blunt beaked head. */
@@ -9417,10 +10332,12 @@ const SCUTTLE = { stride: 1.9, lift: 2.2 };
  * feelers under them, a fat abdomen behind with a marking down its back, and eight legs, each jointed at a knee
  * held high over its body. The legs walk in two sets of four, turn about; each foot is put where it should
  * stand and the leg bent to reach it (see kneeHigh), so the body can sink, sway and lunge over planted feet.
- * `brood` is the Broodmother: a little bigger (a boss is drawn larger besides) and much heavier, spined, an
- * hourglass for its marking and a sac of eggs carried under its tail.
+ * `look`: a Giant Spider (`hunter`, three pale diamonds down its back); the Broodmother (`brood`), a little bigger (a
+ * boss is drawn larger besides) and much heavier, spined, and an hourglass for its marking; or one of her Spiderlings
+ * (`hatchling`), with no marking at all (it is drawn small: WorldRenderer enemySize).
  */
-function spider(top: THREE.Group, shell = "#24332b", dark = "#121a16", back = "#3f7d3c", mark = "#dbe6b4", glow = "#9dff5a", brood = false): Rig {
+function spider(top: THREE.Group, shell = "#24332b", dark = "#121a16", back = "#3f7d3c", mark = "#dbe6b4", glow = "#9dff5a", look: "hunter" | "brood" | "hatchling" = "hunter"): Rig {
+  const brood = look === "brood";
   const parts: Part[] = [];
   // Modelled at a hound's size, and drawn `k` times that: each part's meshes are scaled, and its joints set as far apart.
   const k = brood ? 1.08 : 1;
@@ -9483,13 +10400,7 @@ function spider(top: THREE.Group, shell = "#24332b", dark = "#121a16", back = "#
       const z = -1.5 - i * 1.05;
       for (const s of [-1, 1]) belly.shape(dark, [onHide(sac, z + 0.4, s * 0.8, -0.1), onHide(sac, z - 0.4, s * 0.8, -0.1), onHide(sac, z, s * 0.98, -0.1), onHide(sac, z, s * 0.62, -0.1), onHide(sac, z - 0.7, s * 0.86, 1.3 - Math.abs(i - 2) * 0.16)]);
     }
-    // The eggs, bound up in silk under the tail.
-    const silk = "#e9e2cf";
-    belly.ball(silk, 1.55, 0, -2.5, -6.2, 1, [1.05, 0.9, 1.15]);
-    belly.ball(tone(silk, -0.06), 0.8, 1, -2.2, -5, 1);
-    belly.ball(tone(silk, -0.06), 0.7, -1.05, -2.3, -5.3, 1);
-    belly.ball(silk, 0.65, 0.2, -2.1, -7.6, 1);
-  } else {
+  } else if (look === "hunter") {
     // Three pale diamonds down the back, each smaller than the last, a lit speck either side of each.
     ([[-2.5, 1, 0.34], [-4.6, 0.85, 0.3], [-6.3, 0.6, 0.26]] as const).forEach(([z, half, wide]) => {
       patch(mark, [[z + half, 0], [z, wide], [z - half, 0], [z, -wide]]);
@@ -9517,7 +10428,7 @@ function spider(top: THREE.Group, shell = "#24332b", dark = "#121a16", back = "#
       strut(lower, dark, [0, bend[0], bend[1]], [0, foot[0], foot[1]], 0.38 * stout, 0.07, 6);
       // Where the foot stands, in the figure's space; which of the two sets of four it walks with.
       const stand = new THREE.Vector3(s * (x + Math.sin(yaw) * reach) * k, 0, (cz + z + Math.cos(yaw) * reach) * k);
-      return { upper, lower, thigh: thigh * k, shin: shin * k, e1, e2, yaw: s * yaw, stand, first: (i + (s > 0 ? 0 : 1)) % 2 === 0, front: i === 0, side: s };
+      return { upper, lower, thigh: thigh * k, shin: shin * k, e1, e2, yaw: s * yaw, stand, first: (i + (s > 0 ? 0 : 1)) % 2 === 0, front: i === 0, pair: i, side: s };
     }),
   );
   /** Bend a leg so its thigh and shin point `e1` and `e2` above level, the leg turned `yaw` round from straight ahead. */
@@ -9553,12 +10464,24 @@ function spider(top: THREE.Group, shell = "#24332b", dark = "#121a16", back = "#
       feelers.forEach((p) => p.joint.rotation.set(0.5, 0, 0));
       return;
     }
+    // Its own moves (FANG, WEB) are posed from their keys; anything else it is leant into, rearing and lunging as it strikes.
+    const fang = a.act?.kind === "fang" ? a.act.t : -1;
+    const web = a.act?.kind === "web" ? a.act.t : -1;
+    const rear = fang >= 0 ? along(FANG.rear, fang) : a.strike;
+    const arch = web >= 0 ? along(WEB.arch, web) + Math.sin(web * 70) * along(WEB.shake, web) * 0.06 : 0;
+    const pitch = web >= 0 ? along(WEB.pitch, web) : 0;
+    const sink = web >= 0 ? along(WEB.sink, web) : 0;
+    const brace = web >= 0 ? along(WEB.brace, web) : 0;
+    const ahead = fang >= 0 ? along(FANG.reach, fang) * 2.8 : a.strike * 2.6;
+    const frontUp = fang >= 0 ? along(FANG.legs, fang) : a.strike;
+    // Its fangs: spread wide and lifted as it opens them; below 0, driven down and in.
+    const gape = fang >= 0 ? along(FANG.gape, fang) : a.strike;
     // The body over its feet: it rises and sinks as it breathes, rides the walk, and on a strike rears and lunges.
-    top.rotation.set(-a.strike * 0.24, a.swing * 0.04, 0);
-    top.position.set(Math.sin(a.t * 0.8 + quirk) * 0.14 * k, ((a.breath + 1) * 0.14 + gait * gait * 0.3 + a.strike * 0.7) * k, a.strike * 2.6 * k);
+    top.rotation.set(-rear * (fang >= 0 ? 0.42 : 0.24) + pitch, a.swing * 0.04, 0);
+    top.position.set(Math.sin(a.t * 0.8 + quirk) * 0.14 * k, ((a.breath + 1) * 0.14 + gait * gait * 0.3 + Math.max(0, rear) * (fang >= 0 ? 1.3 : 0.7) + sink) * k, ahead * k);
     chest.joint.rotation.set(0, 0, 0);
-    belly.joint.rotation.set(a.breath * 0.035 + a.strike * 0.14, -a.swing * 0.07, 0);
-    fangs.forEach((jaw, i) => jaw.joint.rotation.set(Math.sin(a.t * 2.3 + i * 2 + quirk) * 0.05 - a.strike * 1.05, 0, (i ? 1 : -1) * a.strike * 0.4));
+    belly.joint.rotation.set(a.breath * 0.035 + Math.max(0, rear) * 0.14 + arch, -a.swing * 0.07, 0);
+    fangs.forEach((jaw, i) => jaw.joint.rotation.set(Math.sin(a.t * 2.3 + i * 2 + quirk) * 0.05 - gape * 1.05, 0, (i ? 1 : -1) * gape * (fang >= 0 ? 0.55 : 0.4)));
     feelers.forEach((p, i) => p.joint.rotation.set(Math.sin(a.t * 3.1 + i * 1.7 + quirk) * 0.14 - a.strike * 0.6, 0, 0));
     top.updateMatrix();
     inTop.copy(top.matrix).invert();
@@ -9572,17 +10495,22 @@ function spider(top: THREE.Group, shell = "#24332b", dark = "#121a16", back = "#
       if (leg.front) {
         // The first pair: thrown up and wide on a strike; now and then one taps the ground, standing.
         const tap = Math.max(0, Math.sin(a.t * 0.9 + quirk + leg.side) - 0.9) * 10;
-        at.y += (a.strike * 9 + tap * 0.9) * k;
-        at.x += leg.side * a.strike * 2 * k;
-        at.z += a.strike * 2.2 * k;
+        at.y += (frontUp * 9 + tap * 0.9) * k;
+        at.x += leg.side * frontUp * (fang >= 0 ? 2.6 : 2) * k;
+        at.z += frontUp * 2.2 * k;
+      } else if (leg.pair === 1 && fang >= 0) {
+        // The second pair is lifted a little with them as it rears.
+        at.y += frontUp * 2.5 * k;
       }
+      // Braced to throw silk: every foot set out a little wider.
+      at.x += leg.side * brace * 0.9 * k;
       at.applyMatrix4(inTop).sub(leg.upper.joint.position);
       const [e1, e2] = kneeHigh(Math.hypot(at.x, at.z), at.y, leg.thigh, leg.shin);
       set(leg, Math.atan2(at.x, at.z), e1, e2);
     }
   };
   // (No mud: slung this low, all of it would be the colour of the ground.)
-  return { parts, animate, clean: true };
+  return { parts, animate, clean: true, spins: true };
 }
 
 /** The sparring ring's training dummy: a straw sack on a post, with a target painted on its chest. */
@@ -9625,17 +10553,17 @@ function rigFor(kind: string, top: THREE.Group, look: Look, outfit: Outfit | und
     case "wolf":
       return wolf(top);
     case "alpha":
-      return wolf(top, "#4a4f5c", "#2c3039", "#ff4d4d");
+      return wolf(top, "#4a4f5c", "#2c3039", "#ff4d4d", undefined, true);
     case "bear":
       return bear(top);
     case "great_bear":
-      return bear(top, "#4a3426", "#2a1d15", "#8a7a6a", "#ff4d4d", "#9a8f86");
+      return bear(top, "#4a3426", "#2a1d15", "#8a7a6a", "#ff4d4d", "#3b291d");
     case "dummy":
       return dummy(top);
     case "shade":
       return ghost(top);
     case "haunt":
-      return ghost(top, "#c7b8f0", "#8b74c9", "#ff4d4d", "#c9a24a");
+      return ghost(top, "#c7b8f0", "#8b74c9", "#2a1838", { crown: "#c9a24a", gem: "#ff4d4d", glare: "#ff4d4d", mantle: "#4b3778", shackles: "#4a4658" });
     case "bat":
       return bat(top);
     case "skeleton":
@@ -9646,12 +10574,16 @@ function rigFor(kind: string, top: THREE.Group, look: Look, outfit: Outfit | und
       return ogre(top);
     case "troll":
       return troll(top);
+    case "guardian":
+      return golem(top);
     case "sea_turtle":
       return seaTurtle(top);
     case "spider":
       return spider(top);
     case "broodmother":
-      return spider(top, "#2b1d3a", "#140d1f", "#3d2857", "#e23a30", "#ff3b3b", true);
+      return spider(top, "#2b1d3a", "#140d1f", "#3d2857", "#e23a30", "#ff3b3b", "brood");
+    case "spiderling":
+      return spider(top, "#1b1b1f", "#0b0b0d", "#232328", "#1b1b1f", "#c8463a", "hatchling");
     case "frost_wolf":
       return wolf(top, "#eaf2f8", "#a9c6dc", "#a8e4ff");
     case "ember_hound":
@@ -9659,7 +10591,7 @@ function rigFor(kind: string, top: THREE.Group, look: Look, outfit: Outfit | und
     case "snow_bear":
       return bear(top, "#eef3f6", "#c9d5de", "#dbe4ea", "#1d2230", undefined, "#2b2f3a");
     case "wraith":
-      return ghost(top, "#e4f6ff", "#8fc9e8", "#16384f", undefined, "#7ff1ff");
+      return ghost(top, "#e4f6ff", "#8fc9e8", "#16384f", { rime: "#7ff1ff" });
     case "drowned_cutlass":
       return skeleton(top, "cutlass");
     case "drowned_gunner":
@@ -9724,7 +10656,7 @@ function castShape(top: THREE.Group, made: THREE.BufferGeometry[]): THREE.Mesh |
 }
 
 /** What is slung too low to show much from the side: in a portrait it is tipped toward the viewer, to show its back. */
-export const SEEN_FROM_ABOVE = new Set(["spider", "broodmother"]);
+export const SEEN_FROM_ABOVE = new Set(["spider", "broodmother", "spiderling"]);
 
 /** The animals that stand side-on in a portrait, as they did in their sprites. */
 export const FOUR_LEGGED = new Set(["wolf", "alpha", "bear", "great_bear", "frost_wolf", "ember_hound", "snow_bear"]);
@@ -9847,6 +10779,7 @@ function ragdoll(top: THREE.Group, parts: Part[], push: THREE.Vector3): Ragdoll 
   const box = new THREE.Box3();
   const piece = new THREE.Box3();
   for (const part of parts) {
+    if (part.fluff) continue;
     box.makeEmpty();
     part.skin.updateMatrix();
     for (const o of part.skin.children) {
@@ -10117,11 +11050,37 @@ export interface Figure {
   /**
    * Strike a blow. "light" is the ordinary one for what is in hand: a cut, with a dagger a leap and a stab
    * downward, with a rapier a straight thrust. "stab" is that thrust at arm's length, with whatever is held. "heavy" is a great two-handed sweep from side to side, or with a weapon
-   * in each hand both tossed up, caught points down and jabbed downward. A person, a giant
-   * or a skeleton winds up and steps in first, and this returns the seconds until the blow lands, for whatever
-   * it hits to wait; a creature lunges at once, as it always did, and this returns 0.
+   * in each hand both tossed up, caught points down and jabbed downward. "slices" is two flat side slashes, one
+   * each way, the first landing when this says and the second SLICES_APART after. "slam" is the weapon heaved up
+   * overhead and brought straight down on the mark (see SLAM). "claw" is a beast rearing up and
+   * raking a forepaw down across its front (see CLAW), for one that has claws to swipe with (a bear); for anything
+   * else it is "light". "flurry" is such a beast rearing right up and raking with both forepaws by turns (see
+   * FLURRY), the first blow landing when this says and the rest at FLURRY_BLOWS. "rake" is such a beast sweeping a
+   * forepaw wide and flat across everything before it (see RAKE); for anything else it is "light". "roar" is such a
+   * beast rearing right up and bellowing, head thrown back (see ROAR), and returns the seconds until the roar; anything
+   * else does nothing and returns 0. "breathe" is a beast on four legs drawing breath and thrusting its head out to
+   * breathe on what is before it (see BREATHE), and returns the seconds until the breath bursts out; anything else does
+   * nothing and returns 0. "flare" is a beast on four legs hunkering down and springing up as what burns in it bursts
+   * out all round (see FLARE), and returns the seconds until it bursts; anything else does nothing and returns 0. "grasp" is a ghost surging in with its arms stretched out to lay its hands on the
+   * target (see GRASP); for anything else it is "light". "wail" is a ghost flinging itself up and back to scream (see
+   * WAIL), and returns the seconds until the scream; anything else does nothing and returns 0. "engulf" is an ooze pouring
+   * itself over the target (see ENGULF); for anything else it is "light". "spit" is an ooze squashing down and springing
+   * up to spit (see SPIT), and returns the seconds until the gob leaves it; anything else does nothing and returns 0. "fang"
+   * is a spider rearing up and plunging its fangs into the target (see FANG); for anything else it is "light". "web" is a
+   * spider arching its abdomen up over its back to throw silk (see WEB), and returns the seconds until the silk leaves it;
+   * anything else does nothing and returns 0. "spook" is the head tipped over to one side and the whole body twitching in jerks (see SPOOK), for anything with poses of its own, and returns the seconds until it is at its worst; anything else does nothing and returns 0. "pound" is both fists heaved up overhead and driven down into the ground before
+   * its feet (see POUND), for a person or a giant; a creature does nothing and it returns 0. A person, a giant or a skeleton (or a bear clawing) winds up and steps in first, and this
+   * returns the seconds until the blow lands, for whatever it hits to wait; a creature lunges at once, as it always
+   * did, and this returns 0.
    */
-  strike(how?: "light" | "stab" | "heavy"): number;
+  strike(how?: "light" | "stab" | "heavy" | "slices" | "slam" | "drop" | "pound" | "channel" | "spook" | "claw" | "flurry" | "rake" | "roar" | "breathe" | "flare" | "grasp" | "wail" | "hurl" | "engulf" | "spit" | "fang" | "web"): number;
+  /**
+   * How bright what glows on it is (eyes, gems, lamps), as a share of its own: 1 as made, more to flare it up (a
+   * Guardian channelling). Greyed when down all the same.
+   */
+  setGlow(k: number): void;
+  /** Where the glowing pieces of the part tagged `tag` are (Part.glowTag), in the world, as it stands now; null if it has none. */
+  glowAt(tag: string): THREE.Vector3 | null;
   /**
    * Cast a spell, or throw something: the casting hand swings round overhead and comes down to point at the mark.
    * Returns the seconds until it points, which is when what is cast should leave; 0 for a creature, which only
@@ -10151,6 +11110,16 @@ export interface Figure {
    * Returns the seconds until the roar; 0 for a creature, which does nothing.
    */
   taunt(): number;
+  /**
+   * Howl (a Pack Leader's Howl): sit back on its haunches and throw its head up at the sky (see HOWL). Returns the
+   * seconds until the head is right up and the howl rings out; 0 for anything that does not howl, which does nothing.
+   */
+  howl(): number;
+  /**
+   * Dive (a Cave Bat's Fell Swoop): pitch nose-down, drop low and sweep the wings back, held for `seconds`, then flare
+   * them out to brake and hover again (see DIVE). Anything that does not dive does nothing.
+   */
+  dive(seconds: number): void;
   /**
    * Work at a trade: `hammer` brings a hammer down on an anvil before the figure, and returns the seconds until it
    * lands, for the sparks and the ring of it to wait; `stir` stirs a pot before it, round and round for half a
@@ -10250,6 +11219,9 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
   const hovers = outfit?.boots?.ref === "cloudsteps" && !!rig.hands;
   const cloud = hovers ? hoverCloud(top) : null;
   const fade = { value: 1 };
+  // Greyed while down (setDim), and how bright its glow is turned up (setGlow).
+  let dim = false;
+  let glowK = 1;
   const mats: Mats = {
     body: fadeable(bodyMaterial(), fade, "gq-figure-body"),
     outline: inkLine(fadeable(new THREE.MeshBasicMaterial({ color: OUTLINE, side: THREE.BackSide }), fade, "gq-figure-line")),
@@ -10345,7 +11317,7 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
     const first = last < 0;
     const dt = last < 0 ? 1 : Math.min(0.1, Math.max(0, p.time - last));
     last = p.time;
-    if (asked) [action, asked] = [{ kind: asked, at: p.time, n: ++actions, air: asked === "jump" ? airtime : 0 }, null];
+    if (asked) [action, asked] = [{ kind: asked, at: p.time, n: ++actions, air: asked === "jump" || asked === "dive" ? airtime : 0 }, null];
     const since = action ? p.time - action.at : 0;
     if (action && (since < 0 || since >= lasts(action.kind) + action.air)) action = null;
     // Walking off ends a dance (or any emote) at once.
@@ -10353,9 +11325,9 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
     const want = p.walking ? Math.sin(p.stride * 3.6) : 0;
     swing += (want - swing) * Math.min(1, dt * 20);
     const rowing = p.rowing !== undefined && !!rig.hands && !p.lying;
-    const anim: Anim = { t: p.time, swing, breath: Math.sin(p.time * 2.2 + beat), strike: Math.min(1, Math.abs(p.lean) * 2), act: action && rig.acts ? { kind: action.kind, t: action.kind === "cast" ? since / pace : since, n: action.n, air: action.air } : null, scale: 1 / scaler.scale.x, lying: p.lying, sitting: rowing ? 1 : typeof p.sitting === "number" ? Math.max(0, Math.min(1, p.sitting)) : p.sitting ? 1 : 0, floor: rowing || p.lying ? 0 : Math.max(0, Math.min(1, p.floor ?? 0)), oars: rowing ? Math.max(0, Math.min(1, p.rowing!)) : -1, getUp: null };
+    const anim: Anim = { t: p.time, swing, breath: Math.sin(p.time * 2.2 + beat), strike: Math.min(1, Math.abs(p.lean) * 2), act: action && (rig.acts || (rig.claws && CLAW_ACTS.has(action.kind)) || (rig.howls && action.kind === "howl") || (rig.breathes && action.kind === "breathe") || (rig.flares && action.kind === "flare") || (rig.dives && action.kind === "dive") || (rig.spectral && SPECTRAL_ACTS.has(action.kind)) || (rig.oozes && OOZE_ACTS.has(action.kind)) || (rig.spins && SPIN_ACTS.has(action.kind))) ? { kind: action.kind, t: action.kind === "cast" ? since / pace : since, n: action.n, air: action.air } : null, scale: 1 / scaler.scale.x, lying: p.lying, sitting: rowing ? 1 : typeof p.sitting === "number" ? Math.max(0, Math.min(1, p.sitting)) : p.sitting ? 1 : 0, floor: rowing || p.lying ? 0 : Math.max(0, Math.min(1, p.floor ?? 0)), oars: rowing ? Math.max(0, Math.min(1, p.rowing!)) : -1, getUp: null };
     // A rig with no animations of its own is leant into a blow, and a little into a hit, easing off as it always has.
-    if (action && !rig.acts) anim.strike = Math.max(anim.strike, Math.min(1, (action.kind === "hit" ? 0.5 : 1.8) * Math.exp(-8 * since)));
+    if (action && !rig.acts && !anim.act) anim.strike = Math.max(anim.strike, Math.min(1, (action.kind === "hit" ? 0.5 : 1.8) * Math.exp(-8 * since)));
     if (sling) stow(sling, p.walking, Math.max(anim.strike, anim.act && anim.act.kind !== "hit" ? 1 : 0), dt);
     // At the oars, whatever was in hand is laid down in the boat; it is back in hand once they step ashore.
     if (rig.hands && rowing !== heldAway) {
@@ -10471,7 +11443,59 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
     hands: () => rig.hands ?? null,
     loose: () => rig.loose?.() ?? 0,
     strike(how = "light") {
-      const kind = how === "heavy" ? (rig.twin ? "twin" : "heavy") : how === "stab" ? "stab" : (rig.light ?? "strike");
+      if ((how === "claw" || how === "flurry" || how === "rake" || how === "roar") && rig.claws) {
+        asked = how;
+        return { claw: CLAW.hit, flurry: FLURRY.hit, rake: RAKE.hit, roar: ROAR.hit }[how];
+      }
+      // Nothing to rear up and roar with: it does nothing.
+      if (how === "roar") return 0;
+      if (how === "breathe") {
+        // Nothing of its own to breathe with: it does nothing, and the breath comes from where it stands.
+        if (!rig.breathes) return 0;
+        asked = "breathe";
+        return BREATHE.hit;
+      }
+      if (how === "flare") {
+        // Nothing of its own to burst out of: it does nothing, and the burst comes from where it stands.
+        if (!rig.flares) return 0;
+        asked = "flare";
+        return FLARE.hit;
+      }
+      if ((how === "grasp" || how === "wail" || how === "hurl") && rig.spectral) {
+        asked = how;
+        return how === "grasp" ? GRASP.hit : how === "hurl" ? HURL.hit : WAIL.peak;
+      }
+      if (how === "wail") return 0;
+      if (how === "grasp" || how === "hurl") how = "light";
+      if ((how === "engulf" || how === "spit") && rig.oozes) {
+        asked = how;
+        return how === "engulf" ? ENGULF.hit : SPIT.hit;
+      }
+      if (how === "spit") return 0;
+      if (how === "engulf") how = "light";
+      if ((how === "fang" || how === "web") && rig.spins) {
+        asked = how;
+        return how === "fang" ? FANG.hit : WEB.hit;
+      }
+      if (how === "web") return 0;
+      if (how === "fang") how = "light";
+      if (how === "drop") {
+        if (!rig.acts) return 0;
+        asked = "drop";
+        return SEAT_DROP.hit;
+      }
+      if (how === "pound") {
+        if (!rig.acts) return 0;
+        asked = "pound";
+        return POUND.hit;
+      }
+      if (how === "channel" || how === "spook") {
+        if (!rig.acts) return 0;
+        asked = how;
+        return how === "channel" ? CHANNEL.hit : SPOOK.hit;
+      }
+      if (how === "claw" || how === "flurry" || how === "rake") how = "light";
+      const kind = how === "heavy" ? (rig.twin ? "twin" : "heavy") : how === "stab" || how === "slices" || how === "slam" ? how : (rig.light ?? "strike");
       asked = kind;
       return rig.acts ? ACT_HIT[kind] : 0;
     },
@@ -10523,6 +11547,16 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
       asked = "taunt";
       return TAUNT.roar;
     },
+    howl() {
+      if (!rig.howls) return 0;
+      asked = "howl";
+      return HOWL.peak;
+    },
+    dive(seconds) {
+      if (!rig.dives) return;
+      asked = "dive";
+      airtime = Math.max(0, seconds);
+    },
     emote(emote) {
       // A sit is not played out but held, as a pose (FigurePose.floor).
       if (rig.acts && emote !== "sit") asked = emote;
@@ -10546,9 +11580,24 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
       fallen = { doll: ragdoll(top, allParts, dir), moving: true, onDown };
     },
     setDim(on) {
+      dim = on;
       mats.body.color.setScalar(on ? 0.5 : 1);
-      mats.glow.color.setScalar(on ? 0.4 : 1);
+      mats.glow.color.setScalar((on ? 0.4 : 1) * glowK);
       mats.ink.color.setScalar(on ? 0.5 : 1);
+    },
+    glowAt(tag) {
+      let found: THREE.Mesh | null = null;
+      root.traverse((o) => {
+        if (!found && o instanceof THREE.Mesh && o.userData.glowTag === tag) found = o;
+      });
+      const mesh = found as THREE.Mesh | null;
+      if (!mesh) return null;
+      if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+      return mesh.geometry.boundingBox!.getCenter(new THREE.Vector3()).applyMatrix4(mesh.matrixWorld);
+    },
+    setGlow(k) {
+      glowK = Math.max(0, k);
+      mats.glow.color.setScalar((dim ? 0.4 : 1) * glowK);
     },
     setFade(left) {
       const was = fade.value;

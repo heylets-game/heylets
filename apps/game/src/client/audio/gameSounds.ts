@@ -17,9 +17,11 @@ export const sounds = {
     audio.play(soundName.attack(ability, style), { at });
     if (actor) audio.play(soundName.attackVoice(actor), { at });
   },
-  impact(ability: string, style: AttackStyle, perfect: boolean, target: Fighter | undefined, at: At) {
+  /** `actor` is who landed it, for a critical hit's sound; without one, the side against the target is taken. */
+  impact(ability: string, style: AttackStyle, crit: boolean, target: Fighter | undefined, at: At, actor?: Fighter) {
     audio.play(soundName.impact(ability, style), { at });
-    if (perfect) audio.play(soundName.crit(), { at });
+    const by = actor?.side ?? (target ? (target.side === "hero" ? "enemy" : "hero") : undefined);
+    if (crit && by) audio.play(soundName.crit(by), { at });
     if (target) audio.play(soundName.hurt(target), { at, delay: 0.05 });
   },
   miss(ability: string, style: AttackStyle, at: At) {

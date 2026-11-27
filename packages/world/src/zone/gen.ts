@@ -12,7 +12,7 @@ import { hexesBetween, solid } from "./geometry";
 import { GROUP_EXTRAS } from "./kit";
 import { cleanMods, modsOf } from "./mods";
 import { layZone } from "./lay";
-import { PARTY_SIZES, SITES } from "./sites";
+import { PARTY_SIZES, SITES, spreadPosts } from "./sites";
 import type { GroundSurface, ZoneBiome, ZoneOptions, ZoneSize } from "./types";
 
 /** How big a map of open cave floor is (a dev map: the atlas's caves are delves). Every other map is laid by lay.ts, on its own grids (`LAY_GRIDS`). */
@@ -25,10 +25,10 @@ export const ZONE_GRIDS: Record<ZoneSize, HexGrid> = {
 /**
  * How near a hero has to come, in plain sight, for an enemy group to turn on them: within three hexes of
  * one of them, with nothing that blocks sight between. Out of sight, or further off, walking past starts nothing.
+ * It is how far a fight is heard, too (zone.ts reinforce): a band this near anyone in a fight joins it, seen or not.
+ * And how near a fight a hero has to come to be drawn into it (zone.ts drawnBy): one value for all three.
  */
 export const ALERT_RANGE = 3;
-/** How near a fight a hero has to be to be drawn into it. */
-export const JOIN_RANGE = 3;
 
 export const DEFAULT_ZONE_OPTIONS: ZoneOptions = { size: "medium", biome: "meadow", groups: 2, kinds: [], elevation: 1, obstacles: 1, clear: 4, party: 2, level: 1 };
 
@@ -228,10 +228,11 @@ function generateCaveFloor(seed: string, asked: ZoneOptions): ZonePlan {
       return kinds;
     };
     const kinds = kindsAt(options.party);
-    const posts = inner
-      .filter((p) => hexDistance(p, c) <= 3 && open.has(posKey(p)) && !taken.has(posKey(p)))
-      .sort((a, b) => hexDistance(a, c) - hexDistance(b, c) || a.q - b.q || a.r - b.r)
-      .slice(0, kinds.length);
+    // Round its centre, spread out where the ground allows.
+    const posts = spreadPosts(
+      inner.filter((p) => hexDistance(p, c) <= 3 && open.has(posKey(p)) && !taken.has(posKey(p))).sort((a, b) => hexDistance(a, c) - hexDistance(b, c) || a.q - b.q || a.r - b.r),
+      kinds.length,
+    );
     for (const p of posts) taken.add(posKey(p));
     return { kinds: kinds.slice(0, posts.length), posts, bands: PARTY_SIZES.map(kindsAt) };
   });

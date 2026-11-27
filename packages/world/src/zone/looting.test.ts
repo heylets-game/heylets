@@ -880,7 +880,7 @@ describe("what a body holds", () => {
 
   it("a boss always has gold on it, more of everything its kind has, gear more often than not, and on the atlas sometimes a lodestone", () => {
     const BOSSES = KINDS.filter((k) => ENEMIES[k].boss);
-    expect(BOSSES).toEqual(expect.arrayContaining(["alpha", "great_bear", "broodmother", "villain", "haunt", "guardian"]));
+    expect(BOSSES).toEqual(expect.arrayContaining(["alpha", "great_bear", "broodmother", "haunt", "guardian"]));
     for (const kind of BOSSES) {
       const level = 5;
       const all = bodies(kind, { tier: 6 }, level);
@@ -1006,5 +1006,27 @@ describe("the lodestones in a place's spoils", () => {
     }
     expect(rollStone(makeRng(1), 5, 9)).toHaveLength(STONE_MODS);
     expect(rollStone(makeRng(1), 5, -1)).toEqual([]);
+  });
+});
+
+describe("a heap of the fallen", () => {
+  it("is searched at once: every body within a hex of the one clicked, the same hex too, and in reach through it", () => {
+    let state = board();
+    hero(state, "ann", at(3, 5));
+    // One beside Ann, one on its hex, one beside that but two from her, and one well off.
+    const near = enemy(state, "bandit", at(4, 5));
+    const stacked = enemy(state, "bandit", at(4, 5));
+    const beyond = enemy(state, "bandit", at(5, 5));
+    const far = enemy(state, "bandit", at(9, 5));
+    state = startFight(state);
+    state = win(state);
+    for (const u of [near, stacked, beyond, far]) expect(spotOf(state, u.id)).toBeTruthy();
+    state = must(state, look("ann", near.id));
+    for (const u of [near, stacked, beyond]) expect(lootIn(spotOf(state, u.id), "ann"), u.id).toBeDefined();
+    expect(lootIn(spotOf(state, far.id), "ann")).toBeUndefined();
+    // The one two hexes off can be taken from, by way of the one beside it; the one well off cannot.
+    state = must(state, take("ann", beyond.id));
+    expect(lootIn(spotOf(state, beyond.id), "ann")).toEqual([]);
+    fails(state, take("ann", far.id));
   });
 });

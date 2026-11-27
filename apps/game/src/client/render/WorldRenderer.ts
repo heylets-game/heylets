@@ -16,7 +16,7 @@ import "./camera.css";
 import { PINCH_PAN_SLACK, followIconSvg, readFollow, writeFollow } from "./cameraFollow";
 import type { HexPos } from "@gantt-quest/core";
 import { hexDistance } from "@gantt-quest/core";
-import { lookStep, lookYaw, BASE_HEIGHT, HARBOR_HEART_AT, BIG_REACH, ENEMIES, HEX_DIRS, SEATS, tileCost, WALL_FACE_HALF, WALL_ITEM_BOTTOM, WALL_ITEM_TOP, hexAt, reachable, tileAt, wallFace, wallFaces, type Biome, type Clime, type Emote, type Outfit, type Poi, type Tile, type WorldMap, type FloorLook, type WallLook } from "@gantt-quest/world";
+import { lookStep, lookYaw, BASE_HEIGHT, HARBOR_HEART_AT, BIG_REACH, ENEMIES, HEX_DIRS, SEATS, spanAt, tileCost, WALL_FACE_HALF, WALL_ITEM_BOTTOM, WALL_ITEM_TOP, hexAt, reachable, tileAt, wallFace, wallFaces, type Biome, type Clime, type Emote, type Outfit, type Poi, type Tile, type WorldMap, type FloorLook, type WallLook } from "@gantt-quest/world";
 import { fancy, fancyGrass, inkLine } from "./fancy";
 import { NightLife } from "./nightlife";
 import { Storm } from "./storm";
@@ -29,6 +29,8 @@ import { FlotsamMarks, type FlotsamMark } from "./flotsam";
 import { OVERLAY_LAYER, PostFx, type Air } from "./post";
 import { fishMount } from "./catchArt";
 import { FRAME, OUTLINE, SITTING_DROP, inflate, makeFigure, type Figure } from "./figures";
+import { ownMove } from "../zone/ownMoves";
+import { POUNCE, dashTime, groundWave, leapAir, pounceAt, pounceLands, pounceOver, type MoveStage } from "./signatureMoves";
 import { HIDES, hidingMaterial } from "./silhouette";
 import { BOAT_SCALE, OARLOCKS, ROWER_SEAT, aimOar, rowboatModel, shipOar } from "./rowboat";
 import { BoatWake, WAKE_STEP } from "./wake";
@@ -76,8 +78,10 @@ const SPELL_COLOR: Record<string, string> = {
   "Lightning Strike": "#ffe98a",
   "Dark Bolt": "#b06cff",
   Immolate: "#ff6a3c",
+  "Frost Mote": "#bfeaff",
+  "Icy Bomb": "#bfeaff",
 };
-const ARROW_ABILITIES = new Set(["Shot", "Volley", "Barbed Arrow"]);
+const ARROW_ABILITIES = new Set(["Shot", "Volley"]);
 /** Thrown things: a rock lobbed in an arc, tumbling, that bursts into dust where it lands. */
 const THROWN: Record<string, string> = { "Hurl Rock": "#77726a" };
 /** Melee blows heavy enough to knock the target back and raise dust at its feet. */
@@ -86,14 +90,16 @@ const SMASHES = new Set(["Club Smash"]);
  * Melee blows struck as the figure's heavy strike (see Figure.strike), a great two-handed sweep or with a blade
  * in each hand both tossed and jabbed down: the smashes, and the other all-or-nothing swings.
  */
-const HEAVY_SWINGS = new Set([...SMASHES, "Cleave", "Eviscerate", "Crushing Maul", "Crushing Strike", "Sweeping Ruin", "Stone Fist", "Shockwave"]);
-/** A ground-pound (the ogre's Stomp, the guardian's Quake): no step in; the ground shakes out from the attacker's feet and jolts whoever it reaches. */
-const QUAKES = new Set(["Stomp", "Quake"]);
+const HEAVY_SWINGS = new Set([...SMASHES, "Cleave", "Eviscerate", "Stone Fist", "Shockwave"]);
+/** A ground-pound (the ogre's Slam, the guardian's Earthquake): no step in; the ground shakes out from the attacker's feet and jolts whoever it reaches. */
+const QUAKES = new Set(["Slam", "Earthquake"]);
 /** How an attack travels, for its sound: the same split the effects above are drawn by. */
 const attackStyle = (ability: string): AttackStyle => (SPELL_COLOR[ability] ? "magic" : ARROW_ABILITIES.has(ability) || THROWN[ability] ? "ranged" : "melee");
 const isBoss = (kind: string) => !!ENEMIES[kind]?.boss;
 /** Rank-and-file drawn a size up: the heavy hitters. */
 const isBig = (kind: string) => kind === "brute" || kind === "bear" || kind === "snow_bear" || kind === "ogre" || kind === "troll";
+/** How tall an enemy is drawn. The Pack Leader is half as big again as the wolves it leads, and a Great Bear half again a Cave Bear. */
+const enemySize = (kind: string) => (kind === "spiderling" ? 0.75 : kind === "alpha" ? 2.1 : kind === "great_bear" ? 2.4 : kind === "guardian" ? 3.4 : isBoss(kind) ? 1.9 : isBig(kind) ? 1.6 : 1.4);
 
 /** Seconds between one pickup told over a hero's head and the next. */
 const PICKUP_GAP = 0.55;
@@ -342,6 +348,8 @@ const STAND_S = 0.2;
  * base and so much more per world unit jumped; the longest it is ever in the air; how far it clears the lip of
  * a ledge it is jumping up onto; and how far into the jump's sound the thud of the landing is.
  */
+/** The longest a unit is held where it set off from for the leap of its Lunge (see lungeFrom), in seconds. */
+const LAUNCH_HELD_S = 2.5;
 const LEAP = { air: 0.3, airPer: 0.045, longest: 0.56, high: 0.45, highPer: 0.13, clear: 0.45, thud: 0.3 };
 
 /**
@@ -388,6 +396,8 @@ const PAN_KEYS: Record<string, [number, number]> = {
 };
 /** Seconds between tellings of which way your own hero looks. */
 const LOOK_SEND_S = 0.15;
+/** How much larger than a unit its body glow's shell is (bodyGlow): a rim round it, not a coat over it. */
+const BODY_GLOW_GROW = 1.07;
 /** How long a figure lying down is, as a share of its size: its tag hangs over the middle of it. */
 const LYING = 0.45;
 /** How long a shove that knocks someone off their feet keeps them down, at least, before they get up (longer if Prone). */
@@ -573,6 +583,12 @@ const noise = (q: number, r: number, salt: number) => {
   return n - Math.floor(n);
 };
 
+/** The dust a unit moved by force leaves behind it (WorldRenderer.trailDust): a puff each `every` seconds, each lasting `life`. */
+const DUST_TRAIL = { every: 0.045, life: 0.45, color: "#c9b994" };
+
+/** How many hexes an enemy of this kind stands on (ENEMIES `size`): it is drawn in the middle of them all. */
+const hexesOf = (kind: string): number => ENEMIES[kind.split("|")[0]]?.size ?? 1;
+
 interface Unit {
   /** Wearing Phase Treads (shown): it leaves a faint afterimage trail as it walks. */
   phase?: boolean;
@@ -582,6 +598,10 @@ interface Unit {
   pace?: number;
   /** Knocked across the ground (a shove): moved this many times faster than a walk, without steps, until it arrives. */
   rush?: number;
+  /** Its rush is a dash of its own through the air (dashUnit), not a knock: it throws up no dust. */
+  glide?: boolean;
+  /** While knocked across the ground: when (render clock) it next throws up a puff of its dust trail (trailDust). */
+  dustAt?: number;
   /** Going into a pit (see sink): until the render clock passes this, nothing else lays it out or clears it away. */
   sinkUntil?: number;
   /** Knocked off its feet: drawn lying until the render clock passes this. */
@@ -607,6 +627,8 @@ interface Unit {
    * render clock and off it for `air` seconds, `high` at the top of the arc.
    */
   leap?: { to: THREE.Vector3; from: THREE.Vector3; at: number; air: number; high: number };
+  /** A startled hop on the spot (see hop): when it leaves the ground, on the render clock. */
+  hopAt?: number;
   /** Afloat: the boat under them, which kind it is, and how far it sits them down. */
   boat?: THREE.Group | null;
   boatKind?: "barrel" | "rowboat";
@@ -644,6 +666,8 @@ interface Unit {
   ring: THREE.Mesh | null;
   /** The hex it stands on (see key), so plates on one hex can be stacked. */
   hex?: string;
+  /** Every hex it stands on, for one on more than one (ENEMIES `size`): pointing at any of them shows its plate. */
+  hexes?: string[];
   /**
    * How high the top of its model is over its feet, standing, measured once for each size it is drawn at
    * (`topSize`): a beast on four legs stands well under its frame's height, and its plate should sit on it.
@@ -672,6 +696,17 @@ interface Unit {
   path: THREE.Vector3[];
   /** Brief attack lunge, decays to zero. */
   kick: THREE.Vector3;
+  /**
+   * A leap at a target under way (signatureMoves.ts pounceAt): begun at `at` on the render clock, along `way` (a unit
+   * length), at a target `far` off, `air` seconds off the ground. `from`: it set off from there, not from its hex (a
+   * Lunge from further off), and settles onto its hex after.
+   */
+  pounce?: { at: number; way: THREE.Vector3; far: number; air: number; from?: THREE.Vector3 };
+  /**
+   * Where it is held, though its hex is another (see lungeFrom), till its leap there is played: from `since` on the
+   * render clock, and not for long.
+   */
+  launch?: { from: THREE.Vector3; since: number };
   /** Lean into an attack, in radians; decays to zero. */
   lean: number;
   /** Distance walked, which drives the hop, and the current hop height. */
@@ -738,6 +773,8 @@ interface Want {
   pos: THREE.Vector3;
   /** The hex it stands on (see key). */
   hex: string;
+  /** Every hex it stands on, for one on more than one (ENEMIES `size`): pointing at any of them shows its plate. */
+  hexes?: string[];
   size: number;
   label?: string;
   /** HP and any shield, and for a hero their level, drawn with the name. */
@@ -853,6 +890,8 @@ interface Fx {
   size: [number, number];
   /** Total rotation over its life, in radians. */
   spin: number;
+  /** Its rotation to begin with, in radians (the spin is added to it). */
+  turn?: number;
   fade: boolean;
   /** How high it rises over the middle of its flight, in world units: a lob. */
   arc?: number;
@@ -892,6 +931,11 @@ export interface RendererCallbacks {
   onWaygateBurst?(): void;
   onHover(pos: HexPos | null): void;
   /**
+   * Where on the ground the pointer is, exactly, in hexes along q and r (fractions of one: not rounded to a hex), each
+   * time it moves; null off the ground. For a shape that turns with the pointer (nearestHexes).
+   */
+  onHoverSpot?(spot: { q: number; r: number } | null): void;
+  /**
    * The place whose model is under the pointer changed (null: none is). `onHover` gives that place's door all the
    * while, which cannot tell its roof from the ground at its door; this can.
    */
@@ -924,6 +968,8 @@ export class WorldRenderer {
   private gaze: THREE.Vector3 | null = null;
   /** Your hero faces the camera rather than the pointer. */
   private faceFront = false;
+  /** Your hero keeps looking where they last looked, not toward the pointer: someone else is being played. */
+  private gazeHeld = false;
   /** Which way everyone else's hero is looking (a turn about y), as their players' pointers have it; gone once they walk. */
   private looks = new Map<string, number>();
   private unhearLooks: (() => void) | null = null;
@@ -1132,6 +1178,8 @@ export class WorldRenderer {
   private fx: Fx[] = [];
   /** When each attacker last shook the ground, on the render clock: a stomp hits everyone, but shakes the ground once. */
   private quakeAt = new Map<string, number>();
+  /** Waves spreading over the ground (signatureMoves.ts groundWave), each stepped every frame until it is over. */
+  private waves: ((dt: number) => boolean)[] = [];
   /** Speech over units' heads, by unit id; kept apart from the unit so a change of gear does not cut it short. */
   private bubbles = new Map<string, Bubble>();
   private pending: { at: number; run: () => void }[] = [];
@@ -1163,6 +1211,8 @@ export class WorldRenderer {
   private lidsSwinging = new Map<string, number>();
   /** Crates rocking from a blow, by poi id: when it landed, and how hard. */
   private poiShakes = new Map<string, { at: number; by: number }>();
+  /** Alarm bells being rung, by poi id: when the ringing began (on the render clock). */
+  private bellsRinging = new Map<string, number>();
   /** Glints on the places that twinkle (a chest not yet opened). Gathered as the places are built. */
   private twinkles: THREE.Object3D[] = [];
   /** The turn this map opens at (RenderState.homeYaw), which the turn buttons' sixths are counted from. */
@@ -1209,6 +1259,8 @@ export class WorldRenderer {
   private combat = new CombatView();
   /** The camera in a fight (fightCamera.ts): whoever's turn it is is followed, and a shot from afar is framed whole. Ahead of following your own hero. */
   private fight = new FightCamera();
+  /** The camera goes only where the player takes it (setStill): nobody followed, no shot framed, nothing looked at of itself. */
+  private cameraStill = false;
   /** Where on screen a framed shot must fit: clear of the fight's panels as they were last measured (see frameShot). */
   private shotBox: Box = SHOT_BOX;
   /** How far this turn's walk reaches from your hero, in world units, and the reach it was measured for (see combatSpots). */
@@ -1558,7 +1610,10 @@ export class WorldRenderer {
     // is done a moment later, once whatever view comes next is up and the page has a quiet moment, not in the
     // middle of going to it.
     const spent = this.renderer;
-    const lose = () => spent.forceContextLoss();
+    // Already dropped by the browser (it holds only so many): nothing to give back, and three.js warns if asked.
+    const lose = () => {
+      if (!spent.getContext().isContextLost()) spent.forceContextLoss();
+    };
     setTimeout(() => (typeof requestIdleCallback === "function" ? requestIdleCallback(lose, { timeout: 4000 }) : lose()), 1500);
     canvas.remove();
   }
@@ -1696,7 +1751,7 @@ export class WorldRenderer {
     for (const ev of events) {
       if (ev.t === "moved") {
         const unit = this.units.get(ev.heroId);
-        if (unit) unit.path = ev.path.map((p) => this.standAt(p));
+        if (unit) unit.path = ev.path.map((p) => this.bodyAt(unit.kind, p));
         continue;
       }
       const got = xp.get(ev.heroId) ?? { amount: 0, levelUp: false };
@@ -1852,7 +1907,7 @@ export class WorldRenderer {
     const last = unit.path[unit.path.length - 1];
     let from: HexPos = last ? worldToHex(last.x, last.z) : worldToHex(unit.root.position.x, unit.root.position.z - 0.25);
     for (const p of path) {
-      const at = this.standAt(p);
+      const at = this.bodyAt(unit.kind, p);
       unit.path.push(at);
       if (level(from) !== level(p)) (unit.leaps ??= new Map()).set(at, false);
       from = p;
@@ -1874,6 +1929,44 @@ export class WorldRenderer {
   }
 
   /**
+   * A unit dashes to a hex in a straight line, through whoever is on `through` (the hexes it passes on the way), with
+   * no steps and no leap: a Cave Bat's Fell Swoop, `name`, played as its own move as it goes (signatureMoves.ts), each
+   * one it passes jolted as it goes through them. Whatever it was walking is dropped.
+   */
+  dashUnit(id: string, to: HexPos, name: string, through: HexPos[]) {
+    const unit = this.units.get(id);
+    if (!unit) return;
+    this.fight.setOff(id);
+    const from = unit.root.position.clone();
+    from.y -= unit.bob;
+    const end = this.bodyAt(unit.kind, to);
+    // Where it is drawn on its hex: a quarter hex toward the camera from the middle (see syncUnits).
+    const ends = end.clone().setZ(end.z + 0.25);
+    const far = Math.hypot(ends.x - from.x, ends.z - from.z);
+    const over = dashTime(far);
+    unit.leaps?.clear();
+    unit.leap = unit.pounce = unit.launch = undefined;
+    unit.path = [end];
+    unit.rush = far / (4.2 * over);
+    unit.glide = true;
+    if (far > 1e-4) unit.turn = unit.turnGoal = Math.atan2(ends.x - from.x, ends.z - from.z);
+    sounds.attack(name, "melee", this.fighter(id), this.spot(id));
+    const move = ownMove(name, unit);
+    if (!move || far < 1e-4) return;
+    // Whoever stands on a hex it passes: gone through as it reaches them, as far along the way as they stand.
+    const passed = new Set(through.map((p) => `${p.q},${p.r}`));
+    const passes = [...this.units.entries()]
+      .filter(([other, u]) => other !== id && !u.lying && u.root.visible && passed.has((({ q, r }) => `${q},${r}`)(worldToHex(u.goal.x, u.goal.z - 0.25))))
+      .map(([, u]) => {
+        const along = Math.min(1, Math.max(0, ((u.goal.x - from.x) * (ends.x - from.x) + (u.goal.z - from.z) * (ends.z - from.z)) / (far * far)));
+        return { at: u.goal.clone().add(new THREE.Vector3(0, u.size * 0.4, 0.05)), when: along * over, jolt: () => u.kick.set((ends.x - from.x) / far * 0.14, 0.08, (ends.z - from.z) / far * 0.14) };
+      });
+    const dir = ends.clone().project(this.camera).x >= from.clone().project(this.camera).x ? 1 : -1;
+    const stage: MoveStage = { ...this.moveStage(id, id, name, unit, dir, false), dash: () => ({ passes, over }) };
+    move.play(stage, { figure: unit.figure, hitAt: ends.clone().setY(ends.y + unit.size * 0.4), dir, crit: false, onImpact: () => {} });
+  }
+
+  /**
    * A walk that was shown before the server had made it (client/zone/ahead.ts) turned out shorter than shown, or
    * was refused: the unit's walk ends at this hex after all. Whatever it was to walk after that hex is dropped;
    * if it has already gone past (or was never bound for it), it turns round and walks straight back.
@@ -1881,7 +1974,7 @@ export class WorldRenderer {
   stopWalkAt(id: string, at: HexPos) {
     const unit = this.units.get(id);
     if (!unit) return;
-    const stop = this.standAt(at);
+    const stop = this.bodyAt(unit.kind, at);
     const i = unit.path.findIndex((p) => Math.hypot(p.x - stop.x, p.z - stop.z) < 0.01);
     const dropped = i >= 0 ? unit.path.splice(i + 1) : unit.path.splice(0);
     if (i < 0) unit.path.push(stop);
@@ -2001,6 +2094,42 @@ export class WorldRenderer {
     });
   }
 
+  /**
+   * A glow round a unit's whole body, in one colour, pulsing up `pulses` times over `life` seconds and gone: a shell of
+   * its shape as it stands now, a little larger than it and drawn from the inside out, so only a rim of light shows
+   * round it, following it while it lasts. Something taking hold of it (a Frenzy).
+   */
+  bodyGlow(id: string, color: string, life = 1.3, pulses = 2) {
+    const unit = this.units.get(id);
+    if (!unit) return;
+    const mats: THREE.MeshBasicMaterial[] = [];
+    const shell = unit.root.clone(true);
+    shell.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh) {
+        const m = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending });
+        (o as THREE.Mesh).material = m;
+        mats.push(m);
+      } else if ((o as THREE.Light).isLight || (o as THREE.Sprite).isSprite) o.visible = false;
+    });
+    const grow = BODY_GLOW_GROW;
+    this.scene.add(shell);
+    let age = 0;
+    const stop = this.addTicker((dt) => {
+      age += dt;
+      const t = Math.min(1, age / life);
+      // Each pulse swells and falls away; the whole of it fades out toward the end.
+      const pulse = Math.sin(Math.PI * ((t * pulses) % 1));
+      for (const m of mats) m.opacity = 0.85 * pulse * (1 - t * 0.5);
+      shell.position.copy(unit.root.position);
+      shell.quaternion.copy(unit.root.quaternion);
+      shell.scale.copy(unit.root.scale).multiplyScalar(grow + 0.04 * pulse);
+      if (t < 1) return;
+      stop();
+      this.scene.remove(shell);
+      for (const m of mats) m.dispose();
+    });
+  }
+
   /** A unit knocked off its feet where it stands, by `by` if anyone (it falls away from them). */
   floor(id: string, seconds = FLOORED_S, by?: string) {
     const unit = this.units.get(id);
@@ -2053,7 +2182,7 @@ export class WorldRenderer {
     const style = attackStyle(name);
     this.attack(actorId, targetId, name, !!opts.crit, () => {
       if (opts.landed) {
-        sounds.impact(name, style, !!opts.crit, this.fighter(targetId), this.spot(targetId));
+        sounds.impact(name, style, !!opts.crit, this.fighter(targetId), this.spot(targetId), this.fighter(actorId));
         this.recoil(targetId, actorId, opts.crit ? 0.6 : 0.38);
       } else sounds.miss(name, style, this.spot(targetId));
       opts.onImpact?.();
@@ -2098,18 +2227,32 @@ export class WorldRenderer {
 
   /**
    * An attack all round where the unit stands (a ring): struck as its heavy blow, or, `sung`, played on what it
-   * carries (cast, with no instrument); a ground-pound is leant into. `then` runs as the blow lands.
+   * carries (cast, with no instrument); a ground-pound is leant into, or played as its own move where it has one
+   * (an Ogre's Slam). `then` runs as the blow lands. Returns whether it played its own move, which draws the
+   * ground shaking round it itself (so whoever asked draws no ring of their own).
    */
-  burst(actorId: string, name: string, sung: boolean, then: () => void) {
+  burst(actorId: string, name: string, sung: boolean, then: () => void, again = false, ground?: THREE.Vector3, calls?: THREE.Vector3[]): boolean {
     const unit = this.units.get(actorId);
     let wait = 0;
     if (unit && !unit.lying) {
+      // Any burst with a move of its own plays it, not only a ground-pound (zone/ownMoves.ts); the second part of
+      // one (an Earthquake's heave, `again`) plays that part of it.
+      const own = ownMove(name, unit);
+      if (own) {
+        sounds.attack(name, "melee", this.fighter(actorId), this.spot(actorId));
+        // Should a hit on someone come through attack after all, it is not played a second time.
+        this.quakeAt.set(actorId, this.clock);
+        const play = (again && own.again?.play) || own.play;
+        play(this.moveStage(actorId, actorId, name, unit, 1, false), { figure: unit.figure, hitAt: unit.goal.clone(), dir: 1, crit: false, onImpact: then, alone: true, ...(ground ? { ground } : {}), ...(calls?.length ? { calls } : {}) });
+        return true;
+      }
       if (QUAKES.has(name)) unit.lean = -0.9;
       else wait = sung ? unit.figure.play() || unit.figure.cast() : unit.figure.strike("heavy");
     }
     sounds.attack(name, sung ? "magic" : "melee", this.fighter(actorId), this.spot(actorId));
     if (wait > 0) this.later(then, wait);
     else then();
+    return false;
   }
 
   /** A heal or a blessing given: the giver turns to whoever it is for (if not themselves) and plays it, or casts it. */
@@ -2239,7 +2382,7 @@ export class WorldRenderer {
   /** That shot or spell arriving: the sound of it landing on its target, or going wide. */
   landed(targetId: string, name: string, hit: boolean, crit = false, fromId: string | null = null) {
     if (hit) {
-      sounds.impact(name, attackStyle(name), crit, this.fighter(targetId), this.spot(targetId));
+      sounds.impact(name, attackStyle(name), crit, this.fighter(targetId), this.spot(targetId), fromId ? this.fighter(fromId) : undefined);
       this.recoil(targetId, fromId, crit ? 0.5 : 0.3);
     } else sounds.miss(name, attackStyle(name), this.spot(targetId));
   }
@@ -2252,6 +2395,28 @@ export class WorldRenderer {
   /** A glint of light on a unit: healing, a guard going up. */
   glint(id: string, color: string) {
     this.sparkle(id, color);
+  }
+
+  /** Whether this unit plays `ability` as a move of its own (signatureMoves.ts), not as the usual cast or blow. */
+  ownsMove(actorId: string, ability: string): boolean {
+    const unit = this.units.get(actorId);
+    return !!unit && !unit.lying && !!ownMove(ability, unit);
+  }
+
+  /**
+   * A unit's own move thrown at a spot on the ground, not at anyone (a Cultist's Immolate, thrown at a hex): it turns
+   * to the spot and plays it there, and `then` runs as it lands. Whoever it catches flinches as their hit is told.
+   */
+  moveAt(actorId: string, ability: string, ground: THREE.Vector3, then: () => void) {
+    const unit = this.units.get(actorId);
+    const move = unit && ownMove(ability, unit);
+    if (!unit || !move || unit.lying) return then();
+    this.face(unit, ground.x, ground.z);
+    const dir = ground.clone().project(this.camera).x >= unit.goal.clone().project(this.camera).x ? 1 : -1;
+    sounds.attack(ability, attackStyle(ability), this.fighter(actorId), this.spot(actorId));
+    // Nobody is jolted by it here: the stage's target is the thrower, and it has not landed on them.
+    const stage = this.moveStage(actorId, actorId, ability, unit, dir, false);
+    move.play(stage, { figure: unit.figure, hitAt: ground.clone().setY(ground.y + 0.45), dir, crit: false, onImpact: then });
   }
 
   /** Where a unit's feet are this frame (the hop left out), or null if it is not on the map. */
@@ -2298,6 +2463,38 @@ export class WorldRenderer {
     a.bob = 0.2;
   }
 
+  /**
+   * Leap a creature bodily at its target and home again (signatureMoves.ts pounceAt); or, held where it set off from
+   * (lungeFrom), from there, onto the hex it has taken beside them. Returns the seconds until it lands.
+   */
+  private pounce(actorId: string, targetId: string): number {
+    const a = this.units.get(actorId);
+    const t = this.units.get(targetId);
+    if (!a || !t || a === t) return 0;
+    const from = a.launch?.from;
+    a.launch = undefined;
+    const way = t.goal.clone().sub(from ?? a.goal);
+    const far = way.length();
+    if (far < 1e-4) return 0;
+    const air = from ? leapAir(far) : undefined;
+    a.pounce = { at: this.clock, way: way.divideScalar(far), far, air: air ?? POUNCE.air, ...(from ? { from } : {}) };
+    a.kick.set(0, 0, 0);
+    return pounceLands(a.pounce.air);
+  }
+
+  /**
+   * The leap of a Lunge, given before its blow: the unit is held where it stands, though its hex is now the one
+   * beside its target, and the blow's own animation (signatureMoves.ts wolfLunge, by pounce) carries it there.
+   */
+  lungeFrom(id: string) {
+    const unit = this.units.get(id);
+    if (!unit) return;
+    this.fight.setOff(id);
+    const from = unit.root.position.clone();
+    from.y -= unit.bob;
+    unit.launch = { from, since: this.clock };
+  }
+
   /** Who a unit is in the fight, for its voice: looked up when asked, as the fight's line-up can change. */
   private fighter(id: string): Fighter | undefined {
     const h = this.state?.heroes.find((x) => x.id === id);
@@ -2317,7 +2514,7 @@ export class WorldRenderer {
    * on the target at once, or a bolt or arrow flies across first. `onImpact`
    * runs when it lands.
    */
-  private attack(actorId: string, targetId: string, ability: string, perfect: boolean, onImpact: () => void, landed = false, tint?: string) {
+  private attack(actorId: string, targetId: string, ability: string, crit: boolean, onImpact: () => void, landed = false, tint?: string) {
     const a = this.units.get(actorId);
     const t = this.units.get(targetId);
     if (!a || !t || a === t) return onImpact();
@@ -2328,22 +2525,42 @@ export class WorldRenderer {
     const spell = SPELL_COLOR[ability];
     // A stomp is leant well into, so it is held long enough to be seen. A spell, a shot or a throw is the
     // figure's own gesture, and a blow in the hand its own strike (see below).
-    if (QUAKES.has(ability)) a.lean = -dir * 0.9;
-    if (!a.lying) a.turn = a.turnGoal = Math.atan2(t.goal.x - a.goal.x, t.goal.z - a.goal.z);
+    // One with an animation of its own (an Ogre's Slam, a seat drop) is not leant: it plays that instead.
+    const ownQuake = QUAKES.has(ability) ? ownMove(ability, a) : undefined;
+    const playsOwn = !!ownQuake;
+    if (QUAKES.has(ability) && !playsOwn) a.lean = -dir * 0.9;
+    // One swing that catches several (a Brute's Great Cleave) is swung once, at the first, and lands on the rest.
+    const signature = ownMove(ability, a);
+    const ownSweep = !!signature?.sweeps;
+    // It faces the first it catches, and stays so for the rest: turning to each would jerk it round mid-move.
+    const caughtAlready = (playsOwn || ownSweep) && this.clock - (this.quakeAt.get(actorId) ?? -Infinity) <= 1;
+    if (!a.lying && !caughtAlready) a.turn = a.turnGoal = Math.atan2(t.goal.x - a.goal.x, t.goal.z - a.goal.z);
     const hitAt = t.goal.clone().add(new THREE.Vector3(0, t.size * 0.4, 0.05));
 
     if (QUAKES.has(ability)) {
       // It stays where it is and brings its weight down: dust rings out from its feet (once for the whole crew),
       // and each hero it reaches is jolted off their feet.
-      if (this.clock - (this.quakeAt.get(actorId) ?? -Infinity) > 1) {
-        this.quakeAt.set(actorId, this.clock);
-        this.quakeRing(a);
+      const first = this.clock - (this.quakeAt.get(actorId) ?? -Infinity) > 1;
+      if (first) this.quakeAt.set(actorId, this.clock);
+      // One with an animation of its own (an Ogre's Slam) plays it for each hero caught, drawn round it only once.
+      if (ownQuake && playsOwn) {
+        ownQuake.play(this.moveStage(actorId, targetId, ability, t, dir, landed), { figure: a.figure, hitAt, dir, crit, onImpact, echo: !first });
+        return;
       }
+      if (first) this.quakeRing(a);
       if (landed) {
         t.kick.set(dir * 0.12, 0.22, 0);
-        this.dustAt(t, perfect);
+        this.dustAt(t, crit);
       }
       onImpact();
+      return;
+    }
+    // An enemy ability with an animation of its own (signatureMoves.ts), the same one the figure lab plays: ahead of the
+    // usual shot, throw or spell, so one from afar is played as its own too (zone/ownMoves.ts).
+    if (signature) {
+      const stage = this.moveStage(actorId, targetId, ability, t, dir, landed);
+      if (ownSweep && !caughtAlready) this.quakeAt.set(actorId, this.clock);
+      signature.play(stage, { figure: a.figure, hitAt, dir, crit, onImpact, echo: caughtAlready });
       return;
     }
     const rock = THROWN[ability];
@@ -2352,9 +2569,9 @@ export class WorldRenderer {
       const from = a.goal.clone().add(new THREE.Vector3(dir * 0.5, a.size * 0.7, 0.05));
       const hurl = () =>
         this.spawnFx("rock", rock, flip, { from, to: hitAt, life: 0.4, size: [0.85, 1.0], spin: -dir * 9, fade: false, arc: 0.9, onEnd: () => {
-          this.spawnFx("burst", perfect ? "#ffd23f" : "#c9c1aa", false, { from: hitAt, to: hitAt, life: 0.22, size: [0.7, 1.6], spin: 0.5, fade: true });
+          this.spawnFx("burst", crit ? "#ffd23f" : "#c9c1aa", false, { from: hitAt, to: hitAt, life: 0.22, size: [0.7, 1.6], spin: 0.5, fade: true });
           if (landed) {
-            this.dustAt(t, perfect);
+            this.dustAt(t, crit);
             t.kick.set(dir * 0.18, 0, 0);
           }
           onImpact();
@@ -2372,7 +2589,7 @@ export class WorldRenderer {
       const from = a.goal.clone().add(new THREE.Vector3(dir * 0.5, a.size * 0.5, 0.05));
       const fly = () =>
         this.spawnFx(kind, color, flip, { from, to: hitAt, life: 0.24, size: [1.0, 1.0], spin: 0, fade: false, onEnd: () => {
-          this.spawnFx("burst", perfect ? "#ffd23f" : color, false, { from: hitAt, to: hitAt, life: 0.22, size: [0.7, 1.7], spin: 0.5, fade: true });
+          this.spawnFx("burst", crit ? "#ffd23f" : color, false, { from: hitAt, to: hitAt, life: 0.22, size: [0.7, 1.7], spin: 0.5, fade: true });
           // An arrow that lands stays in: point first, the shaft toward whoever shot it.
           if (kind === "arrow" && landed) this.stickArrow(t, dir);
           onImpact();
@@ -2392,12 +2609,12 @@ export class WorldRenderer {
     const wait = a.figure.strike(HEAVY_SWINGS.has(ability) ? "heavy" : "light");
     const land = () => {
       // A heavy blow comes down from higher, wider, and knocks the target back with dust thrown up round its feet.
-      this.spawnFx("slash", perfect ? "#ffd23f" : (tint ?? "#dfe9ff"), flip, { from: hitAt, to: hitAt, life: heavy ? 0.3 : 0.26, size: heavy ? [1.7, 3] : [1.3, 2.3], spin: -dir * (heavy ? 1.6 : 0.9), fade: true });
+      this.spawnFx("slash", crit ? "#ffd23f" : (tint ?? "#dfe9ff"), flip, { from: hitAt, to: hitAt, life: heavy ? 0.3 : 0.26, size: heavy ? [1.7, 3] : [1.3, 2.3], spin: -dir * (heavy ? 1.6 : 0.9), fade: true });
       // An ability's blow throws a burst of its colour off the target as it lands.
       if (tint && landed) this.spawnFx("burst", tint, flip, { from: hitAt, to: hitAt, life: 0.22, size: [0.7, 1.6], spin: 0.5, fade: true });
       if (heavy && landed) {
         t.kick.set(dir * 0.35, -0.08, 0);
-        this.dustAt(t, perfect);
+        this.dustAt(t, crit);
       }
       onImpact();
     };
@@ -2408,11 +2625,47 @@ export class WorldRenderer {
     this.later(land, wait);
   }
 
+  /** The map lent to an enemy's own animation (signatureMoves.ts) of `ability`, from one unit at another (`t`). */
+  private moveStage(actorId: string, targetId: string, ability: string, t: Unit, dir: number, landed: boolean): MoveStage {
+    return {
+      wave: (opts) => this.waves.push(groundWave(this.fxGroup, opts)),
+      lay: (lay) => this.waves.push(lay(this.fxGroup)),
+      spawnFx: (kind, color, flipped, opts) => this.spawnFx(kind, color, flipped, opts),
+      later: (run, seconds) => this.later(run, seconds),
+      sound: () => sounds.attack(ability, attackStyle(ability), this.fighter(actorId), this.spot(actorId)),
+      lunge: () => this.lunge(actorId, targetId),
+      pounce: () => this.pounce(actorId, targetId),
+      shake: (by, seconds) => this.shake(by, seconds),
+      jolt: () => {
+        if (landed) t.kick.set(dir * 0.1, 0, 0);
+      },
+    };
+  }
+
+  /**
+   * A unit moved by force (shoved, knocked back, swept along, hauled in) throws up dust behind it as it goes, every
+   * DUST_TRAIL.every seconds of its slide from `from` to `to` this frame: puffs at its feet, kicked back the way it came
+   * and out to either side. None as it drops straight down off a ledge, and none for one that did not move: a shove
+   * that only knocks someone flat leaves no trail.
+   */
+  private trailDust(unit: Unit, from: THREE.Vector3, to: THREE.Vector3) {
+    const way = new THREE.Vector3(to.x - from.x, 0, to.z - from.z);
+    if (way.lengthSq() < 1e-6 || this.clock < (unit.dustAt ?? 0)) return;
+    unit.dustAt = this.clock + DUST_TRAIL.every;
+    way.normalize();
+    const feet = to.clone().setY(to.y - unit.bob + 0.12);
+    for (const side of [-1, 1]) {
+      const out = new THREE.Vector3(-way.z * side, 0, way.x * side);
+      const end = feet.clone().addScaledVector(way, -0.35).addScaledVector(out, 0.35 + Math.random() * 0.2).setY(feet.y + 0.25 + Math.random() * 0.15);
+      this.spawnFx("dust", DUST_TRAIL.color, side > 0, { from: feet.clone(), to: end, life: DUST_TRAIL.life, size: [0.45, 1.1], spin: 0, fade: true });
+    }
+  }
+
   /** Dust thrown up either side of a unit's feet: a heavy landing, a rock breaking, the ground shaking under it. */
-  private dustAt(unit: Unit, perfect = false) {
+  private dustAt(unit: Unit, crit = false) {
     const feet = unit.goal.clone().add(new THREE.Vector3(0, 0.15, 0.1));
     for (const side of [-1, 1]) {
-      this.spawnFx("dust", perfect ? "#e8d27a" : "#c9b994", side > 0, { from: feet, to: feet.clone().add(new THREE.Vector3(side * 0.55, 0.3, 0)), life: 0.4, size: [0.6, 1.1], spin: 0, fade: true });
+      this.spawnFx("dust", crit ? "#e8d27a" : "#c9b994", side > 0, { from: feet, to: feet.clone().add(new THREE.Vector3(side * 0.55, 0.3, 0)), life: 0.4, size: [0.6, 1.1], spin: 0, fade: true });
     }
   }
 
@@ -2469,6 +2722,7 @@ export class WorldRenderer {
     sprite.renderOrder = 4;
     sprite.position.copy(opts.from);
     sprite.scale.set(opts.size[0], opts.size[0], 1);
+    sprite.material.rotation = opts.turn ?? 0;
     sprite.renderOrder = 9;
     this.fxGroup.add(sprite);
     this.fx.push({ sprite, age: 0, ...opts });
@@ -3274,6 +3528,19 @@ export class WorldRenderer {
   }
 
   /**
+   * Where a unit of this kind (a sprite key) stands with its anchor on `pos`: the middle of its hex, or for one that
+   * stands on three (ENEMIES `size`) the middle of all three, on the highest of them.
+   */
+  private bodyAt(kind: string, pos: HexPos): THREE.Vector3 {
+    const n = hexesOf(kind);
+    if (n <= 1) return this.standAt(pos);
+    const all = spanAt(pos, n).map((p) => this.standAt(p));
+    const at = all.reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(all.length);
+    at.y = Math.max(...all.map((p) => p.y));
+    return at;
+  }
+
+  /**
    * Where a point above a hex sits on screen, in CSS pixels from the container's top left corner.
    * `lift` is how far above the ground to aim; the default is where a hero's name label hangs.
    * Null when the point is behind the camera or outside the view.
@@ -3387,12 +3654,19 @@ export class WorldRenderer {
     this.faceFront = on;
   }
 
+  /** Have your hero stop looking toward the pointer and keep looking where they are (someone else is being played), or look toward it again. */
+  setGazeHeld(on: boolean) {
+    this.gazeHeld = on;
+  }
+
   /** The hex the camera is looking at: the one under the middle of the view. */
   focus(): HexPos {
     return worldToHex(this.target.x, this.target.z);
   }
 
-  lookAt(pos: HexPos) {
+  /** Send the view to `pos`. `auto`: the game sends it there of itself (a fight starting, a bell rung), not the player: not while still. */
+  lookAt(pos: HexPos, auto = false) {
+    if (auto && this.cameraStill) return;
     // Sent to look at something else: no longer on whoever's turn it is, or on a shot.
     this.fight.takeOver();
     this.targetGoal.copy(this.standAt(pos));
@@ -3438,6 +3712,15 @@ export class WorldRenderer {
   /** How the camera is set to look, apart from where and from how far (for framing a shot). */
   private lens(): Lens {
     return { fov: this.camera.fov, aspect: this.camera.aspect, yaw: this.yawGoal, pitch: this.pitchGoal, reach: CAMERA_REACH, box: this.shotBox };
+  }
+
+  /**
+   * A dev switch (the Maps tab): the camera never moves of itself. Nobody is followed, your hero or whoever's turn it is, no
+   * shot is framed and nothing is looked at for you (lookAt `auto`); it goes only where you pan it, or send it.
+   */
+  setStill(on: boolean) {
+    this.cameraStill = on;
+    if (on) this.fight.takeOver();
   }
 
   /** Keep your hero centred (or stop). Turning it on brings the camera back to them, easing there. */
@@ -4388,6 +4671,20 @@ export class WorldRenderer {
     this.lidsSwinging.set(poiId, this.clock);
   }
 
+  /** How long an alarm bell swings once rung, in seconds. */
+  static readonly BELL_SWING = 2;
+
+  /** An alarm bell is rung: it swings hard back and forth, dying away to hang askew. */
+  ringBell(poiId: string) {
+    this.bellsRinging.set(poiId, this.clock);
+  }
+
+  /** A unit startled where it stands: a little hop straight up, `delay` seconds from now. */
+  hop(id: string, delay = 0) {
+    const unit = this.units.get(id);
+    if (unit && !unit.lying) unit.hopAt = this.clock + delay;
+  }
+
   /**
    * A blow struck by hand at a place rather than at a unit (a crate): the unit turns to it, winds up and strikes,
    * and `onImpact` runs as the blow lands.
@@ -4498,6 +4795,14 @@ export class WorldRenderer {
       }
       if (t >= 1) this.poiShakes.delete(id);
     }
+    for (const [id, start] of this.bellsRinging) {
+      const hung = this.poiObject(id)?.userData.hung as THREE.Object3D | undefined;
+      const age = this.clock - start;
+      const k = Math.min(1, age / WorldRenderer.BELL_SWING);
+      // A wide swing that dies away, back to hanging straight down; set exactly there as it ends.
+      if (hung) hung.rotation.z = k >= 1 ? 0 : 1.1 * (1 - k) ** 1.4 * Math.sin(age * 11);
+      if (k >= 1) this.bellsRinging.delete(id);
+    }
     for (const o of this.twinkles) {
       const phase = o.userData.twinkle as number;
       // Mostly a faint point, flaring now and then, each on its own beat.
@@ -4545,11 +4850,12 @@ export class WorldRenderer {
     }
     // A zone's enemies: beside whoever else is on their hex. The fallen lie in the middle of theirs.
     for (const u of state.units ?? []) {
-      const pos = this.standAt(u.pos);
-      pos.z += 0.25;
+      const big = hexesOf(u.kind) > 1;
+      const pos = this.bodyAt(u.kind, u.pos);
+      if (!big) pos.z += 0.25;
       // The second on a hex has its plate above the first's, so the two can be told apart.
       let slot = 0;
-      if (!u.down) {
+      if (!u.down && !big) {
         const n = stacks.get(key(u.pos)) ?? 1;
         slot = seen.get(key(u.pos)) ?? 0;
         seen.set(key(u.pos), slot + 1);
@@ -4557,7 +4863,7 @@ export class WorldRenderer {
       }
       // With its HP to show (in a fight, or hurt), an enemy's plate has a red bar of it under the name.
       const plate: PlateStats | undefined = u.hp !== undefined && !u.down ? { hp: u.hp } : undefined;
-      want.set(u.id, { kind: u.kind, pos, hex: key(u.pos), faceKey: u.id, size: isBoss(u.kind) ? 1.9 : isBig(u.kind) ? 1.6 : 1.4, label: u.name ?? (plate ? "" : undefined), plate, tone: "foe", ring: u.hostile && !u.down ? ENEMY_RED : undefined, through: u.hostile ? ENEMY_RED : undefined, pulse: !!u.active, hp: u.hp, down: u.down, falls: true, nameless: true, prone: u.prone, effects: u.effects, stack: slot });
+      want.set(u.id, { kind: u.kind, pos, hex: key(u.pos), ...(big ? { hexes: spanAt(u.pos, hexesOf(u.kind)).map(key) } : {}), faceKey: u.id, size: enemySize(u.kind), label: u.name ?? (plate ? "" : undefined), plate, tone: "foe", ring: u.hostile && !u.down ? ENEMY_RED : undefined, through: u.hostile ? ENEMY_RED : undefined, pulse: !!u.active, hp: u.hp, down: u.down, falls: true, nameless: true, prone: u.prone, effects: u.effects, stack: slot });
     }
 
     const turned = new Map<string, number>();
@@ -4651,7 +4957,9 @@ export class WorldRenderer {
       if (fell || w.hp === undefined) this.clearArrows(unit);
 
       if (w.ring && !unit.ring) {
-        unit.ring = new THREE.Mesh(new THREE.RingGeometry(0.3, 0.44, 6), new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+        // Round all three hexes of one that stands on three.
+        const wide = hexesOf(w.kind) > 1 ? 2.4 : 1;
+        unit.ring = new THREE.Mesh(new THREE.RingGeometry(0.3 * wide, 0.44 * wide, 6), new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
         unit.ring.rotation.x = -Math.PI / 2;
         this.unitGroup.add(unit.ring);
       }
@@ -4663,6 +4971,7 @@ export class WorldRenderer {
 
       unit.nameless = !!w.nameless;
       unit.hex = w.hex;
+      unit.hexes = w.hexes;
       unit.labelWant = { label: w.label, plate: w.plate, tone: w.tone, size: w.size, asleep: w.asleep, stack: w.stack };
       this.applyLabel(unit);
 
@@ -4730,7 +5039,7 @@ export class WorldRenderer {
     const pointed = this.hovered ? key(this.hovered) : null;
     const byHex = new Map<string, Unit[]>();
     for (const [id, unit] of this.units) {
-      unit.plateShown = !fighting || this.pulsing.has(id) || (pointed !== null && unit.hex === pointed);
+      unit.plateShown = !fighting || this.pulsing.has(id) || (pointed !== null && (unit.hexes?.includes(pointed) ?? unit.hex === pointed));
       if (!unit.label || !unit.plateShown || !unit.root.visible || this.quiet.has(id)) continue;
       const hex = unit.hex ?? id;
       const on = byHex.get(hex);
@@ -5279,6 +5588,7 @@ export class WorldRenderer {
   private armHold(x: number, y: number) {
     this.cancelHold();
     this.setHovered(this.pick());
+    this.tellSpot(this.pickedGround);
     const rect = this.renderer.domElement.getBoundingClientRect();
     const ring = this.holdRing;
     ring.style.left = `${x - rect.left}px`;
@@ -5357,6 +5667,14 @@ export class WorldRenderer {
     this.userDist = Math.max(MIN_ZOOM, Math.min(this.maxZoom, this.userDist * Math.exp(step)));
     this.dist = this.userDist;
   };
+
+  /** Tells onHoverSpot where on the ground the pointer is (the inverse of hexToWorld, not rounded). */
+  private tellSpot(ground: THREE.Intersection | undefined) {
+    if (!this.callbacks.onHoverSpot) return;
+    if (!ground) return this.callbacks.onHoverSpot(null);
+    const r = ground.point.z / 1.5;
+    this.callbacks.onHoverSpot({ q: ground.point.x / SQRT3 - r / 2, r });
+  }
 
   private setHovered(pos: HexPos | null) {
     if ((pos && this.hovered && key(pos) === key(this.hovered)) || (!pos && !this.hovered)) return;
@@ -5508,6 +5826,7 @@ export class WorldRenderer {
       // if it got as far as trying the ground.
       const ground = !this.terrain ? undefined : this.pickedOn === this.terrain ? this.pickedGround : this.raycaster.intersectObject(this.terrain)[0];
       if (ground) this.gaze = (this.gaze ?? new THREE.Vector3()).copy(ground.point);
+      this.tellSpot(ground);
       if (this.state?.holding) this.placeGhost();
       if (this.callbacks.onPropHover) {
         const prop = this.pickProp();
@@ -5534,15 +5853,15 @@ export class WorldRenderer {
 
     // In a fight, a shot from afar is framed whole, from the one who lets it go to wherever it lands; then the
     // camera goes back to where it was going.
-    const shot = this.fight.aim(this.clock, this.lens(), this.userDist, this.maxZoom);
+    const shot = this.cameraStill ? null : this.fight.aim(this.clock, this.lens(), this.userDist, this.maxZoom);
     if (shot) {
       this.targetGoal.copy(shot.at);
       this.dist = shot.dist;
     }
     // Following: the camera's goal is the feet (the middle of the hex they stand on) of whoever's turn it is in a
     // fight, or else your own hero's, wherever they have got to.
-    const watched = this.fight.following && this.fight.watched ? this.units.get(this.fight.watched) : undefined;
-    const mine = !watched && this.follow && this.state?.you ? this.units.get(this.state.you) : undefined;
+    const watched = !this.cameraStill && this.fight.following && this.fight.watched ? this.units.get(this.fight.watched) : undefined;
+    const mine = !this.cameraStill && !watched && this.follow && this.state?.you ? this.units.get(this.state.you) : undefined;
     if (mine) {
       if (this.followHeld && mine.path.length > 0) {
         this.followHeld = false;
@@ -5771,6 +6090,8 @@ export class WorldRenderer {
       let touched = false;
       // A jump whose landing place is no longer the next on the way (knocked aside, sent elsewhere) is off.
       if (unit.leap && unit.leap.to !== unit.path[0]) unit.leap = undefined;
+      // Sent walking (or knocked aside) mid-pounce: the walk takes over from it.
+      if (unit.path.length > 0) unit.pounce = unit.launch = undefined;
       if (unit.path.length === 0 && unit.leaps?.size) unit.leaps.clear();
       if (unit.path.length > 0) {
         const next = this.stepSpot.copy(unit.path[0]);
@@ -5816,24 +6137,48 @@ export class WorldRenderer {
           // They turn to face the way they are walking.
           if (Math.hypot(next.x - p.x, next.z - p.z) > 1e-4) unit.turnGoal = Math.atan2(next.x - p.x, next.z - p.z);
         }
+        // Knocked across the ground, it is followed by the dust it throws up (see trailDust).
+        const slid = unit.rush && !leap && !unit.glide ? p.clone() : null;
         if (leap) {
           // Carried by the jump, above.
         } else if (p.distanceTo(next) <= step) {
           p.copy(next);
           unit.path.shift();
-          if (unit.path.length === 0) unit.rush = undefined;
+          if (unit.path.length === 0) unit.rush = unit.glide = undefined;
         } else {
           p.add(next.sub(p).setLength(step));
         }
+        if (slid) this.trailDust(unit, slid, p);
         // Two steps per hex, with a little bounce in each, landing as each hex is reached.
         if (!unit.rush && !leap) unit.bob = Math.abs(Math.sin(unit.stride * 3.6)) * 0.07;
       } else {
-        unit.bob *= Math.exp(-dt * 18);
+        const hopK = unit.hopAt === undefined ? -1 : (this.clock - unit.hopAt) / 0.42;
+        if (hopK >= 0 && hopK < 1) unit.bob = 0.55 * 4 * hopK * (1 - hopK);
+        else {
+          if (hopK >= 1) unit.hopAt = undefined;
+          unit.bob *= Math.exp(-dt * 18);
+        }
         unit.stride = 0;
         const goal = this.restSpot.copy(unit.goal).add(unit.kick);
+        const pounce = unit.pounce;
+        if (pounce && this.clock - pounce.at >= pounceOver(pounce.air)) unit.pounce = undefined;
+        // Held for a leap that never came (its blow was not played): it goes on to its hex.
+        if (unit.launch && this.clock - unit.launch.since > LAUNCH_HELD_S) unit.launch = undefined;
+        if (unit.pounce && pounce) {
+          // Leaping at a target: carried along the leap exactly, through the air and home again (signatureMoves.ts).
+          const at = pounceAt(this.clock - pounce.at, pounce.far, pounce.air);
+          if (pounce.from) {
+            // From where it set off, up into the target's face, and from there onto its own new hex.
+            p.copy(pounce.from).addScaledVector(pounce.way, at.home > 0 ? at.reach : at.ahead).lerp(goal, at.home);
+            unit.bob = at.home > 0 ? 0 : at.up;
+          } else {
+            p.copy(goal.addScaledVector(pounce.way, at.ahead));
+            unit.bob = at.up;
+          }
+        } else if (unit.launch) p.copy(unit.launch.from);
         // Put somewhere else with no walk to get there (sent back to its post when a fight ends, set down at the
         // spawn): it is simply there, not dragged across the map in a streak.
-        if (Math.hypot(goal.x - p.x, goal.z - p.z) > 3.5) p.copy(goal);
+        else if (Math.hypot(goal.x - p.x, goal.z - p.z) > 3.5) p.copy(goal);
         else p.lerp(goal, 1 - Math.exp(-dt * 14));
         unit.kick.multiplyScalar(Math.exp(-dt * 9));
       }
@@ -5850,7 +6195,7 @@ export class WorldRenderer {
       // Your own hero, standing idle, looks toward the pointer; with the bag open they turn to face you.
       if (id === this.state?.you && unit.path.length === 0 && !unit.asleep && !flat && !this.minigame) {
         if (this.faceFront) unit.turnGoal = this.yaw;
-        else if (this.gaze && this.pointer.inside) {
+        else if (this.gaze && this.pointer.inside && !this.gazeHeld) {
           const dx = this.gaze.x - p.x;
           const dz = this.gaze.z - p.z;
           if (dx * dx + dz * dz > 0.09) {
@@ -5949,6 +6294,8 @@ export class WorldRenderer {
     // An XP glow on a plate has run its course: draw the bar plain again.
     for (const unit of this.units.values()) if (unit.glowing && this.clock >= unit.glowUntil) this.applyLabel(unit);
 
+    this.waves = this.waves.filter((step) => step(dt));
+
     for (let i = this.fx.length - 1; i >= 0; i--) {
       const f = this.fx[i];
       f.age += dt;
@@ -5957,7 +6304,7 @@ export class WorldRenderer {
       if (f.arc) f.sprite.position.y += f.arc * 4 * t * (1 - t);
       const size = f.size[0] + (f.size[1] - f.size[0]) * t;
       f.sprite.scale.set(size, size, 1);
-      f.sprite.material.rotation = f.spin * t;
+      f.sprite.material.rotation = (f.turn ?? 0) + f.spin * t;
       if (f.fade) f.sprite.material.opacity = 1 - t * t;
       if (t >= 1) {
         this.fxGroup.remove(f.sprite);

@@ -1,11 +1,13 @@
-// The figure lab: a dev-only stage for trying every figure's animations.
+// The model preview (once the figure lab): a dev-only stage for trying every figure's animations.
 // Opened from the dev toolbox's Figures tab (DevToolbox.tsx), so it is there
 // only on a development deployment.
 //
 // Pick who stands on the stage (a hero class, a townsperson or an enemy),
 // dress a person in any gear, and drive the same pose the game drives
 // (render/figures.ts, FigurePose and Figure): walk, strike, stab, sweep,
-// shoot, cast, play, flinch, lie down, sit, row. Time can be slowed, paused and stepped a frame at a time, and an
+// shoot, cast, play, flinch, lie down, sit, row. An enemy ability with an
+// animation of its own (render/signatureMoves.ts) plays here too, effects and
+// all, thrown at a ring a tile ahead, for the enemy it belongs to. Time can be slowed, paused and stepped a frame at a time, and an
 // action can be set to repeat, to watch it over and over. Drag the stage to
 // look round the figure, and scroll to come closer.
 //
@@ -19,11 +21,12 @@ import type { Me } from "./api";
 import { label } from "./labels";
 import { makeFigure, type Figure } from "./render/figures";
 import { LOOKS } from "./render/looks";
-import { lookFor } from "./render/sprites";
+import { POUNCE_LANDS, SIGNATURE_MOVES, dashTime, groundWave, moveName, pounceAt, type FxOpts, type MoveStage } from "./render/signatureMoves";
+import { fxTexture, lookFor } from "./render/sprites";
 import "./figureLab.css";
 
 /** The kinds drawn as creatures, with a body of their own: they wear no gear (dressed, a kind is drawn as a person). */
-const CREATURES = new Set(["wolf", "alpha", "bear", "great_bear", "dummy", "shade", "haunt", "bat", "skeleton", "slime", "ogre", "troll", "spider", "broodmother", "frost_wolf", "ember_hound", "snow_bear", "wraith"]);
+const CREATURES = new Set(["wolf", "alpha", "bear", "great_bear", "dummy", "shade", "haunt", "bat", "skeleton", "slime", "ogre", "troll", "spider", "broodmother", "spiderling", "frost_wolf", "ember_hound", "snow_bear", "wraith"]);
 const HEROES = HERO_CLASSES.map((c) => c.id);
 const FOES = Object.keys(ENEMIES);
 const TOWNSFOLK = Object.keys(LOOKS).filter((k) => !HEROES.includes(k) && !FOES.includes(k));
@@ -53,9 +56,15 @@ const ACTIONS = [
   ["floss", "Floss", "Emote: straight arms swung side to side across the body, one in front of the hips as the other goes behind, the hips swaying against them (walking stops it)."],
   ["runningman", "Running man", "Emote: running on the spot. A knee driven up, the foot stepped out in front and dragged back under the body as the other knee comes up, arms pushing down, for five seconds (walking stops it)."],
   ["breakdance", "Breakdance", "Emote: a backspin. Down on the back, knees tucked and hugged, spun round six times flat on the floor, then onto the side, head on a fist and an arm to the sky, and back up (walking stops it)."],
-  ["lean", "Lean", "The plain lean, easing off: what every attack used to be, and a stomp still is."],
+  ["lean", "Lean", "The plain lean, easing off: what every attack used to be, and a ground-pound without a move of its own still is."],
 ] as const;
 type Action = (typeof ACTIONS)[number][0];
+/** An action, or an enemy ability's own animation (render/signatureMoves.ts) by its name. */
+type Act = Action | `move:${string}`;
+/** How far in front of the figure an enemy move's target stands: about the next tile's middle. */
+const TARGET_AHEAD = 1.6;
+/** How far a dash (a Fell Swoop) carries the figure in the lab: on through the target and past it; held there a moment, then back. */
+const DASH = { far: TARGET_AHEAD + 1.6, hold: 0.35, back: 0.3 };
 
 const nameOf = (kind: string) => (HEROES.includes(kind) ? label("class", kind) : FOES.includes(kind) ? label("enemy", kind) : kind.replace(/_/g, " "));
 /** Models with no weapon in the game yet: offered in the main hand, to see them held. */
@@ -82,7 +91,7 @@ interface Live {
   spin: boolean;
   /** The figure itself turns on the spot, a quarter turn one way and then the other, to fling what hangs loose. */
   pivot: boolean;
-  repeat: Action | null;
+  repeat: Act | null;
   every: number;
 }
 
@@ -115,22 +124,44 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
   }, [person, dressed, ownLook, gear, rarity, appearance]);
 
   const canvas = useRef<HTMLCanvasElement>(null);
+  /**
+   * Which canvas the stage is drawn on. A canvas whose WebGL context the browser has dropped (it holds only so many,
+   * and drops the oldest: easily the lab's, while the dev server swaps in changed code) never draws again, so the
+   * stage is built afresh on a new one. `swapped` is when that last happened, so a browser that gives no working
+   * context at all is not asked again and again.
+   */
+  const [generation, setGeneration] = useState(0);
+  const swapped = useRef(-Infinity);
   const readout = useRef<HTMLSpanElement>(null);
   const liveRef = useRef(live);
   liveRef.current = live;
-  const stage = useRef<{ stand: THREE.Group; camera: THREE.PerspectiveCamera; figure: Figure | null; look: { yaw: number; pitch: number; away: number; mid: number }; act(action: Action): string; step(): void } | null>(null);
+  const stage = useRef<{ stand: THREE.Group; camera: THREE.PerspectiveCamera; figure: Figure | null; look: { yaw: number; pitch: number; away: number; mid: number }; act(action: Act): string; step(): void } | null>(null);
 
-  // The stage: a floor, lights that throw the figure's shadow, and a camera that looks round it. Made once.
+  // The stage: a floor, lights that throw the figure's shadow, and a camera that looks round it. Made once for each canvas.
   useEffect(() => {
     const el = canvas.current;
     if (!el) return;
+    const swap = () => {
+      if (performance.now() - swapped.current < 1000) return false;
+      swapped.current = performance.now();
+      setGeneration((g) => g + 1);
+      return true;
+    };
     let renderer: THREE.WebGLRenderer;
     try {
       renderer = new THREE.WebGLRenderer({ canvas: el, antialias: true });
     } catch {
-      setNote("No WebGL here: the stage cannot be drawn.");
+      if (!swap()) setNote("No WebGL here: the stage cannot be drawn.");
       return;
     }
+    // Lost already (dropped between this canvas's last stage and this one): onto a new canvas.
+    if (renderer.getContext().isContextLost()) {
+      renderer.dispose();
+      if (!swap()) setNote("No WebGL here: the stage cannot be drawn.");
+      return;
+    }
+    const lost = () => swap();
+    el.addEventListener("webglcontextlost", lost);
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -153,7 +184,13 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
     const ground = new THREE.Mesh(new THREE.CircleGeometry(6, 48).rotateX(-Math.PI / 2).translate(0, -0.08, 0), new THREE.MeshLambertMaterial({ color: "#77838f" }));
     ground.receiveShadow = true;
     const stand = new THREE.Group();
-    scene.add(floor, ground, stand);
+    // Where an enemy move lands: a ring on the ground a tile ahead, and the effects thrown at it, drawn over all.
+    const mark = new THREE.Mesh(new THREE.RingGeometry(0.3, 0.38, 32).rotateX(-Math.PI / 2).translate(0, 0.01, TARGET_AHEAD), new THREE.MeshBasicMaterial({ color: "#e0313f", transparent: true, opacity: 0.55 }));
+    const fxGroup = new THREE.Group();
+    scene.add(floor, ground, stand, mark, fxGroup);
+    const fx: (FxOpts & { sprite: THREE.Sprite; age: number })[] = [];
+    let waves: ((dt: number) => boolean)[] = [];
+    const pending: { at: number; run: () => void }[] = [];
     const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 60);
     const look = { yaw: 0.5, pitch: 0.28, away: 6, mid: 0.8 };
 
@@ -163,11 +200,39 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
     let sinceAct = 0;
     /** A jump under way: when the feet leave the ground, on the stage's clock. */
     let sprang = -Infinity;
+    /** A leap at the target under way (a creature's pounce): when it began, on the stage's clock. */
+    let pounced = -Infinity;
+    /** A dash through the target under way (a Fell Swoop): when it began, on the stage's clock. */
+    let dashed = -Infinity;
     const draw = (dt: number) => {
       const s = stage.current;
       const now = liveRef.current;
       if (!s) return;
       t += dt;
+      // What a move left to happen later, on this clock (so it slows and stops with it).
+      for (const due of pending.filter((p) => p.at <= t)) {
+        pending.splice(pending.indexOf(due), 1);
+        due.run();
+      }
+      // The effects in flight, as the game moves them (WorldRenderer).
+      waves = waves.filter((step) => step(dt));
+      for (let i = fx.length - 1; i >= 0; i--) {
+        const f = fx[i];
+        f.age += dt;
+        const k = Math.min(1, f.age / f.life);
+        f.sprite.position.lerpVectors(f.from, f.to, k);
+        if (f.arc) f.sprite.position.y += f.arc * 4 * k * (1 - k);
+        const size = f.size[0] + (f.size[1] - f.size[0]) * k;
+        f.sprite.scale.set(size, size, 1);
+        f.sprite.material.rotation = (f.turn ?? 0) + f.spin * k;
+        if (f.fade) f.sprite.material.opacity = 1 - k * k;
+        if (k >= 1) {
+          fxGroup.remove(f.sprite);
+          f.sprite.material.dispose();
+          fx.splice(i, 1);
+          f.onEnd?.();
+        }
+      }
       lean *= Math.exp(-dt * LEAN_EASE);
       if (now.walking) stride += dt * now.pace;
       if (now.repeat) {
@@ -186,12 +251,66 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
       // A jump goes up and comes down on the spot, as high as one of two tiles does in the game.
       const up = (t - sprang) / JUMP_AIR;
       if (s.figure) s.figure.root.position.y = up > 0 && up < 1 ? 4 * JUMP_HIGH * up * (1 - up) : 0;
+      // A pounce carries it at the target ahead and home again, as the game does (signatureMoves.ts pounceAt).
+      const leapt = pounceAt(t - pounced, TARGET_AHEAD);
+      if (s.figure) {
+        s.figure.root.position.z = leapt.ahead;
+        s.figure.root.position.y += leapt.up;
+        // A dash goes straight on through the target and past it, is held there a moment, and glides back home.
+        const over = dashTime(DASH.far);
+        const d = t - dashed;
+        if (d >= 0 && d < over + DASH.hold + DASH.back) {
+          s.figure.root.position.z = d < over ? (DASH.far * d) / over : d < over + DASH.hold ? DASH.far : DASH.far * (1 - (d - over - DASH.hold) / DASH.back);
+        }
+      }
       if (readout.current) readout.current.textContent = `${t.toFixed(2)}s · lean ${lean.toFixed(2)} · strike ${Math.min(1, Math.abs(lean) * 2).toFixed(2)}`;
     };
-    const act = (action: Action): string => {
+    const act = (action: Act): string => {
       sinceAct = 0;
       const figure = stage.current?.figure;
       if (!figure) return "";
+      if (action.startsWith("move:")) {
+        // "move:Name|again": that move's second part (an Earthquake's heave on its next turn).
+        const [named, part] = action.slice(5).split("|");
+        const move = SIGNATURE_MOVES[named];
+        if (!move) return "";
+        const play = (part === "again" && move.again?.play) || move.play;
+        // As the game does it: left or right is which way the target is as the camera sees it.
+        const body = figure.root.position.clone().setY(SIZE * 0.4);
+        const hitAt = new THREE.Vector3(0, SIZE * 0.4, TARGET_AHEAD);
+        const dir = hitAt.clone().project(camera).x >= body.clone().project(camera).x ? 1 : -1;
+        const stage: MoveStage = {
+          spawnFx(kind, color, flip, opts) {
+            const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: fxTexture(kind, color, flip), transparent: true, depthTest: false }));
+            sprite.position.copy(opts.from);
+            sprite.scale.set(opts.size[0], opts.size[0], 1);
+            sprite.material.rotation = opts.turn ?? 0;
+            sprite.renderOrder = 9;
+            fxGroup.add(sprite);
+            fx.push({ ...opts, sprite, age: 0 });
+          },
+          wave: (opts) => waves.push(groundWave(fxGroup, opts)),
+          lay: (lay) => waves.push(lay(fxGroup)),
+          later: (run, seconds) => pending.push({ at: t + seconds, run }),
+          sound: () => {},
+          lunge: () => {
+            lean = -0.9;
+          },
+          pounce: () => {
+            pounced = t;
+            return POUNCE_LANDS;
+          },
+          dash: () => {
+            dashed = t;
+            const over = dashTime(DASH.far);
+            return { passes: [{ at: hitAt, when: (over * TARGET_AHEAD) / DASH.far, jolt: () => {} }], over };
+          },
+          jolt: () => {},
+        };
+        const began = t;
+        play(stage, { figure, hitAt, dir, crit: false, onImpact: () => setNote(`The blow is told ${(t - began).toFixed(2)}s in.`) });
+        return "";
+      }
       if (action === "hit") {
         figure.hit();
         return "";
@@ -233,6 +352,8 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
 
     let raf = 0;
     let last = performance.now();
+    /** The last frame threw: its error has been said already. */
+    let failing = false;
     const frame = (at: number) => {
       const s = stage.current;
       if (!s) return;
@@ -240,7 +361,15 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
       last = at;
       const now = liveRef.current;
       if (now.spin && !dragging) look.yaw += real * 0.5;
-      if (!now.paused) draw(real * now.speed);
+      // A frame that throws (a figure or a move half-way through being changed) is passed over, said once, and
+      // the stage carries on: otherwise the next frame is never asked for, and the stage stands still for good.
+      try {
+        if (!now.paused) draw(real * now.speed);
+        failing = false;
+      } catch (e) {
+        if (!failing) console.error("Model preview: a frame failed", e);
+        failing = true;
+      }
       // The camera goes round the figure; the figure itself stays facing +z, as in the game.
       const flat = Math.cos(look.pitch) * look.away;
       camera.position.set(Math.sin(look.yaw) * flat, look.mid + Math.sin(look.pitch) * look.away, Math.cos(look.yaw) * flat);
@@ -289,13 +418,17 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
       el.removeEventListener("pointerup", up);
       el.removeEventListener("pointercancel", up);
       el.removeEventListener("wheel", wheel);
+      el.removeEventListener("webglcontextlost", lost);
       stage.current?.figure?.dispose();
+      for (const f of fx) f.sprite.material.dispose();
+      mark.geometry.dispose();
+      mark.material.dispose();
       floor.geometry.dispose();
       ground.geometry.dispose();
       renderer.dispose();
       stage.current = null;
     };
-  }, []);
+  }, [generation]);
 
   // The figure: built afresh whenever who it is, what it wears or how it is made changes.
   const built = `${kind}|${JSON.stringify(outfit ?? null)}|${rod}|${asleep}`;
@@ -317,7 +450,7 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
     s.look.mid = Math.max(0.4, (box.max.y + box.min.y) / 2);
     setNote("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [built]);
+  }, [built, generation]);
 
   // Escape shuts the lab; the space bar holds and lets go of time.
   useEffect(() => {
@@ -334,17 +467,31 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
     return () => window.removeEventListener("keydown", key, true);
   }, [onClose]);
 
-  const act = (action: Action) => setNote(stage.current?.act(action) ?? "");
+  const act = (action: Act) => setNote(stage.current?.act(action) ?? "");
+  // The enemy moves (render/signatureMoves.ts) of whoever is on the stage: none for anyone else.
+  // A move in two parts (an Earthquake) has a button for each: the second is "Name, next turn".
+  const ownMoves = useMemo(
+    () =>
+      Object.entries(SIGNATURE_MOVES)
+        .filter(([, move]) => move.who === kind)
+        .flatMap(([key, move]): [string, { blurb: string }, string][] => [[moveName(key), move, `move:${key}`], ...(move.again ? [[`${moveName(key)}, next turn`, move.again, `move:${key}|again`] as [string, { blurb: string }, string]] : [])]),
+    [kind],
+  );
+  // A move set to repeat is let go when its enemy leaves the stage.
+  useEffect(() => {
+    if (live.repeat?.startsWith("move:") && !ownMoves.some(([, , act]) => act === live.repeat)) set({ repeat: null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownMoves]);
   const view = (yaw: number, pitch: number) => {
     if (stage.current) Object.assign(stage.current.look, { yaw, pitch });
   };
 
   return (
-    <div className="figure-lab" role="dialog" aria-label="Figure lab">
-      <canvas ref={canvas} className="figure-lab-stage" aria-label="The figure on its stage. Drag to look round it; scroll to come closer." role="img" />
+    <div className="figure-lab" role="dialog" aria-label="Model preview">
+      <canvas key={generation} ref={canvas} className="figure-lab-stage" aria-label="The figure on its stage. Drag to look round it; scroll to come closer." role="img" />
       <div className="figure-lab-side panel">
         <div className="figure-lab-head">
-          <strong>Figure lab</strong>
+          <strong>Model preview</strong>
           <button className="link" onClick={onClose}>
             Close
           </button>
@@ -423,13 +570,31 @@ export default function FigureLab({ me, onClose }: { me: Me; onClose(): void }) 
             </button>
           ))}
         </div>
+        {ownMoves.length > 0 && (
+          <>
+            <h4>Enemy moves</h4>
+            <p className="muted">This enemy's abilities with an animation of their own, thrown at the red ring a tile ahead.</p>
+            <div className="dev-row">
+              {ownMoves.map(([name, move, id]) => (
+                <button key={name} className="small primary" title={move.blurb} onClick={() => act(id as Act)}>
+                  {name}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
         <div className="dev-row">
           <label title="Do it again and again, this often.">
             Repeat
-            <select value={live.repeat ?? ""} onChange={(e) => set({ repeat: (e.target.value || null) as Action | null })}>
+            <select value={live.repeat ?? ""} onChange={(e) => set({ repeat: (e.target.value || null) as Act | null })}>
               <option value="">Off</option>
               {ACTIONS.map(([id, name]) => (
                 <option key={id} value={id}>
+                  {name}
+                </option>
+              ))}
+              {ownMoves.map(([name, , id]) => (
+                <option key={name} value={id}>
                   {name}
                 </option>
               ))}

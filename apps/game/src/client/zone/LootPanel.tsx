@@ -37,6 +37,8 @@ export interface LootPanelProps {
   subtitle?: string;
   kind: "body" | "chest" | "spoils";
   items: LootItem[];
+  /** Which lot each of `items` is from, where several are shown at once (a heap of the fallen): its things keep their own squares apart. */
+  sources?: string[];
   /**
    * Whose it is: "shared" (a body, a chest: one lot for everyone, and whoever takes a thing first has it) or
    * "own" (the spoils: your share, which nobody else can take). Said in a line under the title.
@@ -209,7 +211,10 @@ const typing = (e: KeyboardEvent) => !!(e.target as HTMLElement | null)?.closest
 /** Whose it is, in a short line. */
 const SHARE: Record<NonNullable<LootPanelProps["share"]>, string> = { shared: "Shared: first come, first served", own: "Your share" };
 
-export function LootPanel({ title, subtitle, kind, items, share, blocked, onTake, onTakeAll, onClose, viewer }: LootPanelProps) {
+/** The window grows to fit what is in it: this many squares wide at least, and at most (then it grows taller, and then scrolls). */
+const COLS = { least: 4, most: 8 };
+
+export function LootPanel({ title, subtitle, kind, items, sources, share, blocked, onTake, onTakeAll, onClose, viewer }: LootPanelProps) {
   const [hover, setHover] = useState<number | null>(null);
   const [dragging, setDragging] = useState<number | null>(null);
   const can = !blocked && items.length > 0;
@@ -239,16 +244,23 @@ export function LootPanel({ title, subtitle, kind, items, share, blocked, onTake
   // A key for each square that stays with its thing as others are taken from before it (by you, or by someone
   // else from a body or a chest): its own number where it has one.
   const seenSigs = new Map<string, number>();
-  const keys = items.map((item) => {
-    if (item.uid !== undefined) return `uid:${item.uid}`;
+  const keys = items.map((item, i) => {
+    const from = sources?.[i] ? `${sources[i]}/` : "";
+    if (item.uid !== undefined) return `${from}uid:${item.uid}`;
     const sig = item.t === "gear" ? `gear:${item.item.ref}:${item.item.rarity}:${item.item.name}` : item.t === "stone" ? `stone:${item.stone.join("+")}` : item.t === "blueprint" ? `bp:${item.id}` : item.t === "furnishing" ? `furn:${item.grant.defId}` : item.t === "gold" ? "gold" : `${item.t}:${item.kind}`;
-    const nth = seenSigs.get(sig) ?? 0;
-    seenSigs.set(sig, nth + 1);
-    return `${sig}#${nth}`;
+    const nth = seenSigs.get(from + sig) ?? 0;
+    seenSigs.set(from + sig, nth + 1);
+    return `${from}${sig}#${nth}`;
   });
 
   return (
-    <div className={`fight-ui fight-loot panel window ${kind} ${blocked ? "blocked" : ""}`} role="dialog" aria-label={`${WORD[kind]}: ${title}`}>
+    <div
+      className={`fight-ui fight-loot panel window ${kind} ${blocked ? "blocked" : ""}`}
+      role="dialog"
+      aria-label={`${WORD[kind]}: ${title}`}
+      // As wide as four rows of it need, between COLS.least and COLS.most squares.
+      style={{ "--cols": Math.min(COLS.most, Math.max(COLS.least, Math.ceil(items.length / 4))) } as CSSProperties}
+    >
       <span className="win-plate">{title}</span>
       <button type="button" className="bag-close hud-btn" aria-label="Close" title="Close (Esc)" onClick={onClose}>×</button>
       {share && <p className={`loot-share ${share}`}>{SHARE[share]}</p>}
