@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 import { at, flatBoard, must, standEnemy as enemy, standHero, unit } from "../test/zoneBoard";
 import { makeRng } from "../rng";
 import { damage, type Ctx } from "./engine";
-import type { ZoneEvent } from "./types";
-import { zoneIdleTurn } from "./zone";
 
 // The Maps tab's dev switches: heroes who cannot go down, and clearing every enemy off the map.
 
@@ -59,33 +57,10 @@ describe("dev switches", () => {
     expect(must(off, { type: "dev", by: "ann", dev: { op: "timer", off: false } }).timerOff).toBeUndefined();
   });
 
-  it("has the server end each hero's turn while heroes take no turns", () => {
-    let state = board();
-    state.aiOff = false;
-    if (state.encounter!.acting[0] !== "ann") state = must(state, { type: "dev", by: "ann", dev: { op: "next_turn" } });
-    expect(zoneIdleTurn(state)).toBe(false);
-    state = must(state, { type: "dev", by: "ann", dev: { op: "heroes_idle", on: true } });
-    expect(state.heroesIdle).toBe(true);
-    // Her turn is still hers: the server ends it (its timeout).
-    expect(state.encounter!.acting).toEqual(["ann"]);
-    expect(zoneIdleTurn(state)).toBe(true);
-    const events: ZoneEvent[] = [];
-    const turnNo = state.encounter!.turnNo;
-    const after = must(state, { type: "timeout" }, events);
-    // The wolf played, and it is her turn again, for the server to end too.
-    expect(events.some((e) => e.t === "hit" || e.t === "miss")).toBe(true);
-    expect(after.encounter!.acting).toEqual(["ann"]);
-    expect(after.encounter!.turnNo).toBeGreaterThan(turnNo);
-    expect(zoneIdleTurn(after)).toBe(true);
-    expect(must(state, { type: "dev", by: "ann", dev: { op: "heroes_idle", on: false } }).heroesIdle).toBeUndefined();
-  });
-
-  it("leaves turns to the dev in the sandbox, heroes taking no turns or not", () => {
-    let state = must(board(), { type: "dev", by: "ann", dev: { op: "heroes_idle", on: true } });
-    if (state.encounter!.acting[0] !== "ann") state = must(state, { type: "dev", by: "ann", dev: { op: "next_turn" } });
-    expect(zoneIdleTurn(state)).toBe(true);
-    state = must(state, { type: "dev", by: "ann", dev: { op: "sandbox", on: true } });
-    expect(zoneIdleTurn(state)).toBe(false);
+  it("sets and clears the switch for heroes taking no turns", () => {
+    const on = must(board(), { type: "dev", by: "ann", dev: { op: "heroes_idle", on: true } });
+    expect(on.heroesIdle).toBe(true);
+    expect(must(on, { type: "dev", by: "ann", dev: { op: "heroes_idle", on: false } }).heroesIdle).toBeUndefined();
   });
 
   it("takes every enemy off the map, ending the fight they were in, with no bodies", () => {

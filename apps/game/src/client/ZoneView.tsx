@@ -197,6 +197,8 @@ interface Picture {
   pois: Poi[];
 }
 
+/** How long a turn of yours lasts with the dev switch "heroes take no turns" on, once all before it has been shown. */
+const IDLE_TURN_MS = 1000;
 /** A magnifying glass, for the card saying what is under the pointer. */
 const MAGNIFIER = ["..####.....", ".#....#....", "#..##..#...", "#.#....#...", "#......#...", "#......#...", ".#....#....", "..####.#...", ".......##..", "........##.", ".........##"];
 
@@ -2541,6 +2543,14 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     const n = zone.send({ type: "end_turn", unit: act.id });
     if (n !== null) setAhead([...aheadNow.current, { n, kind: "end", unit: act.id }]);
   };
+  // Dev switch "heroes take no turns": a turn of yours ends of itself, a moment after everything before it has been shown
+  // (not on a timer of the server's, which would cut short the enemy turns still playing). Not in the sandbox.
+  const idleTurn = !!z?.heroesIdle && !z.sandbox && myTurn;
+  useEffect(() => {
+    if (!idleTurn) return;
+    const t = setTimeout(endTurn, IDLE_TURN_MS);
+    return () => clearTimeout(t);
+  }, [idleTurn, act?.id, enc?.turnNo]);
   const choose = (ability: string) => {
     const shape = tacticOf(ability).shape;
     // Something with nothing to aim goes off at once. A blink is aimed, at where to go; a creature called, at where it stands.

@@ -4,7 +4,7 @@
 // stays inside.
 
 export * from "./types";
-export { createZone, ensureEnemyAbilities, ensureMouth, loadZone, stepZone, zoneView, zoneAwaiting, zoneIdleTurn, zoneUntimed, zoneHero, standInHero, growGroups, MAX_PARTY, MAP_FULL } from "./zone";
+export { createZone, ensureEnemyAbilities, ensureMouth, loadZone, stepZone, zoneView, zoneAwaiting, zoneUntimed, zoneHero, standInHero, growGroups, MAX_PARTY, MAP_FULL } from "./zone";
 export { ZONE_GRIDS, ALERT_RANGE, JOIN_RANGE, DEFAULT_ZONE_OPTIONS, BIOME_LEADS, zoneOptions, generateZone, groupKinds, type ZonePlan } from "./gen";
 export {
   FREE_WALK, MAX_ELEV, HEX_ROOM, HIGH_REACH,
