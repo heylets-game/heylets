@@ -14,7 +14,7 @@ import { ALERT_RANGE, DEFAULT_ZONE_OPTIONS, JOIN_RANGE, generateZone, zoneOption
 import { HEX_ROOM, adjacent, blast, blockerAt, flies, isDead, sameHex, seesFor, solid, stepCost, unitAt, zoneReach } from "./geometry";
 import { propOf } from "./props";
 import { SITE_IDS, backdropOf, siteInside, type SiteId } from "./sites";
-import { ACTION_AP, AP_MAX, AP_TURN, AQUEOUS, RALLY, SUMMON_AP_TURN, AURAS, CHART, COMMON_ACTIONS, BLOCK, BONUS_AP, BOLSTER, AGAINST_WAVES, ENDURE, STAND_STRONG, STURDY, ENEMY_BURST, ENEMY_KIT, ENEMY_MOVE_AP, EXPLORE_ROUND_MS, FLEE_RANGE, LIGHT_RADIUS, SHIELD_SET_ASIDE, TACTICS, TORCH_GROUND_ROUNDS, TORCH_HELD_ROUNDS, TORCH_ROUND_MS, abilityDice as abilityDiceFor, commonCost, enemyHp, DEFAULT_MIND, abilityStrikes, enemyMove, enemyStrikes, mindOf, retortDice, tacticOf, unitStrikes } from "./kit";
+import { ACTION_AP, AP_MAX, AP_TURN, AQUEOUS, BULWARK, RALLY, SUMMON_AP_TURN, AURAS, CHART, COMMON_ACTIONS, BLOCK, BONUS_AP, BOLSTER, AGAINST_WAVES, ENDURE, STAND_STRONG, STURDY, ENEMY_BURST, ENEMY_KIT, ENEMY_MOVE_AP, EXPLORE_ROUND_MS, FLEE_RANGE, LIGHT_RADIUS, SHIELD_SET_ASIDE, TACTICS, TORCH_GROUND_ROUNDS, TORCH_HELD_ROUNDS, TORCH_ROUND_MS, abilityDice as abilityDiceFor, commonCost, enemyHp, DEFAULT_MIND, abilityStrikes, enemyMove, enemyStrikes, mindOf, retortDice, tacticOf, unitStrikes } from "./kit";
 import { MAX_CATCHUP_ROUNDS, nextTick } from "./clock";
 import { clusterHexes } from "./weather";
 import { d20, diceAverage, diceFor, heroMove, hitChance } from "./rules";
@@ -4681,7 +4681,7 @@ describe("the Warden's wall", () => {
     const bare = blow(0);
     const braced = blow(20);
     expect(braced.seed).toBe(bare.seed);
-    expect(braced.amount - bare.amount).toBe(Math.floor((20 + 5) / 2) - Math.floor(5 / 2));
+    expect(braced.amount - bare.amount).toBe(Math.floor((20 + 5) * BULWARK.perShield) - Math.floor(5 * BULWARK.perShield));
   });
 
   it("Taunt: 2 AP, 3 turns to wait; every enemy within 2 hexes of the Warden is Taunted by them for 2 of its turns", () => {

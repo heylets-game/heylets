@@ -204,7 +204,7 @@ export const BOLSTER = { range: 2, shield: 10 };
 export const ENDURE = { range: 0, shield: 10 };
 export const OVERWHELM = { hexes: 2, stun: 1 };
 export const FORTIFY = { hexes: 3, rounds: 3, defence: 1 };
-export const BULWARK = { shield: 4, perShield: 0.5 };
+export const BULWARK = { shield: 4, perShield: 0.25 };
 export const TAUNT = { range: 2, rounds: 2 };
 /** Sturdy Blow (the maul): a shield of `shield` plus the user's level, on top of any they have, hit or miss. */
 export const STURDY = { shield: 3 };
