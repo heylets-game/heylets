@@ -10,7 +10,8 @@
 // kind of tool:
 //
 //   Audio/visual  open the model preview, a stage for trying any figure's
-//                 animations (FigureLab.tsx); hold the time of day and the
+//                 animations (FigureLab.tsx), or the sound lab, every sound
+//                 in the game to search and play (SoundLab.tsx); hold the time of day and the
 //                 weather where you want them, and see what the audio engine
 //                 is doing. Your own tab only.
 //   Items         add gold to your hero's purse, or take it away; put a
@@ -42,6 +43,7 @@ import { MapsTab } from "./zone/MapsTab";
 
 /** Loaded only when it is opened: it is a dev tool, and no part of the game. */
 const FigureLab = lazy(() => import("./FigureLab"));
+const SoundLab = lazy(() => import("./SoundLab"));
 
 const OPEN_KEY = "gq.dev.readout";
 const TAB_KEY = "gq.dev.tab";
@@ -137,6 +139,7 @@ export function DevToolbox({ me, refresh }: { me: Me; refresh(): Promise<void> }
   // (Gold, Sky & sound and Figures had tabs of their own once: they are on Items and Audio/visual now.)
   const [tab, setTab] = useState<Tab>(() => TABS.find(([id]) => id === (FORMER_TABS[recall(TAB_KEY) ?? ""] ?? recall(TAB_KEY)))?.[0] ?? "av");
   const [lab, setLab] = useState(false);
+  const [soundLab, setSoundLab] = useState(false);
   // The old box people had a switch here once; with it gone, nobody is left stuck with them (from the next reload).
   useEffect(() => {
     if (recall(BLOCKY_KEY) === "1") remember(BLOCKY_KEY, null);
@@ -208,6 +211,12 @@ export function DevToolbox({ me, refresh }: { me: Me; refresh(): Promise<void> }
                   <button className="small primary" onClick={() => setLab(true)}>Open the model preview</button>
                 </div>
               </DevSection>
+              <DevSection id="av.sounds" title="Sound lab" open>
+                <p className="muted">Every sound in the game, to search and play at will: each event as the game plays it, each of its takes, and all the music and atmosphere.</p>
+                <div className="dev-row">
+                  <button className="small primary" onClick={() => setSoundLab(true)}>Open the sound lab</button>
+                </div>
+              </DevSection>
               <DevSection id="av.sky" title="Sky & sound" open>
                 <SkyAndSound />
               </DevSection>
@@ -228,6 +237,11 @@ export function DevToolbox({ me, refresh }: { me: Me; refresh(): Promise<void> }
       {lab && (
         <Suspense fallback={null}>
           <FigureLab me={me} onClose={() => setLab(false)} />
+        </Suspense>
+      )}
+      {soundLab && (
+        <Suspense fallback={null}>
+          <SoundLab onClose={() => setSoundLab(false)} />
         </Suspense>
       )}
     </>
