@@ -58,7 +58,7 @@ describe("a Hedge Witch", () => {
   it("has Weakening Hex and Witches' Brew", () => {
     expect(ENEMIES.witch.abilities).toEqual(["weakening_hex", "witches_brew"]);
     expect(ENEMY_ABILITIES.weakening_hex).toMatchObject({ damage: 6, potency: 4, range: 5, weight: 2, saveOr: { effect: "weakened", turns: 1, amount: 2 } });
-    expect(ENEMY_ABILITIES.witches_brew).toMatchObject({ range: 5, area: 3, cooldown: 3, heal: 6, behaviour: "mend" });
+    expect(ENEMY_ABILITIES.witches_brew).toMatchObject({ range: 5, spread: { shape: "cluster", size: 3 }, cooldown: 3, heal: 6, behaviour: "mend" });
   });
 });
 

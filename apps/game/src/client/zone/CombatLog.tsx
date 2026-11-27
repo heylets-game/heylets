@@ -159,6 +159,21 @@ export function Die({ d, n, dropped = false }: { d: number; n: number; dropped?:
   );
 }
 
+/** One chip of what of the moment went into a number: its words, whether it helped, and (a roll's) whether it made the difference. */
+interface Chip {
+  text: string;
+  good: boolean;
+  swung?: boolean;
+}
+
+/** What of the moment is in a number as chips: "+2 Bard's tune" (good) or "-1 Ladder" (bad). */
+const chipsOf = (mods: readonly RollMod[]): Chip[] => mods.map((m) => ({ text: `${signed(m.n)} ${m.name}`, good: m.n > 0 }));
+
+/** What of the moment went into a number, a chip each, in the class (`fl-part`, `fr-part`) of the row they sit in; a roll's mark the one that swung it. */
+function ModChips({ parts, chip }: { parts: readonly Chip[]; chip: "fl-part" | "fr-part" }) {
+  return <>{parts.map((p, i) => <span key={i} className={`${chip} ${p.good ? "good" : "bad"}${p.swung === undefined ? "" : ` ${p.swung ? "swung" : ""}`}`}>{p.text}</span>)}</>;
+}
+
 /** Damage or healing dice written out: "1d8 <6> + 3 = 9", with what a save or a shield did to it after. */
 export function DiceSum({ dice, blocked }: { dice: Rolled; blocked?: number }) {
   return (
@@ -170,7 +185,7 @@ export function DiceSum({ dice, blocked }: { dice: Rolled; blocked?: number }) {
       {dice.crit && <span className="fl-mod adv" title="A critical hit rolls twice the dice">crit</span>}
       {dice.halved && <span className="fl-mod half" title="The target saved, and took half">halved</span>}
       {!!blocked && <span className="fl-mod blk" title="Taken by a shield or a guard">({blocked} blocked)</span>}
-      {(dice.mods ?? []).map((m, i) => <span key={i} className={`fl-part ${m.n > 0 ? "good" : "bad"}`}>{signed(m.n)} {m.name}</span>)}
+      <ModChips parts={chipsOf(dice.mods ?? [])} chip="fl-part" />
     </>
   );
 }
@@ -178,7 +193,7 @@ export function DiceSum({ dice, blocked }: { dice: Rolled; blocked?: number }) {
 /** What of the moment went into damage dice (Rolled `mods`), a chip each, as the roll card shows them under the dice. */
 function DiceParts({ dice }: { dice: Rolled }) {
   if (!dice.mods?.length) return null;
-  return <div className="fr-parts dmg">{dice.mods.map((m, i) => <span key={i} className={`fr-part ${m.n > 0 ? "good" : "bad"}`}>{signed(m.n)} {m.name}</span>)}</div>;
+  return <div className="fr-parts dmg"><ModChips parts={chipsOf(dice.mods)} chip="fr-part" /></div>;
 }
 
 /** A d20 roll written out: the dice, the bonus, the sum, what it had to reach, and how it came out. */
@@ -201,7 +216,7 @@ function RollSum({ roll }: { roll: Roll }) {
       </div>
       {parts.length > 0 && (
         <div className="fl-parts">
-          {parts.map((p, i) => <span key={i} className={`fl-part ${p.good ? "good" : "bad"} ${p.swung ? "swung" : ""}`}>{p.text}</span>)}
+          <ModChips parts={parts} chip="fl-part" />
         </div>
       )}
       <SwingLine roll={roll} swings={swings} className="fl-swing" />
@@ -234,7 +249,7 @@ const Row = memo(function Row({ e, fresh }: { e: LogEntry; fresh: boolean }) {
       return (
         <div className={cls(e.tone ?? "")}>
           {e.text}
-          {!!e.mods?.length && <div className="fl-parts">{e.mods.map((m, i) => <span key={i} className={`fl-part ${m.n > 0 ? "good" : "bad"}`}>{signed(m.n)} {m.name}</span>)}</div>}
+          {!!e.mods?.length && <div className="fl-parts"><ModChips parts={chipsOf(e.mods)} chip="fl-part" /></div>}
         </div>
       );
     case "roll":
@@ -472,7 +487,7 @@ function RollCard({ roll, who, dice, hold, onGone }: { roll: Roll; who?: string;
         </div>
         {parts.length > 0 && (
           <div className="fr-parts">
-            {parts.map((p, i) => <span key={i} className={`fr-part ${p.good ? "good" : "bad"} ${p.swung ? "swung" : ""}`}>{p.text}</span>)}
+            <ModChips parts={parts} chip="fr-part" />
           </div>
         )}
         <SwingLine roll={roll} swings={swings} className="fr-swing" />

@@ -3,6 +3,7 @@
 
 import type { StatKey } from "@gantt-quest/core";
 import type { ScaleRate } from "./zone/rules";
+import type { Drain } from "./zone/unless";
 import type { SurfaceKind } from "./zone/types";
 
 /** What an ability or an enemy's attack can leave on whoever it lands on. A fight on the tiles has more conditions of its own (zone/types.ts). */
@@ -175,8 +176,8 @@ export interface AbilityDef {
   saveOr?: Inflict;
   /** Applied to each target it gets through to, with no save. */
   targetEffect?: Inflict;
-  /** Heals the user this share of the damage it deals. */
-  drain?: number;
+  /** Heals the user a share of the damage it deals, unless something stops it (zone/unless.ts). */
+  drain?: Drain;
   blurb: string;
 }
 
@@ -250,7 +251,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   thornlash: { id: "thornlash", name: "Thornlash", stat: "int_stat", target: "enemy", damage: 7, saveOr: { effect: "slowed", turns: 2 }, blurb: "Thorns that dig in. On a hit, the target must save or be Slowed." },
   rejuvenate: { id: "rejuvenate", name: "Rejuvenate", stat: "int_stat", target: "ally", heal: 7, blurb: "Heal an ally (or yourself) now, and the same again at the start of their next turn." },
   hex: { id: "hex", name: "Hex", stat: "int_stat", target: "enemy", damage: 7, saveOr: { effect: "fumbling", stacks: 1 }, blurb: "A slow curse on the target. On a hit, it must save or be Fumbling: its next attack is rolled with disadvantage." },
-  soul_drain: { id: "soul_drain", name: "Soul Drain", stat: "int_stat", target: "enemy", damage: 11, drain: 0.5, blurb: "Takes some of their life for yours: heals you half the damage dealt. 2 turns to wait." },
+  soul_drain: { id: "soul_drain", name: "Soul Drain", stat: "int_stat", target: "enemy", damage: 11, drain: { share: 0.5 }, blurb: "Takes some of their life for yours: heals you half the damage dealt. 2 turns to wait." },
   // Class abilities: chosen for a hero's slots from their class's pool (classabilities.ts), not given by a weapon.
   // Paladin. The two auras are conditions on the Paladin in a fight (zone/kit.ts AURAS).
   beacon_aura: { id: "beacon_aura", name: "Beacon Aura", stat: "vit", target: "self", blurb: "For 4 turns you shine: you light the dark around you, and you and allies within 2 hexes get +2 to hit." },

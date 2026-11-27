@@ -167,7 +167,7 @@ describe("golden D: terrain, pushes, falls, wet", () => {
   it("battering ram over an edge", enemyOn("battering_ram", "brute", { edit: on([at(3, 6), at(2, 6)], { elev: -2 }) }));
 
   /** Ann using `id`, with bandits at (5,6) and (6,6) and one Wet at (5,7); `edit` shapes the ground. */
-  const heroUses = (id: string, o: { edit?: Edit; aim?: (first: Unit) => Aim; prep?: (s: ZoneState) => void; kind?: string; seeds?: number[] } = {}) => () => {
+  const heroUses = (id: string, o: { edit?: Edit; aim?: (first: Unit) => Aim; prep?: (s: ZoneState) => void; kind?: string; seeds?: number[]; firstAt?: HexPos } = {}) => () => {
     const out = (o.seeds ?? SEEDS).map((seed) => {
       let first = "";
       const state = scene({
@@ -175,8 +175,8 @@ describe("golden D: terrain, pushes, falls, wet", () => {
         more: (s) => {
           sturdy(standHero(s, "ann", at(4, 6), { ...hero, abilities: [id] }));
           sturdy(standHero(s, "bob", at(3, 6), hero));
-          first = standEnemy(s, o.kind ?? "bandit", at(5, 6), "g1", { hp: 900, maxHp: 900 }).id;
-          standEnemy(s, o.kind ?? "bandit", at(6, 6), "g1", { hp: 900, maxHp: 900 });
+          first = standEnemy(s, o.kind ?? "bandit", o.firstAt ?? at(5, 6), "g1", { hp: 900, maxHp: 900 }).id;
+          standEnemy(s, o.kind ?? "bandit", o.firstAt ? at(6, 7) : at(6, 6), "g1", { hp: 900, maxHp: 900 });
           o.prep?.(s);
         },
       });
@@ -195,6 +195,8 @@ describe("golden D: terrain, pushes, falls, wet", () => {
   it("a bellows blast knocks them back", heroUses("bellows_blast", { aim: (f) => ({ at: f.pos }) }));
   it("a pike drags an enemy", heroUses("throw_pike", { aim: (f) => ({ target: f.id }), prep: (s) => { standEnemy(s, "bandit", at(8, 6), "g1", { hp: 900, maxHp: 900 }); } }));
   it("a pike drags a far enemy over an edge", heroUses("harpoon_shot", { aim: (f) => ({ target: f.id }), edit: on([at(5, 6)], { elev: -2 }) }));
+  it("a pike drags a far enemy in, more dice", heroUses("throw_pike", { seeds: MORE_SEEDS, firstAt: at(8, 6) }));
+  it("a harpoon drags a far enemy over an edge, more dice", heroUses("harpoon_shot", { seeds: MORE_SEEDS, firstAt: at(8, 6), edit: on([at(6, 6)], { elev: -2 }) }));
   it("chain lightning on the Wet", heroUses("chain_lightning", { seeds: MORE_SEEDS, prep: (s) => { for (const u of s.units) if (u.side === "enemy") u.conditions.push({ kind: "wet", rounds: 3 }); } }));
   it("a shock on the Wet", heroUses("shock", { seeds: MORE_SEEDS, prep: (s) => { for (const u of s.units) if (u.side === "enemy") u.conditions.push({ kind: "wet", rounds: 3 }); } }));
   it("a tidal wave on the Wet", heroUses("tidal_wave", { seeds: MORE_SEEDS, aim: (f) => ({ at: f.pos }), prep: (s) => { for (const u of s.units) if (u.side === "enemy") u.conditions.push({ kind: "wet", rounds: 3 }); } }));

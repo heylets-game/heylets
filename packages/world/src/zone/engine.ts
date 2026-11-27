@@ -12,7 +12,13 @@ import { AQUEOUS, AURAS, CONDITION_INFO, CORAL_ARMOR, ENEMY_KIT, FORTIFY, SHIELD
 import { inDark } from "./light";
 import { d20, heroDefence, mod, netAdvantage, rollShown, statOf } from "./rules";
 import { songDefence, songHit, windward } from "./song";
-import type { Condition, Roll, RollMod, Rolled, Unit, UnitCondition, ZoneEffect, ZoneEvent, ZoneState } from "./types";
+import type { Budget, Condition, Roll, RollMod, Rolled, Unit, UnitCondition, ZoneEffect, ZoneEvent, ZoneState } from "./types";
+
+/** This unit's budget, if it is in the middle of its turn in a fight: acting now and not done. */
+export function liveBudget(state: ZoneState, unit: Unit): Budget | undefined {
+  const enc = state.encounter;
+  return enc && enc.acting.includes(unit.id) && !enc.done.includes(unit.id) ? enc.budgets[unit.id] : undefined;
+}
 
 export interface Ctx {
   state: ZoneState;
@@ -40,8 +46,9 @@ export function removeCondition(unit: Unit, kind: Condition): void {
 /**
  * Put a condition on a unit, or lengthen the one it has. Something soaked cannot be set burning.
  * `amount`: a shield's points (Bolstered), or the AP a Reeling takes; a bigger one replaces a smaller.
+ * `told`: what to say of it in the event that tells of it: what of the moment is in it (`mods`, those that add or take something), to be shown.
  */
-export function addCondition(ctx: Ctx, unit: Unit, kind: Condition, rounds: number, amount?: number, at?: HexPos): void {
+export function addCondition(ctx: Ctx, unit: Unit, kind: Condition, rounds: number, amount?: number, at?: HexPos, told?: { mods?: RollMod[] }): void {
   // Bleeding and Burning come in stacks that last as long as they always do, whatever asked for them.
   if (isStacking(kind)) return addStacks(ctx, unit, kind, amount ?? 1);
   if (unit.down || rounds <= 0 || !takesHold(ctx, unit, kind)) return;
@@ -73,7 +80,8 @@ export function addCondition(ctx: Ctx, unit: Unit, kind: Condition, rounds: numb
   if (amount !== undefined) now.amount = Math.max(now.amount ?? 0, amount);
   // A hex it is tied to (Fettered's spot): the latest one given.
   if (at) now.at = { q: at.q, r: at.r };
-  ctx.events.push({ t: "condition", target: unit.id, kind, rounds, ...(now.amount !== undefined ? { amount: now.amount } : {}), ...(now.at ? { at: now.at } : {}) });
+  const shown = told?.mods?.filter((m) => m.n !== 0) ?? [];
+  ctx.events.push({ t: "condition", target: unit.id, kind, rounds, ...(now.amount !== undefined ? { amount: now.amount } : {}), ...(now.at ? { at: now.at } : {}), ...(shown.length > 0 ? { mods: shown } : {}) });
 }
 
 /** Each stack of a Burning: one count of turns apiece (a Burning from before stacks had their own is read as that many of its `rounds`). */
@@ -345,21 +353,12 @@ const shieldable = (ctx: Ctx, unit: Unit): boolean => inFight(ctx.state, unit.id
  * `mods`: what of the moment is in `amount` (standing in water), told with it to be shown.
  */
 export function shieldUnit(ctx: Ctx, unit: Unit, amount: number, mods: RollMod[] = []): void {
-  if (amount > 0 && shieldable(ctx, unit)) shielded(ctx, unit, () => addCondition(ctx, unit, "bolstered", SHIELD_KEEPS, amount), mods);
+  if (amount > 0 && shieldable(ctx, unit)) addCondition(ctx, unit, "bolstered", SHIELD_KEEPS, amount, undefined, { mods });
 }
 
 /** Add `amount` points to whatever shield a unit in a fight already has (Bulwark Strike), to last the fight. `mods` as shieldUnit's. */
 export function addShield(ctx: Ctx, unit: Unit, amount: number, mods: RollMod[] = []): void {
-  if (amount > 0 && shieldable(ctx, unit)) shielded(ctx, unit, () => addCondition(ctx, unit, "bolstered", SHIELD_KEEPS, shieldOf(unit) + amount), mods);
-}
-
-/** Give a shield (`give`), and put `mods` (those that add or take something) on the event that tells of it. */
-function shielded(ctx: Ctx, unit: Unit, give: () => void, mods: RollMod[]): void {
-  const mark = ctx.events.length;
-  give();
-  const shown = mods.filter((m) => m.n !== 0);
-  if (shown.length === 0) return;
-  for (const ev of ctx.events.slice(mark)) if (ev.t === "condition" && ev.kind === "bolstered" && ev.target === unit.id) ev.mods = shown;
+  if (amount > 0 && shieldable(ctx, unit)) addCondition(ctx, unit, "bolstered", SHIELD_KEEPS, shieldOf(unit) + amount, undefined, { mods });
 }
 
 /**
@@ -401,14 +400,14 @@ function soak(unit: Unit, amount: number): number {
  * Returns the HP it cost. `dice`: what was rolled for it, told with the hit (`halved`: the target saved for half).
  * `splash`: the shock of a blow on someone beside the target, not a blow at it (see the hit event).
  */
-export function damage(ctx: Ctx, target: Unit, amount: number, opts: { actor: string | null; what: string; crit?: boolean; dice?: Rolled; halved?: boolean; splash?: boolean }): number {
+export function damage(ctx: Ctx, target: Unit, amount: number, opts: { actor: string | null; what: string; ability?: string; crit?: boolean; dice?: Rolled; halved?: boolean; splash?: boolean }): number {
   if (target.down) return 0;
   let dealt = Math.max(1, Math.round(amount));
   if (has(target, "guarded")) dealt = Math.ceil(dealt / 2);
   const blocked = soak(target, dealt);
   dealt = wound(ctx, target, dealt - blocked);
   const dice = opts.dice ? { ...opts.dice, ...(opts.halved ? { halved: true } : {}) } : undefined;
-  ctx.events.push({ t: "hit", actor: opts.actor, target: target.id, amount: dealt, what: opts.what, crit: !!opts.crit, ...(blocked > 0 ? { blocked } : {}), ...(dice ? { dice } : {}), ...(opts.splash ? { splash: true } : {}) });
+  ctx.events.push({ t: "hit", actor: opts.actor, target: target.id, amount: dealt, what: opts.what, ...(opts.ability ? { ability: opts.ability } : {}), crit: !!opts.crit, ...(blocked > 0 ? { blocked } : {}), ...(dice ? { dice } : {}), ...(opts.splash ? { splash: true } : {}) });
   if (target.hp <= 0) fall(ctx, target);
   // North Star: whatever its bearer strikes on the other side catches fire.
   const by = opts.actor ? ctx.state.units.find((u) => u.id === opts.actor) : undefined;
@@ -427,7 +426,7 @@ export function tick(ctx: Ctx, target: Unit, kind: Condition | "poison" | "fire"
 }
 
 /** Heal a unit. Someone down is back on their feet. Any healing closes one stack of Bleeding. Returns what was healed. */
-export function heal(ctx: Ctx, target: Unit, amount: number, opts: { actor: string | null; what: string; dice?: Rolled }): number {
+export function heal(ctx: Ctx, target: Unit, amount: number, opts: { actor: string | null; what: string; ability?: string; dice?: Rolled }): number {
   if (amount > 0) staunch(target);
   if (target.down) {
     target.down = false;
@@ -435,7 +434,7 @@ export function heal(ctx: Ctx, target: Unit, amount: number, opts: { actor: stri
   }
   const healed = Math.max(0, Math.min(target.maxHp - target.hp, Math.round(amount)));
   target.hp += healed;
-  ctx.events.push({ t: "heal", actor: opts.actor, target: target.id, amount: healed, what: opts.what, ...(opts.dice ? { dice: opts.dice } : {}) });
+  ctx.events.push({ t: "heal", actor: opts.actor, target: target.id, amount: healed, what: opts.what, ...(opts.ability ? { ability: opts.ability } : {}), ...(opts.dice ? { dice: opts.dice } : {}) });
   return healed;
 }
 
@@ -507,9 +506,18 @@ export function attackContext(state: ZoneState, attacker: Unit, target: Unit, op
     if (rise > 0) add("Ladder", 2, "striking down a ladder");
     else add("Ladder", -2, "striking up a ladder");
   }
-  const net = netAdvantage(ups.length > 0, downs.length > 0);
-  const cancelled = ups.length > 0 && downs.length > 0 ? { adv: ups, dis: downs } : undefined;
-  return { adv: net, mods: parts.reduce((n, p) => n + p.n, 0), parts, advWhy: net > 0 ? ups : net < 0 ? downs : [], ...(cancelled ? { cancelled } : {}), notes };
+  const net = advantageOf(ups, downs);
+  return { adv: net.adv, mods: parts.reduce((n, p) => n + p.n, 0), parts, advWhy: net.advWhy, ...(net.cancelled ? { cancelled: net.cancelled } : {}), notes };
+}
+
+/**
+ * A roll's advantage from what gives it (`ups`) and what takes it away (`downs`), a short name each: whether it has
+ * either (both cancel), why, and (when both are there) why each, as a Roll carries them.
+ */
+export function advantageOf(ups: readonly string[], downs: readonly string[]): { adv: -1 | 0 | 1; advWhy: string[]; cancelled?: { adv: string[]; dis: string[] } } {
+  const adv = netAdvantage(ups.length > 0, downs.length > 0);
+  const cancelled = ups.length > 0 && downs.length > 0 ? { adv: [...ups], dis: [...downs] } : undefined;
+  return { adv, advWhy: adv > 0 ? [...ups] : adv < 0 ? [...downs] : [], ...(cancelled ? { cancelled } : {}) };
 }
 
 /**
@@ -601,7 +609,8 @@ export const UNTIMED: ReadonlySet<string> = new Set(["lucky", "bolstered", "fren
 export function saveRoll(ctx: Ctx, unit: Unit, stat: StatKey, vs: number, label: string, disadvantage?: string): Roll {
   // Within a Terror Aura of the other side's, every save is made with disadvantage.
   const worse = [disadvantage, dreadOver(ctx.state, unit)].filter((w): w is string => !!w);
-  const roll = d20(ctx.rng, { kind: "save", id: unit.id, label, bonus: saveBonus(unit, stat), vs, adv: worse.length > 0 ? -1 : 0, ...momentOf({ mods: saveMods(unit), advWhy: worse }) });
+  const { adv, advWhy } = advantageOf([], worse);
+  const roll = d20(ctx.rng, { kind: "save", id: unit.id, label, bonus: saveBonus(unit, stat), vs, adv, ...momentOf({ mods: saveMods(unit), advWhy }) });
   ctx.events.push({ t: "roll", roll });
   return roll;
 }

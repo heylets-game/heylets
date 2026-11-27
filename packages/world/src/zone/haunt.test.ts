@@ -42,9 +42,9 @@ describe("a Haunt's kit", () => {
   it("is Grave Grasp, Ice Spear, Ghastly Fetter and Terror Aura, and only the first three are ever used", () => {
     expect(ENEMIES.haunt.abilities).toEqual(["grave_grasp", "ice_spear", "ghastly_fetter", "terror_aura"]);
     expect(enemyStrikes("haunt", 1).map((s) => s.name)).toEqual(["Grave Grasp", "Ice Spear", "Ghastly Fetter"]);
-    expect(graveGrasp.kit.cone).toBe(3);
+    expect(graveGrasp.kit.spread).toEqual({ shape: "cone", rows: 3 });
     expect(iceSpear).toMatchObject({ cooldown: 2 });
-    expect(iceSpear.kit.line).toBe(5);
+    expect(iceSpear.kit.spread).toEqual({ shape: "line", length: 5 });
     expect(fetter).toMatchObject({ range: 5, cost: 1, cooldown: 3, saveOr: { effect: "reeling", turns: 3, amount: 1 } });
   });
 });
