@@ -2138,6 +2138,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         const fetter = u.conditions.find((c) => c.kind === "fettered" && c.at);
         const spot = fetter?.at;
         const key = spot ? `fetter:${id}:${spot.q},${spot.r}` : "";
+        // Any chain of theirs to another spot is gone, at once: they are held by this one now (or by none).
+        fxs.letGo(`fetter:${id}:`, key);
         if (spot && !fxs.holds(key) && follow()) {
           const holding = () => !!standing(id)?.conditions.some((c) => c.kind === "fettered" && c.at?.q === spot.q && c.at?.r === spot.r);
           fxs.fetter({ key, follow, holding }, point(spot), FETTER.iron, FETTER.glow);

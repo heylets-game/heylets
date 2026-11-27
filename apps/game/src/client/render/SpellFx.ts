@@ -2139,6 +2139,11 @@ export class SpellFx {
     return this.bound.has(key);
   }
 
+  /** Let go at once of every effect bound to a key starting with `prefix`, bar `keep`: each fades out as it would at its end. */
+  letGo(prefix: string, keep?: string) {
+    for (const [key, release] of this.bound) if (key.startsWith(prefix) && key !== keep) release();
+  }
+
   /**
    * The dread round one with a Terror Aura (a Haunt), for as long as `bind.holding()` says it stands, following it:
    * a dark ring on the ground at the edge of its reach (`radius`), breathing; a dark haze over the ground inside it;
