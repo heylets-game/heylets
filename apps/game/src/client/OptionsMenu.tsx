@@ -1,16 +1,33 @@
 // The game menu: one window for everything that is not the game itself. The
 // cog on the bottom bar (or Escape) opens it over whatever view you are in;
-// nothing pauses behind it. Down the left are the view's own actions (the
-// invite link, your account, leaving) and putting things back; beside them
-// the sound and the display.
+// nothing pauses behind it. It is a window in the new UI's wood (ui/WoodWindow.tsx).
+//
+//   +-[ Menu ]-----------------------------------------+
+//   |        Heylets Harbor  ·  crew · invite code      |
+//   | > Resume        |  Sound                         |
+//   |   (the view's)  |  ( Sound .............. On )   |
+//   |   SETTINGS      |  Volume ===========o    50%    |
+//   |   Sound      >  |  ...                           |
+//   |   Graphics   >  |                                |
+//   |   Interface  >  |                                |
+//   |   Reset pos.    |                                |
+//   |   Main menu     |                                |
+//   +--------------------------------------------------+
+//
+// Down the left are the view's own actions (the invite link, your account,
+// leaving), the settings' pages (Settings.tsx SETTINGS_PAGES), and putting
+// your hero back or going out. The page picked fills the right. On a phone
+// the list fills the window and a page opens over it as a submenu, with a
+// way back.
 //
 // It closes on Escape, on Resume, or on a press outside the window.
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { PixelIcon } from "./PixelIcon";
-import { SettingsSections } from "./Settings";
-import { GEAR } from "./ui/menuIcons";
+import { SETTINGS_PAGES, SettingsPageBody } from "./Settings";
+import { WoodWindow } from "./ui/WoodWindow";
+import { COMPASS, DOOR, GEAR, PLAY } from "./ui/menuIcons";
 
 export interface ResetPosition {
   /** Ask the server to put your hero back. */
@@ -28,7 +45,12 @@ export interface MenuAction {
   /** Stay in the menu after it runs (copying a link); otherwise the menu closes. */
   stay?: boolean;
   tone?: "primary" | "danger" | "nudge";
+  /** A pixel glyph (PixelIcon rows) before the label. */
+  icon?: string[];
 }
+
+/** The settings page last looked at, opened again next time. */
+let lastPage = SETTINGS_PAGES[0].key;
 
 /** Out to the main menu (#menu in App.tsx), from wherever you are. */
 export const MAIN_MENU_HASH = "#menu";
@@ -49,9 +71,13 @@ export function OptionsMenu({ reset, resetBlocked, mainMenuBlocked, title = "The
   actions?: MenuAction[];
 }) {
   const [open, setOpen] = useState(false);
+  const [pageKey, setPageKey] = useState(lastPage);
+  /** On a phone: a page is open over the list. (On a computer both are always shown.) */
+  const [inPage, setInPage] = useState(false);
   const gear = useRef<HTMLButtonElement>(null);
   const first = useRef<HTMLButtonElement>(null);
   const menuId = useId();
+  const page = SETTINGS_PAGES.find((p) => p.key === pageKey) ?? SETTINGS_PAGES[0];
 
   // Escape opens the menu when nothing else is open over the view, and closes it again. Anything that shuts on
   // Escape itself (a drop of the top bar, a piece being carried) says so with `data-closes-on-escape`, and has it first.
@@ -72,9 +98,24 @@ export function OptionsMenu({ reset, resetBlocked, mainMenuBlocked, title = "The
   }, [open]);
   useEffect(() => {
     if (open) first.current?.focus();
+    else setInPage(false);
   }, [open]);
 
   const close = () => setOpen(false);
+  const openPage = (key: string) => {
+    lastPage = key;
+    setPageKey(key);
+    setInPage(true);
+  };
+
+  /** One entry down the left: its glyph, its words, and a chevron if it opens a page. */
+  const entry = (icon: string[] | undefined, label: ReactNode, chevron = false) => (
+    <>
+      <span className="menu-entry-icon">{icon && <PixelIcon rows={icon} size={16} />}</span>
+      <span className="menu-entry-label">{label}</span>
+      {chevron && <span className="menu-entry-chevron" aria-hidden>›</span>}
+    </>
+  );
 
   return (
     <span className="options">
@@ -93,59 +134,85 @@ export function OptionsMenu({ reset, resetBlocked, mainMenuBlocked, title = "The
       {/* Drawn into the view itself, not here in the bar: the bar is filtered, and a filtered box would pin the menu inside it. */}
       {open && createPortal(
         <div className="overlay menu-overlay" onClick={(e) => e.target === e.currentTarget && close()}>
-          <div className="panel window game-menu" id={menuId} role="dialog" aria-label="Menu">
-            <span className="win-plate">Menu</span>
-            <header className="menu-head">
+          <WoodWindow className={`game-menu ${inPage ? "in-page" : ""}`} id={menuId} plate="Menu">
+            <header className="menu-head timber-head">
               <h2>{title}</h2>
-              {subtitle && <p className="muted">{subtitle}</p>}
+              {subtitle && <p>{subtitle}</p>}
             </header>
-            <div className="menu-cols">
-              <section className="menu-col">
-                <h3>Game</h3>
-                <button ref={first} className="primary menu-action" onClick={close}>Resume</button>
-                {actions.map((a, i) => (
+            <div className="menu-body">
+              <nav className="menu-rail" aria-label="Menu">
+                <button ref={first} className="primary menu-entry menu-resume" onClick={close}>{entry(PLAY, "Resume")}</button>
+                {actions.length > 0 && (
+                  <div className="menu-group">
+                    {actions.map((a, i) => (
+                      <button
+                        key={i}
+                        className={`menu-entry ${a.tone ?? ""}`}
+                        disabled={a.disabled}
+                        title={a.hint}
+                        onClick={() => {
+                          a.run();
+                          if (!a.stay) close();
+                        }}
+                      >
+                        {entry(a.icon, a.label)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="menu-group" role="tablist" aria-label="Settings">
+                  <h3 className="menu-group-head">Settings</h3>
+                  {SETTINGS_PAGES.map((p) => (
+                    <button
+                      key={p.key}
+                      role="tab"
+                      className={`menu-entry menu-tab ${p.key === page.key ? "selected" : ""}`}
+                      aria-selected={p.key === page.key}
+                      aria-controls={`${menuId}-page`}
+                      onClick={() => openPage(p.key)}
+                    >
+                      {entry(p.icon, p.label, true)}
+                    </button>
+                  ))}
+                </div>
+                <div className="menu-group menu-out">
                   <button
-                    key={i}
-                    className={`menu-action ${a.tone ?? ""}`}
-                    disabled={a.disabled}
-                    title={a.hint}
+                    className="menu-entry"
+                    disabled={!reset}
+                    title={reset ? `Stuck or lost? Put your hero back at ${reset.to}` : resetBlocked}
                     onClick={() => {
-                      a.run();
-                      if (!a.stay) close();
+                      reset?.run();
+                      close();
                     }}
                   >
-                    {a.label}
+                    {entry(COMPASS, "Reset position")}
                   </button>
-                ))}
-                <button
-                  className="menu-action"
-                  disabled={!reset}
-                  title={reset ? `Put your hero back at ${reset.to}` : resetBlocked}
-                  onClick={() => {
-                    reset?.run();
-                    close();
-                  }}
-                >
-                  Reset position
-                </button>
-                <p className="options-note muted">{reset ? `Stuck or lost? This puts your hero back at ${reset.to}.` : resetBlocked}</p>
-                <button
-                  className="menu-action"
-                  disabled={!!mainMenuBlocked}
-                  title={mainMenuBlocked ?? "Your account, your crew, and starting or joining another"}
-                  onClick={() => {
-                    close();
-                    location.hash = MAIN_MENU_HASH;
-                  }}
-                >
-                  Main menu
-                </button>
-                {mainMenuBlocked && <p className="options-note muted">{mainMenuBlocked}</p>}
-              </section>
+                  <p className="menu-why">{reset ? `Stuck or lost? Back to ${reset.to}.` : resetBlocked}</p>
+                  <button
+                    className="menu-entry"
+                    disabled={!!mainMenuBlocked}
+                    title={mainMenuBlocked ?? "Your account, your crew, and starting or joining another"}
+                    onClick={() => {
+                      close();
+                      location.hash = MAIN_MENU_HASH;
+                    }}
+                  >
+                    {entry(DOOR, "Main menu")}
+                  </button>
+                  {mainMenuBlocked && <p className="menu-why">{mainMenuBlocked}</p>}
+                </div>
+              </nav>
 
-              <SettingsSections />
+              <section className="menu-page" id={`${menuId}-page`} role="tabpanel" aria-label={page.label}>
+                <header className="menu-page-head">
+                  <button className="menu-back" aria-label="Back to the menu" onClick={() => setInPage(false)}>‹</button>
+                  <PixelIcon rows={page.icon} size={18} />
+                  <h3>{page.label}</h3>
+                </header>
+                <SettingsPageBody page={page} />
+              </section>
             </div>
-          </div>
+          </WoodWindow>
         </div>,
         gear.current?.closest(".run") ?? document.body,
       )}

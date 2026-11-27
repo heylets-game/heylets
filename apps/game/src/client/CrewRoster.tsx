@@ -8,12 +8,19 @@
 // first, outlined in gold, and a click on one plays them; everyone else's are
 // outlined in blue. In town a "+" under the list changes the party. The list
 // folds away to its heading.
+//
+// With `avatarsOnPhone` (the party's corner of the Harbor and a map), a phone
+// shows each person as a round portrait with their level on a badge, and a
+// tap opens a card with the rest: their name, class and health, and what can
+// be done with them (play them, their sheet, and the right-click's offers).
 
 import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import { PartyPicker } from "./PartyPicker";
 import type { Outfit } from "@gantt-quest/world";
 import { label } from "./labels";
 import { spriteDataUrl, spriteKey } from "./render/sprites";
+import { uiZoom } from "./uiScale";
+import { PHONE_QUERY, useMedia } from "./useMedia";
 import "./roster.css";
 
 export interface RosterMember {
@@ -71,6 +78,8 @@ interface Props {
   party?: RosterParty;
   /** Kept folded or not between visits, under this name. Without it the list cannot be folded. */
   foldId?: string;
+  /** On a phone: round portraits only, a tap opening a card with the rest. */
+  avatarsOnPhone?: boolean;
 }
 
 const foldKey = (id: string) => `gq.roster.${id}.folded`;
@@ -94,7 +103,8 @@ function face(classId: string, outfit?: Outfit): string {
 
 const byName = (a: RosterMember, b: RosterMember) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
 
-export function CrewRoster({ members, you, heading, onOpen, openId, menu, party, foldId }: Props) {
+export function CrewRoster({ members, you, heading, onOpen, openId, menu, party, foldId, avatarsOnPhone }: Props) {
+  const avatars = useMedia(PHONE_QUERY) && !!avatarsOnPhone;
   const yours = (id: string) => !!party?.ids.includes(id);
   // Yours first, in the party's own order; then whoever is here; then the rest.
   const own = party ? party.ids.flatMap((id) => members.filter((m) => m.id === id)) : [];
@@ -111,8 +121,12 @@ export function CrewRoster({ members, you, heading, onOpen, openId, menu, party,
       return !f;
     });
   const [picking, setPicking] = useState(false);
-  /** The menu that is open: whose, and where on screen it was asked for. */
-  const [asked, setAsked] = useState<{ id: string; x: number; y: number } | null>(null);
+  /**
+   * The menu that is open: whose, and where on screen it was asked for. A card (`card`) is a phone's tap on a
+   * portrait: it stands beside the portrait (`right` from the screen's edge) and has their details and what a click
+   * would have done too.
+   */
+  const [asked, setAsked] = useState<{ id: string; x: number; y: number; card?: boolean; right?: number } | null>(null);
   useEffect(() => {
     if (!asked) return;
     const close = () => setAsked(null);
@@ -130,6 +144,47 @@ export function CrewRoster({ members, you, heading, onOpen, openId, menu, party,
   }, [asked]);
   const askedOf = asked ? members.find((m) => m.id === asked.id) : undefined;
   const offered = askedOf && menu ? menu(askedOf) : [];
+
+  /** What a plain click on someone's row does, as one of the card's entries; null where it does nothing. */
+  const clickAction = (m: RosterMember): RosterAction | null => {
+    const mine = m.id === (party?.acting ?? you);
+    const ofYours = yours(m.id);
+    if (ofYours && party && !mine) return { label: `Play ${m.name}`, blocked: party.blocked?.(m.id), run: () => party.onPick(m.id, "only") };
+    if (ofYours && party && mine && party.selected?.length && !onOpen) return { label: `Play ${m.name} alone`, run: () => party.onPick(m.id, "only") };
+    if (onOpen) return { label: "Hero sheet", run: () => onOpen(m.id) };
+    return null;
+  };
+  const cardActions = askedOf && asked?.card ? [clickAction(askedOf), ...offered].filter((a, i, all): a is RosterAction => !!a && all.findIndex((b) => b?.label === a.label) === i) : offered;
+
+  /** On a phone: a round portrait with their level, and health under it where it is known. A tap opens their card. */
+  const avatar = (m: RosterMember) => {
+    const mine = m.id === (party?.acting ?? you);
+    const ofYours = yours(m.id);
+    const grouped = !mine && !!party?.selected?.includes(m.id);
+    const hp = m.hp ? Math.max(0, Math.min(100, (100 * m.hp.now) / Math.max(1, m.hp.max))) : null;
+    const opened = asked?.card && asked.id === m.id;
+    return (
+      <li key={m.id} className={`cm-av-li ${m.here || ofYours ? "here" : "away"}${mine ? " mine" : ""}${grouped ? " grouped" : ""}${party ? (ofYours ? " yours" : " theirs") : ""}${opened ? " open" : ""}`}>
+        <button
+          type="button"
+          className="cm-av"
+          aria-label={`${m.name}, level ${m.level} ${label("class", m.classId)}${m.hp ? `, ${m.hp.now} of ${m.hp.max} health` : ""}${m.here ? "" : " (away)"}`}
+          aria-haspopup="menu"
+          aria-expanded={!!opened}
+          onClick={(e) => {
+            if (opened) return setAsked(null);
+            const z = uiZoom() || 1;
+            const r = e.currentTarget.getBoundingClientRect();
+            setAsked({ id: m.id, card: true, x: r.left / z, y: r.top / z, right: (innerWidth - r.left) / z + 8 });
+          }}
+        >
+          <img className="pixel-icon" src={face(m.classId, m.outfit)} width={36} height={44} alt="" />
+          <span className="cm-av-lv" aria-hidden>{m.level}</span>
+          {hp !== null && <span className="cm-av-hp" aria-hidden><i style={{ width: `${hp}%` }} /></span>}
+        </button>
+      </li>
+    );
+  };
 
   const row = (m: RosterMember) => {
     const mine = m.id === (party?.acting ?? you);
@@ -194,6 +249,52 @@ export function CrewRoster({ members, you, heading, onOpen, openId, menu, party,
     );
   };
 
+  const card = asked?.card && askedOf ? (
+    <div className="cm-card timber" role="menu" aria-label={askedOf.name} style={{ right: asked.right, top: Math.max(6, Math.min(asked.y, innerHeight / (uiZoom() || 1) - 60 - cardActions.length * 40 - 90)) }} onPointerDown={(e) => e.stopPropagation()}>
+      <div className="cm-card-head">
+        <span className="cm-face"><img className="pixel-icon" src={face(askedOf.classId, askedOf.outfit)} width={36} height={44} alt="" /></span>
+        <span className="cm-text">
+          <span className="cm-line">
+            <strong className="cm-name">{askedOf.name}</strong>
+            {askedOf.id === (party?.acting ?? you) && <span className="cm-tag you">you</span>}
+          </span>
+          <span className="cm-line">
+            <span className="cm-lv">Lv {askedOf.level}</span>
+            <span className="cm-class">{label("class", askedOf.classId)}</span>
+          </span>
+          {(askedOf.tags?.length || !askedOf.here) && <span className="cm-line cm-card-tags">{[...(askedOf.tags ?? []), ...(askedOf.here || yours(askedOf.id) ? [] : ["away"])].join(" · ")}</span>}
+        </span>
+      </div>
+      {askedOf.hp && (
+        <span className="cm-hp" aria-label={`${askedOf.hp.now} of ${askedOf.hp.max} health`}>
+          <span className="cm-hp-fill" style={{ width: `${Math.max(0, Math.min(100, (100 * askedOf.hp.now) / Math.max(1, askedOf.hp.max)))}%` }} />
+          <span className="cm-hp-text">{askedOf.hp.now}/{askedOf.hp.max}{askedOf.hp.shield ? ` +${askedOf.hp.shield}` : ""}</span>
+        </span>
+      )}
+      {cardActions.map((a) => (
+        <button key={a.label} type="button" role="menuitem" className="cm-menu-item" disabled={!!a.blocked} onClick={() => { setAsked(null); a.run(); }}>
+          <span>{a.label}</span>
+          {a.blocked && <span className="muted">{a.blocked}</span>}
+        </button>
+      ))}
+    </div>
+  ) : null;
+
+  if (avatars) {
+    return (
+      <div className="crew-roster roster-avatars">
+        <ul className="roster">
+          {own.map(avatar)}
+          {here.map(avatar)}
+          {away.map(avatar)}
+        </ul>
+        {party?.change && <button type="button" className="roster-add" title="Add a hero of yours to the party, or take one out" aria-label="Change the party" onClick={() => setPicking(true)}>+</button>}
+        {picking && party?.change && <PartyPicker leader={party.change.leader} onClose={() => setPicking(false)} onChanged={party.change.onChanged} />}
+        {card}
+      </div>
+    );
+  }
+
   return (
     <div className={`panel crew-roster${folded ? " roster-folded" : ""}`}>
       <div className="roster-top">
@@ -212,7 +313,8 @@ export function CrewRoster({ members, you, heading, onOpen, openId, menu, party,
         </>
       )}
       {picking && party?.change && <PartyPicker leader={party.change.leader} onClose={() => setPicking(false)} onChanged={party.change.onChanged} />}
-      {asked && askedOf && offered.length > 0 && (
+      {card}
+      {asked && !asked.card && askedOf && offered.length > 0 && (
         <div className="cm-menu panel" role="menu" aria-label={askedOf.name} style={{ left: Math.min(asked.x, innerWidth - 230), top: Math.min(asked.y, innerHeight - 40 - offered.length * 44) }} onPointerDown={(e) => e.stopPropagation()}>
           <strong className="cm-menu-name">{askedOf.name}</strong>
           {offered.map((a) => (

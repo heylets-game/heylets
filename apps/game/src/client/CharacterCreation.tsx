@@ -13,6 +13,7 @@ import { GRAPHICS_HELP } from "./render/graphics";
 import { isBlankPortrait } from "./render/portraits";
 import { spriteDataUrl } from "./render/sprites";
 import { useAct } from "./useAct";
+import { WoodWindow } from "./ui/WoodWindow";
 
 const STEPS = ["Class", "Look", "Name & stats"] as const;
 
@@ -154,7 +155,7 @@ export function CharacterCreation({ draft, refresh, onBack, onDone, note }: Prop
   const main = mainStat(classId);
   return (
     <div className="mm-layout creation-layout">
-      <section className="panel window mm-panel cr-panel" aria-labelledby="cr-title">
+      <WoodWindow className="mm-panel cr-panel" role="region" labelledBy="cr-title">
         <header className="mm-sub-head">
           <button className="link mm-back" onClick={step === 0 ? onBack : () => setStep(step - 1)}>‹ Back</button>
           <h2 id="cr-title">Create your hero</h2>
@@ -243,11 +244,11 @@ export function CharacterCreation({ draft, refresh, onBack, onDone, note }: Prop
             </>
           )}
         </footer>
-      </section>
+      </WoodWindow>
 
       <aside className="cr-stage" aria-label="Your hero">
         <LookStage classId={classId} look={look} onChange={setLook} view={view} size={narrow ? 170 : 340} />
-        <div className="panel cr-plate">
+        <WoodWindow className="cr-plate" role="group" label="Your hero">
           <strong className="cr-plate-name">{name.trim() || "Your hero"}</strong>
           <span className="cr-plate-class">
             {label("class", classId)}
@@ -262,7 +263,7 @@ export function CharacterCreation({ draft, refresh, onBack, onDone, note }: Prop
             <Icon name={WEAPON_ICON[cls.weapons[0]] ?? "broadsword"} color={RARITY_COLOR.common} size={18} />
             <span>Starts with <strong>{label("weapon", cls.weapons[0])}</strong></span>
           </span>
-        </div>
+        </WoodWindow>
       </aside>
     </div>
   );

@@ -5,6 +5,7 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { api, type Me } from "./api";
+import { WoodWindow } from "./ui/WoodWindow";
 
 type Mode = "login" | "signup" | "reset";
 
@@ -190,26 +191,27 @@ export function AccountPanel({ me, refresh, onClose }: { me: Me; refresh(): Prom
   };
   return (
     <div className="overlay inv-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="panel account" role="dialog" aria-label="Account">
-        <header className="inv-head">
-          <h2>Account</h2>
-          <span className="spacer" />
-          <button onClick={onClose}>Close</button>
+      <WoodWindow className="account-window" plate="Account" onClose={onClose}>
+        <header className="wood-head timber-head">
+          <h2>{me.player.email ? "Your account" : "Save your progress"}</h2>
+          <p>{me.player.email ? <>Logged in as <strong>{me.player.email}</strong></> : "You are playing as a guest"}</p>
         </header>
-        {me.player.email ? (
-          <>
-            <p>Logged in as <strong>{me.player.email}</strong>.</p>
-            <p className="muted">Your character, gear and crew are saved to this address. Log in with it on any device to pick up where you left off.</p>
-            <button className="danger" disabled={busy} onClick={signOut}>Log out</button>
-          </>
-        ) : (
-          <>
-            <p><strong>You are playing as a guest.</strong></p>
-            <p className="muted">Right now this character exists only in this browser. Clear its cookies, or switch device, and it is gone. Make an account to keep it.</p>
-            <EmailSignIn onDone={refresh} hasCharacter={me.character?.status === "active"} />
-          </>
-        )}
-      </div>
+        <div className="wood-body">
+          {me.player.email ? (
+            <>
+              <p className="muted">Your character, gear and crew are saved to this address. Log in with it on any device to pick up where you left off.</p>
+              <div className="account-foot">
+                <button className="danger" disabled={busy} onClick={signOut}>Log out</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="muted">Right now this character exists only in this browser. Clear its cookies, or switch device, and it is gone. Make an account to keep it.</p>
+              <EmailSignIn onDone={refresh} hasCharacter={me.character?.status === "active"} />
+            </>
+          )}
+        </div>
+      </WoodWindow>
     </div>
   );
 }

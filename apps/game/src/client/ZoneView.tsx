@@ -156,6 +156,7 @@ import { Trading } from "./TradePanel";
 import { useAudioScene } from "./audio/useAudioScene";
 import { sounds } from "./audio/gameSounds";
 import { OptionsMenu } from "./OptionsMenu";
+import { LEAVE } from "./ui/menuIcons";
 import * as THREE from "three";
 import { SpellFx, WAVE_PACE } from "./render/SpellFx";
 import { DREAD, FETTER, FIELD_LOOKS, fieldReach } from "./render/signatureMoves";
@@ -3517,6 +3518,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
             ...crewOnline.map((m): RosterMember => ({ id: m.id, name: m.name, classId: m.classId, level: m.level, here: m.zone?.code === code, outfit: state.units.find((u) => u.id === m.id)?.outfit, tags: m.zone?.fighting ? ["in a fight"] : m.zone && m.zone.code !== code ? ["on another map"] : m.town ? ["in the Harbor"] : undefined })),
           ]}
           foldId="zone"
+          avatarsOnPhone
           party={{
             ids: mine.map((u) => u.id),
             acting: act.id,
@@ -3648,12 +3650,14 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         menu={<OptionsMenu mainMenuBlocked={fighting ? "You're in a fight: win it or flee first." : caves && !atMouth ? "Walk back to the cave mouth first." : undefined} title={state.options.name ?? `Map ${code}`} subtitle={<>{state.options.biome} · {state.options.size}{state.options.tier ? ` · ${state.options.tier} ${state.options.tier === 1 ? "ring" : "rings"} out` : ""}</>} actions={[caves
           ? {
               label: "Leave the cave",
+              icon: LEAVE,
               hint: !atMouth ? "The way out is the cave mouth: walk back to it to leave." : !fighting ? "Back up to the Harbor. The cave stays as you left it." : fleeBlock ? `In a fight: you can leave once you could flee it. ${fleeBlock}` : "Flee the fight and climb back up to the Harbor.",
               disabled: !atMouth || (fighting && !!fleeBlock),
               run: fighting ? fleeAndLeave : leave,
             }
           : {
               label: "Leave the map",
+              icon: LEAVE,
               hint: !fighting ? "Back to the Harbor. The map stays as you left it." : fleeBlock ? `In a fight: you can leave once you could flee it. ${fleeBlock}` : "Flee the fight and go back to the Harbor.",
               disabled: fighting && !!fleeBlock,
               run: fighting ? fleeAndLeave : leave,

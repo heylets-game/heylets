@@ -31,6 +31,7 @@ import { CrewRoster } from "./CrewRoster";
 import { DragPanel } from "./DragPanel";
 import { TopBar, type TopBarItem } from "./ui/TopBar";
 import { OptionsMenu } from "./OptionsMenu";
+import { LEAVE } from "./ui/menuIcons";
 import { HudBar, HudCorner } from "./ui/Hud";
 import { InventoryScreen } from "./InventoryScreen";
 import { Logbook } from "./Logbook";
@@ -683,7 +684,7 @@ export function HutView({ ownerId, me, refresh, onLeave }: { ownerId: string; me
     <OptionsMenu
       title={title}
       subtitle={tier !== null ? hutTier(tier).name : undefined}
-      actions={[{ label: "Leave", run: onLeave }]}
+      actions={[{ label: "Leave", icon: LEAVE, run: onLeave }]}
       reset={hut.status !== "open" || tier === null ? undefined : {
         to: "the door",
         run: () => {
@@ -889,7 +890,7 @@ export function HutView({ ownerId, me, refresh, onLeave }: { ownerId: string; me
         />
       </DragPanel>
 
-      <DragPanel id="hut.chat" title="Hut chat" foldOnPhone expandable className="chat panel harbor-chat">
+      <DragPanel id="hut.chat" title="Hut chat" foldOnPhone expandable movable className="chat panel harbor-chat timber">
         <div className="chat-lines">
           {hut.chat.length === 0 && <div className="muted">Only people inside this hut see what is said here.</div>}
           {hut.chat.map((l, i) => <div key={i} className="line hero"><strong>{l.name}: </strong>{l.text}</div>)}

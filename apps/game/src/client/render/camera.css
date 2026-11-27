@@ -1,4 +1,5 @@
-/* The renderer's own view-turning buttons, at the right edge of the map. */
+/* The renderer's camera buttons, at the right edge of the map: a touch screen's only. A computer has keys for them
+   (the menu's Keys page lists them), so the column is not shown there. */
 .camera-rotate { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); z-index: 8; display: flex; flex-direction: column; gap: 6px; }
 .camera-rotate button { width: 34px; height: 34px; padding: 0; font-size: 18px; line-height: 1; background: var(--raise, rgba(27, 24, 48, 0.9)); }
 @media (pointer: coarse) { .camera-rotate button { width: 44px; height: 44px; font-size: 22px; } }
@@ -6,7 +7,20 @@
 .camera-rotate .camera-follow { display: grid; place-items: center; color: var(--brass-hi, #c9c3e6); }
 .camera-rotate .camera-follow[aria-pressed="true"] { color: var(--gold, #ffd23f); border-color: var(--gold, #ffd23f); background: #4a4320; }
 .camera-rotate .camera-follow[hidden] { display: none; }
-/* The combat view (cutaway.ts), on a battle map only: lit gold while trees and walls in the way are cut away. Set a little apart from the turning buttons. */
+/* The combat view (cutaway.ts), on a battle map only: lit gold while trees and walls in the way are cut away. */
 .camera-rotate .camera-cutaway { display: grid; place-items: center; margin-top: 6px; color: var(--brass-hi, #c9c3e6); }
 .camera-rotate .camera-cutaway[aria-pressed="true"] { color: var(--gold, #ffd23f); border-color: var(--gold, #ffd23f); background: #4a4320; }
 .camera-rotate .camera-cutaway[hidden] { display: none; }
+
+/* The camera button: only on a touch screen, where it folds the column away. */
+.camera-rotate .camera-fold { display: none; }
+@media (pointer: fine) { .camera-rotate { display: none; } }
+@media (pointer: coarse) {
+  /* Opening downward from where the camera button stands, so it stays put under the finger. */
+  .camera-rotate { top: calc(50% - 22px); transform: none; }
+  .camera-rotate .camera-fold { display: grid; place-items: center; color: var(--brass-hi, #c9c3e6); }
+  .camera-rotate .camera-fold[aria-expanded="true"] { color: var(--gold, #ffd23f); border-color: var(--gold, #ffd23f); background: #4a4320; }
+  /* Folded: the camera button alone. Opened: what it holds, under it. */
+  .camera-rotate:not(.open) > :not(.camera-fold) { display: none; }
+  .camera-rotate .camera-cutaway { margin-top: 0; }
+}

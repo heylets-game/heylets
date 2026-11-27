@@ -278,6 +278,8 @@
 .run:has(> .hud) .harbor-chat, .run:has(> .hud) .chat { left: 20px; right: auto; bottom: 20px; }
 /* Clear of the bar and the strip over it, wherever their top is (--hud-all-h, measured in Hud.tsx). */
 .run:has(> .hud) .tip { bottom: calc(var(--hud-all-h, 190px) / var(--ui-z, 1) + 16px); }
+/* A phone hangs the tip near the top instead (styles.css): only its top is set there, or it stretches down to the bar. */
+@media (max-width: 760px) { .run:has(> .hud) .tip { bottom: auto; width: max-content; box-sizing: border-box; } }
 .run:has(> .hud) .toast { top: 16px; }
 @media (max-width: 1500px) {
   /* The talk would sit under the bar on a narrower screen: lift it clear, and the column above it. */
@@ -319,27 +321,160 @@
   .run:has(> .hud):has(.camera-rotate) .harbor-chat:not(.folded), .run:has(> .hud):has(.camera-rotate) .chat:not(.folded) { left: 6px; right: 62px; width: auto; }
 }
 
-/* ---------- The game menu ---------- */
-.overlay.menu-overlay { position: fixed; z-index: 80; }
-.overlay > .panel.game-menu { position: relative; max-width: 860px; width: 100%; max-height: calc(100% - 40px); overflow-y: auto; display: flex; flex-direction: column; gap: 12px; white-space: normal; }
-.menu-head { text-align: center; padding-top: 6px; }
-.menu-head h2 { margin: 0; font-size: 30px; color: var(--gold); background: linear-gradient(180deg, #fbeab4 10%, #c29a4c 55%, #8a6a30 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.6)); }
-.menu-head p { margin: 2px 0 0; font-family: var(--font-book); font-size: 15px; }
-.menu-cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
-.menu-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.menu-col h3 { margin: 0 0 2px; text-align: center; font-size: 19px; background-position: center bottom; }
-.menu-action { width: 100%; text-align: center; padding: 8px 12px; }
-.menu-action.nudge { border-color: var(--gold); color: var(--gold); }
-.menu-slider { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; }
-.menu-slider input { grid-column: 1 / -1; width: 100%; }
-.options-row { display: flex; align-items: center; gap: 8px; }
-.options-sound { width: 100%; }
-.options-switch { background: var(--well); }
-.options-note { margin: 0; }
-@media (max-width: 760px) { .menu-cols { grid-template-columns: 1fr; } }
-.overlay > .panel.game-menu { overflow: visible; }
-.menu-cols { overflow-y: auto; min-height: 0; padding: 2px; }
-.menu-col .options-sound { flex: none; }
+/* ---------- The game menu (OptionsMenu.tsx) ----------
+   A board of the new UI's timber (theme.css `.timber`) in the wood of the sea bag's window, with the logbook's brass
+   corners: the place's name on a lit strip across the top, the list down the left on a darker inset, and the page
+   picked beside it. */
+.overlay.menu-overlay { position: fixed; z-index: 80; padding: 34px 16px 16px; }
+.wood-window.game-menu { width: min(820px, 100%); max-height: 100%; display: flex; flex-direction: column; }
+.game-menu > .win-plate { font-family: var(--font-title); font-size: 22px; padding: 0 38px 2px; }
+
+.menu-head { flex: none; padding: 20px 28px 10px; text-align: center; }
+.menu-head h2 {
+  margin: 0; font-family: var(--font-title); font-weight: normal; font-size: 30px; line-height: 1.1; color: var(--gold);
+  background: linear-gradient(180deg, #fbeab4 10%, #c29a4c 55%, #8a6a30 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.7));
+}
+.menu-head p { margin: 2px 0 0; font-family: var(--font-book); font-size: 15px; color: #c9ad8c; text-shadow: 0 1px 0 #000; }
+.menu-head p .code { color: var(--t-brass-hi); letter-spacing: 0.08em; }
+
+.menu-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 250px minmax(0, 1fr); }
+
+/* The list: a darker board let into the left, its entries the timber's soft buttons. */
+.menu-rail {
+  min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 12px; padding: 14px 12px;
+  background: linear-gradient(90deg, rgba(10, 5, 4, 0.5), rgba(10, 5, 4, 0.32));
+  border-right: 2px solid var(--t-out); box-shadow: 1px 0 0 rgba(214, 150, 96, 0.14), inset 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+.menu-group { display: flex; flex-direction: column; gap: 5px; }
+.menu-group-head { margin: 0 2px 1px; font-family: var(--font-head); font-weight: normal; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: #a98b6c; text-align: left; }
+.menu-out { margin-top: auto; padding-top: 12px; border-top: 1px solid rgba(0, 0, 0, 0.55); box-shadow: inset 0 1px 0 rgba(214, 150, 96, 0.12); }
+/* Every entry is the same row: dark wood, one height, one face, its glyph and its words. Only an accent tells them
+   apart: Resume in green, a nudge (save your progress) in gold, the open page lit brass as the top bar's open tab. */
+.game-menu.timber .menu-rail button.menu-entry {
+  width: 100%; height: 38px; display: flex; align-items: center; gap: 10px; padding: 0 10px; text-align: left;
+  font-family: inherit; font-size: 15px; letter-spacing: 0; color: var(--text, #fbe6c8); text-shadow: 0 1px 0 rgba(0, 0, 0, 0.7);
+  background: linear-gradient(180deg, rgba(255, 220, 180, 0.08), rgba(0, 0, 0, 0.14)), rgba(61, 35, 29, 0.92);
+  border: 1px solid var(--t-out); border-radius: 3px;
+  box-shadow: inset 0 1px 0 rgba(255, 214, 170, 0.12), 0 0 0 1px rgba(107, 53, 36, 0.7);
+}
+.game-menu.timber .menu-rail button.menu-entry:hover:not(:disabled) { background: linear-gradient(180deg, rgba(255, 220, 180, 0.16), rgba(0, 0, 0, 0.08)), #6a3a26; box-shadow: inset 0 1px 0 rgba(255, 214, 170, 0.22), 0 0 0 1px var(--t-brass); }
+.game-menu.timber .menu-rail button.menu-entry:active:not(:disabled) { box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--t-brass); }
+.game-menu.timber .menu-rail button.menu-entry.primary { background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(0, 0, 0, 0.16)), #3e7a52; box-shadow: inset 0 1px 0 rgba(220, 255, 220, 0.25), 0 0 0 1px #2f5a3c; }
+.game-menu.timber .menu-rail button.menu-entry.primary:hover:not(:disabled) { background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(0, 0, 0, 0.1)), #4a8d60; box-shadow: inset 0 1px 0 rgba(220, 255, 220, 0.3), 0 0 0 1px #86d86c; }
+.game-menu.timber .menu-rail button.menu-entry.nudge { color: #fbe08a; }
+.game-menu.timber .menu-rail button.menu-entry.nudge .menu-entry-icon { color: #f4c64e; }
+.game-menu.timber .menu-rail button.menu-entry.selected { color: #2a1406; text-shadow: none; background: linear-gradient(180deg, #fbe7a6, #e0b04a); border-color: #6b4a12; box-shadow: inset 0 1px 0 #fff7d6, 0 0 0 1px #6b4a12; }
+.game-menu.timber .menu-rail button.menu-entry.selected:hover:not(:disabled) { background: linear-gradient(180deg, #fff1bf, #ebbd58); box-shadow: inset 0 1px 0 #fff7d6, 0 0 0 1px var(--t-brass-hi); }
+.game-menu.timber .menu-rail button.menu-entry:disabled { opacity: 0.5; }
+.menu-entry-icon { flex: none; width: 16px; display: grid; place-items: center; color: #c9a24a; }
+.menu-entry.primary .menu-entry-icon { color: #c8f0b8; }
+.menu-entry.selected .menu-entry-icon { color: #5a3a0c; }
+.menu-entry-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.menu-entry-chevron { flex: none; font-size: 20px; line-height: 1; opacity: 0.7; }
+/* Why an entry is greyed out, or what it does, in a line under it. */
+.menu-why { margin: -1px 2px 2px; font-size: 11.5px; line-height: 1.3; color: #a98b6c; }
+
+/* The page: its name over its rows. */
+.menu-page { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 14px 18px 18px; }
+.menu-page-head { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; padding-bottom: 8px; color: var(--t-brass-hi); border-bottom: 1px solid rgba(0, 0, 0, 0.55); box-shadow: 0 1px 0 rgba(214, 150, 96, 0.14); }
+.menu-page-head h3 { margin: 0; font-family: var(--font-head); font-weight: normal; font-size: 20px; letter-spacing: 0.05em; color: var(--t-brass-hi); text-shadow: 0 1px 0 #000; }
+.timber button.menu-back { display: none; width: 32px; height: 32px; padding: 0; font-size: 22px; line-height: 1; }
+
+/* A phone held upright: the list fills the window, and a page opens over it as a submenu with a way back. */
+@media (max-width: 760px) {
+  .overlay.menu-overlay { padding: 30px 8px 8px; }
+  .menu-head { padding: 16px 16px 8px; }
+  .menu-head h2 { font-size: 24px; }
+  .menu-head p { font-size: 13px; }
+  .menu-body { grid-template-columns: minmax(0, 1fr); }
+  .menu-rail { border-right: none; box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.45); }
+  .menu-out { margin-top: 0; }
+  .game-menu:not(.in-page) .menu-page { display: none; }
+  .game-menu.in-page .menu-rail { display: none; }
+  .timber button.menu-back { display: grid; place-items: center; }
+  /* No page is open beside the list, so none of its tabs is lit. */
+  .game-menu.timber:not(.in-page) .menu-rail button.menu-entry.selected { color: var(--text, #fbe6c8); text-shadow: 0 1px 0 rgba(0, 0, 0, 0.7); background: linear-gradient(180deg, rgba(255, 220, 180, 0.08), rgba(0, 0, 0, 0.14)), rgba(61, 35, 29, 0.92); border-color: var(--t-out); box-shadow: inset 0 1px 0 rgba(255, 214, 170, 0.12), 0 0 0 1px rgba(107, 53, 36, 0.7); }
+  .game-menu:not(.in-page) .menu-entry.selected .menu-entry-icon { color: #c9a24a; }
+  .menu-page { padding: 12px 12px 14px; }
+}
+
+/* A phone on its side: a slimmer head, so the list and the page have the height. */
+@media (max-height: 520px) {
+  .overlay.menu-overlay { padding-top: 26px; padding-bottom: 6px; }
+  .menu-head { padding: 14px 16px 5px; }
+  .menu-head h2 { font-size: 21px; }
+  .menu-head p { font-size: 12px; }
+  .menu-rail { gap: 8px; padding: 10px; }
+  .menu-page { padding-top: 10px; }
+}
+
+/* ---------- Settings (Settings.tsx): rows of an icon, a name and what it does, and a control ----------
+   The game menu's pages and the main menu's Settings both. */
+.set-page { display: flex; flex-direction: column; gap: 6px; }
+.set-section h3 { margin: 0 0 8px; }
+.set-page .set-row {
+  width: 100%; box-sizing: border-box; display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 12px;
+  padding: 8px 12px; text-align: left; color: var(--text, #fbe6c8); text-shadow: 0 1px 0 rgba(0, 0, 0, 0.7);
+  background: linear-gradient(180deg, rgba(255, 214, 170, 0.04), rgba(0, 0, 0, 0.1)), rgba(10, 5, 4, 0.42);
+  border: 1px solid #1c0d0e; border-radius: 3px;
+  box-shadow: inset 0 1px 0 rgba(255, 214, 170, 0.05), 0 0 0 1px rgba(107, 53, 36, 0.5);
+}
+.set-page button.set-row:hover:not(:disabled) { border-color: #1c0d0e; background: linear-gradient(180deg, rgba(255, 214, 170, 0.08), rgba(0, 0, 0, 0.06)), rgba(61, 35, 29, 0.7); box-shadow: inset 0 1px 0 rgba(255, 214, 170, 0.1), 0 0 0 1px #c9a24a; }
+.set-page button.set-row:active:not(:disabled) { box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.5), 0 0 0 1px #c9a24a; }
+.set-icon { display: grid; place-items: center; color: #c9a24a; }
+.set-text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.set-label { font-size: 15px; line-height: 1.2; }
+.set-note { font-size: 12px; line-height: 1.3; color: #c9ad8c; }
+.set-control { display: inline-flex; align-items: center; gap: 6px; }
+.set-value { min-width: 4.5ch; text-align: right; font-variant-numeric: tabular-nums; color: var(--t-brass-hi, #f6e2a1); }
+
+/* A switch: a dark slot with a brass knob, slid across and lit green when on. */
+.set-switch {
+  position: relative; display: inline-flex; align-items: center; width: 62px; height: 24px; box-sizing: border-box;
+  border: 1px solid #1c0d0e; border-radius: 12px; background: rgba(10, 5, 4, 0.75);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.7), 0 0 0 1px #6b3524; transition: background 0.15s;
+}
+.set-switch i {
+  position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff3c4, #e0b04a 55%, #8a6420); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.7), 0 0 0 1px #4a320e;
+  transition: left 0.15s;
+}
+.set-switch-word { position: absolute; right: 9px; font-size: 11px; letter-spacing: 0.05em; color: #a98b6c; }
+.set-switch.on { background: linear-gradient(180deg, #2f6a44, #3e7a52); box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.55), 0 0 0 1px #2f5a3c; }
+.set-switch.on i { left: calc(100% - 20px); }
+.set-switch.on .set-switch-word { right: auto; left: 10px; color: #e6f6dc; }
+@media (prefers-reduced-motion: reduce) { .set-switch, .set-switch i { transition: none; } }
+
+/* The volumes: one box, a slider to a line. */
+.set-sliders { display: flex; flex-direction: column; gap: 9px; padding: 10px 12px 12px; background: rgba(10, 5, 4, 0.42); border: 1px solid #1c0d0e; border-radius: 3px; box-shadow: 0 0 0 1px rgba(107, 53, 36, 0.5); }
+.set-slider { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; align-items: center; }
+.set-slider input { grid-column: 1 / -1; width: 100%; }
+.set-slider.master .set-label { font-family: var(--font-head); letter-spacing: 0.04em; color: var(--t-brass-hi, #f6e2a1); }
+.set-slider:not(.master) { padding-left: 12px; }
+.set-slider:not(.master) .set-label { font-size: 14px; }
+
+.set-stepper { display: inline-flex; align-items: center; gap: 4px; }
+.set-stepper button { width: 30px; height: 28px; padding: 0; font-size: 17px; line-height: 1; }
+.set-stepper .set-value { min-width: 5ch; text-align: center; }
+.set-choice { display: inline-flex; }
+.set-choice button { padding: 3px 10px; font-size: 13px; }
+.set-choice button:not(:first-child) { margin-left: -1px; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.set-choice button:not(:last-child) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+/* The Keys page: each key a small worn cap. Rows without an icon close up the icon's column. */
+.set-keys { display: flex; flex-direction: column; gap: 6px; }
+.set-keys .set-row { grid-template-columns: 0 minmax(0, 1fr) auto; gap: 0 12px; }
+.set-kbds { display: inline-flex; align-items: center; gap: 4px; }
+.set-kbds kbd {
+  min-width: 22px; padding: 2px 7px; box-sizing: border-box; text-align: center; font: bold 12px/1.3 ui-monospace, Consolas, monospace; color: var(--t-brass-hi, #f6e2a1);
+  background: linear-gradient(180deg, #4a2a22, #2a1614); border: 1px solid #1c0d0e; border-radius: 3px; box-shadow: inset 0 1px 0 rgba(255, 214, 170, 0.18), 0 2px 0 #1c0d0e;
+}
+.set-kbd-to { font-size: 11px; color: #a98b6c; }
+.set-foot { display: flex; justify-content: flex-end; padding: 2px 4px 0; }
+@media (max-width: 420px) {
+  .set-page .set-row { gap: 9px; padding: 8px 9px; }
+  .set-note { font-size: 11px; }
+}
 
 /* While a minigame has the view (the quarry, fishing, felling), the "where you stand" strip over the bar and the
    crew's cards are put away: the game's own controls sit just above the bar (at --hud-h, which leaves the strip
@@ -369,4 +504,10 @@ body.mining .hud-left, body.fishing .hud-left, .harbor-view.felling .hud-left { 
 }
 @media (max-width: 760px) {
   .run .party-roster { top: 8px; right: 8px; width: fit-content; max-width: 190px; }
+}
+/* A phone: the party as round portraits down the right-hand edge (roster.css), no panel round them, stopping short of
+   the camera's button half way down. */
+@media (max-width: 760px), (max-height: 520px) {
+  .run .party-roster:has(.roster-avatars) { top: 8px; right: 8px; width: auto; max-width: none; padding: 0; background: none; }
+  .run .party-roster .roster-avatars .roster { max-height: calc(50vh / var(--ui-z, 1) - 90px); padding: 4px 8px 10px; }
 }

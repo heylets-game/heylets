@@ -104,22 +104,54 @@
   .cr-class.selected .cr-class-figure img { animation: none; }
 }
 
-/* The menu's big buttons in the theme's own timber and green (welcome.css's older colours are for other screens). */
-.main-menu button.big { box-shadow: inset 0 3px 0 var(--raise-hi), inset 0 -3px 0 var(--raise-lo); }
-.main-menu button.big.primary { background: #45a84c; border-color: var(--out); box-shadow: inset 0 3px 0 #86d86c, inset 0 -3px 0 #2c7c3e; color: #fff; }
-.main-menu button.big.primary:hover:not(:disabled) { background: #52b85a; box-shadow: inset 0 3px 0 #a2e88a, inset 0 -3px 0 #2c7c3e; }
-.main-menu button.big.roll { background: #f4c64e; border-color: var(--out); box-shadow: inset 0 3px 0 #fbe08a, inset 0 -3px 0 #b9822a; color: #3a1d20; text-shadow: none; }
-/* On the gold of a picked class, the gold stat tag goes dark to stay readable. */
+/* ---------------------------------------------------------- the new wood ---
+   The panel is a wood window (ui/WoodWindow.tsx): the sea bag's timber with brass corners, and the new UI's soft
+   controls (theme.css `.timber`). What follows sizes the menu's own parts for it. */
+/* Its body scrolls inside it; the window itself lets its brass corners stand out over its edge. */
+.wood-window.mm-panel { padding: 20px 22px 14px; overflow: visible; --corner-at: -12px; --corner-size: 42px; }
+.mm-panel .mm-title { padding-top: 6px; }
+.mm-panel .mm-foot { border-top: 1px solid rgba(0, 0, 0, 0.55); box-shadow: inset 0 1px 0 rgba(214, 150, 96, 0.12); color: #c9ad8c; }
+.mm-panel .mm-sub-head h2 { font-family: var(--font-head); font-weight: normal; letter-spacing: 0.04em; color: var(--t-brass-hi); text-shadow: 0 1px 0 #000; }
+.mm-panel .muted { color: #c9ad8c; }
+/* The choices: tall timber boards, the first in green. */
+.timber button.mm-choice { min-height: 48px; padding: 9px 16px; font-family: var(--font-head); font-size: 18px; letter-spacing: 0.06em; border-radius: 4px; }
+.timber button.mm-choice.primary, .timber button.big.primary { font-family: var(--font-head); letter-spacing: 0.06em; }
+.timber button.mm-choice.primary { min-height: 58px; font-size: 21px; }
+.timber button.big.primary { font-size: 17px; }
+.timber button.big { min-height: 42px; padding: 8px 18px; font-family: var(--font-head); font-size: 17px; letter-spacing: 0.05em; border-radius: 4px; }
+.timber button.big.roll { color: #2a1406; text-shadow: none; background: linear-gradient(180deg, #fbe7a6, #e0b04a); border-color: #6b4a12; box-shadow: inset 0 1px 0 #fff7d6, 0 0 0 1px #6b4a12; }
+.timber button.big.roll:hover:not(:disabled) { background: linear-gradient(180deg, #fff1bf, #ebbd58); }
+.timber .mm-form input, .timber .mm-code { min-height: 36px; font-size: 16px; }
+.timber .mm-code { font-size: 22px; }
+/* Boxes inside it (the hero being played, a world, the invite code, the look pickers): a darker inset of the board. */
+.mm-panel .mm-hero, .mm-panel .mm-world, .mm-panel .mm-invite-code, .mm-panel .look-group, .cr-panel .look-group {
+  border: 1px solid #1c0d0e; border-radius: 3px; background: rgba(10, 5, 4, 0.42); box-shadow: 0 0 0 1px rgba(107, 53, 36, 0.5);
+}
+.mm-panel .mm-invite-code { color: var(--t-brass-hi); }
+.mm-panel .mm-world.here { box-shadow: 0 0 0 1px var(--t-brass), 0 0 10px rgba(244, 198, 78, 0.25); }
+.mm-panel .mm-hero-face, .mm-panel .cr-class-figure { background: radial-gradient(ellipse at 50% 70%, rgba(201, 162, 74, 0.25), rgba(0, 0, 0, 0) 70%), rgba(10, 5, 4, 0.5); border-radius: 3px; }
+.mm-panel .mm-hero-text strong { color: var(--t-brass-hi); }
+/* Creation's steps: three tabs, the one you are on lit. */
+.cr-panel .cr-step-num { color: #2a1406; background: var(--t-brass); border-radius: 2px; }
+.timber .cr-class { border-radius: 4px; }
+/* A picked class is lit brass: its words go dark to read on it. */
 .cr-class.selected .stat-tag { color: #3a1d20; border-color: #b9822a; }
 .cr-class.selected .cr-class-text strong { color: #3a1d20; }
-/* The look pickers in the panel, in the same timber as the rest of the menu. */
-.main-menu .look-group { border-color: var(--rule, #3d3226); background: rgba(0, 0, 0, 0.22); }
-.main-menu .look-chip { color: var(--text); background: var(--well, #1a130e); border-color: var(--line); box-shadow: 0 2px 0 rgba(0, 0, 0, 0.4); text-shadow: none; }
-.main-menu .look-chip:hover:not(:disabled) { border-color: var(--brass-hi); background: var(--well, #1a130e); }
-.main-menu .look-chip.selected { color: #3a1d20; background: #f4c64e; border-color: var(--out); }
-.main-menu .look-swatch { box-shadow: 0 0 0 1px var(--line); }
-.main-menu .look-swatch.selected { box-shadow: 0 0 0 2px var(--out), 0 0 0 4px #f4c64e; }
-.main-menu .hero-name { background: var(--well, #1a130e); }
+.timber .cr-class.selected .cc-blurb, .timber .cr-class.selected .muted { color: #4a2a10; }
+.main-menu .look-chip { color: var(--text); background: rgba(10, 5, 4, 0.55); border: 1px solid #1c0d0e; border-radius: 3px; box-shadow: 0 0 0 1px rgba(107, 53, 36, 0.6); text-shadow: none; }
+.main-menu .look-chip:hover:not(:disabled) { background: rgba(61, 35, 29, 0.85); box-shadow: 0 0 0 1px var(--t-brass, #c9a24a); }
+.main-menu .look-chip.selected { color: #2a1406; background: linear-gradient(180deg, #fbe7a6, #e0b04a); border-color: #6b4a12; }
+.main-menu .look-swatch { box-shadow: 0 0 0 1px #6b3524; }
+.main-menu .look-swatch.selected { box-shadow: 0 0 0 2px #1c0d0e, 0 0 0 4px #f4c64e; }
+.main-menu .hero-name { background: rgba(10, 5, 4, 0.55); }
+/* The plate under the hero in creation: a small wood window of its own. */
+.wood-window.cr-plate { --corner-at: -10px; --corner-size: 30px; }
+.cr-plate .cr-plate-name { color: var(--t-brass-hi); }
+@media (max-width: 760px) {
+  /* Room round the window for its brass corners, and over it for the Sound button in the top right. */
+  .mm-layout { padding: 46px 12px 12px; }
+  .wood-window.mm-panel { padding: 16px 14px 10px; }
+}
 
 /* -------------------------------------------------------------- heroes --- */
 

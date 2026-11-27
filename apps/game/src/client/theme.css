@@ -278,7 +278,6 @@ button.primary:hover:not(:disabled) { background: #52b85a; box-shadow: inset 0 3
 button.danger { background: #b83a30; border-color: var(--out); box-shadow: inset 0 3px 0 #e0665a, inset 0 -3px 0 #7a221c; color: #ffe9e0; }
 button.selected, button[aria-pressed="true"] { background: #f4c64e; border-color: var(--out); box-shadow: inset 0 3px 0 #fbe08a, inset 0 -3px 0 #b9822a; color: #3a1d20; text-shadow: none; }
 button.nudge { border-color: var(--out); color: #3a1d20; background: #f4c64e; box-shadow: inset 0 3px 0 #fbe08a, inset 0 -3px 0 #b9822a; text-shadow: none; }
-.menu-action.nudge { color: #3a1d20; border-color: var(--out); }
 button.link, .grip, .min-btn, .panel-title, button.cm-main { background: none; border: none; box-shadow: none; }
 button.link { color: var(--accent); text-shadow: none; }
 button.cm-main { border: 2px solid transparent; }
@@ -390,8 +389,6 @@ input::placeholder { color: #a5765a; }
 .crew-cards .roster li.cm { background: var(--panel); border: 3px solid var(--out); box-shadow: inset 0 3px 0 rgba(209, 138, 85, 0.25), 0 3px 0 rgba(0, 0, 0, 0.4); }
 .crew-cards .roster li.cm:last-child { border-bottom: 3px solid var(--out); }
 .hud-corner > span, .hud-corner > strong { border: 3px solid var(--out); box-shadow: none; }
-.options-switch { border: 2px solid var(--out); background: var(--well); }
-.options-switch.on { color: var(--good); border-color: var(--out); }
 .split-prompt { padding: 12px 14px; }
 
 /* Slots everywhere else (a chest's grid, an offer, the stall, a hero's sheet) are the sea bag's squares: flat
@@ -438,8 +435,12 @@ input::placeholder { color: #a5765a; }
 .timber button:hover:not(:disabled) { border-color: var(--t-out); background: linear-gradient(180deg, rgba(255, 220, 180, 0.24), rgba(0, 0, 0, 0.14)), #a3593a; box-shadow: inset 0 1px 0 rgba(255, 214, 170, 0.35), 0 0 0 1px var(--t-brass); }
 .timber button:active:not(:disabled) { box-shadow: inset 0 2px 3px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(107, 53, 36, 0.7); }
 .timber button.selected, .timber button[aria-selected="true"], .timber button[aria-pressed="true"] { color: #2a1406; text-shadow: none; background: linear-gradient(180deg, #fbe7a6, #e0b04a); border-color: #6b4a12; box-shadow: inset 0 1px 0 #fff7d6, 0 0 0 1px #6b4a12; }
+/* Pressed in stays lit when pointed at: a little brighter, not the plain button's hover. */
+.timber button.selected:hover:not(:disabled), .timber button[aria-selected="true"]:hover:not(:disabled), .timber button[aria-pressed="true"]:hover:not(:disabled) { background: linear-gradient(180deg, #fff1bf, #ebbd58); border-color: #6b4a12; box-shadow: inset 0 1px 0 #fff7d6, 0 0 0 1px var(--t-brass-hi); }
 .timber button.primary { color: #f1f6e6; background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(0, 0, 0, 0.18)), #3e7a52; border-color: #142a1a; box-shadow: inset 0 1px 0 rgba(220, 255, 220, 0.3), 0 0 0 1px #2f5a3c; font-family: inherit; font-size: inherit; letter-spacing: 0; }
 .timber button.primary:hover:not(:disabled) { background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(0, 0, 0, 0.1)), #4a8d60; }
+.timber button.danger { color: #ffe9e0; background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(0, 0, 0, 0.18)), #9a3229; border-color: #2a0c0a; box-shadow: inset 0 1px 0 rgba(255, 200, 190, 0.3), 0 0 0 1px #6a221c; }
+.timber button.danger:hover:not(:disabled) { background: linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(0, 0, 0, 0.1)), #b23b30; box-shadow: inset 0 1px 0 rgba(255, 200, 190, 0.35), 0 0 0 1px #e0665a; }
 .timber button.link { padding: 0; border: none; background: none; box-shadow: none; color: var(--t-brass-hi); text-decoration: underline; }
 .timber button:disabled { opacity: 0.5; }
 .timber input:not([type="checkbox"]):not([type="range"]), .timber select {
@@ -451,3 +452,56 @@ input::placeholder { color: #a5765a; }
 .timber input[type="checkbox"]:checked { border-color: #6b4a12; box-shadow: 0 0 0 1px var(--t-brass); background: linear-gradient(180deg, #fbe7a6, #e0b04a); }
 .timber input[type="checkbox"]:checked::after { content: ""; display: block; width: 4px; height: 8px; margin: 1px auto 0; border: solid #2a1406; border-width: 0 2px 2px 0; rotate: 45deg; }
 .timber kbd { padding: 0 5px; border: 1px solid var(--t-out); border-radius: 3px; background: rgba(10, 5, 4, 0.55); box-shadow: 0 0 0 1px var(--t-rim); }
+
+/* ==========================================================================
+   A place's chat (the Harbor's, a hut's, the pub's) in the new UI's timber: a board of smoked wood over the view,
+   see-through enough that the place shows behind it, with a lit strip for its name, the talk on a darker well, and
+   the line you type in a timber field. Its top edge still drags it taller (DragPanel's `tall`).
+   ========================================================================== */
+.chat.panel.timber {
+  padding: 0; display: flex; flex-direction: column; overflow: visible;
+  background: linear-gradient(180deg, rgba(255, 214, 170, 0.05), rgba(0, 0, 0, 0.2)), linear-gradient(rgba(42, 22, 20, 0.62), rgba(28, 14, 12, 0.7)), var(--tex-wood, none) 0 0 / 128px 128px;
+  border: 2px solid var(--t-out); border-image: none; border-radius: 3px;
+  box-shadow: 0 0 0 1px var(--t-rim), 0 6px 16px rgba(0, 0, 0, 0.45);
+  text-shadow: 0 1px 0 #000;
+  backdrop-filter: blur(2px);
+}
+.chat.panel.timber:hover, .chat.panel.timber:focus-within {
+  background: linear-gradient(180deg, rgba(255, 214, 170, 0.06), rgba(0, 0, 0, 0.2)), linear-gradient(rgba(42, 22, 20, 0.86), rgba(28, 14, 12, 0.9)), var(--tex-wood, none) 0 0 / 128px 128px;
+}
+/* Its name, on a lit strip across the top; the fold button sits at the strip's end. */
+.chat.panel.timber > .panel-title {
+  width: 100%; box-sizing: border-box; padding: 5px 40px 5px 10px; text-align: left;
+  font-family: var(--font-head); font-size: 14px; letter-spacing: 0.05em; color: var(--t-brass-hi); text-transform: none;
+  background: linear-gradient(180deg, rgba(255, 214, 170, 0.12), rgba(0, 0, 0, 0.2)), linear-gradient(rgba(96, 30, 24, 0.34), rgba(96, 30, 24, 0.34)), var(--tex-wood, none) 0 0 / 128px 128px, var(--t-wood-hi);
+  border: none; border-bottom: 1px solid var(--t-out); border-radius: 0; box-shadow: inset 0 1px 0 rgba(214, 150, 96, 0.3);
+}
+.chat.panel.timber > .panel-title:hover { color: #fff6cf; }
+/* It can be moved by its strip (DragPanel's `movable`): a hand to say so, and a drag on a touch screen moves it. */
+.chat.panel.timber.movable > .panel-title { cursor: grab; touch-action: none; padding-right: 58px; }
+.chat.panel.timber.movable.dragging > .panel-title { cursor: grabbing; }
+.chat.panel.timber .grip { width: 22px; height: 22px; line-height: 22px; color: var(--t-brass); cursor: grab; touch-action: none; background: none; border: none; box-shadow: none; }
+.chat.panel.timber .grip:hover { color: #fff6cf; }
+.chat.panel.timber > .panel-tools { top: 3px; right: 5px; }
+.chat.panel.timber .min-btn { width: 22px; height: 22px; line-height: 20px; padding: 0; color: var(--t-brass-hi); background: none; border: none; box-shadow: none; }
+.chat.panel.timber .min-btn:hover:not(:disabled) { color: #fff6cf; background: rgba(255, 214, 170, 0.1); }
+.chat.panel.timber > .panel-body { display: flex; flex-direction: column; gap: 6px; padding: 7px 8px 8px; }
+/* The talk: on a darker well, one line each, the speaker's name in its own colour. */
+.chat.panel.timber .chat-lines {
+  gap: 3px; padding: 5px 8px; margin: 0; font-size: 13px; line-height: 1.35;
+  background: rgba(10, 5, 4, 0.38); border: 1px solid rgba(0, 0, 0, 0.55); border-radius: 3px; box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+.chat.panel.timber .chat-lines > .muted { margin: auto 0; text-align: center; font-family: var(--font-book); font-style: italic; color: #a98b6c; }
+.chat.panel.timber .line { overflow-wrap: anywhere; }
+.chat.panel.timber .line strong { font-weight: bold; }
+.chat.panel.timber .line.hero strong { color: #f0a58f; }
+.chat.panel.timber .line.npc strong { color: var(--t-brass-hi); }
+/* The line you type: the emote button, the field, and Say, as one row. */
+.chat.panel.timber .row { display: flex; align-items: center; gap: 5px; margin: 0; }
+.chat.panel.timber .row input { flex: 1; min-width: 0; min-height: 28px; font-size: 13px; }
+.chat.panel.timber .row button { min-height: 28px; text-shadow: 0 1px 0 rgba(0, 0, 0, 0.7); }
+.chat.panel.timber .tall-handle { top: -6px; }
+/* Folded: just the strip. */
+.chat.panel.timber.folded { background: none; backdrop-filter: none; }
+.chat.panel.timber.folded > .panel-title { border-bottom: none; padding-right: 36px; white-space: nowrap; }
+.chat.panel.timber.folded > .panel-tools { top: 3px; }

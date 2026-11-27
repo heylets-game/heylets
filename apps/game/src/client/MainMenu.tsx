@@ -27,6 +27,7 @@ import { CharacterCreation } from "./CharacterCreation";
 import { MAIN_MENU_HASH, NEW_HERO_HASH } from "./OptionsMenu";
 import { SettingsSections } from "./Settings";
 import { AnchorMark, HarborBackdrop, HarborTitle } from "./Welcome";
+import { WoodWindow } from "./ui/WoodWindow";
 import "./mainmenu.css";
 
 /** The game's name, as the browser tab shows it (index.html). */
@@ -278,7 +279,7 @@ export function MainMenu({ me, refresh, invite, onContinue }: Props) {
   return (
     <Backdrop>
       <div className="mm-layout">
-        <section className="panel window mm-panel">
+        <WoodWindow className="mm-panel" role="region" label="Main menu">
           <header className="mm-title">
             <AnchorMark />
             <HarborTitle name={GAME_TITLE} compact />
@@ -288,7 +289,7 @@ export function MainMenu({ me, refresh, invite, onContinue }: Props) {
           <footer className="mm-foot muted">
             {me.player.email ? <>Logged in as {me.player.email}</> : <>Playing as a guest · <button className="link" onClick={() => go("account")}>Log in</button></>}
           </footer>
-        </section>
+        </WoodWindow>
       </div>
     </Backdrop>
   );

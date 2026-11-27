@@ -22,6 +22,8 @@ import { AttentionMark } from "./AttentionMark";
 import { PlaceTitle } from "./PlaceTitle";
 import { hasUnseen } from "../releases";
 import { OptionsMenu } from "./OptionsMenu";
+import { ANCHOR, LINK, PERSON, WRENCH } from "./ui/menuIcons";
+import { TopBar } from "./ui/TopBar";
 import { DragPanel } from "./DragPanel";
 import { HudBar } from "./ui/Hud";
 import { Logbook } from "./Logbook";
@@ -725,6 +727,8 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
   // Resting: the server keeps the clock; this is only what it last told us, counted down for show.
   const [restReadyAt, setRestReadyAt] = useState(0);
   const [note, setNote] = useState<string | null>(null);
+  /** The top bar's drop that is open (the guide to the docks), if any. */
+  const [topDrop, setTopDrop] = useState<string | null>(null);
   const [, tick] = useState(0);
   useEffect(() => {
     api.gather().then((g) => {
@@ -970,16 +974,33 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
       {/* Someone of the crew is setting out for a place on the atlas, and asks who is coming. */}
       {muster.muster && <MusterPanel muster={muster.muster} me={harbor.you ?? me.player.id} onSay={muster.say} busy={muster.busy} error={muster.error} />}
       <div key="stage" className="stage" ref={mount} />
-      {/* Down the left-hand side: the docks (the talk sits under them). */}
-      <div className="hud-left">
-        <DragPanel id="harbor.docks" title="Docks" foldOnPhone className="story panel docks">
-          <p className="muted">The crew's atlas is opened at the waygate, in the middle of the square: everywhere you have found, and the routes that run on from there. When one of you sets out, everyone in town is asked whether they are coming. Setting out takes a lodestone: they are cut and worked at the Lapidary, the narrow shop with a gem for a sign, where Tilda also buys gems. What the crew shares is kept in the town chest, on its dais down on the west shore.</p>
-          <p>
-            <button className="small" onClick={() => renderer.current?.lookAt(HARBOR_WAYGATE)}>Show me the waygate</button> <button className="small" onClick={() => renderer.current?.lookAt(HARBOR_LAPIDARY)}>Show me the Lapidary</button> <button className="small" onClick={() => renderer.current?.lookAt(HARBOR_CHEST)}>Show me the town chest</button>
-          </p>
-        </DragPanel>
-
-      </div>
+      {/* Top left: the Harbor's name on the new UI's bar, and its guide to the docks as a drop, shut until asked for. */}
+      <TopBar
+        className="harbor-top"
+        title={HARBOR_NAME}
+        subtitle={harbor.crew?.name ?? me.crew?.name}
+        open={topDrop}
+        onOpen={setTopDrop}
+        items={[{
+          key: "docks",
+          label: "Docks",
+          icon: ANCHOR,
+          title: "The docks: the waygate, the Lapidary and the town chest",
+          width: 320,
+          panel: (
+            <>
+              <p>The crew's atlas is opened at the <strong>waygate</strong>, in the middle of the square: everywhere you have found, and the routes that run on from there. When one of you sets out, everyone in town is asked whether they are coming.</p>
+              <p>Setting out takes a lodestone: they are cut and worked at the <strong>Lapidary</strong>, the narrow shop with a gem for a sign, where Tilda also buys gems.</p>
+              <p>What the crew shares is kept in the <strong>town chest</strong>, on its dais down on the west shore.</p>
+              <div className="harbor-guide-go">
+                {([["the waygate", HARBOR_WAYGATE], ["the Lapidary", HARBOR_LAPIDARY], ["the town chest", HARBOR_CHEST]] as const).map(([name, at]) => (
+                  <button key={name} onClick={() => { setTopDrop(null); renderer.current?.lookAt(at); }}>Show me {name}</button>
+                ))}
+              </div>
+            </>
+          ),
+        }]}
+      />
 
       {/* Top right, as on a map: the crew's cards, your party first. */}
       <div className="crew roster-panel crew-cards party-roster">
@@ -990,6 +1011,7 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
           onOpen={heroSheet.toggle}
           openId={heroSheet.open}
           foldId="harbor"
+          avatarsOnPhone
           party={party ? { ids: party.ids, acting: party.acting, onPick: party.pick, change: { leader: party.ids[0], onChanged: party.reload } } : undefined}
           menu={(m) => {
             // One of your party: a click plays them, and their sheet is here.
@@ -1004,7 +1026,7 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
         />
       </div>
 
-      <DragPanel id="harbor.chat" title="Crew chat" foldOnPhone expandable className="chat panel harbor-chat">
+      <DragPanel id="harbor.chat" title="Crew chat" foldOnPhone expandable movable className="chat panel harbor-chat timber">
         <div className="chat-lines">
           {harbor.chat.length === 0 && <div className="muted">Crew chat. Only people in the Harbor right now see it.</div>}
           {harbor.chat.map((l, i) => <div key={i} className="line hero"><strong>{l.name}: </strong>{l.text}</div>)}
@@ -1041,9 +1063,9 @@ export function HarborView({ me, refresh, resting = false, inside = null }: { me
             title={HARBOR_NAME}
             subtitle={<>{harbor.crew?.name ?? me.crew?.name}{harbor.crew && <> · invite code <span className="selectable code">{harbor.crew.id}</span></>}</>}
             actions={[
-              { label: copied ? "Invite link copied" : "Copy the crew's invite link", run: () => void copy(), stay: true },
-              { label: me.player.email ? "Account" : "Save your progress", hint: me.player.email ?? "Guest account: not saved yet", tone: me.player.email ? undefined : "nudge", run: () => setAccount(true) },
-              ...(me.isAdmin ? [{ label: "Admin", run: () => { location.hash = "#admin"; } }] : []),
+              { label: copied ? "Invite link copied" : "Copy invite link", hint: "A link that brings a friend straight into your crew", icon: LINK, run: () => void copy(), stay: true },
+              { label: me.player.email ? "Account" : "Save your progress", hint: me.player.email ?? "Guest account: not saved yet", tone: me.player.email ? undefined : "nudge", icon: PERSON, run: () => setAccount(true) },
+              ...(me.isAdmin ? [{ label: "Admin", icon: WRENCH, run: () => { location.hash = "#admin"; } }] : []),
             ]}
             reset={harbor.status !== "open" ? undefined : {
               to: "the plaza, where everyone arrives",

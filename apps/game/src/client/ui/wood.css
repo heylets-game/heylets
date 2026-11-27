@@ -1,0 +1,30 @@
+/* A window in the new UI's wood (ui/WoodWindow.tsx): the sea bag's timber board, rimmed dark with a thin line of
+   copper, the logbook's brass corners over its corners, and its name on the ribbon tacked over its top edge.
+   Everything in it takes the new UI's controls (theme.css `.timber`). */
+.wood-window.timber {
+  --corner-at: -13px; --corner-size: 40px;
+  position: relative; box-sizing: border-box; white-space: normal;
+  background:
+    linear-gradient(180deg, rgba(255, 214, 170, 0.08), rgba(0, 0, 0, 0) 30%, rgba(0, 0, 0, 0.32)),
+    linear-gradient(rgba(96, 30, 24, 0.34), rgba(96, 30, 24, 0.34)),
+    var(--tex-wood, none) 0 0 / 128px 128px,
+    #2a1614;
+  box-shadow: inset 0 1px 0 rgba(214, 150, 96, 0.25), 0 0 0 1px var(--t-rim), 0 0 0 4px var(--t-out), 0 14px 40px rgba(0, 0, 0, 0.65);
+  animation: wood-window-in 0.14s ease-out;
+}
+@keyframes wood-window-in { from { opacity: 0; transform: translateY(8px) scale(0.985); } }
+@media (prefers-reduced-motion: reduce) { .wood-window.timber { animation: none; } }
+/* The ribbon hangs over the top edge. */
+.wood-window > .win-plate { top: -20px; }
+/* The way out: a small timber button over the top right corner, inside the brass. */
+.wood-window.timber > button.wood-close { position: absolute; top: 10px; right: 12px; z-index: 5; width: 30px; height: 30px; padding: 0; font-size: 20px; line-height: 1; }
+@media (max-width: 760px) {
+  .wood-window.timber { --corner-at: -10px; --corner-size: 30px; }
+}
+
+/* A window's head and body, for one with a heading strip and words under it (the account window). */
+.wood-head { flex: none; padding: 18px 52px 10px 20px; }
+.wood-head h2 { margin: 0; font-family: var(--font-head); font-weight: normal; font-size: 20px; letter-spacing: 0.04em; color: var(--t-brass-hi); text-shadow: 0 1px 0 #000; }
+.wood-head p { margin: 2px 0 0; font-size: 13px; color: #c9ad8c; }
+.wood-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 14px 20px 18px; display: flex; flex-direction: column; gap: 10px; }
+.wood-body > p { margin: 0; }

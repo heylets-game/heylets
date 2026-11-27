@@ -43,11 +43,11 @@ export const FOLLOW_ICON = [
   "###.....###",
 ];
 
-/** The same icon as an SVG element, for the renderer's plain-DOM buttons. */
-export function followIconSvg(size = 22): SVGSVGElement {
+/** A pixel glyph (rows of "#" and ".", as PixelIcon draws them) as an SVG element, for the renderer's plain-DOM buttons. */
+export function pixelGlyphSvg(rows: string[], size = 22): SVGSVGElement {
   const ns = "http://www.w3.org/2000/svg";
-  const w = FOLLOW_ICON[0].length;
-  const h = FOLLOW_ICON.length;
+  const w = Math.max(...rows.map((r) => r.length));
+  const h = rows.length;
   const svg = document.createElementNS(ns, "svg");
   svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
   svg.setAttribute("width", String(size));
@@ -56,7 +56,7 @@ export function followIconSvg(size = 22): SVGSVGElement {
   svg.setAttribute("fill", "currentColor");
   svg.setAttribute("aria-hidden", "true");
   svg.classList.add("pixel-glyph");
-  FOLLOW_ICON.forEach((row, y) =>
+  rows.forEach((row, y) =>
     [...row].forEach((c, x) => {
       if (c !== "#") return;
       const r = document.createElementNS(ns, "rect");
@@ -69,3 +69,22 @@ export function followIconSvg(size = 22): SVGSVGElement {
   );
   return svg;
 }
+
+/** The follow icon as an SVG element. */
+export function followIconSvg(size = 22): SVGSVGElement {
+  return pixelGlyphSvg(FOLLOW_ICON, size);
+}
+
+/** A camera: the button that opens the camera's column on a touch screen. */
+export const CAMERA_ICON = [
+  "...####.....",
+  "..######....",
+  "############",
+  "#....##....#",
+  "#...####...#",
+  "#..##..##..#",
+  "#..##..##..#",
+  "#...####...#",
+  "#....##....#",
+  "############",
+];
