@@ -3666,6 +3666,7 @@ exports[`golden A: enemy abilities > dark_bolt 1`] = `
         "t": "roll",
       },
       {
+        "ability": "dark_bolt",
         "actor": "e101",
         "t": "miss",
         "target": "ann",
@@ -3846,6 +3847,7 @@ exports[`golden A: enemy abilities > dark_bolt 1`] = `
         "t": "roll",
       },
       {
+        "ability": "dark_bolt",
         "actor": "e101",
         "t": "miss",
         "target": "ann",
@@ -6590,6 +6592,7 @@ exports[`golden A: enemy abilities > frost_mote 1`] = `
         "t": "roll",
       },
       {
+        "ability": "frost_mote",
         "actor": "e101",
         "t": "miss",
         "target": "ann",
@@ -6787,6 +6790,7 @@ exports[`golden A: enemy abilities > frost_mote 1`] = `
         "t": "roll",
       },
       {
+        "ability": "frost_mote",
         "actor": "e101",
         "t": "miss",
         "target": "ann",
@@ -8768,6 +8772,7 @@ exports[`golden A: enemy abilities > hurl_rock 1`] = `
         "t": "roll",
       },
       {
+        "ability": "hurl_rock",
         "actor": "e101",
         "t": "miss",
         "target": "ann",
@@ -8965,6 +8970,7 @@ exports[`golden A: enemy abilities > hurl_rock 1`] = `
         "t": "roll",
       },
       {
+        "ability": "hurl_rock",
         "actor": "e101",
         "t": "miss",
         "target": "ann",
@@ -18417,6 +18423,7 @@ exports[`golden A: enemy abilities > volley 1`] = `
         "t": "roll",
       },
       {
+        "ability": "volley",
         "actor": "e101",
         "t": "miss",
         "target": "ann",
@@ -18596,6 +18603,7 @@ exports[`golden A: enemy abilities > volley 1`] = `
         "t": "roll",
       },
       {
+        "ability": "volley",
         "actor": "e101",
         "t": "miss",
         "target": "ann",
@@ -19275,6 +19283,7 @@ exports[`golden A: enemy abilities > weakening_hex 1`] = `
         "t": "roll",
       },
       {
+        "ability": "weakening_hex",
         "actor": "e101",
         "t": "miss",
         "target": "ann",
@@ -19472,6 +19481,7 @@ exports[`golden A: enemy abilities > weakening_hex 1`] = `
         "t": "roll",
       },
       {
+        "ability": "weakening_hex",
         "actor": "e101",
         "t": "miss",
         "target": "ann",
@@ -55736,6 +55746,7 @@ exports[`golden C: enemy turns with the AI on > archer 1`] = `
       "t": "roll",
     },
     {
+      "ability": "volley",
       "actor": "e101",
       "t": "miss",
       "target": "ann",
@@ -56347,6 +56358,7 @@ exports[`golden C: enemy turns with the AI on > bandit 1`] = `
       "t": "roll",
     },
     {
+      "ability": "slash",
       "actor": "e101",
       "t": "miss",
       "target": "ann",
@@ -56380,6 +56392,7 @@ exports[`golden C: enemy turns with the AI on > bandit 1`] = `
       "t": "roll",
     },
     {
+      "ability": "slash",
       "actor": "e101",
       "t": "miss",
       "target": "cal",
@@ -58214,6 +58227,7 @@ exports[`golden C: enemy turns with the AI on > bear 1`] = `
       "t": "roll",
     },
     {
+      "ability": "bear_maul",
       "actor": "e102",
       "t": "miss",
       "target": "cal",
@@ -58821,6 +58835,7 @@ exports[`golden C: enemy turns with the AI on > broodmother 1`] = `
       "t": "roll",
     },
     {
+      "ability": "spiderling_bite",
       "actor": "e104",
       "t": "miss",
       "target": "ann",
@@ -58973,6 +58988,7 @@ exports[`golden C: enemy turns with the AI on > broodmother 1`] = `
       "t": "roll",
     },
     {
+      "ability": "impaling_fang",
       "actor": "e102",
       "t": "miss",
       "target": "cal",
@@ -60585,6 +60601,7 @@ exports[`golden C: enemy turns with the AI on > broodmother 1`] = `
       "t": "roll",
     },
     {
+      "ability": "spiderling_bite",
       "actor": "e108",
       "t": "miss",
       "target": "cal",
@@ -61333,6 +61350,7 @@ exports[`golden C: enemy turns with the AI on > brute 1`] = `
       "t": "roll",
     },
     {
+      "ability": "battering_ram",
       "actor": "e101",
       "t": "miss",
       "target": "ann",
@@ -61457,6 +61475,7 @@ exports[`golden C: enemy turns with the AI on > brute 1`] = `
       "t": "roll",
     },
     {
+      "ability": "beatdown",
       "actor": "e102",
       "t": "miss",
       "target": "cal",
@@ -62324,6 +62343,7 @@ exports[`golden C: enemy turns with the AI on > cultist 1`] = `
       "t": "roll",
     },
     {
+      "ability": "dark_bolt",
       "actor": "e102",
       "t": "miss",
       "target": "ann",
@@ -64225,6 +64245,7 @@ exports[`golden C: enemy turns with the AI on > frost_wolf 1`] = `
       "t": "roll",
     },
     {
+      "ability": "rime_bite",
       "actor": "e102",
       "t": "miss",
       "target": "bob",
@@ -66862,6 +66883,7 @@ exports[`golden C: enemy turns with the AI on > guardian 1`] = `
       "t": "roll",
     },
     {
+      "ability": "stone_fist",
       "actor": "e102",
       "t": "miss",
       "target": "cal",
@@ -68907,6 +68929,7 @@ exports[`golden C: enemy turns with the AI on > ogre 1`] = `
       "t": "roll",
     },
     {
+      "ability": "club_smash",
       "actor": "e102",
       "t": "miss",
       "target": "ann",
@@ -69790,6 +69813,7 @@ exports[`golden C: enemy turns with the AI on > shade 1`] = `
       "t": "roll",
     },
     {
+      "ability": "chill_touch",
       "actor": "e102",
       "t": "miss",
       "target": "cal",
@@ -69823,6 +69847,7 @@ exports[`golden C: enemy turns with the AI on > shade 1`] = `
       "t": "roll",
     },
     {
+      "ability": "chill_touch",
       "actor": "e102",
       "t": "miss",
       "target": "ann",
@@ -69928,6 +69953,7 @@ exports[`golden C: enemy turns with the AI on > shade 1`] = `
       "t": "roll",
     },
     {
+      "ability": "chill_touch",
       "actor": "e101",
       "t": "miss",
       "target": "cal",
@@ -69969,6 +69995,7 @@ exports[`golden C: enemy turns with the AI on > shade 1`] = `
       "t": "roll",
     },
     {
+      "ability": "chill_touch",
       "actor": "e102",
       "t": "miss",
       "target": "ann",
@@ -70653,6 +70680,7 @@ exports[`golden C: enemy turns with the AI on > skeleton 1`] = `
       "t": "roll",
     },
     {
+      "ability": "rusted_cutlass",
       "actor": "e101",
       "t": "miss",
       "target": "ann",
@@ -70786,6 +70814,7 @@ exports[`golden C: enemy turns with the AI on > skeleton 1`] = `
       "t": "roll",
     },
     {
+      "ability": "rusted_cutlass",
       "actor": "e101",
       "t": "miss",
       "target": "cal",
@@ -71200,6 +71229,7 @@ exports[`golden C: enemy turns with the AI on > slime 1`] = `
       "t": "roll",
     },
     {
+      "ability": "engulf",
       "actor": "e102",
       "t": "miss",
       "target": "cal",
@@ -74963,6 +74993,7 @@ exports[`golden C: enemy turns with the AI on > troll 1`] = `
       "t": "roll",
     },
     {
+      "ability": "hurl_rock",
       "actor": "e102",
       "t": "miss",
       "target": "bob",
@@ -75000,6 +75031,7 @@ exports[`golden C: enemy turns with the AI on > troll 1`] = `
       "t": "roll",
     },
     {
+      "ability": "chomp",
       "actor": "e101",
       "t": "miss",
       "target": "cal",
@@ -76256,6 +76288,7 @@ exports[`golden C: enemy turns with the AI on > witch 1`] = `
       "t": "roll",
     },
     {
+      "ability": "weakening_hex",
       "actor": "e101",
       "t": "miss",
       "target": "cal",
@@ -76493,6 +76526,7 @@ exports[`golden C: enemy turns with the AI on > wolf 1`] = `
       "t": "roll",
     },
     {
+      "ability": "wolf_bite",
       "actor": "e102",
       "t": "miss",
       "target": "cal",
@@ -77366,6 +77400,7 @@ exports[`golden C: enemy turns with the AI on > wraith 1`] = `
       "t": "roll",
     },
     {
+      "ability": "frost_mote",
       "actor": "e102",
       "t": "miss",
       "target": "ann",
@@ -77399,6 +77434,7 @@ exports[`golden C: enemy turns with the AI on > wraith 1`] = `
       "t": "roll",
     },
     {
+      "ability": "frost_mote",
       "actor": "e102",
       "t": "miss",
       "target": "cal",
@@ -77588,6 +77624,7 @@ exports[`golden C: enemy turns with the AI on > wraith 1`] = `
       "t": "roll",
     },
     {
+      "ability": "frost_mote",
       "actor": "e102",
       "t": "miss",
       "target": "bob",
