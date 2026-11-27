@@ -105,7 +105,7 @@ export const AUDIO: AudioManifest = {
     // A critical hit, laid over the blow: a hero's flares bright and sparkles; an enemy's is a heavy sword blow, the
     // blade's shwink and a hard, dark impact, so a crit against you is felt rather than cheered.
     "impact.crit.hero": { files: "sfx/combat/crit_#", fallback: built("crit"), gainDb: -3 },
-    "impact.crit.enemy": { files: "sfx/combat/crit_enemy_#", fallback: built("crit_blade"), gainDb: -2, pitch: [-1, 1], reverb: -8 },
+    "impact.crit.enemy": { files: "sfx/combat/crit_enemy_#", fallback: built("crit_blade"), gainDb: 2, pitch: [-1, 1], reverb: -8 },
     miss: { files: "sfx/combat/miss_#", fallback: built("whiff"), pitch: [-2, 2], gainDb: -4 },
     "miss.magic": { files: "sfx/combat/fizzle_#", fallback: built("fizzle"), pitch: [-2, 2], gainDb: -4 },
     heal: { files: "sfx/combat/heal_#", fallback: built("heal") },
