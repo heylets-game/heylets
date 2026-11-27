@@ -33,7 +33,7 @@ import { checkStrike } from "./strikes";
 import { UNTIMED_KEEPS, countDown, has, leaveFight, heal, regrow, removeCondition, tick, tickStacks, unseen, usesLeft, type Ctx } from "./engine";
 import { ALERT_RANGE, JOIN_RANGE, freeHexNear, generateZone } from "./gen";
 import { generateDelve } from "./delve";
-import { checkLoot, checkOpen, leaveBody, look, lootFor, openChest, payBounty, take } from "./loot";
+import { checkLoot, checkOpen, leaveBody, look, lootFor, lootGroup, openChest, payBounty, take } from "./loot";
 import { PARTY_SIZES, siteOpen, spaced } from "./sites";
 import { FREE_WALK, big, blast, blockerAt, caught, covers, gap, inFight, isDead, meet, noWayThere, pathIn, perkOf, roomAt, sameHex, sees, solid, span, unitAt, unitById, zoneReach } from "./geometry";
 import { AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, ENEMY_MOVE_AP, FLEE_RANGE, ITEM_AP, STROLL_GRACE_MS, STROLL_STEP_MS, SUMMONS, STARTING_ITEMS, THROWABLES, THROWABLE_KINDS, cleanItems, unitStrike, commonCostFor, enemyMove, tacticOf } from "./kit";
@@ -1294,7 +1294,8 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
     const wrong = checkLoot(state, unit, spot);
     if (wrong) return wrong;
     if (action.type === "take") return take(ctx, unit, spot!, { index: action.index, uid: action.uid });
-    look(ctx, unit, spot!);
+    // A body: the others beside it are gone through with it (lootGroup), all in the one window.
+    for (const s of lootGroup(state, spot!)) if (!checkLoot(state, unit, s)) look(ctx, unit, s);
     ctx.events.push({ t: "looked", id: unit.id, spot: spot!.id });
     return null;
   }

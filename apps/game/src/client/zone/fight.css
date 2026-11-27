@@ -660,7 +660,8 @@
    ========================================================================== */
 .fight-loot.panel {
   --lu: 56px;
-  position: absolute; right: 24px; top: calc(50% - 60px); translate: 0 -50%; z-index: 26; width: calc(var(--lu) * 4 + 42px); max-width: calc(100% - 24px);
+  --cols: 4;
+  position: absolute; right: 24px; top: calc(50% - 60px); translate: 0 -50%; z-index: 26; width: calc(var(--lu) * var(--cols) + 42px); max-width: calc(100% - 24px);
   display: flex; flex-direction: column; gap: 8px; padding: 20px 18px 12px; pointer-events: auto;
   animation: loot-in 0.2s cubic-bezier(0.2, 1.3, 0.4, 1) both;
 }
@@ -669,6 +670,10 @@
 .run:has(.bag-overlay) .fight-loot.panel { right: calc(22px + 51px * 12 + 46px + 20px); z-index: 51; }
 /* Too narrow for both side by side (a phone): the loot lies over the top of the bag, over what is worn, and the
    pack's squares below it are still there to drag things down onto. */
+/* A phone: never wider than four squares, however much is in it. */
+@media (max-width: 560px) {
+  .fight-loot.panel { --cols: 4 !important; }
+}
 @media (max-width: 1000px) {
   .run:has(.bag-overlay) .fight-loot.panel { right: auto; left: 50%; top: 12px; translate: -50% 0; animation: none; }
 }
@@ -681,7 +686,8 @@
 .loot-sub { margin: 0; text-align: center; font-family: var(--font-book); font-size: 14px; line-height: 1.25; color: var(--muted, #d2a585); }
 .loot-blocked { margin: 0; padding: 4px 8px; font-size: 12px; line-height: 1.35; color: #ffb3a8; background: rgba(74, 26, 24, 0.6); border: 2px solid var(--bad, #ff8a7a); }
 .loot-wrap { align-self: center; border: 3px solid var(--out, #3a1d20); background: #1b110f; }
-.loot-grid { display: grid; grid-template-columns: repeat(4, var(--lu)); grid-auto-rows: var(--lu); min-height: calc(var(--lu) * 2); max-height: calc(var(--lu) * 4); overflow-y: auto; background: var(--tex-cell, none) 0 0 / var(--lu) var(--lu), #1b110f; }
+/* It grows to fit: wider (LootPanel sets --cols) and taller, as far as the screen allows, before it scrolls. */
+.loot-grid { display: grid; grid-template-columns: repeat(var(--cols, 4), var(--lu)); grid-auto-rows: var(--lu); min-height: calc(var(--lu) * 2); max-height: min(calc(var(--lu) * 8), 60vh); overflow-y: auto; background: var(--tex-cell, none) 0 0 / var(--lu) var(--lu), #1b110f; }
 .fight-ui button.loot-slot {
   position: relative; width: var(--lu); height: var(--lu); padding: 0; display: grid; place-items: center; border: none; border-radius: 0; text-shadow: none; cursor: grab;
   background: var(--tex-lines, none) 0 0 / var(--lu) var(--lu), color-mix(in srgb, var(--tint, #b1633c) 17%, #170f12);

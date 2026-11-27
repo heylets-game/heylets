@@ -115,6 +115,7 @@ import {
   unopened,
   unlooted,
   lootIn,
+  lootGroup,
   sharedLoot,
   checkLoot,
   leavesReach,
@@ -906,7 +907,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         if (ownHero(next, ev.id)) {
           const found = next.loot?.find((s) => s.id === ev.spot);
           // Nothing there (it had nothing on it, or someone has had it all already): said, with no window opened on nothing.
-          if (found && lootIn(found, ev.id)?.length === 0) later(() => setNote(`There is nothing ${found.kind === "body" ? "on" : "in"} it.`));
+          // A body is searched with those beside it (lootGroup): nothing on any of them.
+          if (found && lootGroup(next, found).every((s) => lootIn(s, ev.id)?.length === 0)) later(() => setNote(`There is nothing ${found.kind === "body" ? "on" : "in"} it.`));
           else later(() => setLooting(ev.spot));
         }
       } else if (ev.t === "took") {
@@ -2628,7 +2630,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     lootNext.current = null;
     // What is known to be in it already: a body's or a chest's once anyone has looked, the spoils' once you have.
     const known = lootIn(spot, selfId);
-    if (known?.length === 0) return setNote(sharedLoot(spot) ? `There is nothing left ${spot.kind === "body" ? "on" : "in"} it.` : "You have taken all of your share.");
+    if (known?.length === 0 && lootGroup(state, spot).every((s) => lootIn(s, selfId)?.length === 0)) return setNote(sharedLoot(spot) ? `There is nothing left ${spot.kind === "body" ? "on" : "in"} it.` : "You have taken all of your share.");
     if (known) setLooting(spot.id);
     zone.send({ type: "loot", unit: selfId, spot: spot.id });
   };
@@ -2833,7 +2835,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     if (!looting || !state) return;
     const spot = state.loot?.find((s) => s.id === looting);
     // (Or once it has been emptied: there is nothing more to look at.)
-    if (!spot || !ownAt || ownFighting || hexDistance(ownAt, spot.pos) > 1 || lootIn(spot, selfId)?.length === 0) setLooting(null);
+    const group = spot ? lootGroup(state, spot) : [];
+    if (!spot || !ownAt || ownFighting || !group.some((s) => hexDistance(ownAt, s.pos) <= 1) || group.every((s) => lootIn(s, selfId)?.length === 0)) setLooting(null);
   }, [looting, state, ownAt, ownFighting]);
   // With something open to search, the sea bag is open beside it: what is taken goes there.
   useEffect(() => {
@@ -3117,12 +3120,26 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   // What is open to be searched, why nothing can be taken from it just now (if so), and how much is left on the map for you.
   const lootSpot = looting ? state.loot?.find((s) => s.id === looting) : undefined;
   const lootBlocked = lootSpot && self ? checkLoot(asState(state), self, lootSpot) : null;
-  // What is in it: everyone's, if it is a body or a chest (and going as others take it); your own share of the spoils.
-  const lootItems = lootSpot ? (lootIn(lootSpot, selfId) ?? []) : [];
-  /** Take one thing from it, named by its own number: a click that lands after someone else's never takes whatever has moved into its place. */
+  // What is open: the body clicked and every other beside it (lootGroup), in the one window.
+  const lootSpots = lootSpot ? lootGroup(state, lootSpot) : [];
+  // What is in them: everyone's, if it is a body or a chest (and going as others take it); your own share of the spoils.
+  // Each thing with the one it is in, and where in that one's list it is.
+  const lootRows = lootSpots.flatMap((spot) => (lootIn(spot, selfId) ?? []).map((item, at) => ({ spot, item, at })));
+  const lootItems = lootRows.map((r) => r.item);
+  /** Take one thing, from whichever it is in, named by its own number: a click that lands after someone else's never takes whatever has moved into its place. */
   const takeOne = (index: number, uid = lootItems[index]?.uid) => {
-    if (lootSpot) zone.send({ type: "take", unit: selfId, spot: lootSpot.id, ...(uid !== undefined ? { uid } : { index }) });
+    const row = lootRows[index];
+    if (row) zone.send({ type: "take", unit: selfId, spot: row.spot.id, ...(uid !== undefined ? { uid } : { index: row.at }) });
   };
+  const takeAll = () => {
+    for (const spot of lootSpots) if ((lootIn(spot, selfId)?.length ?? 0) > 0) zone.send({ type: "take", unit: selfId, spot: spot.id });
+  };
+  // Several searched at once: each name, with how many of it ("Giant Spider x2 · Dire Wolf").
+  const lootTitle = (() => {
+    const count = new Map<string, number>();
+    for (const s of lootSpots) count.set(s.name, (count.get(s.name) ?? 0) + 1);
+    return [...count].map(([name, n]) => (n > 1 ? `${name} ×${n}` : name)).join(" · ");
+  })();
   const leftToSearch = unlooted(state, selfId);
   // The crew who are online (on a map, this one or another, or in the Harbor) and not among your own here. Nobody offline.
   const crewOnline = crew.filter((m) => !mine.some((u) => u.id === m.id) && (m.zone || m.town));
@@ -3313,13 +3330,14 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
 
       {lootSpot && me.character && (
         <LootPanel
-          title={lootSpot.name}
+          title={lootTitle}
           share={sharedLoot(lootSpot) ? "shared" : "own"}
           kind={lootSpot.kind}
           items={lootItems}
+          sources={lootRows.map((r) => r.spot.id)}
           blocked={lootBlocked ?? undefined}
           onTake={(index) => takeOne(index)}
-          onTakeAll={() => zone.send({ type: "take", unit: selfId, spot: lootSpot.id })}
+          onTakeAll={takeAll}
           onClose={() => setLooting(null)}
           viewer={{ classId: me.character.class_id, level: me.character.level }}
         />
