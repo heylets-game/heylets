@@ -309,6 +309,36 @@ function drainInto(ctx: Ctx, user: Unit, dealt: number, drain: Drain | undefined
   heal(ctx, user, Math.max(1, Math.round(dealt * drain.share)), { actor: user.id, what });
 }
 
+/** What a blow's shock does to those beside its target (a Water Burst's spray, an Ogre's Club Smash). */
+interface SplashSpec {
+  /** Each is hurt by a share of the blow's own roll, or by dice of its own rolled for each. */
+  amount: { share: number; of: number } | { roll: () => Rolled };
+  /** They may save for half (with this stat, against this DC), or not at all. */
+  save?: { stat: StatKey; dc: number; label: string };
+  actor: string;
+  what: string;
+  /** The nearest to the target that counts as beside it: 1 leaves out one on the very same hex, 0 does not. */
+  minGap: number;
+  /** The damage is logged as the shock of a blow on someone beside its target, not a blow at them (the hit event's `splash`). */
+  splash?: boolean;
+}
+
+/**
+ * The shock of a blow on `target` pulses out: every unit of the other side than `side`'s, standing, within a hex of the
+ * target (itself left out) is hurt as the spec says. In the order of the zone's units, each fully dealt with in turn.
+ */
+function splashAround(ctx: Ctx, side: Side, target: Unit, spec: SplashSpec): void {
+  const beside = struckBy(ctx.state, side, (u) => u.id !== target.id && gap(u, target) >= spec.minGap && gap(u, target) <= 1);
+  const share = "share" in spec.amount ? Math.floor(spec.amount.of * spec.amount.share) : 0;
+  for (const victim of beside) {
+    const dice = "roll" in spec.amount ? spec.amount.roll() : undefined;
+    const full = dice ? dice.total : share;
+    const hurt = { actor: spec.actor, what: spec.what, ...(dice ? { dice } : {}), ...(spec.splash ? { splash: true } : {}) };
+    if (spec.save) saveForHalf(ctx, [victim], { ...spec.save, amount: () => full, hurt });
+    else damage(ctx, victim, full, hurt);
+  }
+}
+
 /** One attack that everyone it catches saves against for half (see saveForHalf). */
 interface HalfSave {
   /** The stat they save with: Agility for most. */
@@ -827,10 +857,8 @@ function strike(ctx: Ctx, unit: Unit, def: AbilityDef, tactic: Tactic, target: U
   if (tactic.kindleLit && !target.down && has(target, "guiding_light")) addStacks(ctx, target, "burning");
   // Water Burst: the drench reaches whoever stands beside the target, no roll to hit.
   if (tactic.spray) {
-    for (const foe of ctx.state.units.filter((u) => u.id !== target.id && u.side !== unit.side && !u.down && gap(u, target) <= 1)) {
-      const splash = rollDamage(ctx, unit, def, diceFor(Math.max(2, tactic.spray - 2)));
-      damage(ctx, foe, splash.total, { actor: unit.id, what: def.id, dice: splash });
-    }
+    const dice = diceFor(Math.max(2, tactic.spray - 2));
+    splashAround(ctx, unit.side, target, { amount: { roll: () => rollDamage(ctx, unit, def, dice) }, actor: unit.id, what: def.id, minGap: 0 });
   }
   if (melee) thorns(ctx, unit, target);
   // On a big one, what it leaves goes on the hex of it nearest the one who struck.
@@ -1524,9 +1552,7 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
     // A splash: the shock of the blow pulses out, and every other hero in the fight beside the target is battered by
     // a share of it, or by half that if they get clear (an Agility save).
     if (attack.kit.splash) {
-      const share = Math.floor(rolled.total * SPLASH_SHARE);
-      const beside = struckBy(state, enemy.side, (u) => u.id !== target.id && gap(u, target) === 1);
-      saveForHalf(ctx, beside, { stat: "agi", dc, label: attack.name, amount: () => share, hurt: { actor: enemy.id, what: attack.name, splash: true } });
+      splashAround(ctx, enemy.side, target, { amount: { share: SPLASH_SHARE, of: rolled.total }, save: { stat: "agi", dc, label: attack.name }, actor: enemy.id, what: attack.name, minGap: 1, splash: true });
     }
   }
   leave(target, true);
