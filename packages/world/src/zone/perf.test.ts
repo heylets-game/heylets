@@ -3,7 +3,7 @@ import { at, flatBoard, must, standEnemy, standHero, unit } from "../test/zoneBo
 import type { ZoneEvent, ZoneState } from "./types";
 
 // How long enemy turns take. Only runs when BENCH is set, and asserts nothing about the time: it prints the median
-// of three runs, so a speed-up can be shown. `BENCH=1 pnpm --filter @gantt-quest/world exec vitest run perf`.
+// of seven runs, so a speed-up can be shown. `BENCH=1 pnpm --filter @gantt-quest/world exec vitest run perf`.
 
 const bench = process.env.BENCH ? it : it.skip;
 const hero = { classId: "qa_paladin", level: 3, armor: 0, power: 1, abilities: ["bash"], items: {} };
@@ -26,6 +26,6 @@ function fight(): number {
 
 bench("ten rounds of enemy turns", () => {
   fight(); // warm up
-  const times = [fight(), fight(), fight()].sort((a, b) => a - b);
-  console.log(`BENCH enemy turns: median ${times[1].toFixed(0)} ms (runs ${times.map((t) => t.toFixed(0)).join(", ")})`);
+  const times = Array.from({ length: 7 }, fight).sort((a, b) => a - b);
+  console.log(`BENCH enemy turns: median ${times[3].toFixed(0)} ms (runs ${times.map((t) => t.toFixed(0)).join(", ")})`);
 }, 120000);
