@@ -24,7 +24,8 @@
 // voice (AGENTS.md says how to write one). It is every Release-summary:
 // trailer from the commits that make lines, in order:
 //   Release-summary: The hut's had a refit, with every tool hung on a rail up top.
-// or, for a release already tagged, its entry in release-note-overrides.ts.
+// or its entry in release-note-overrides.ts, keyed by its tag or, before it
+// is tagged, by the full hash of one of its commits.
 // A release with neither has no summary, and shows its lines alone.
 //
 // Needs the whole history and the tags (actions/checkout with fetch-depth: 0).
@@ -98,8 +99,10 @@ export function summariesFor(c: Commit, notes: readonly ReleaseNote[]): string[]
 const sentence = (s: string) => (/[.!?…]["'”’)]?$/.test(s) ? s : `${s}.`);
 
 /**
- * A release's lines and its summary, from its commits. A summary written for the
- * tag in release-note-overrides.ts wins; otherwise the commits' Release-summary
+ * A release's lines and its summary, from its commits. A summary written in
+ * release-note-overrides.ts wins: one for the tag, or else one for the newest of
+ * its commits that has one (so a release can have its summary before it is
+ * tagged, and keep it once it is). Otherwise the commits' Release-summary
  * trailers make it, each once, in order.
  */
 export function releaseFrom(list: readonly Commit[], tag?: string, summaries: Record<string, string> = SUMMARIES): Pick<Release, "notes" | "summary"> {
@@ -110,7 +113,8 @@ export function releaseFrom(list: readonly Commit[], tag?: string, summaries: Re
     notes.push(...lines);
     for (const s of summariesFor(c, lines)) if (!said.includes(s)) said.push(s);
   }
-  const summary = (tag && summaries[tag]) || said.map(sentence).join(" ");
+  const byCommit = [...list].reverse().find((c) => c.hash && summaries[c.hash]);
+  const summary = (tag && summaries[tag]) || (byCommit?.hash && summaries[byCommit.hash]) || said.map(sentence).join(" ");
   return summary ? { notes, summary } : { notes };
 }
 
