@@ -1566,8 +1566,10 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       } else if (ev.t === "condition") {
         const u = find(ev.target);
         const held = u?.conditions.find((c) => c.kind === ev.kind);
-        if (u && !held) u.conditions.push({ kind: ev.kind, rounds: ev.rounds, ...(ev.amount !== undefined ? { amount: ev.amount } : {}) });
+        if (u && !held) u.conditions.push({ kind: ev.kind, rounds: ev.rounds, ...(ev.amount !== undefined ? { amount: ev.amount } : {}), ...(ev.at ? { at: ev.at } : {}) });
         if (held) held.rounds = Math.max(held.rounds, ev.rounds);
+        // Fettered again somewhere else: its chain goes to the new spot.
+        if (held && ev.at) held.at = ev.at;
         if (held && ev.amount !== undefined) held.amount = ev.amount;
         // A shield is no condition to be named: it goes up on the HP bars (and the ward's own effect plays), and the log says how big.
         if (ev.kind === "bolstered") {

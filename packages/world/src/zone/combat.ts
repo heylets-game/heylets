@@ -1220,9 +1220,7 @@ export function fieldSlows(ctx: Ctx, unit: Unit): void {
  * chained to where it stands now instead, for as long as the longer of the two.
  */
 function fetter(ctx: Ctx, unit: Unit, tether: { reach: number; turns: number }): void {
-  addCondition(ctx, unit, "fettered", tether.turns, tether.reach);
-  const held = unit.conditions.find((c) => c.kind === "fettered");
-  if (held) held.at = { q: unit.pos.q, r: unit.pos.r };
+  addCondition(ctx, unit, "fettered", tether.turns, tether.reach, unit.pos);
 }
 
 function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | null, at?: HexPos): void {
