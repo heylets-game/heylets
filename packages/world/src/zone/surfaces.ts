@@ -43,6 +43,14 @@ const HOLDS: Partial<Record<SurfaceKind, { standing: boolean; home: Condition }>
 /** Whether a unit is at home on this ground (EnemyDef `homeGround`). */
 export const atHome = (unit: Unit, kind: SurfaceKind): boolean => unit.side === "enemy" && !!ENEMIES[unit.kind]?.homeGround?.includes(kind);
 
+/** Whether ground of this kind does nothing at all to a unit (EnemyDef `groundImmune`: an ember hound in fire). */
+export const groundImmune = (unit: Pick<Unit, "side" | "kind">, kind: SurfaceKind): boolean =>
+  unit.side === "enemy" && !!ENEMIES[unit.kind]?.groundImmune?.includes(kind);
+
+/** Whether ground of this kind hurts or trips this unit (HARMFUL, unless it is immune to it): what it steers round. */
+export const harms = (unit: Pick<Unit, "side" | "kind">, kind: SurfaceKind | undefined): boolean =>
+  !!kind && HARMFUL.has(kind) && !groundImmune(unit, kind);
+
 /** What a fire burning through oil or poison lasts. */
 const SPREAD_FIRE_ROUNDS = 2;
 const ICE_SAVE = 12;
@@ -60,6 +68,7 @@ function act(ctx: Ctx, unit: Unit, kind: SurfaceKind, moving: boolean): boolean 
   if (unit.down || flies(unit) || !inPlay(ctx, unit)) return false;
   // Cloudstep Boots float over all of it but the flames.
   if (hovers(unit) && kind !== "fire") return false;
+  if (groundImmune(unit, kind)) return false;
   const sure = perkOf(unit, "sure_footed") > 0;
   if (kind === "poison") {
     tick(ctx, unit, "poison", d(ctx, 4));
@@ -98,7 +107,8 @@ function act(ctx: Ctx, unit: Unit, kind: SurfaceKind, moving: boolean): boolean 
  * its hexes (what harms before what hinders, before water), which acts on it once.
  */
 function underfoot(state: Ctx["state"], unit: Unit): GroundSurface | undefined {
-  const all = span(unit).map((p) => state.surfaces[posKey(p)]).filter((s): s is GroundSurface => !!s);
+  // Ground it is immune to is not counted: a big one half in fire it shrugs off and half in poison is poisoned.
+  const all = span(unit).map((p) => state.surfaces[posKey(p)]).filter((s): s is GroundSurface => !!s && !groundImmune(unit, s.kind));
   const rank = (s: GroundSurface) => (HARMFUL.has(s.kind) ? 0 : HINDERING.has(s.kind) ? 1 : 2);
   return all.sort((a, b) => rank(a) - rank(b))[0];
 }

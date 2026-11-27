@@ -16,7 +16,7 @@ import { ACTION_AP, CHART, COMMON_ACTIONS, CORAL_ARMOR, ENEMY_EDGE, RALLY, SHANT
 import { modsOf } from "./mods";
 import { d20, diceFor, hitChance, mod, proficiency, rollDice, rollShown, statOf, type Dice } from "./rules";
 import { seenByHeroes } from "./light";
-import { HARMFUL, HINDERING, chill, clearSurfaces, dropTorch, enterSurface, ignite, letGoTorch, placeSurface } from "./surfaces";
+import { HINDERING, harms, chill, clearSurfaces, dropTorch, enterSurface, ignite, letGoTorch, placeSurface } from "./surfaces";
 import { FIELD_KINDS, type Budget, type CommonAction, type FieldKind, type Throwable, type Unit, type ZoneState } from "./types";
 import { clusterHexes, enterWeather, makeQuake, makeWeather, quakeHexes, rainHexes, wallHexes } from "./weather";
 import { callKin, summonCall, summonSpots } from "./summon";
@@ -1151,7 +1151,7 @@ export function lungeLanding(state: ZoneState, enemy: Unit, from: HexPos, attack
   const spots = hexNeighbors(target.pos, state.map.grid).filter(
     (p) => !sameHex(p, from) && !fetterBars(enemy, from, p) && standable(state, p, enemy) && elevOf(state.map, p) <= rise && strikes(state.map, p, target.pos) && sees(state.map, from, p),
   );
-  const harmful = (p: HexPos) => { const kind = state.surfaces[posKey(p)]?.kind; return kind && HARMFUL.has(kind) ? 1 : 0; };
+  const harmful = (p: HexPos) => (harms(enemy, state.surfaces[posKey(p)]?.kind) ? 1 : 0);
   return spots.sort((a, b) => harmful(a) - harmful(b) || hexDistance(from, a) - hexDistance(from, b) || a.q - b.q || a.r - b.r)[0] ?? null;
 }
 
