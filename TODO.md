@@ -10,3 +10,5 @@ line off once it is done.
   `packages/world/src/zone/enemyabilities.ts`, rates in `rules.ts` SCALE_RATES).
 - The Villain boss never spawns: nothing on the atlas or in delves places it (lairs pick theirs from LAIR_BEAST /
   CLIME_BEAST in `packages/world/src/atlas.ts`). Give it a home.
+- An enemy's opportunity attack is its first one-hex ability, so one that spreads (a cone, a sweep) goes off whole at
+  whoever steps away: the Haunt's Grave Grasp, the Great Bear's Rending Cleave (combat.ts provoke). Decide if it should.
