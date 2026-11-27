@@ -61,6 +61,16 @@ export function addStats(base: Stats, ...bonuses: Partial<Stats>[]): Stats {
   return out;
 }
 
+/** Stat bonuses added together (gear and a meal, say), keeping only the stats that come to something. */
+export function sumBonuses(...bonuses: Partial<Stats>[]): Partial<Stats> {
+  const out: Partial<Stats> = {};
+  for (const key of STAT_KEYS) {
+    const n = bonuses.reduce((t, b) => t + (b[key] ?? 0), 0);
+    if (n !== 0) out[key] = n;
+  }
+  return out;
+}
+
 /**
  * XP needed to go from `level` to `level + 1`, on the original game's curve
  * (`xpForLevel`): 100, 248, 374, 490, 599… Each level takes longer than the

@@ -8,6 +8,15 @@
 .pub-menu li { display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid var(--line); padding: 6px 8px; }
 .pub-menu li > .grow { flex: 1; min-width: 0; }
 .pub-menu button { flex: none; min-width: 64px; }
+/* What each meal does (PubMenu): stat points as a boost, outings as something given back. */
+.pub-perks { list-style: none; margin: 3px 0 0; padding: 0; display: flex; flex-direction: column; gap: 1px; font-size: 0.92em; }
+.pub-perks li { display: block; border: 0; padding: 0 0 0 14px; position: relative; }
+.pub-perks li::before { position: absolute; left: 0; }
+.pub-perks li.boost { color: var(--good); }
+.pub-perks li.boost::before { content: "▲"; font-size: 0.8em; top: 0.15em; }
+.pub-perks li.back::before { content: "↺"; }
+.pub-menu > li.eaten { border-color: var(--good); }
+.pub-fed { color: var(--good); }
 .pub-bar .row { display: flex; gap: 6px; }
 
 @media (max-width: 760px) {
