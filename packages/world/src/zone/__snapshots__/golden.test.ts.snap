@@ -66165,6 +66165,12 @@ exports[`golden C: enemy turns with the AI on > guardian 1`] = `
       },
     },
     {
+      "kind": "slowed",
+      "rounds": 1,
+      "t": "condition",
+      "target": "bob",
+    },
+    {
       "id": "e102",
       "name": "Stone Fist",
       "t": "used",
@@ -66293,12 +66299,6 @@ exports[`golden C: enemy turns with the AI on > guardian 1`] = `
         "q": -1,
         "r": 7,
       },
-    },
-    {
-      "kind": "slowed",
-      "rounds": 1,
-      "t": "condition",
-      "target": "bob",
     },
     {
       "id": "bob",

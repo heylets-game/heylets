@@ -295,6 +295,22 @@ export function shoveDest(from: HexPos, at: HexPos): HexPos {
 }
 
 /**
+ * A unit has come to stand on a hex by some other way than a step of its own walk (a leap, a dash, a blink, or moved by
+ * force): it meets the ground there, then the weather, then whatever greets anyone arriving on a hex (zone.ts onStep: a
+ * field of the other side's, being seen, being drawn into a fight). It is on the hex whatever the ground does to it, so
+ * all three happen even when the ground trips it. Says whether it is still on its feet and free to go on (false: the ground
+ * stopped it or it went down). What `onStep` answers ("stop walking") is ignored here: a shove or a drag goes as far as it
+ * would have gone, and only a unit's own walk stops on it.
+ */
+function arrive(ctx: Ctx, unit: Unit, flush: () => void = () => {}): boolean {
+  if (unit.down) return false;
+  const stopped = enterSurface(ctx, unit, flush);
+  if (!unit.down) enterWeather(ctx, unit, flush);
+  if (!unit.down) ctx.onStep?.(unit, flush);
+  return !stopped && !unit.down;
+}
+
+/**
  * Knock `target` one hex directly away from `from`. Against a wall, a cliff face, a hex its enemies hold or one full
  * of its own side it takes a knock and falls Prone instead. Toward a drop or a pit it may catch the edge; if it does
  * not, it goes over (shift).
@@ -309,8 +325,7 @@ export function push(ctx: Ctx, from: HexPos, target: Unit, by: string): Shift {
     damage(ctx, target, rolled.total, { actor: by, what: "shove", dice: rolled });
     addCondition(ctx, target, "prone", 1);
   } else if ((went === "moved" || went === "fell") && !target.down) {
-    enterSurface(ctx, target);
-    enterWeather(ctx, target);
+    arrive(ctx, target);
   }
   return went;
 }
@@ -341,8 +356,7 @@ function overwhelm(ctx: Ctx, unit: Unit, def: AbilityDef, target: Unit, opts: { 
     }
     if (went !== "moved") return true;
     // Ground that trips it (ice) ends the drive there.
-    if (enterSurface(ctx, target) || target.down) return true;
-    enterWeather(ctx, target);
+    if (!arrive(ctx, target)) return true;
   }
   return true;
 }
@@ -361,8 +375,7 @@ function pull(ctx: Ctx, unit: Unit, target: Unit, hexes: number): void {
     const went = shift(ctx, target, dest, unit.id, undefined, { pulled: i + 1 });
     if (went !== "moved") return;
     // Ground that trips it (ice) ends the drag there.
-    if (enterSurface(ctx, target) || target.down) return;
-    enterWeather(ctx, target);
+    if (!arrive(ctx, target)) return;
   }
 }
 
@@ -382,8 +395,7 @@ function sweepAlong(ctx: Ctx, target: Unit, line: HexPos[], by: string): void {
     const was = target.pos;
     target.pos = dest;
     ctx.events.push({ t: "shoved", id: by, target: target.id, from: was, to: dest });
-    if (enterSurface(ctx, target) || target.down) return;
-    enterWeather(ctx, target);
+    if (!arrive(ctx, target)) return;
   }
   // And then, if the line goes on over an edge or into a pit (or ends at the water's edge, or the land's): so does the wave.
   let over: HexPos | null = j < line.length ? line[j] : null;
@@ -396,10 +408,7 @@ function sweepAlong(ctx: Ctx, target: Unit, line: HexPos[], by: string): void {
   if (!over || target.down) return;
   const into = shiftInto(ctx.state, target.pos, over, target);
   if (!into || into.how === "open") return;
-  if (shift(ctx, target, over, by) === "fell" && !target.down) {
-    enterSurface(ctx, target);
-    enterWeather(ctx, target);
-  }
+  if (shift(ctx, target, over, by) === "fell" && !target.down) arrive(ctx, target);
 }
 
 /** Open ground `who` could be put down on: a floor, nothing built on it, and room for them to stand (roomAt: with nobody named, nobody there at all). */
@@ -431,7 +440,7 @@ function blinkTo(ctx: Ctx, unit: Unit, to: HexPos, phase = false): void {
   const from = unit.pos;
   unit.pos = to;
   ctx.events.push({ t: "blinked", id: unit.id, from, to, ...(phase ? { phase: true as const } : {}) });
-  if (!enterSurface(ctx, unit) && !unit.down) enterWeather(ctx, unit);
+  arrive(ctx, unit);
 }
 
 /** Lead by Example: the user's ally nearest the target (not the user) gets a stack of Inspired: advantage on a roll to hit. */
@@ -969,7 +978,6 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
     // Then away, hit or miss, if a hex was picked.
     if (tactic.blink && aim.at && !unit.down && standable(state, aim.at, unit)) {
       blinkTo(ctx, unit, aim.at);
-      if (!unit.down) ctx.onStep?.(unit, () => {});
     }
   } else if (tactic.sweep) {
     // A wave: the far ones are swept first, so the near ones have somewhere to go.
@@ -1055,7 +1063,6 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
     const spot = ally ? carrySpot(state, unit, ally, aim.at!) : null;
     blinkTo(ctx, unit, aim.at!);
     if (ally && spot) blinkTo(ctx, ally, spot);
-    for (const u of [unit, ...(ally && spot ? [ally] : [])]) if (!u.down) ctx.onStep?.(u, () => {});
     landed = true;
   } else {
     const target = tactic.shape === "ally" && aim.target ? unitById(state, aim.target)! : unit;
@@ -1220,9 +1227,7 @@ function lungeAt(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit): bool
   enemy.pos = to;
   ctx.events.push({ t: "jumped", id: enemy.id, from, to, lunge: target.id });
   tumble(ctx, enemy, from, null, JUMP_DOWN);
-  if (enemy.down || enterSurface(ctx, enemy) || enemy.down) return false;
-  enterWeather(ctx, enemy);
-  ctx.onStep?.(enemy, () => {});
+  if (!arrive(ctx, enemy)) return false;
   return !enemy.down && !has(enemy, "prone") && !target.down;
 }
 
@@ -1444,9 +1449,7 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
       if (!saved) leave(victim, false);
     }
     tumble(ctx, enemy, from, null, JUMP_DOWN);
-    if (enemy.down || enterSurface(ctx, enemy) || enemy.down) return;
-    enterWeather(ctx, enemy);
-    ctx.onStep?.(enemy, () => {});
+    arrive(ctx, enemy);
     return;
   }
   if (!target) return;
@@ -1590,7 +1593,6 @@ export function doCommon(ctx: Ctx, unit: Unit, what: CommonAction, aim: Aim, bud
   } else if (what === "jump" && isBlink(ctx.state, unit, aim.at)) {
     // Phase Treads: there at once, crossing nothing, drawing no blow on the way.
     blinkTo(ctx, unit, aim.at!, true);
-    if (!unit.down) ctx.onStep?.(unit, () => {});
   } else if (what === "jump") {
     const from = unit.pos;
     provoke(ctx, unit, aim.at!, budget, () => {});
@@ -1599,10 +1601,7 @@ export function doCommon(ctx: Ctx, unit: Unit, what: CommonAction, aim: Aim, bud
     ctx.events.push({ t: "jumped", id: unit.id, from, to: unit.pos });
     // A leap down is the leaper's own doing, as far as it goes: past that it is a fall.
     tumble(ctx, unit, from, null, JUMP_DOWN);
-    if (!unit.down && !enterSurface(ctx, unit) && !unit.down) {
-      enterWeather(ctx, unit);
-      ctx.onStep?.(unit, () => {});
-    }
+    arrive(ctx, unit);
   }
 }
 
