@@ -51,7 +51,7 @@ import { closeBack, sendTo, tellTrades } from "./walk-room";
 
 /** How long a turn in a fight may take before it ends itself. */
 export const ZONE_TURN_MS = 90_000;
-/** How long a hero's turn passed over by the dev switch "heroes take no turns" waits, between rounds (zoneIdleTurn). */
+/** How long a hero's turn lasts with the dev switch "heroes take no turns" on (zoneIdleTurn). */
 const IDLE_TURN_MS = 1_000;
 
 interface Attachment {

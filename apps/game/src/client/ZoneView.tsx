@@ -737,7 +737,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         if (foe && next.encounter) {
           sounds.zone("turn.enemy");
           if (inFight) renderer.current?.watch(id);
-          else if (where) renderer.current?.lookAt(where);
+          else if (where) renderer.current?.lookAt(where, true);
           announce("enemy", `${unit?.name ?? "The enemy"}'s turn`);
           logAdd({ k: "turn", name: unit?.name ?? "The enemy", side: "enemy" });
         } else if (inFight) {
@@ -1654,7 +1654,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           sounds.zone("initiative");
           announce("fight", "Combat", "Roll for initiative");
           logAdd({ k: "head", text: "Combat begins" });
-          if (centre) view?.lookAt(centre);
+          if (centre) view?.lookAt(centre, true);
         });
       } else if (ev.t === "fight_join") {
         say(`${name(ev.id)} joins the fight.`);
@@ -1737,7 +1737,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         });
         say(`${next.options.name ?? "This place"} is cleared, and the routes beyond it are open. Its spoils are heaped up for the taking.`, "good");
         const heap = next.loot?.find((s) => s.id === ev.spot);
-        if (heap) later(() => view?.lookAt(heap.pos));
+        if (heap) later(() => view?.lookAt(heap.pos, true));
       } else if (ev.t === "key") {
         // On the ring: over whoever found it, or (from a beaten band) your own hero, as the ring is everyone's.
         const finder = ev.id ?? next.you;
@@ -1755,7 +1755,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         const bellAt = bell?.pos;
         later(() => {
           // The camera swings over to it; then it swings hard, and waves of sound pulse out from it.
-          if (bellAt) view?.lookAt(bellAt);
+          if (bellAt) view?.lookAt(bellAt, true);
           timers.current.push(setTimeout(() => ringOut(ev.poi), bellAt ? BELL_PAN_MS : 0));
         });
         say(`${name(ev.id)} rings the alarm bell!`, "bad");
@@ -2033,6 +2033,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       view.dispose();
     };
   }, []);
+  // The dev switch for a camera that never moves of itself (the Maps tab).
+  useEffect(() => renderer.current?.setStill(dev.cameraStill), [dev.cameraStill]);
 
   // The dev toolbox's way in: while this zone is on screen it can send dev actions and arm a tool.
   const send = zone.send;

@@ -1244,6 +1244,8 @@ export class WorldRenderer {
   private combat = new CombatView();
   /** The camera in a fight (fightCamera.ts): whoever's turn it is is followed, and a shot from afar is framed whole. Ahead of following your own hero. */
   private fight = new FightCamera();
+  /** The camera goes only where the player takes it (setStill): nobody followed, no shot framed, nothing looked at of itself. */
+  private cameraStill = false;
   /** Where on screen a framed shot must fit: clear of the fight's panels as they were last measured (see frameShot). */
   private shotBox: Box = SHOT_BOX;
   /** How far this turn's walk reaches from your hero, in world units, and the reach it was measured for (see combatSpots). */
@@ -3647,7 +3649,9 @@ export class WorldRenderer {
     return worldToHex(this.target.x, this.target.z);
   }
 
-  lookAt(pos: HexPos) {
+  /** Send the view to `pos`. `auto`: the game sends it there of itself (a fight starting, a bell rung), not the player: not while still. */
+  lookAt(pos: HexPos, auto = false) {
+    if (auto && this.cameraStill) return;
     // Sent to look at something else: no longer on whoever's turn it is, or on a shot.
     this.fight.takeOver();
     this.targetGoal.copy(this.standAt(pos));
@@ -3693,6 +3697,15 @@ export class WorldRenderer {
   /** How the camera is set to look, apart from where and from how far (for framing a shot). */
   private lens(): Lens {
     return { fov: this.camera.fov, aspect: this.camera.aspect, yaw: this.yawGoal, pitch: this.pitchGoal, reach: CAMERA_REACH, box: this.shotBox };
+  }
+
+  /**
+   * A dev switch (the Maps tab): the camera never moves of itself. Nobody is followed, your hero or whoever's turn it is, no
+   * shot is framed and nothing is looked at for you (lookAt `auto`); it goes only where you pan it, or send it.
+   */
+  setStill(on: boolean) {
+    this.cameraStill = on;
+    if (on) this.fight.takeOver();
   }
 
   /** Keep your hero centred (or stop). Turning it on brings the camera back to them, easing there. */
@@ -5811,15 +5824,15 @@ export class WorldRenderer {
 
     // In a fight, a shot from afar is framed whole, from the one who lets it go to wherever it lands; then the
     // camera goes back to where it was going.
-    const shot = this.fight.aim(this.clock, this.lens(), this.userDist, this.maxZoom);
+    const shot = this.cameraStill ? null : this.fight.aim(this.clock, this.lens(), this.userDist, this.maxZoom);
     if (shot) {
       this.targetGoal.copy(shot.at);
       this.dist = shot.dist;
     }
     // Following: the camera's goal is the feet (the middle of the hex they stand on) of whoever's turn it is in a
     // fight, or else your own hero's, wherever they have got to.
-    const watched = this.fight.following && this.fight.watched ? this.units.get(this.fight.watched) : undefined;
-    const mine = !watched && this.follow && this.state?.you ? this.units.get(this.state.you) : undefined;
+    const watched = !this.cameraStill && this.fight.following && this.fight.watched ? this.units.get(this.fight.watched) : undefined;
+    const mine = !this.cameraStill && !watched && this.follow && this.state?.you ? this.units.get(this.state.you) : undefined;
     if (mine) {
       if (this.followHeld && mine.path.length > 0) {
         this.followHeld = false;

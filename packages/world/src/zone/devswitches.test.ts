@@ -59,35 +59,32 @@ describe("dev switches", () => {
     expect(must(off, { type: "dev", by: "ann", dev: { op: "timer", off: false } }).timerOff).toBeUndefined();
   });
 
-  it("passes the heroes' turns over while heroes take no turns, a round at a time", () => {
+  it("has the server end each hero's turn while heroes take no turns", () => {
     let state = board();
     state.aiOff = false;
-    state.undying = true;
-    // Ann's turn, if it is hers now, ends with the switch.
-    const events: ZoneEvent[] = [];
-    const round = state.encounter!.round;
-    state = must(state, { type: "dev", by: "ann", dev: { op: "heroes_idle", on: true } }, events);
+    if (state.encounter!.acting[0] !== "ann") state = must(state, { type: "dev", by: "ann", dev: { op: "next_turn" } });
+    expect(zoneIdleTurn(state)).toBe(false);
+    state = must(state, { type: "dev", by: "ann", dev: { op: "heroes_idle", on: true } });
     expect(state.heroesIdle).toBe(true);
-    const enc = state.encounter!;
-    // The wolf played: it bit her, and it is her turn again only in the next round, waiting for the server to end it.
-    expect(events.some((e) => e.t === "hit")).toBe(true);
-    expect(enc.round).toBe(round + 1);
-    expect(enc.acting).toEqual(["ann"]);
-    expect(enc.done).toEqual([]);
+    // Her turn is still hers: the server ends it (its timeout).
+    expect(state.encounter!.acting).toEqual(["ann"]);
     expect(zoneIdleTurn(state)).toBe(true);
-    // Ending it (the server's timeout) plays one round more.
-    const again = must(state, { type: "timeout" });
-    expect(again.encounter!.round).toBe(round + 2);
-    expect(again.encounter!.acting).toEqual(["ann"]);
+    const events: ZoneEvent[] = [];
+    const turnNo = state.encounter!.turnNo;
+    const after = must(state, { type: "timeout" }, events);
+    // The wolf played, and it is her turn again, for the server to end too.
+    expect(events.some((e) => e.t === "hit" || e.t === "miss")).toBe(true);
+    expect(after.encounter!.acting).toEqual(["ann"]);
+    expect(after.encounter!.turnNo).toBeGreaterThan(turnNo);
+    expect(zoneIdleTurn(after)).toBe(true);
     expect(must(state, { type: "dev", by: "ann", dev: { op: "heroes_idle", on: false } }).heroesIdle).toBeUndefined();
   });
 
-  it("leaves a hero's turn waiting with heroes taking no turns while the enemy takes none either", () => {
+  it("leaves turns to the dev in the sandbox, heroes taking no turns or not", () => {
     let state = must(board(), { type: "dev", by: "ann", dev: { op: "heroes_idle", on: true } });
-    const enc = state.encounter!;
-    if (enc.acting[0] !== "ann") state = must(state, { type: "dev", by: "ann", dev: { op: "next_turn" } });
-    expect(state.encounter!.acting).toEqual(["ann"]);
-    expect(state.encounter!.done).toEqual([]);
+    if (state.encounter!.acting[0] !== "ann") state = must(state, { type: "dev", by: "ann", dev: { op: "next_turn" } });
+    expect(zoneIdleTurn(state)).toBe(true);
+    state = must(state, { type: "dev", by: "ann", dev: { op: "sandbox", on: true } });
     expect(zoneIdleTurn(state)).toBe(false);
   });
 
