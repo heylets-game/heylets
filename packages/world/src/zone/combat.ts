@@ -697,8 +697,13 @@ function strike(ctx: Ctx, unit: Unit, def: AbilityDef, tactic: Tactic, target: U
   if (tactic.vsWet && has(target, "wet")) more += tactic.vsWet;
   if (tactic.edge && roll.adv === 1) more += tactic.edge;
   if (tactic.wading && inWater(ctx.state, unit)) more += tactic.wading;
-  if (tactic.bulwark) more += Math.floor(shieldOf(unit) * tactic.bulwark.perShield);
   const rolled = rollShown(ctx.rng, abilityDice(def), more, roll.crit);
+  // Bulwark Strike: harder for the shield carried, but by no more than the blow does without it.
+  if (tactic.bulwark) {
+    const extra = Math.min(Math.floor(shieldOf(unit) * tactic.bulwark.perShield), Math.floor(rolled.total * tactic.bulwark.upTo));
+    rolled.plus += extra;
+    rolled.total += extra;
+  }
   const dealt = damage(ctx, target, rolled.total, { actor: unit.id, what: def.id, crit: roll.crit, dice: rolled });
   if (def.drain && dealt > 0 && !unit.down) heal(ctx, unit, Math.max(1, Math.round(dealt * def.drain)), { actor: unit.id, what: def.id });
   // A Warlock's critical hits drag the target under (Riptide).
