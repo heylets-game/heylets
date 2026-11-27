@@ -207,15 +207,6 @@ export function zoneView(state: ZoneState, you: string, hidden: readonly string[
 /** Whether a fight's turns go untimed: the dev switch for it, or the combat sandbox. */
 export const zoneUntimed = (state: Pick<ZoneState, "timerOff" | "sandbox">): boolean => !!state.timerOff || !!state.sandbox;
 
-/**
- * Whether the turn waited on is a hero's that the dev switch ZoneState.heroesIdle has the server end after a moment, timer or
- * no timer. Not in the sandbox, where every turn waits on the dev.
- */
-export function zoneIdleTurn(state: ZoneState): boolean {
-  const enc = state.encounter;
-  return !!enc && !!state.heroesIdle && !state.sandbox && enc.acting.length > 0 && enc.acting.every((id) => unitById(state, id)?.side === "hero");
-}
-
 /** Whose turn the server is waiting on, as a key that changes when the wait does. Null out of a fight. */
 export function zoneAwaiting(state: ZoneState): string | null {
   return state.encounter && state.encounter.acting.length > 0 ? `t:${state.encounter.turnNo}` : null;

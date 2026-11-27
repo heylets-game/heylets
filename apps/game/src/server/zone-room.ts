@@ -40,7 +40,7 @@
 // written on the socket itself, which outlives the room's hibernation.
 
 import { DurableObject } from "cloudflare:workers";
-import { EMOTE_MIN_MS, THROWABLE_KINDS, ZONE_CLIENT_ACTIONS, createZone, hiddenEnemies, loadZone, nextTick, stepZone, zoneAwaiting, zoneHero, zoneIdleTurn, zoneOptions, zoneUntimed, zoneView, validEmote, type ZoneAction, type ZoneEvent, type ZoneState } from "@gantt-quest/world";
+import { EMOTE_MIN_MS, THROWABLE_KINDS, ZONE_CLIENT_ACTIONS, createZone, hiddenEnemies, loadZone, nextTick, stepZone, zoneAwaiting, zoneHero, zoneOptions, zoneUntimed, zoneView, validEmote, type ZoneAction, type ZoneEvent, type ZoneState } from "@gantt-quest/world";
 import { consumablesOf, gainConsumables, kitStatements, spendConsumables, type Consumables } from "./consumables";
 import { returnLuck, takeLuck } from "./well";
 import { applyZoneGrant, crewFor, heroInitFor, refreshHarbor, type Env } from "./db";
@@ -51,8 +51,6 @@ import { closeBack, sendTo, tellTrades } from "./walk-room";
 
 /** How long a turn in a fight may take before it ends itself. */
 export const ZONE_TURN_MS = 90_000;
-/** How long a hero's turn lasts with the dev switch "heroes take no turns" on (zoneIdleTurn). */
-const IDLE_TURN_MS = 1_000;
 
 interface Attachment {
   playerId: string;
@@ -327,7 +325,7 @@ export class ZoneRoom extends DurableObject<Env> {
       }
       const deadline = zone.encounter?.deadline ?? null;
       // No time limit on turns (DevOp "timer", or the sandbox): nothing to run out.
-      if (zoneUntimed(zone) && !zoneIdleTurn(zone)) return;
+      if (zoneUntimed(zone)) return;
       if (deadline && Date.now() < deadline - 500) {
         await this.ctx.storage.setAlarm(deadline);
         return;
@@ -378,7 +376,7 @@ export class ZoneRoom extends DurableObject<Env> {
     }
     const next = res.state;
     // A new turn, or turns timed or untimed again (DevOp "timer", "sandbox").
-    if (zoneAwaiting(next) !== zoneAwaiting(prev) || zoneUntimed(next) !== zoneUntimed(prev) || zoneIdleTurn(next) !== zoneIdleTurn(prev)) await this.armTimer(next);
+    if (zoneAwaiting(next) !== zoneAwaiting(prev) || zoneUntimed(next) !== zoneUntimed(prev)) await this.armTimer(next);
     // Out of a fight, the clock's next round.
     if (!zoneAwaiting(next)) await this.armClock(next);
     this.zone = next;
@@ -504,13 +502,9 @@ export class ZoneRoom extends DurableObject<Env> {
     }
   }
 
-  /**
-   * A new turn is being waited on (or none is): set its deadline and the alarm that ends it. None while the dev switch has turns
-   * untimed, bar a hero's turn the dev switch "heroes take no turns" passes over: that one ends after a moment, whatever the timer.
-   */
+  /** A new turn is being waited on (or none is): set its deadline and the alarm that ends it. None while the dev switch has turns untimed. */
   private async armTimer(zone: ZoneState) {
-    const idle = zoneIdleTurn(zone);
-    const deadline = zoneAwaiting(zone) && (idle || !zoneUntimed(zone)) ? Date.now() + (idle ? IDLE_TURN_MS : ZONE_TURN_MS) : null;
+    const deadline = zoneAwaiting(zone) && !zoneUntimed(zone) ? Date.now() + ZONE_TURN_MS : null;
     if (zone.encounter) zone.encounter.deadline = deadline;
     if (deadline) await this.ctx.storage.setAlarm(deadline);
     else await this.ctx.storage.deleteAlarm();
@@ -533,7 +527,7 @@ export class ZoneRoom extends DurableObject<Env> {
     if (!zoneAwaiting(zone)) return this.armClock(zone);
     const deadline = zone.encounter?.deadline ?? null;
     const alarm = await this.ctx.storage.getAlarm();
-    if ((!zoneUntimed(zone) || zoneIdleTurn(zone)) && (alarm === null || !deadline || deadline < Date.now())) {
+    if (!zoneUntimed(zone) && (alarm === null || !deadline || deadline < Date.now())) {
       await this.armTimer(zone);
       await saveZoneStatement(this.env.DB, zone).run();
     }
