@@ -304,6 +304,8 @@ interface HalfSave {
   amount: (victim: Unit) => number;
   /** What is passed to `damage` for the log: who did it, with what, and the dice when there were dice (the very object, with the parts of the moment it carries). */
   hurt: { actor: string; what: string; dice?: Rolled; splash?: boolean };
+  /** What this one victim takes on top of the roll, as parts of the moment (a Wet one takes more from lightning): added to their amount and shown with their dice. */
+  more?: (victim: Unit) => RollMod[];
   /** After the damage, for one who failed the save, or for one who made it. */
   onFail?: (victim: Unit) => void;
   onSave?: (victim: Unit) => void;
@@ -316,8 +318,12 @@ interface HalfSave {
 function saveForHalf(ctx: Ctx, victims: readonly Unit[], o: HalfSave): void {
   for (const victim of victims) {
     const saved = saveRoll(ctx, victim, o.stat, o.dc, o.label).ok;
-    const full = o.amount(victim);
-    damage(ctx, victim, saved ? Math.floor(full / 2) : full, { ...o.hurt, halved: saved });
+    const extra = (o.more?.(victim) ?? []).filter((m) => m.n !== 0);
+    const added = extra.reduce((n, m) => n + m.n, 0);
+    const full = o.amount(victim) + added;
+    // Their dice show the extra as a part of their own, and add up to what they took.
+    const dice = o.hurt.dice && extra.length > 0 ? { ...o.hurt.dice, plus: o.hurt.dice.plus + added, total: o.hurt.dice.total + added, mods: [...(o.hurt.dice.mods ?? []), ...extra] } : o.hurt.dice;
+    damage(ctx, victim, saved ? Math.floor(full / 2) : full, { ...o.hurt, dice, halved: saved });
     if (saved) o.onSave?.(victim);
     else o.onFail?.(victim);
   }
@@ -1017,7 +1023,8 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
     const rolled = dice.total;
     saveForHalf(ctx, swept, {
       stat: "agi", dc: saveDc(unit, def), label: def.name,
-      amount: (victim) => rolled + (tactic.vsWet && has(victim, "wet") ? tactic.vsWet : 0),
+      amount: () => rolled,
+      more: (victim) => (tactic.vsWet && has(victim, "wet") ? [{ name: "Wet", n: tactic.vsWet }] : []),
       hurt: { actor: unit.id, what: def.id, dice },
       onFail: (victim) => {
         if (!victim.down) sweepAlong(ctx, victim, line, unit.id);
@@ -1071,7 +1078,8 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
     const rolled = dice.total;
     saveForHalf(ctx, inIt, {
       stat: "agi", dc: saveDc(unit, def), label: def.name,
-      amount: (victim) => rolled + (tactic.vsWet && has(victim, "wet") ? tactic.vsWet : 0),
+      amount: () => rolled,
+      more: (victim) => (tactic.vsWet && has(victim, "wet") ? [{ name: "Wet", n: tactic.vsWet }] : []),
       hurt: { actor: unit.id, what: def.id, dice },
       onFail: (victim) => {
         afflict(ctx, unit, def, victim, false);
