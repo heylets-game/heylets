@@ -2259,10 +2259,13 @@ function iceSpear(stage: MoveStage, { figure, hitAt, crit, onImpact }: MoveCtx) 
         frost.lookAt(ground.x, frost.position.y, ground.z);
         frostMaterial.opacity = 0.45;
         if (age >= trail) {
-          trail = age + 0.04;
-          // Behind it, not over it: the spear itself stays in plain sight.
+          trail = age + 0.015;
+          // Behind it, not over it: the spear itself stays in plain sight. Two speed lines at a time, a little apart.
           const tail = at.clone().addScaledVector(ahead, -length * 0.75);
-          stage.spawnFx("streak", cold, ahead.x < 0, { from: tail, to: tail.clone().addScaledVector(ahead, -0.8), life: 0.16, size: [1, 0.4], spin: 0, fade: true });
+          for (let i = 0; i < 2; i++) {
+            const from = offset(tail, (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4);
+            stage.spawnFx("streak", i ? ICE_CORE : cold, ahead.x < 0, { from, to: from.clone().addScaledVector(ahead, -1.2), life: 0.2, size: [1.7, 0.6], spin: 0, fade: true });
+          }
           stage.spawnFx("mote", ICE_CORE, ahead.x < 0, { from: tail, to: offset(tail, 0, -0.5, 0), life: 0.45, size: [0.3, 0.1], spin: 0, fade: true });
         }
       } else {
