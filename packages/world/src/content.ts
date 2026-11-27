@@ -493,7 +493,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   },
   // What the nest belongs to: a spider the size of a cart, that webs the whole crew at once.
   broodmother: {
-    kind: "broodmother", name: "Broodmother", hp: 55, defence: 12, move: 2, save: 3, init: 0, xp: 44, boss: true,
+    kind: "broodmother", name: "Broodmother", hp: 77, defence: 12, move: 2, save: 3, init: 0, xp: 44, boss: true,
     abilities: ["impaling_fang", "spin_web", "brood_swarm"],
     homeGround: ["web"],
   },
