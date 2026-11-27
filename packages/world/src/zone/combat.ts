@@ -988,281 +988,410 @@ function markDisengaged(ctx: Ctx, unit: Unit, budget: Budget): void {
   if (enc && !enc.disengaged?.includes(unit.id)) enc.disengaged = [...(enc.disengaged ?? []), unit.id];
 }
 
+/** What a hero's ability is handed to do: who uses it, which, on what, and whether they were Unseen as they began. */
+interface AbilityUse {
+  ctx: Ctx;
+  unit: Unit;
+  def: AbilityDef;
+  tactic: Tactic;
+  aim: Aim;
+  ability: string;
+  wasUnseen: boolean;
+}
+
+/** One kind of hero ability: whether it is this kind, and what it does. */
+interface AbilityKind {
+  id: string;
+  is(tactic: Tactic, aim: Aim, state: ZoneState): boolean;
+  /** Does it. True if it landed (the effects that wait on that: a Phase Treads blink's selfEffect). */
+  run(use: AbilityUse): boolean;
+}
+
+/** The other side's units still standing. */
+const foesOf = (state: ZoneState, unit: Unit): Unit[] => state.units.filter((u) => u.side !== unit.side && !u.down);
+
+function use_crate({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+  const { state } = ctx;
+  let landed = false;
+  raiseShields(ctx, unit, tactic);
+  // Aimed at a crate, a chain goes no further: there is nothing in a crate for it to jump from.
+  smash(ctx, unit, def, tactic, crateById(state, aim.target)!);
+  landed = true;
+  return landed;
+}
+
+function use_weather({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+  const { state } = ctx;
+  let landed = false;
+  makeWeather(ctx, tactic.weather!, abilityArea(state, unit, ability, aim.at, undefined, aim.lean), unit);
+  landed = true;
+  return landed;
+}
+
+function use_splash({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+  const { state } = ctx;
+  let landed = false;
+  // Healing for the caster's side alone, the fallen got up with it; then the water, which soaks whoever is there.
+  const area = abilityArea(state, unit, ability, aim.at, undefined, aim.lean);
+  const keys = new Set(area.map(posKey));
+  const mended = rollHeal(ctx, unit, def, healDice(def));
+  for (const u of state.units.filter((x) => x.side === unit.side && caught(x, keys))) heal(ctx, u, mended.total, { actor: unit.id, what: def.id, dice: mended });
+  placeSurface(ctx, area, "water", tactic.splash!.water, unit.id);
+  landed = true;
+  return landed;
+}
+
+function use_summon({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+  const { state } = ctx;
+  let landed = false;
+  for (const called of summonCall(ctx, unit, tactic.summon!, aim.at!)) if (!called.down) ctx.onStep?.(called, () => {});
+  landed = true;
+  return landed;
+}
+
+function use_chart({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+  const { state } = ctx;
+  let landed = false;
+  // One mark at a time: the new one takes the old one's place.
+  removeCondition(unit, "charted");
+  addCondition(ctx, unit, "charted", tactic.chart!.rounds);
+  const mark = unit.conditions.find((c) => c.kind === "charted");
+  if (mark) mark.at = { q: aim.at!.q, r: aim.at!.r };
+  chartCourse(ctx, unit);
+  landed = true;
+  return landed;
+}
+
+function use_constellation({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+  const { state } = ctx;
+  let landed = false;
+  // The links pass harmlessly over the user's side; every enemy on one is struck once and lit, however many cross it.
+  const keys = new Set(abilityArea(state, unit, ability).map(posKey));
+  const rolled = rollDamage(ctx, unit, def, abilityDice(def));
+  for (const victim of foesOf(state, unit).filter((u) => caught(u, keys))) {
+    damage(ctx, victim, rolled.total, { actor: unit.id, what: def.id, dice: rolled });
+    if (!victim.down) addCondition(ctx, victim, "guiding_light", tactic.guide ?? 0);
+  }
+  landed = true;
+  return landed;
+}
+
+function use_newMoon({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+  const { state } = ctx;
+  let landed = false;
+  // Every light put out at once, each for a blow that cannot be dodged.
+  const lit = litFoes(state, unit);
+  const rolled = rollDamage(ctx, unit, def, abilityDice(def));
+  for (const victim of lit) removeCondition(victim, "guiding_light");
+  for (const victim of lit) damage(ctx, victim, rolled.total, { actor: unit.id, what: def.id, dice: rolled });
+  landed = true;
+  return landed;
+}
+
+function use_redSky({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+  const { state } = ctx;
+  let landed = false;
+  // An omen, not a blow: no roll and no save, and only the other side reads it.
+  const keys = new Set(abilityArea(state, unit, ability, aim.at, undefined, aim.lean).map(posKey));
+  for (const foe of foesOf(state, unit).filter((u) => caught(u, keys))) addCondition(ctx, foe, "red_sky", tactic.redSky!.rounds);
+  landed = true;
+  return landed;
+}
+
+function use_unholy({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+  const { state } = ctx;
+  let landed = false;
+  // Water over it all, bar where an enemy stands: that hex comes up burning, whatever water or ice was on it gone first.
+  // (Oil or poison under an enemy goes up with it, and takes the rest of its spill along.)
+  const area = abilityArea(state, unit, ability, aim.at, undefined, aim.lean);
+  const held = new Set(foesOf(state, unit).map((u) => posKey(u.pos)));
+  const burning = area.filter((p) => held.has(posKey(p)));
+  placeSurface(ctx, area.filter((p) => !held.has(posKey(p))), "water", tactic.unholy!.water, unit.id);
+  clearSurfaces(ctx, burning.filter((p) => ["water", "ice"].includes(state.surfaces[posKey(p)]?.kind ?? "")));
+  placeSurface(ctx, burning, "fire", tactic.unholy!.fire, unit.id);
+  landed = true;
+  return landed;
+}
+
+function use_single({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+  const { state } = ctx;
+  let landed = false;
+  const target = unitById(state, aim.target!)!;
+  // The shield is set before the swing, and counts toward it.
+  raiseShields(ctx, unit, tactic);
+  // A pocket picked unseen is no blow, just a quick hand.
+  if (tactic.steal && wasUnseen) landed = true;
+  else if (tactic.overwhelm) landed = overwhelm(ctx, unit, def, target, tactic.overwhelm);
+  else if (tactic.bind) landed = bind(ctx, unit, def, target, tactic.bind);
+  else if (tactic.sure) {
+    if (def.damage) {
+      const rolled = rollDamage(ctx, unit, def, abilityDice(def));
+      damage(ctx, target, rolled.total, { actor: unit.id, what: def.id, dice: rolled });
+    }
+    // It lands without a roll to hit, but what it would leave on the target can still be saved against (Roar of Thunder's Stun).
+    afflict(ctx, unit, def, target, true);
+    landed = true;
+  } else landed = strike(ctx, unit, def, tactic, target);
+  // Knocked back unless it saves (Peal), or at once (Roar of Thunder).
+  let shoved = landed && !!tactic.knockback && !target.down;
+  if (shoved && tactic.knockSave) shoved = !saveRoll(ctx, target, "str", saveDc(unit, def), `Resist ${def.name}`).ok;
+  if (shoved) knockBack(ctx, unit, target, tactic.knockback ?? 0);
+  if (landed && tactic.pull && !target.down) pull(ctx, unit, target, tactic.pull);
+  if (tactic.steal && landed) pocket(ctx, unit, target);
+  if (tactic.inspire && landed) inspireNearest(ctx, unit, target);
+  if (tactic.curse && landed) layCurse(ctx, unit, target, "drowning_curse", tactic.curse.rounds);
+  if (tactic.blackSpot && landed) layCurse(ctx, unit, target, "black_spot", tactic.blackSpot.rounds);
+  // Then away, hit or miss, if a hex was picked.
+  if (tactic.blink && aim.at && !unit.down && standable(state, aim.at, unit)) {
+    blinkTo(ctx, unit, aim.at);
+  }
+  return landed;
+}
+
+function use_sweep({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+  const { state } = ctx;
+  let landed = false;
+  // A wave: the far ones are swept first, so the near ones have somewhere to go.
+  const line = abilityArea(state, unit, ability, aim.at, undefined, aim.lean);
+  const along = (u: Unit) => line.findIndex((p) => covers(u, p));
+  const swept = foesOf(state, unit).filter((u) => along(u) >= 0).sort((a, b) => along(b) - along(a));
+  const dice = rollDamage(ctx, unit, def, abilityDice(def));
+  const rolled = dice.total;
+  saveForHalf(ctx, swept, {
+    stat: "agi", dc: saveDc(unit, def), label: def.name,
+    amount: () => rolled,
+    more: (victim) => (tactic.vsWet && has(victim, "wet") ? [{ name: "Wet", n: tactic.vsWet }] : []),
+    hurt: { actor: unit.id, what: def.id, dice },
+    onFail: (victim) => {
+      if (!victim.down) sweepAlong(ctx, victim, line, unit.id);
+    },
+  });
+  if (unit.side === "hero" && def.damage) for (const box of cratesOn(state, line)) hurtCrate(ctx, box, rolled, { actor: unit.id, what: def.id });
+  // It leaves the line awash: whoever ends up on it is soaked.
+  if (tactic.surface) placeSurface(ctx, line, tactic.surface.kind, tactic.surface.rounds, unit.id);
+  landed = true;
+  return landed;
+}
+
+function use_adjacent({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+  const { state } = ctx;
+  let landed = false;
+  for (const foe of foesOf(state, unit).filter((u) => reaches(state.map, unit, u))) landed = strike(ctx, unit, def, tactic, foe) || landed;
+  if (unit.side === "hero" && def.damage) {
+    for (const box of cratesBeside(state, unit)) {
+      smash(ctx, unit, def, tactic, box);
+      landed = true;
+    }
+  }
+  return landed;
+}
+
+function use_arc({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+  const { state } = ctx;
+  let landed = false;
+  const keys = new Set(arcHexes(state, unit.pos, aim.at!).map(posKey));
+  for (const foe of foesOf(state, unit).filter((u) => span(u).some((p) => keys.has(posKey(p)) && strikes(state.map, unit.pos, p)))) landed = strike(ctx, unit, def, tactic, foe) || landed;
+  if (unit.side === "hero" && def.damage) {
+    for (const box of cratesBeside(state, unit).filter((c) => keys.has(posKey(c.pos)))) {
+      smash(ctx, unit, def, tactic, box);
+      landed = true;
+    }
+  }
+  return landed;
+}
+
+function use_chain({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+  const { state } = ctx;
+  let landed = false;
+  const chain = [unitById(state, aim.target!)!];
+  for (let i = 0; i < (tactic.jumps ?? 0); i++) {
+    const last = chain[chain.length - 1];
+    const next = foesOf(state, unit)
+      .filter((u) => !chain.includes(u) && gap(u, last) <= 2 && sees(state.map, ...meet(last, u)))
+      .sort((a, b) => gap(a, last) - gap(b, last) || a.id.localeCompare(b.id))[0];
+    if (!next) break;
+    chain.push(next);
+  }
+  // A miss breaks the chain: the lightning goes no further than the enemy that dodged it.
+  for (const foe of chain) {
+    if (foe.down) continue;
+    if (!strike(ctx, unit, def, tactic, foe)) break;
+    landed = true;
+  }
+  return landed;
+}
+
+function use_area({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+  const { state } = ctx;
+  let landed = false;
+  const area = abilityArea(state, unit, ability, aim.at, undefined, aim.lean);
+  const keys = new Set(area.map(posKey));
+  // A burst is thrown at the enemy, and so is a chorus; a blast or a line catches whoever is standing in it.
+  const inIt = state.units.filter((u) => !u.down && caught(u, keys) && ((tactic.shape !== "burst" && tactic.shape !== "cone" && !tactic.chorus && !tactic.foesOnly) || u.side !== unit.side));
+  // A chorus swells with every voice of the user's side caught up in it (the user's own aside).
+  const voices = tactic.chorus ? state.units.filter((u) => u.side === unit.side && u.id !== unit.id && !u.down && caught(u, keys)).length : 0;
+  const dice = rollDamage(ctx, unit, def, abilityDice(def), [{ name: "Chorus", n: (tactic.chorus ?? 0) * voices }]);
+  const rolled = dice.total;
+  saveForHalf(ctx, inIt, {
+    stat: "agi", dc: saveDc(unit, def), label: def.name,
+    amount: () => rolled,
+    more: (victim) => (tactic.vsWet && has(victim, "wet") ? [{ name: "Wet", n: tactic.vsWet }] : []),
+    hurt: { actor: unit.id, what: def.id, dice },
+    onFail: (victim) => {
+      afflict(ctx, unit, def, victim, false);
+      // Moonlight: whoever fails to brace is lit.
+      if (tactic.guide && !victim.down) addCondition(ctx, victim, "guiding_light", tactic.guide);
+      // Pull of the Deep: whoever fails to brace is dragged under.
+      if (tactic.drowns) drown(ctx, victim, tactic.drowns);
+      // Bellows Blast: whoever fails to brace is blown back, away from the user.
+      knockBack(ctx, unit, victim, tactic.knockback ?? 0);
+    },
+  });
+  // A crate in it takes the lot: it cannot get out of the way.
+  if (unit.side === "hero" && def.damage) for (const box of cratesOn(state, area)) hurtCrate(ctx, box, rolled, { actor: unit.id, what: def.id });
+  landed = true;
+  if (tactic.ignites) for (const pos of area) ignite(ctx, pos, unit.id);
+  if (tactic.surface) placeSurface(ctx, area, tactic.surface.kind, tactic.surface.rounds, unit.id);
+  return landed;
+}
+
+function use_blink({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+  const { state } = ctx;
+  let landed = false;
+  // Smuggler's Route: the ally's place beside the far end is settled before either of them goes.
+  const ally = aim.target && aim.target !== unit.id ? unitById(state, aim.target) : undefined;
+  const spot = ally ? carrySpot(state, unit, ally, aim.at!) : null;
+  blinkTo(ctx, unit, aim.at!);
+  if (ally && spot) blinkTo(ctx, ally, spot);
+  landed = true;
+  return landed;
+}
+
+function use_support({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+  const { state } = ctx;
+  let landed = false;
+  const target = tactic.shape === "ally" && aim.target ? unitById(state, aim.target)! : unit;
+  const soaked = tactic.regen && inWater(state, target) ? tactic.regen.water : 0;
+  if (def.heal && !tactic.soothe) {
+    const bonus = healBonus(unit, def);
+    const mended = rollHeal(ctx, unit, def, healDice(def), soaked ? [{ name: "In water", n: soaked }] : []);
+    heal(ctx, target, mended.total, { actor: unit.id, what: def.id, dice: mended });
+    // The same heal again as their next turn starts (Rejuvenate): the bonus kept on the condition, the dice rolled then.
+    if (tactic.echo) addCondition(ctx, target, "rejuvenating", tactic.echo, bonus);
+  }
+  // A heal that spreads: to every ally beside the one it is aimed at (Clarion Call), or round the user (Soothing Tone).
+  const healed = (u: Unit, base: number) => {
+    const mended = rollHeal(ctx, unit, def, diceFor(Math.max(2, base - 1)));
+    return heal(ctx, u, mended.total, { actor: unit.id, what: def.id, dice: mended });
+  };
+  if (tactic.ripple) for (const u of state.units) if (u.side === unit.side && !u.down && u.id !== target.id && gap(u, target) <= 1) healed(u, tactic.ripple);
+  if (tactic.soothe) for (const u of state.units) if (u.side === unit.side && !u.down && gap(u, unit) <= tactic.soothe.range) healed(u, def.heal ?? 0);
+  if (tactic.northStar) {
+    // The blow round the ally first, then the star: what it strikes now is not set alight by it.
+    const rolled = rollDamage(ctx, unit, def, abilityDice(def));
+    for (const foe of foesOf(state, unit).filter((u) => gap(u, target) <= 1)) {
+      damage(ctx, foe, rolled.total, { actor: unit.id, what: def.id, dice: rolled });
+      if (!foe.down) addCondition(ctx, foe, "guiding_light", tactic.guide ?? 0);
+    }
+    addCondition(ctx, target, "north_star", tactic.northStar.rounds);
+  }
+  if (tactic.regen) addCondition(ctx, target, "regenerating", tactic.regen.rounds);
+  if (tactic.starlit) addCondition(ctx, target, "north_star", tactic.starlit);
+  if (tactic.sicken) addCondition(ctx, unit, "poisoned", tactic.sicken);
+  if (tactic.standStrong) {
+    const { shield, perFoe } = tactic.standStrong;
+    const beside = perFoe * foesOf(state, unit).filter((u) => gap(u, unit) <= 1).length;
+    addShield(ctx, unit, shield + unit.level + beside, [{ name: "Foes beside", n: beside }]);
+  }
+  if (tactic.armor) addCondition(ctx, target, "coral_armor", tactic.armor.rounds);
+  if (tactic.shanty) {
+    // One shanty at a time: the new one starts afresh, nobody joined yet.
+    for (const kind of SHANTIES) removeCondition(unit, kind);
+    addCondition(ctx, unit, tactic.shanty, SHANTY.rounds);
+    Object.assign(shantyOf(unit)!, { joined: [], joinedOwn: [], surge: 0 });
+    retune(ctx);
+  }
+  if (def.targetEffect) inflict(ctx, target, def.targetEffect);
+  if (tactic.aura) addCondition(ctx, unit, tactic.aura.kind, tactic.aura.rounds);
+  if (tactic.steady) addUses(ctx, target, "inspired", tactic.steady);
+  // Wind's Blessing: more movement for each AP, now for one in the middle of their turn, else on their next.
+  if (tactic.tailwind && !moveMore(state, target, tactic.tailwind)) {
+    addCondition(ctx, target, "tailwind", 1, tactic.tailwind);
+    // An ally done with their turn in this same phase has it ended again as the phase does: it must outlast that.
+    const blessing = target.conditions.find((c) => c.kind === "tailwind");
+    if (blessing && state.encounter?.acting.includes(target.id)) blessing.fresh = true;
+  }
+  if (tactic.shield) {
+    const { range, shield, water } = tactic.shield;
+    for (const u of state.units) {
+      if (u.side !== unit.side || u.down || gap(u, unit) > range) continue;
+      const soaked = water && inWater(state, u) ? water : 0;
+      shieldUnit(ctx, u, shield + unit.level + soaked, [{ name: "In water", n: soaked }]);
+    }
+  }
+  if (tactic.cleanse) for (const kind of DEBUFFS) removeCondition(target, kind);
+  if (tactic.clearWay) {
+    for (const kind of DEBUFFS) removeCondition(target, kind);
+    clearSurfaces(ctx, wayBetween(state, unit, target.pos).filter((p) => { const s = state.surfaces[posKey(p)]; return !!s && HINDERING.has(s.kind); }));
+  }
+  if (tactic.taunt) {
+    for (const foe of foesWithin(state, unit, tactic.taunt.range)) {
+      tauntBy(ctx, foe, tactic.taunt.rounds, unit.id);
+    }
+  }
+  if (tactic.rally) {
+    const { range, rounds } = tactic.rally;
+    for (const u of state.units) if (u.side === unit.side && !u.down && gap(u, unit) <= range) addCondition(ctx, u, "rallied", rounds);
+  }
+  if (tactic.hide) {
+    const { range, rounds } = tactic.hide;
+    for (const u of state.units) if (u.side === unit.side && !u.down && gap(u, unit) <= range) addCondition(ctx, u, "invisible", rounds);
+  }
+  // One each for the user and an ally; used on yourself, both are yours.
+  if (tactic.smuggle) {
+    if (target.id === unit.id) addCondition(ctx, unit, "contraband", tactic.smuggle.rounds, 2);
+    else for (const u of [unit, target]) addCondition(ctx, u, "contraband", tactic.smuggle.rounds, 1);
+  }
+  landed = true;
+  return landed;
+}
+
+/**
+ * The kinds of hero ability, tried in this order: the first that matches is used, so the order is part of the rules.
+ * A new kind of ability is a new entry here (and its own function), not a new branch in the middle of one.
+ */
+const ABILITY_KINDS: readonly AbilityKind[] = [
+  { id: "crate", is: (tactic, aim, state) => (tactic.shape === "single" || tactic.shape === "chain") && !!crateById(state, aim.target), run: use_crate },
+  { id: "weather", is: (tactic) => !!tactic.weather, run: use_weather },
+  { id: "splash", is: (tactic) => !!tactic.splash, run: use_splash },
+  { id: "summon", is: (tactic) => !!tactic.summon, run: use_summon },
+  { id: "chart", is: (tactic) => !!tactic.chart, run: use_chart },
+  { id: "constellation", is: (tactic) => !!tactic.constellation, run: use_constellation },
+  { id: "newMoon", is: (tactic) => !!tactic.newMoon, run: use_newMoon },
+  { id: "redSky", is: (tactic) => !!tactic.redSky, run: use_redSky },
+  { id: "unholy", is: (tactic) => !!tactic.unholy, run: use_unholy },
+  { id: "single", is: (tactic) => tactic.shape === "single", run: use_single },
+  { id: "sweep", is: (tactic) => !!tactic.sweep, run: use_sweep },
+  { id: "adjacent", is: (tactic) => tactic.shape === "adjacent", run: use_adjacent },
+  { id: "arc", is: (tactic) => tactic.shape === "arc", run: use_arc },
+  { id: "chain", is: (tactic) => tactic.shape === "chain", run: use_chain },
+  { id: "area", is: (tactic) => tactic.shape === "blast" || tactic.shape === "burst" || tactic.shape === "line" || tactic.shape === "cone", run: use_area },
+  { id: "blink", is: (tactic) => !!tactic.blink, run: use_blink },
+  { id: "support", is: () => true, run: use_support },
+];
+
 /** Use an ability that has passed its check. Says what was used, then rolls and applies it. */
 export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim): void {
   const def = ABILITIES[ability];
   const tactic = tacticOf(ability);
   const { state } = ctx;
   ctx.events.push({ t: "used", id: unit.id, what: ability, name: def.name, target: aim.target, at: aim.at, ...(aim.lean ? { lean: aim.lean } : {}) });
-  const foes = () => state.units.filter((u) => u.side !== unit.side && !u.down);
   // Unseen, any ability gives the user away once it is done (bar going Unseen again, or a pocket picked unseen).
   const wasUnseen = unseen(unit);
   // Rallied (Hornpipe): the next ability that does harm gets the bonus, on everything it strikes, and uses it up.
   const rallied = has(unit, "rallied") && !!def.damage;
-  let landed = false;
-  const crate = tactic.shape === "single" || tactic.shape === "chain" ? crateById(state, aim.target) : undefined;
-  if (crate) {
-    raiseShields(ctx, unit, tactic);
-    // Aimed at a crate, a chain goes no further: there is nothing in a crate for it to jump from.
-    smash(ctx, unit, def, tactic, crate);
-    landed = true;
-  } else if (tactic.weather) {
-    makeWeather(ctx, tactic.weather, abilityArea(state, unit, ability, aim.at, undefined, aim.lean), unit);
-    landed = true;
-  } else if (tactic.splash) {
-    // Healing for the caster's side alone, the fallen got up with it; then the water, which soaks whoever is there.
-    const area = abilityArea(state, unit, ability, aim.at, undefined, aim.lean);
-    const keys = new Set(area.map(posKey));
-    const mended = rollHeal(ctx, unit, def, healDice(def));
-    for (const u of state.units.filter((x) => x.side === unit.side && caught(x, keys))) heal(ctx, u, mended.total, { actor: unit.id, what: def.id, dice: mended });
-    placeSurface(ctx, area, "water", tactic.splash.water, unit.id);
-    landed = true;
-  } else if (tactic.summon) {
-    for (const called of summonCall(ctx, unit, tactic.summon, aim.at!)) if (!called.down) ctx.onStep?.(called, () => {});
-    landed = true;
-  } else if (tactic.chart) {
-    // One mark at a time: the new one takes the old one's place.
-    removeCondition(unit, "charted");
-    addCondition(ctx, unit, "charted", tactic.chart.rounds);
-    const mark = unit.conditions.find((c) => c.kind === "charted");
-    if (mark) mark.at = { q: aim.at!.q, r: aim.at!.r };
-    chartCourse(ctx, unit);
-    landed = true;
-  } else if (tactic.constellation) {
-    // The links pass harmlessly over the user's side; every enemy on one is struck once and lit, however many cross it.
-    const keys = new Set(abilityArea(state, unit, ability).map(posKey));
-    const rolled = rollDamage(ctx, unit, def, abilityDice(def));
-    for (const victim of foes().filter((u) => caught(u, keys))) {
-      damage(ctx, victim, rolled.total, { actor: unit.id, what: def.id, dice: rolled });
-      if (!victim.down) addCondition(ctx, victim, "guiding_light", tactic.guide ?? 0);
-    }
-    landed = true;
-  } else if (tactic.newMoon) {
-    // Every light put out at once, each for a blow that cannot be dodged.
-    const lit = litFoes(state, unit);
-    const rolled = rollDamage(ctx, unit, def, abilityDice(def));
-    for (const victim of lit) removeCondition(victim, "guiding_light");
-    for (const victim of lit) damage(ctx, victim, rolled.total, { actor: unit.id, what: def.id, dice: rolled });
-    landed = true;
-  } else if (tactic.redSky) {
-    // An omen, not a blow: no roll and no save, and only the other side reads it.
-    const keys = new Set(abilityArea(state, unit, ability, aim.at, undefined, aim.lean).map(posKey));
-    for (const foe of foes().filter((u) => caught(u, keys))) addCondition(ctx, foe, "red_sky", tactic.redSky.rounds);
-    landed = true;
-  } else if (tactic.unholy) {
-    // Water over it all, bar where an enemy stands: that hex comes up burning, whatever water or ice was on it gone first.
-    // (Oil or poison under an enemy goes up with it, and takes the rest of its spill along.)
-    const area = abilityArea(state, unit, ability, aim.at, undefined, aim.lean);
-    const held = new Set(foes().map((u) => posKey(u.pos)));
-    const burning = area.filter((p) => held.has(posKey(p)));
-    placeSurface(ctx, area.filter((p) => !held.has(posKey(p))), "water", tactic.unholy.water, unit.id);
-    clearSurfaces(ctx, burning.filter((p) => ["water", "ice"].includes(state.surfaces[posKey(p)]?.kind ?? "")));
-    placeSurface(ctx, burning, "fire", tactic.unholy.fire, unit.id);
-    landed = true;
-  } else if (tactic.shape === "single") {
-    const target = unitById(state, aim.target!)!;
-    // The shield is set before the swing, and counts toward it.
-    raiseShields(ctx, unit, tactic);
-    // A pocket picked unseen is no blow, just a quick hand.
-    if (tactic.steal && wasUnseen) landed = true;
-    else if (tactic.overwhelm) landed = overwhelm(ctx, unit, def, target, tactic.overwhelm);
-    else if (tactic.bind) landed = bind(ctx, unit, def, target, tactic.bind);
-    else if (tactic.sure) {
-      if (def.damage) {
-        const rolled = rollDamage(ctx, unit, def, abilityDice(def));
-        damage(ctx, target, rolled.total, { actor: unit.id, what: def.id, dice: rolled });
-      }
-      // It lands without a roll to hit, but what it would leave on the target can still be saved against (Roar of Thunder's Stun).
-      afflict(ctx, unit, def, target, true);
-      landed = true;
-    } else landed = strike(ctx, unit, def, tactic, target);
-    // Knocked back unless it saves (Peal), or at once (Roar of Thunder).
-    let shoved = landed && !!tactic.knockback && !target.down;
-    if (shoved && tactic.knockSave) shoved = !saveRoll(ctx, target, "str", saveDc(unit, def), `Resist ${def.name}`).ok;
-    if (shoved) knockBack(ctx, unit, target, tactic.knockback ?? 0);
-    if (landed && tactic.pull && !target.down) pull(ctx, unit, target, tactic.pull);
-    if (tactic.steal && landed) pocket(ctx, unit, target);
-    if (tactic.inspire && landed) inspireNearest(ctx, unit, target);
-    if (tactic.curse && landed) layCurse(ctx, unit, target, "drowning_curse", tactic.curse.rounds);
-    if (tactic.blackSpot && landed) layCurse(ctx, unit, target, "black_spot", tactic.blackSpot.rounds);
-    // Then away, hit or miss, if a hex was picked.
-    if (tactic.blink && aim.at && !unit.down && standable(state, aim.at, unit)) {
-      blinkTo(ctx, unit, aim.at);
-    }
-  } else if (tactic.sweep) {
-    // A wave: the far ones are swept first, so the near ones have somewhere to go.
-    const line = abilityArea(state, unit, ability, aim.at, undefined, aim.lean);
-    const along = (u: Unit) => line.findIndex((p) => covers(u, p));
-    const swept = foes().filter((u) => along(u) >= 0).sort((a, b) => along(b) - along(a));
-    const dice = rollDamage(ctx, unit, def, abilityDice(def));
-    const rolled = dice.total;
-    saveForHalf(ctx, swept, {
-      stat: "agi", dc: saveDc(unit, def), label: def.name,
-      amount: () => rolled,
-      more: (victim) => (tactic.vsWet && has(victim, "wet") ? [{ name: "Wet", n: tactic.vsWet }] : []),
-      hurt: { actor: unit.id, what: def.id, dice },
-      onFail: (victim) => {
-        if (!victim.down) sweepAlong(ctx, victim, line, unit.id);
-      },
-    });
-    if (unit.side === "hero" && def.damage) for (const box of cratesOn(state, line)) hurtCrate(ctx, box, rolled, { actor: unit.id, what: def.id });
-    // It leaves the line awash: whoever ends up on it is soaked.
-    if (tactic.surface) placeSurface(ctx, line, tactic.surface.kind, tactic.surface.rounds, unit.id);
-    landed = true;
-  } else if (tactic.shape === "adjacent") {
-    for (const foe of foes().filter((u) => reaches(state.map, unit, u))) landed = strike(ctx, unit, def, tactic, foe) || landed;
-    if (unit.side === "hero" && def.damage) {
-      for (const box of cratesBeside(state, unit)) {
-        smash(ctx, unit, def, tactic, box);
-        landed = true;
-      }
-    }
-  } else if (tactic.shape === "arc") {
-    const keys = new Set(arcHexes(state, unit.pos, aim.at!).map(posKey));
-    for (const foe of foes().filter((u) => span(u).some((p) => keys.has(posKey(p)) && strikes(state.map, unit.pos, p)))) landed = strike(ctx, unit, def, tactic, foe) || landed;
-    if (unit.side === "hero" && def.damage) {
-      for (const box of cratesBeside(state, unit).filter((c) => keys.has(posKey(c.pos)))) {
-        smash(ctx, unit, def, tactic, box);
-        landed = true;
-      }
-    }
-  } else if (tactic.shape === "chain") {
-    const chain = [unitById(state, aim.target!)!];
-    for (let i = 0; i < (tactic.jumps ?? 0); i++) {
-      const last = chain[chain.length - 1];
-      const next = foes()
-        .filter((u) => !chain.includes(u) && gap(u, last) <= 2 && sees(state.map, ...meet(last, u)))
-        .sort((a, b) => gap(a, last) - gap(b, last) || a.id.localeCompare(b.id))[0];
-      if (!next) break;
-      chain.push(next);
-    }
-    // A miss breaks the chain: the lightning goes no further than the enemy that dodged it.
-    for (const foe of chain) {
-      if (foe.down) continue;
-      if (!strike(ctx, unit, def, tactic, foe)) break;
-      landed = true;
-    }
-  } else if (tactic.shape === "blast" || tactic.shape === "burst" || tactic.shape === "line" || tactic.shape === "cone") {
-    const area = abilityArea(state, unit, ability, aim.at, undefined, aim.lean);
-    const keys = new Set(area.map(posKey));
-    // A burst is thrown at the enemy, and so is a chorus; a blast or a line catches whoever is standing in it.
-    const inIt = state.units.filter((u) => !u.down && caught(u, keys) && ((tactic.shape !== "burst" && tactic.shape !== "cone" && !tactic.chorus && !tactic.foesOnly) || u.side !== unit.side));
-    // A chorus swells with every voice of the user's side caught up in it (the user's own aside).
-    const voices = tactic.chorus ? state.units.filter((u) => u.side === unit.side && u.id !== unit.id && !u.down && caught(u, keys)).length : 0;
-    const dice = rollDamage(ctx, unit, def, abilityDice(def), [{ name: "Chorus", n: (tactic.chorus ?? 0) * voices }]);
-    const rolled = dice.total;
-    saveForHalf(ctx, inIt, {
-      stat: "agi", dc: saveDc(unit, def), label: def.name,
-      amount: () => rolled,
-      more: (victim) => (tactic.vsWet && has(victim, "wet") ? [{ name: "Wet", n: tactic.vsWet }] : []),
-      hurt: { actor: unit.id, what: def.id, dice },
-      onFail: (victim) => {
-        afflict(ctx, unit, def, victim, false);
-        // Moonlight: whoever fails to brace is lit.
-        if (tactic.guide && !victim.down) addCondition(ctx, victim, "guiding_light", tactic.guide);
-        // Pull of the Deep: whoever fails to brace is dragged under.
-        if (tactic.drowns) drown(ctx, victim, tactic.drowns);
-        // Bellows Blast: whoever fails to brace is blown back, away from the user.
-        knockBack(ctx, unit, victim, tactic.knockback ?? 0);
-      },
-    });
-    // A crate in it takes the lot: it cannot get out of the way.
-    if (unit.side === "hero" && def.damage) for (const box of cratesOn(state, area)) hurtCrate(ctx, box, rolled, { actor: unit.id, what: def.id });
-    landed = true;
-    if (tactic.ignites) for (const pos of area) ignite(ctx, pos, unit.id);
-    if (tactic.surface) placeSurface(ctx, area, tactic.surface.kind, tactic.surface.rounds, unit.id);
-  } else if (tactic.blink) {
-    // Smuggler's Route: the ally's place beside the far end is settled before either of them goes.
-    const ally = aim.target && aim.target !== unit.id ? unitById(state, aim.target) : undefined;
-    const spot = ally ? carrySpot(state, unit, ally, aim.at!) : null;
-    blinkTo(ctx, unit, aim.at!);
-    if (ally && spot) blinkTo(ctx, ally, spot);
-    landed = true;
-  } else {
-    const target = tactic.shape === "ally" && aim.target ? unitById(state, aim.target)! : unit;
-    const soaked = tactic.regen && inWater(state, target) ? tactic.regen.water : 0;
-    if (def.heal && !tactic.soothe) {
-      const bonus = healBonus(unit, def);
-      const mended = rollHeal(ctx, unit, def, healDice(def), soaked ? [{ name: "In water", n: soaked }] : []);
-      heal(ctx, target, mended.total, { actor: unit.id, what: def.id, dice: mended });
-      // The same heal again as their next turn starts (Rejuvenate): the bonus kept on the condition, the dice rolled then.
-      if (tactic.echo) addCondition(ctx, target, "rejuvenating", tactic.echo, bonus);
-    }
-    // A heal that spreads: to every ally beside the one it is aimed at (Clarion Call), or round the user (Soothing Tone).
-    const healed = (u: Unit, base: number) => {
-      const mended = rollHeal(ctx, unit, def, diceFor(Math.max(2, base - 1)));
-      return heal(ctx, u, mended.total, { actor: unit.id, what: def.id, dice: mended });
-    };
-    if (tactic.ripple) for (const u of state.units) if (u.side === unit.side && !u.down && u.id !== target.id && gap(u, target) <= 1) healed(u, tactic.ripple);
-    if (tactic.soothe) for (const u of state.units) if (u.side === unit.side && !u.down && gap(u, unit) <= tactic.soothe.range) healed(u, def.heal ?? 0);
-    if (tactic.northStar) {
-      // The blow round the ally first, then the star: what it strikes now is not set alight by it.
-      const rolled = rollDamage(ctx, unit, def, abilityDice(def));
-      for (const foe of foes().filter((u) => gap(u, target) <= 1)) {
-        damage(ctx, foe, rolled.total, { actor: unit.id, what: def.id, dice: rolled });
-        if (!foe.down) addCondition(ctx, foe, "guiding_light", tactic.guide ?? 0);
-      }
-      addCondition(ctx, target, "north_star", tactic.northStar.rounds);
-    }
-    if (tactic.regen) addCondition(ctx, target, "regenerating", tactic.regen.rounds);
-    if (tactic.starlit) addCondition(ctx, target, "north_star", tactic.starlit);
-    if (tactic.sicken) addCondition(ctx, unit, "poisoned", tactic.sicken);
-    if (tactic.standStrong) {
-      const { shield, perFoe } = tactic.standStrong;
-      const beside = perFoe * foes().filter((u) => gap(u, unit) <= 1).length;
-      addShield(ctx, unit, shield + unit.level + beside, [{ name: "Foes beside", n: beside }]);
-    }
-    if (tactic.armor) addCondition(ctx, target, "coral_armor", tactic.armor.rounds);
-    if (tactic.shanty) {
-      // One shanty at a time: the new one starts afresh, nobody joined yet.
-      for (const kind of SHANTIES) removeCondition(unit, kind);
-      addCondition(ctx, unit, tactic.shanty, SHANTY.rounds);
-      Object.assign(shantyOf(unit)!, { joined: [], joinedOwn: [], surge: 0 });
-      retune(ctx);
-    }
-    if (def.targetEffect) inflict(ctx, target, def.targetEffect);
-    if (tactic.aura) addCondition(ctx, unit, tactic.aura.kind, tactic.aura.rounds);
-    if (tactic.steady) addUses(ctx, target, "inspired", tactic.steady);
-    // Wind's Blessing: more movement for each AP, now for one in the middle of their turn, else on their next.
-    if (tactic.tailwind && !moveMore(state, target, tactic.tailwind)) {
-      addCondition(ctx, target, "tailwind", 1, tactic.tailwind);
-      // An ally done with their turn in this same phase has it ended again as the phase does: it must outlast that.
-      const blessing = target.conditions.find((c) => c.kind === "tailwind");
-      if (blessing && state.encounter?.acting.includes(target.id)) blessing.fresh = true;
-    }
-    if (tactic.shield) {
-      const { range, shield, water } = tactic.shield;
-      for (const u of state.units) {
-        if (u.side !== unit.side || u.down || gap(u, unit) > range) continue;
-        const soaked = water && inWater(state, u) ? water : 0;
-        shieldUnit(ctx, u, shield + unit.level + soaked, [{ name: "In water", n: soaked }]);
-      }
-    }
-    if (tactic.cleanse) for (const kind of DEBUFFS) removeCondition(target, kind);
-    if (tactic.clearWay) {
-      for (const kind of DEBUFFS) removeCondition(target, kind);
-      clearSurfaces(ctx, wayBetween(state, unit, target.pos).filter((p) => { const s = state.surfaces[posKey(p)]; return !!s && HINDERING.has(s.kind); }));
-    }
-    if (tactic.taunt) {
-      for (const foe of foesWithin(state, unit, tactic.taunt.range)) {
-        tauntBy(ctx, foe, tactic.taunt.rounds, unit.id);
-      }
-    }
-    if (tactic.rally) {
-      const { range, rounds } = tactic.rally;
-      for (const u of state.units) if (u.side === unit.side && !u.down && gap(u, unit) <= range) addCondition(ctx, u, "rallied", rounds);
-    }
-    if (tactic.hide) {
-      const { range, rounds } = tactic.hide;
-      for (const u of state.units) if (u.side === unit.side && !u.down && gap(u, unit) <= range) addCondition(ctx, u, "invisible", rounds);
-    }
-    // One each for the user and an ally; used on yourself, both are yours.
-    if (tactic.smuggle) {
-      if (target.id === unit.id) addCondition(ctx, unit, "contraband", tactic.smuggle.rounds, 2);
-      else for (const u of [unit, target]) addCondition(ctx, u, "contraband", tactic.smuggle.rounds, 1);
-    }
-    landed = true;
-  }
+  const kind = ABILITY_KINDS.find((k) => k.is(tactic, aim, state))!;
+  const landed = kind.run({ ctx, unit, def, tactic, aim, ability, wasUnseen });
   if (landed && def.selfEffect && !unit.down) inflict(ctx, unit, def.selfEffect);
   if (tactic.stride && !unit.down) moveMore(state, unit, tactic.stride);
   if (wasUnseen && !tactic.hide && !tactic.steal) giveAway(ctx, unit);
