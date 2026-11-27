@@ -12,6 +12,8 @@
 // - Burning ground burns: a glowing bed of embers on every hex, flames
 //   licking up off it (the torch's flame, torchFlame.ts, a few to a hex),
 //   and sparks drifting up out of it.
+// - Web lies still: silk threads strung over each hex, spokes out from a
+//   middle and rings across them, each hex spun a little differently.
 //
 // Everything here is animated by `tickGround` (and the fumes by `tickFumes`),
 // called once a frame; all of it lies dimmer at night.
@@ -323,6 +325,62 @@ function emberBed(radius: number): THREE.Mesh {
 }
 
 /** Fire on the ground: per hex a glowing bed of embers, three flames licking up off it, and sparks rising. */
+/** Web on the ground (webField): its spokes and rings to a hex, how far out they reach (of a hex's middle-to-corner), and how thick a thread is. */
+export const WEB_GROUND = { spokes: 7, rings: 3, reach: 0.98, thread: 0.035 };
+
+/**
+ * Web lying over hexes: on each, threads strung out from a middle to round its edge and rings of thread across them,
+ * each sagging in a little between spokes, all one flat mesh just over the ground. Each hex is spun its own way, but
+ * the same way every time it is drawn (from where it is), so the web does not shift when the ground is drawn again.
+ */
+export function webField(hexes: HexPos[], at: (p: HexPos) => { x: number; y: number; z: number }, color: string): THREE.Mesh {
+  const { spokes, rings, reach, thread } = WEB_GROUND;
+  const positions: number[] = [];
+  const index: number[] = [];
+  const strand = (y: number, ax: number, az: number, bx: number, bz: number, w: number) => {
+    const len = Math.hypot(bx - ax, bz - az) || 1;
+    const [nx, nz] = [(-(bz - az) / len) * (w / 2), ((bx - ax) / len) * (w / 2)];
+    const n = positions.length / 3;
+    positions.push(ax + nx, y, az + nz, ax - nx, y, az - nz, bx + nx, y, bz + nz, bx - nx, y, bz - nz);
+    index.push(n, n + 1, n + 2, n + 1, n + 3, n + 2);
+  };
+  for (const p of hexes) {
+    const { x, y, z } = at(p);
+    // A hash of where it is, for its own twist and wobble.
+    const seed = (k: number) => {
+      const s = Math.sin(p.q * 12.9898 + p.r * 78.233 + k * 37.719) * 43758.5453;
+      return s - Math.floor(s);
+    };
+    const turn = seed(0) * Math.PI * 2;
+    const [mx, mz] = [x + (seed(1) - 0.5) * 0.2, z + (seed(2) - 0.5) * 0.2];
+    const angles = Array.from({ length: spokes }, (_, i) => turn + ((i + (seed(3 + i) - 0.5) * 0.4) / spokes) * Math.PI * 2);
+    const far = angles.map((_, i) => reach * (0.85 + seed(20 + i) * 0.15));
+    const h = y + 0.045;
+    angles.forEach((a, i) => strand(h, mx, mz, x + Math.cos(a) * far[i], z + Math.sin(a) * far[i], thread * 1.3));
+    for (let r = 1; r <= rings; r++) {
+      const share = r / (rings + 0.4);
+      for (let i = 0; i < spokes; i++) {
+        const j = (i + 1) % spokes;
+        const [a, b] = [angles[i], angles[j]];
+        const ax = mx + (x + Math.cos(a) * far[i] - mx) * share;
+        const az = mz + (z + Math.sin(a) * far[i] - mz) * share;
+        const bx = mx + (x + Math.cos(b) * far[j] - mx) * share;
+        const bz = mz + (z + Math.sin(b) * far[j] - mz) * share;
+        // Sagging in toward the middle between the two spokes it is strung across.
+        const [cx, cz] = [mx + ((ax + bx) / 2 - mx) * 0.88, mz + ((az + bz) / 2 - mz) * 0.88];
+        strand(h, ax, az, cx, cz, thread);
+        strand(h, cx, cz, bx, bz, thread);
+      }
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setIndex(index);
+  const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }));
+  mesh.renderOrder = 2;
+  return mesh;
+}
+
 export function fireField(hexes: HexPos[], at: (p: HexPos) => { x: number; y: number; z: number }): { group: THREE.Group; flames: THREE.Object3D[]; sparks: THREE.Points } {
   const group = new THREE.Group();
   const flames: THREE.Object3D[] = [];

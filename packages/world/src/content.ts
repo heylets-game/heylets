@@ -3,6 +3,7 @@
 
 import type { StatKey } from "@gantt-quest/core";
 import type { ScaleRate } from "./zone/rules";
+import type { SurfaceKind } from "./zone/types";
 
 /** What an ability or an enemy's attack can leave on whoever it lands on. A fight on the tiles has more conditions of its own (zone/types.ts). */
 export type EffectKind = "bleeding" | "burning" | "stunned" | "guarded" | "taunting" | "slowed" | "hasted" | "fumbling" | "exposed" | "prone" | "sundered" | "reeling" | "memento_mori";
@@ -372,6 +373,8 @@ export interface EnemyDef {
   regen?: { amount: number; unless: EffectKind; name: string };
   /** What hurts whoever lands a blow on it up close (a slime's Acid Armor; combat.ts thorns). */
   retort?: Retort;
+  /** Ground it is at home on: what slows anyone else there quickens it instead (a spider on web; zone/surfaces.ts). */
+  homeGround?: SurfaceKind[];
 }
 
 /**
@@ -486,11 +489,19 @@ export const ENEMIES: Record<string, EnemyDef> = {
   spider: {
     kind: "spider", name: "Giant Spider", hp: 14, defence: 12, move: 3, save: 0, init: 1, xp: 11,
     abilities: ["venomous_bite", "spider_web_spit"],
+    homeGround: ["web"],
   },
   // What the nest belongs to: a spider the size of a cart, that webs the whole crew at once.
   broodmother: {
     kind: "broodmother", name: "Broodmother", hp: 55, defence: 12, move: 2, save: 3, init: 0, xp: 44, boss: true,
-    abilities: ["impaling_fang", "brood_web_spit", "brood_swarm"],
+    abilities: ["impaling_fang", "spin_web", "brood_swarm"],
+    homeGround: ["web"],
+  },
+  // The Broodmother's young, called out of the nest by the pair (Brood Swarm): small, soft and quick, and they bite.
+  spiderling: {
+    kind: "spiderling", name: "Spiderling", hp: 5, defence: 9, move: 3, save: 0, init: 1, xp: 2,
+    abilities: ["spiderling_bite"],
+    homeGround: ["web"],
   },
   // The frost's wolves: a dire wolf in all but coat, and the cold in its bite slows what it bleeds.
   frost_wolf: {

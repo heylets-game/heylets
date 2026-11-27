@@ -4,8 +4,8 @@
 // the ability's shape, before its look is thought of (ZoneView's used and hit):
 //
 // - "burst": round its user, everyone near caught (an Ogre's Slam), a call to its own side (a Pack Leader's
-//   Howl), or a field raised round it (a Guardian's Slowing Field). Played round it as it is used (WorldRenderer.burst); each hero caught just flinches as their hit is told.
-// - "at": thrown at a spot, landing on the hexes round it (a Cultist's Immolate), or swept toward one through the
+//   Howl), a field raised round it (a Guardian's Slowing Field), or a call for more of it (a Broodmother's Brood Swarm). Played round it as it is used (WorldRenderer.burst); each hero caught just flinches as their hit is told.
+// - "at": thrown at a spot, landing on the hexes round it (a Cultist's Immolate, a Broodmother's Spin Web), or swept toward one through the
 //   hexes in front of its user (a Great Bear's Rending Cleave). Played at the spot as it is used (WorldRenderer.moveAt);
 //   each hero caught just flinches. A sweep whose move strikes each hero caught in turn (`sweeps`: a Brute's Great
 //   Cleave) is a "blow" instead.
@@ -23,7 +23,7 @@ const BY_NAME = new Map(Object.values(ENEMY_ABILITIES).map((a) => [a.name, a]));
 
 /**
  * The enemy ability called `name`, as the kind `kind` has it: several kinds have abilities of the same name that work
- * differently (a Giant Spider's Web Spit lands on a clump of hexes, a Broodmother's on one hero), so its user's own
+ * differently (a Giant Spider's Web Spit, a Spiderling's Bite), so its user's own
  * comes first. Any other by that name, if its kind has none (or none is known).
  */
 export function enemyAbilityNamed(name: string, kind?: string) {
@@ -42,9 +42,9 @@ export function ownRoute(name: string, kind?: string): OwnRoute | null {
   if (RETORTS.has(name)) return "blow";
   const def = enemyAbilityNamed(name, kind);
   if (!def) return null;
-  if (def.shape === "burst" || def.rally || def.field) return "burst";
+  if (def.shape === "burst" || def.rally || def.field || def.summon) return "burst";
   if (def.dash) return "dash";
-  return def.area || (def.sweep && !SIGNATURE_MOVES[name]?.sweeps) ? "at" : "blow";
+  return def.area || def.blast || (def.sweep && !SIGNATURE_MOVES[name]?.sweeps) ? "at" : "blow";
 }
 
 /**

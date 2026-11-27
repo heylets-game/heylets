@@ -36,7 +36,7 @@ import { generateDelve } from "./delve";
 import { checkLoot, checkOpen, leaveBody, look, lootFor, openChest, payBounty, take } from "./loot";
 import { PARTY_SIZES, siteOpen, spaced } from "./sites";
 import { FREE_WALK, big, blast, blockerAt, caught, covers, gap, inFight, isDead, meet, noWayThere, pathIn, perkOf, roomAt, sameHex, sees, solid, span, unitAt, unitById, zoneReach } from "./geometry";
-import { AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, ENEMY_MOVE_AP, FLEE_RANGE, ITEM_AP, STROLL_GRACE_MS, STROLL_STEP_MS, SUMMONS, STARTING_ITEMS, THROWABLES, THROWABLE_KINDS, cleanItems, unitStrike, commonCostFor, enemyHp, enemyMove, tacticOf } from "./kit";
+import { AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, ENEMY_MOVE_AP, FLEE_RANGE, ITEM_AP, STROLL_GRACE_MS, STROLL_STEP_MS, SUMMONS, STARTING_ITEMS, THROWABLES, THROWABLE_KINDS, cleanItems, unitStrike, commonCostFor, enemyMove, tacticOf } from "./kit";
 import { d20, heroMove, mod, rollDice, statOf } from "./rules";
 import { hiddenEnemies, sentToClient } from "./light";
 import { quakeAtTurn, tickWeather, weatherAtTurn } from "./weather";
@@ -44,7 +44,7 @@ import { checkPickup, checkStow, clearSurfaces, lightTorch, pickUpTorch, placeSu
 import { exploreRound, passTime } from "./clock";
 import { checkUnlock, dropKeys, heardBy, workDoor } from "./doors";
 import { checkForage, forage } from "./forage";
-import { dismiss } from "./summon";
+import { dismiss, enemyMaxHp, enemyUnit } from "./summon";
 import { drown, drowningAtStart, drowningOwed, holdBreath } from "./drowning";
 import { shantyOf, songMove, windward } from "./song";
 import { courseMarks } from "./stars";
@@ -55,31 +55,6 @@ import type { Budget, Condition, DevOp, Encounter, Throwable, Unit, ZoneAction, 
 const PAINT_ROUNDS = 6;
 
 // ---------- making a zone ----------
-
-/** An enemy of this kind standing at `pos` in `group`, at the map's level or at `level`. */
-function enemyUnit(state: ZoneState, kind: string, pos: HexPos, group: string, level = state.options.level): Unit {
-  const hp = enemyMaxHp(state, kind, level);
-  return {
-    id: `e${++state.seq}`,
-    side: "enemy",
-    name: ENEMIES[kind].name,
-    kind,
-    level,
-    pos,
-    hp,
-    maxHp: hp,
-    armor: 0,
-    power: 0,
-    // Its own copy of what its kind starts with: one enemy can be given more, or fewer, than the rest.
-    abilities: [...(ENEMIES[kind].abilities ?? [])],
-    conditions: [],
-    down: false,
-    cooldowns: {},
-    items: {},
-    group,
-    home: pos,
-  };
-}
 
 /**
  * The most heroes on a map at once, and the most its groups are ever sized for. A hero whose player has gone (`away`)
@@ -604,7 +579,7 @@ function beginTurn(ctx: Ctx, enc: Encounter, unit: Unit): boolean {
   if (has(unit, "slowed") && stride > 0) stride = Math.max(1, Math.floor(stride / 2));
   if (has(unit, "hasted")) stride *= 2;
   // Fresh AP on top of what was saved from its last turn.
-  let ap = Math.min(AP_MAX, (enc.banked?.[unit.id] ?? 0) + (unit.summon ? SUMMON_AP_TURN : AP_TURN));
+  let ap = Math.min(AP_MAX, (enc.banked?.[unit.id] ?? 0) + (unit.summon && unit.side === "hero" ? SUMMON_AP_TURN : AP_TURN));
   if (enc.banked) delete enc.banked[unit.id];
   // Getting up off the ground takes an AP.
   if (has(unit, "prone")) {
@@ -626,7 +601,7 @@ function beginTurn(ctx: Ctx, enc: Encounter, unit: Unit): boolean {
   // Windrunner Leggings: a few steps free at the start of every turn (none for one knocked flat).
   enc.budgets[unit.id] = { ap, move: stride > 0 ? perkOf(unit, "fleet") : 0, stride, disengaged: false, ...(sung > 0 ? { song: sung } : {}) };
   // An enemy puts only so much of a turn into getting about.
-  if (unit.side === "enemy" && !unit.summon) enc.budgets[unit.id].walk = ENEMY_MOVE_AP;
+  if (unit.side === "enemy") enc.budgets[unit.id].walk = ENEMY_MOVE_AP;
   // A course charted by one of its side: further, on the steps that bring it nearer the mark.
   if (courseMarks(ctx.state, unit).length > 0) enc.budgets[unit.id].course = 0;
   // Weather it stands in acts now its turn is underway, with a budget for the winds to change.
@@ -698,7 +673,8 @@ function settle(ctx: Ctx): boolean {
     // them: they lie where they fell, to be searched (loot.ts).
     // On a map the atlas made, the fallen are worth more the higher their level, as they took more killing.
     const worth = (f: Unit) => (ENEMIES[f.kind]?.xp ?? 0) * (state.options.tier ? 1 + 0.15 * Math.max(0, f.level - 1) : 1);
-    const xp = Math.round(foes.reduce((sum, f) => sum + worth(f), 0));
+    // What an enemy called into the fight (a Broodmother's brood) is worth nothing of its own.
+    const xp = Math.round(foes.filter((f) => !f.summon).reduce((sum, f) => sum + worth(f), 0));
     for (const h of heroes) {
       if (h.controller) continue;
       ctx.effects.push({ type: "grant", heroId: h.id, xp, resources: {} });
@@ -875,7 +851,7 @@ function topUp(ctx: Ctx): void {
 
 /** What 1 AP of movement buys a unit, before anything that hastens or slows it. */
 function strideOf(state: ZoneState, unit: Unit): number {
-  return unit.summon ? (SUMMONS[unit.kind]?.move ?? 1) : unit.side === "hero" && unit.stats ? heroMove(unit.stats) : enemyMove(unit.kind, modsOf(state.options).move);
+  return unit.summon && unit.side === "hero" ? (SUMMONS[unit.kind]?.move ?? 1) : unit.side === "hero" && unit.stats ? heroMove(unit.stats) : enemyMove(unit.kind, modsOf(state.options).move);
 }
 
 /** What `unit` has left this turn, if it is in a fight: an error if it is not its turn, null if it is in no fight. */
@@ -900,9 +876,6 @@ function spend(budget: Budget | null, cost: number): string | null {
   budget.ap -= cost;
   return null;
 }
-
-/** An enemy's HP at full health, for its kind at this level on this map. */
-const enemyMaxHp = (state: ZoneState, kind: string, level: number): number => Math.round(enemyHp(kind, level) * modsOf(state.options).hp);
 
 /** The highest level the dev tools put an enemy at (DevOp "spawn", "set_level"). */
 export const ENEMY_DEV_MAX_LEVEL = 60;

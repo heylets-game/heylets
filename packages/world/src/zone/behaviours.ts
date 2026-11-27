@@ -10,13 +10,13 @@
 
 import { hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/core";
 import { tileAt } from "../map";
-import { alliesReached, dashWay, leaps, leavesReach, lungeLanding, shiftInto, shoveDest, sweepHexes } from "./combat";
+import { alliesReached, dashWay, landsOn, leaps, leavesReach, lungeLanding, shiftInto, shoveDest, sweepHexes } from "./combat";
 import { has } from "./engine";
 import { HIGH_REACH, blast, covers, gap, inFight, meet, nearOf, reachFrom, reaches, sameHex, seesFor, span, strikes } from "./geometry";
 import { SPLASH_SHARE, type EnemyStrike, type Mind } from "./kit";
 import { diceAverage } from "./rules";
-import { clusterHexes } from "./weather";
 import { HARMFUL } from "./surfaces";
+import { kinSpots } from "./summon";
 import type { Unit, ZoneState } from "./types";
 
 /** What a behaviour is told: the place, and the enemy weighing it up. */
@@ -79,8 +79,8 @@ interface Aim {
  */
 function spreadAims(look: Look, from: HexPos, attack: EnemyStrike, targets: readonly Unit[]): Aim[] | null {
   const { state, enemy } = look;
-  const { area, sweep, dash } = attack.kit;
-  if (!area && !sweep && !dash) return null;
+  const { area, blast: wide, sweep, dash } = attack.kit;
+  if (!area && !wide && !sweep && !dash) return null;
   if (dash) {
     // A dash goes as straight as hexes lie toward its aim: aimed at each hex of the ring as far out as it reaches, it
     // goes every way it can. It catches whoever is on the hexes it passes through, not where it comes to rest.
@@ -94,12 +94,13 @@ function spreadAims(look: Look, from: HexPos, attack: EnemyStrike, targets: read
     return out;
   }
   let aims: HexPos[];
-  if (area) {
-    // What lands on a clump round the hex aimed at covers no hex further than one from it: so a hero's own hex, or one beside it.
+  if (area || wide) {
+    // What lands on a clump round the hex aimed at covers no hex further than one from it: so a hero's own hex, or one
+    // beside it. What lands on a blast covers every hex as far from it as it is wide.
     const seen = new Set<string>();
     aims = [];
     for (const h of targets) {
-      for (const p of [h.pos, ...hexNeighbors(h.pos, state.map.grid)]) {
+      for (const p of wide ? blast(state.map, h.pos, wide) : [h.pos, ...hexNeighbors(h.pos, state.map.grid)]) {
         const key = posKey(p);
         if (seen.has(key)) continue;
         seen.add(key);
@@ -112,7 +113,7 @@ function spreadAims(look: Look, from: HexPos, attack: EnemyStrike, targets: read
   }
   const out: Aim[] = [];
   for (const at of aims) {
-    const hexes = area ? clusterHexes(state, from, at, area) : sweepHexes(state, from, at, sweep!);
+    const hexes = area || wide ? landsOn(state, from, attack, at) : sweepHexes(state, from, at, sweep!);
     const caught = targets.filter((h) => hexes.some((p) => covers(h, p)));
     if (caught.length > 0) out.push({ at, caught });
   }
@@ -165,7 +166,12 @@ const strike: Behaviour = {
     if (aims) {
       for (const { at, caught } of aims) {
         const hero = caught.find((h) => sameHex(h.pos, at)) ?? caught[0];
-        let worth = average * 0.75 * caught.length * (look.whim?.(attack, hero) ?? 1);
+        // One that does no harm (Spin Web) is worth what it leaves on the ground: CURSE_WORTH for each hero caught who is
+        // not standing in that ground already.
+        const ground = attack.kit.surface?.kind;
+        const fresh = attack.harmless ? caught.filter((h) => !ground || !span(h).some((p) => look.state.surfaces[posKey(p)]?.kind === ground)).length : 0;
+        let worth = (attack.harmless ? fresh * CURSE_WORTH : average * 0.75 * caught.length) * (look.whim?.(attack, hero) ?? 1);
+        if (worth <= 0) continue;
         if (caught.some((h) => has(h, "taunting"))) worth *= 3;
         if (!best || worth > best.worth) best = { attack, target: hero, at, worth };
       }
@@ -269,7 +275,25 @@ const field: Behaviour = {
   },
 };
 
-export const BEHAVIOURS = { strike, burst, shove, rally, field } satisfies Record<string, Behaviour>;
+/** What a call for more of its side (a Broodmother's Brood Swarm) is worth for each one that would come: about a blow of theirs. */
+export const KIN_WORTH = 5;
+
+/**
+ * A call for more of its side (behaviour `summon`): worth KIN_WORTH for each that has room to stand beside it where it
+ * would call them (summon.ts kinSpots), and only while one of the other side is in the fight. It reaches none of the
+ * other side, so it is nothing to walk toward by itself.
+ */
+const summon: Behaviour = {
+  reaches: () => false,
+  value(look, from, attack, targets) {
+    const call = attack.kit.summon;
+    if (!call || targets.length === 0) return null;
+    const room = kinSpots(look.state, look.enemy, call.count, from).length;
+    return room > 0 ? { attack, target: null, worth: room * KIN_WORTH * (look.whim?.(attack, null) ?? 1) } : null;
+  },
+};
+
+export const BEHAVIOURS = { strike, burst, shove, rally, field, summon } satisfies Record<string, Behaviour>;
 
 export type BehaviourId = keyof typeof BEHAVIOURS;
 

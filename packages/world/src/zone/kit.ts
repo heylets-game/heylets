@@ -745,7 +745,7 @@ export function commonCostFor(unit: Pick<Unit, "kind" | "perks">, what: CommonAc
 // ---------- enemies ----------
 
 /** What an enemy's ability does besides its damage, when it lands. */
-export type EnemyAttackKit = Pick<EnemyAbilityDef, "surface" | "push" | "chills" | "splash" | "drain" | "area" | "sweep" | "dash" | "onSave" | "rally" | "field"> & {
+export type EnemyAttackKit = Pick<EnemyAbilityDef, "surface" | "push" | "chills" | "splash" | "drain" | "area" | "blast" | "sweep" | "dash" | "onSave" | "rally" | "field" | "summon"> & {
   /** Its second shaking (EnemyAbilityDef `aftershock`), its damage grown with level as the first's is. */
   aftershock?: { dice: Dice; saveOr?: Inflict };
 };
@@ -804,6 +804,7 @@ export const ENEMY_KIT: Record<string, EnemyKit> = {
   villain: {},
   spider: { pack: true },
   broodmother: {},
+  spiderling: { pack: true },
   frost_wolf: { pack: true },
   ember_hound: { pack: true },
   snow_bear: {},
@@ -875,11 +876,11 @@ export function abilityStrikes(ids: readonly string[], level: number, more = 0):
         potency: a.potency + Math.floor((Math.max(1, level) - 1) / 4) + edge,
         saveOr: a.saveOr,
         weight: a.weight,
-        behaviour: (a.behaviour ?? (burst ? "burst" : "strike")) as BehaviourId,
+        behaviour: (a.behaviour ?? (a.summon ? "summon" : burst ? "burst" : "strike")) as BehaviourId,
         cost: a.cost ?? ACTION_AP,
         cooldown: a.cooldown ?? 0,
         kit: {
-          surface: a.surface, push: a.push, chills: a.chills, splash: a.splash, drain: a.drain, area: a.area, sweep: a.sweep, dash: a.dash, onSave: a.onSave, rally: a.rally, field: a.field,
+          surface: a.surface, push: a.push, chills: a.chills, splash: a.splash, drain: a.drain, area: a.area, blast: a.blast, sweep: a.sweep, dash: a.dash, onSave: a.onSave, rally: a.rally, field: a.field, summon: a.summon,
           ...(a.aftershock ? { aftershock: { dice: diceFor(scaled(a.aftershock.damage, a.scales?.damage ?? DEFAULT_SCALE, level) + edge), saveOr: a.aftershock.saveOr } } : {}),
         },
       },

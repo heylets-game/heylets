@@ -60,6 +60,17 @@ export interface EnemyAbilityDef {
    * they step in (combat.ts fieldSlows). It goes with its user. It does no harm, and is aimed at nobody.
    */
   field?: { rounds: number; radius: number };
+  /**
+   * Thrown at a hex up to `range` off, it lands on every hex within this many of it (2: that hex and the two rings round
+   * it), as `area` does on its clump: everyone there saves for half, and its `surface` is left on all of it. One that
+   * does no harm only leaves its surface (and its `saveOr`, saved against).
+   */
+  blast?: number;
+  /**
+   * Calls more of its own side into the fight (a Broodmother's Brood Swarm): `count` enemies of `kind`, each on an open
+   * hex beside it (summon.ts callKin). It does no harm, and is aimed at nobody.
+   */
+  summon?: { kind: string; count: number };
   /** Left under the target when it lands. */
   surface?: { kind: SurfaceKind; rounds: number };
   /** Knocks the target back when it lands: `true` for a hex, or a number of hexes (it stops early at anything in the way). */
@@ -101,7 +112,7 @@ export interface EnemyAbilityDef {
   drain?: number;
   /**
    * How an enemy weighs up using it (behaviours.ts): `strike` for one target, `burst` for everyone round, `shove` for
-   * one beside it with a drop or a pit at their back, `rally` for a call to its own side. When not said, it follows the shape.
+   * one beside it with a drop or a pit at their back, `rally` for a call to its own side, `summon` for calling more of it. When not said, it follows the shape.
    */
   behaviour?: string;
   /** How much its user favours it, beside its other abilities: a multiplier on what it is worth (ai.ts bestAttack). */
@@ -187,9 +198,13 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   keening: { id: "keening", name: "Keening", damage: 5, potency: 3, shape: "burst", saveOr: { effect: "slowed", turns: 2 }, weight: 2 },
   venomous_bite: { id: "venomous_bite", name: "Venomous Bite", damage: 5, potency: 4, surface: { kind: "poison", rounds: 2 }, weight: 2 },
   spider_web_spit: { id: "spider_web_spit", name: "Web Spit", damage: 3, potency: 3, range: 4, area: 3, saveOr: { effect: "slowed", turns: 2 }, surface: { kind: "slime", rounds: 2 }, cooldown: 3, weight: 3 },
-  impaling_fang: { id: "impaling_fang", name: "Impaling Fang", damage: 11, potency: 5, saveOr: { effect: "bleeding" }, weight: 2 },
-  brood_web_spit: { id: "brood_web_spit", name: "Web Spit", damage: 5, potency: 4, range: 5, saveOr: { effect: "slowed", turns: 2 }, surface: { kind: "slime", rounds: 2 }, weight: 2 },
-  brood_swarm: { id: "brood_swarm", name: "Brood Swarm", damage: 5, potency: 3, shape: "burst", saveOr: { effect: "slowed", turns: 1 }, weight: 1 },
+  impaling_fang: { id: "impaling_fang", name: "Impaling Fang", damage: 11, potency: 5, saveOr: { effect: "sundered", turns: 2 }, weight: 2 },
+  // Silk thrown over a wide patch of ground, hurting nobody: the web it leaves slows whoever is not a spider and speeds
+  // whoever is (surfaces.ts).
+  spin_web: { id: "spin_web", name: "Spin Web", damage: 0, potency: 4, range: 3, blast: 2, surface: { kind: "web", rounds: 4 }, cooldown: 4, weight: 2 },
+  // Its young, called out of the nest to its side.
+  brood_swarm: { id: "brood_swarm", name: "Brood Swarm", damage: 0, potency: 0, cost: 1, cooldown: 2, summon: { kind: "spiderling", count: 2 }, weight: 2 },
+  spiderling_bite: { id: "spiderling_bite", name: "Bite", damage: 5, potency: 2, weight: 1 },
   rime_bite: { id: "rime_bite", name: "Rime Bite", damage: 5, potency: 5, saveOr: { effect: "slowed", turns: 2 }, chills: true, weight: 1 },
   searing_bite: { id: "searing_bite", name: "Searing Bite", damage: 5, potency: 5, saveOr: { effect: "burning" }, weight: 1 },
   frost_lance: { id: "frost_lance", name: "Frost Lance", damage: 6, potency: 4, range: 5, saveOr: { effect: "slowed", turns: 2 }, chills: true, weight: 2 },

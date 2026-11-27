@@ -19,7 +19,7 @@ import { seenByHeroes } from "./light";
 import { HARMFUL, HINDERING, chill, clearSurfaces, dropTorch, enterSurface, ignite, letGoTorch, placeSurface } from "./surfaces";
 import type { Budget, CommonAction, Throwable, Unit, ZoneState } from "./types";
 import { clusterHexes, enterWeather, makeQuake, makeWeather, quakeHexes, rainHexes, wallHexes } from "./weather";
-import { summonCall, summonSpots } from "./summon";
+import { callKin, summonCall, summonSpots } from "./summon";
 import { layCurse, drown } from "./drowning";
 import { SHANTIES, joinable, shantyOf, songDamage, songMove, windward } from "./song";
 import { constellationHexes, constellationLinks, courseMarks, litFoes } from "./stars";
@@ -1135,11 +1135,12 @@ function lungeAt(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit): bool
  * An enemy uses an ability on `target`. One that lands on more than one hex (`area`, `sweep`) is aimed at `at`, which
  * may be a hex beside the target rather than theirs (ai.ts aims it to catch as many as it can); left out, at the target.
  * Each attack it makes spends one count of a Frenzy, once it is over (so the blood it draws in that attack still
- * bleeds); a call to its own side is no attack, and spends none.
+ * bleeds); a call to its own side, or for more of it, is no attack, and spends none.
  */
 export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | null, at?: HexPos): void {
   if (attack.kit.rally) return howl(ctx, enemy, attack);
   if (attack.kit.field) return raiseField(ctx, enemy, attack);
+  if (attack.kit.summon) return callForKin(ctx, enemy, attack);
   enemyAttack(ctx, enemy, attack, target, at);
   attackMade(ctx, enemy);
 }
@@ -1155,6 +1156,18 @@ export const alliesReached = (state: ZoneState, enemy: Unit, pos: HexPos, attack
 function howl(ctx: Ctx, enemy: Unit, attack: EnemyStrike): void {
   ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name });
   for (const ally of alliesReached(ctx.state, enemy, enemy.pos, attack)) addCondition(ctx, ally, "frenzied", UNTIMED_KEEPS, attack.kit.rally!.attacks);
+}
+
+/** A call for more of its side (a Broodmother's Brood Swarm): so many of a kind come to stand beside it (summon.ts callKin). */
+function callForKin(ctx: Ctx, enemy: Unit, attack: EnemyStrike): void {
+  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name });
+  for (const called of callKin(ctx, enemy, attack.kit.summon!.kind, attack.kit.summon!.count)) if (!called.down) ctx.onStep?.(called, () => {});
+}
+
+/** The hexes an ability thrown onto more than one hex lands on, aimed at `at` by `enemy` from `from`: a clump (`area`), or every hex within its `blast`. */
+export function landsOn(state: ZoneState, from: HexPos, attack: EnemyStrike, at: HexPos): HexPos[] {
+  if (attack.kit.blast) return blast(state.map, at, attack.kit.blast).filter((p) => !!tileAt(state.map, p));
+  return clusterHexes(state, from, at, attack.kit.area ?? 1);
 }
 
 /**
@@ -1192,7 +1205,7 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
   const { state } = ctx;
   const dc = 8 + attack.potency;
   const aim = at ?? target?.pos;
-  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name, target: target?.id, ...((attack.kit.area || attack.kit.sweep || attack.kit.dash) && aim ? { at: aim } : {}) });
+  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name, target: target?.id, ...((attack.kit.area || attack.kit.blast || attack.kit.sweep || attack.kit.dash) && aim ? { at: aim } : {}) });
   // What it leaves on whoever it gets through to: `saveOr` unless they save (`save`: they may), and its lesser share
   // (`onSave`) if they do.
   const leave = (victim: Unit, save: boolean) => {
@@ -1223,13 +1236,18 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
     }
     return;
   }
-  // Thrown at their hex, it lands on a clump of hexes round it: everyone there (in the fight) saves for half, and
-  // whatever it leaves on the ground is left on all of it.
+  // Thrown at their hex, it lands on a clump of hexes round it, or every hex within its blast: everyone there (in the
+  // fight) saves for half, and whatever it leaves on the ground is left on all of it. One that does no harm (Spin Web)
+  // is only what it leaves: they save against its `saveOr`, if it has one, not for half.
   // (Aimed at a hex, it needs nobody on it: the combat sandbox aims these by hand. Anything else needs its target.)
-  if (attack.kit.area && aim) {
-    const hexes = clusterHexes(state, enemy.pos, aim, attack.kit.area);
-    const dice = rollShown(ctx.rng, attack.dice);
+  if ((attack.kit.area || attack.kit.blast) && aim) {
+    const hexes = landsOn(state, enemy.pos, attack, aim);
+    const dice = attack.harmless ? null : rollShown(ctx.rng, attack.dice);
     for (const victim of state.units.filter((u) => u.side !== enemy.side && !u.down && !unseen(u) && inFight(state, u.id) && hexes.some((p) => covers(u, p)))) {
+      if (!dice) {
+        leave(victim, true);
+        continue;
+      }
       const saved = saveRoll(ctx, victim, "agi", dc, attack.name).ok;
       damage(ctx, victim, saved ? Math.floor(dice.total / 2) : dice.total, { actor: enemy.id, what: attack.name, dice, halved: saved });
       if (!saved) leave(victim, false);

@@ -5,7 +5,7 @@
 // nothing of the rules: the view tells it which hexes and what colour.
 
 import * as THREE from "three";
-import { fireField, gooMaterial, poisonFumes, poisonMaterial, tickFumes, tickGround, waterMaterial } from "./groundFx";
+import { fireField, gooMaterial, poisonFumes, poisonMaterial, tickFumes, tickGround, waterMaterial, webField } from "./groundFx";
 import { posKey, type HexPos } from "@gantt-quest/core";
 import { SURFACE_INFO, WEATHER_INFO, tileAt, type SurfaceKind, type WeatherKind, type WorldMap } from "@gantt-quest/world";
 import { OUTLINE } from "./figures";
@@ -555,7 +555,8 @@ export class TacticsLayer {
         this.goo.push(water);
         material = water;
       } else {
-        const base = kind === "ice" ? 0.75 : kind === "fire" ? 0.22 : 0.6;
+        // Web is mostly its threads (webField, below): only a faint sheen of silk lies under them.
+        const base = kind === "ice" ? 0.75 : kind === "fire" ? 0.22 : kind === "web" ? 0.14 : 0.6;
         const flat = new THREE.MeshBasicMaterial({ color: SURFACE_INFO[kind].color, transparent: true, opacity: base, depthWrite: false, side: THREE.DoubleSide });
         flat.userData.base = base;
         // Fire stirs; the rest lie still.
@@ -569,11 +570,12 @@ export class TacticsLayer {
         this.flames.push(...fire.flames);
         this.sparks.push(fire.sparks);
       }
+      if (kind === "web") this.ground.add(webField(hexes, (p) => ({ ...hexToWorld(p), y: this.top(p) }), SURFACE_INFO.web.color));
       const mesh = new THREE.Mesh(this.fill(hexes, 0.03, 0.9), material);
       mesh.renderOrder = 1;
       this.ground.add(mesh);
       // Water's edge is soft: its rim only just shows.
-      const rim = new THREE.LineSegments(this.outline(hexes, 0.04), new THREE.LineBasicMaterial({ color: SURFACE_INFO[kind].color, transparent: true, opacity: kind === "water" ? 0.45 : 0.9 }));
+      const rim = new THREE.LineSegments(this.outline(hexes, 0.04), new THREE.LineBasicMaterial({ color: SURFACE_INFO[kind].color, transparent: true, opacity: kind === "water" ? 0.45 : kind === "web" ? 0.5 : 0.9 }));
       rim.renderOrder = 1;
       this.ground.add(rim);
     }

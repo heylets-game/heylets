@@ -97,7 +97,7 @@ const isBoss = (kind: string) => !!ENEMIES[kind]?.boss;
 /** Rank-and-file drawn a size up: the heavy hitters. */
 const isBig = (kind: string) => kind === "brute" || kind === "bear" || kind === "snow_bear" || kind === "ogre" || kind === "troll";
 /** How tall an enemy is drawn. The Pack Leader is half as big again as the wolves it leads, and a Great Bear half again a Cave Bear. */
-const enemySize = (kind: string) => (kind === "alpha" ? 2.1 : kind === "great_bear" ? 2.4 : kind === "guardian" ? 3.4 : isBoss(kind) ? 1.9 : isBig(kind) ? 1.6 : 1.4);
+const enemySize = (kind: string) => (kind === "spiderling" ? 0.75 : kind === "alpha" ? 2.1 : kind === "great_bear" ? 2.4 : kind === "guardian" ? 3.4 : isBoss(kind) ? 1.9 : isBig(kind) ? 1.6 : 1.4);
 
 /** Seconds between one pickup told over a hero's head and the next. */
 const PICKUP_GAP = 0.55;
