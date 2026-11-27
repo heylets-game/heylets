@@ -176,3 +176,31 @@ export const OVERRIDES: Record<string, string[]> = {
     "Fights: the ring and sparks from a landing spell or flask no longer stay frozen on the ground",
   ],
 };
+
+// Summaries for releases already tagged: the short seafaring paragraph shown
+// above a release's lines. Keyed by tag. A summary here replaces the one the
+// release's Release-summary: trailers would make, so it also mends one that
+// reads badly. How to write one is in AGENTS.md ("Release notes").
+export const SUMMARIES: Record<string, string> = {
+  "game-v2026.11.27.2":
+    "The hut's had a refit: Decorate, the lamp and Leave hang from a bar along the top, with Craft and Storage stowed beneath it. Escape now shuts a panel without hauling up the game menu besides.",
+  "game-v2026.11.27":
+    "All hands! Every enemy has been rebuilt from keel to masthead, with new abilities and new ways to move. Effects stack up and clear when a fight is done, hold Alt over anyone to read what ails them, and battle rings truer to the ear.",
+  "game-v2026.11.26": "Hail your crew from the combat log, even with steel drawn, and watch their words float over their heads on the maps.",
+  "game-v2026.11.25.9": "The warlock has stowed the scarf, so beards and the like show plain on deck.",
+  "game-v2026.11.25.8":
+    "Googly eyes roll with the swell as you walk, any hero in your party can take a new name and face from the hero sheet, and the level circle on a name plate grows as you draw in close.",
+  "game-v2026.11.25.7":
+    "Aim lines and cones whichever way the wind blows, shields hold for the whole fight, and a missed Chain Lightning stops dead. Make a new hero right from the party picker, march your group across the maps together, and find the bottom bar trimmed in the same timber as the shops.",
+  "game-v2026.11.25.6":
+    "Twenty-six new hats, tops, breeches and boots have come ashore, some with powers of their own, and every piece of armor looks like its name. Any hero in your party may take the party's boat, and the townsfolk will answer your questions and gossip about the crew.",
+  "game-v2026.11.25.5": "The Your catch panel in your sea bag shuts tight again.",
+  "game-v2026.11.25.4": "In a fight the camera keeps a lookout's eye on whoever's turn it is, and pulls back to frame a long shot.",
+  "game-v2026.11.25.3": "The wizard beard fits every head now, sideburns and all, and there's a plain mustache for the clean-cut sailor.",
+  "game-v2026.11.25.2": "More ways to shape your hero's face and body, and beards stay fast to the jaw instead of drifting off.",
+  "game-v2026.11.25":
+    "A great haul! Sail with a party of up to four of your own heroes, keep several heroes and worlds on one account, and each world has a hut of its own. Enemies think for themselves, run for the alarm bell to raise the rest, and grow to match a crew of up to six on a map.",
+  "game-v2026.11.24.4": "A new main menu greets you at the gangplank, with password logins and a hero maker in three steps.",
+  "game-v2026.11.24.3":
+    "Spot a crewmate's portrait over the building they've ducked into, see your flotsam float up overhead, tell acid from poison at a glance, and sit yourself down on the deck until you walk off.",
+};

@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react";
 import { BUILD_ID, isStale } from "../build";
 import { RELEASES, incomingNotes, newestTagged, parseReleases, releaseTitle, type Release } from "../releases";
-import { ReleaseLines } from "./ReleaseLines";
+import { ReleaseLines, ReleaseSummary } from "./ReleaseLines";
 
 /** How long after the page loads before the first look: out of the way of everything else starting up. */
 const FIRST_MS = 10_000;
@@ -117,6 +117,7 @@ export function NewVersionNotice() {
           {incoming.map((r) => (
             <section key={r.id}>
               {incoming.length > 1 && <h3>{releaseTitle(r)}</h3>}
+              <ReleaseSummary summary={r.summary} />
               <ReleaseLines notes={r.notes} />
             </section>
           ))}

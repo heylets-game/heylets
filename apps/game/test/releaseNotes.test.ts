@@ -6,8 +6,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { noteFrom, notesFor, readReleases, releaseMarkdown } from "../scripts/release-notes.ts";
-import { hasUnseen, incomingNotes, newestTagged, parseReleases, releaseTitle, releasesSince, unseenCount, type Release } from "../src/releases";
+import { noteFrom, notesFor, readReleases, releaseFrom, releaseMarkdown } from "../scripts/release-notes.ts";
+import { hasUnseen, incomingNotes, releaseAreas, newestTagged, parseReleases, releaseTitle, releasesSince, unseenCount, type Release } from "../src/releases";
 
 describe("noteFrom", () => {
   it("takes the area off the front and the PR number off the end", () => {
@@ -172,5 +172,51 @@ describe("what a newer build brings", () => {
     const sent = JSON.parse(JSON.stringify([...server.slice(0, 1), { id: 7 }, null, { id: "game-vX", notes: [{ text: "Kept", area: "Pub" }, { text: 3 }, null, { area: "No text" }] }])) as unknown;
     expect(parseReleases(sent)).toEqual([server[0], { id: "game-vX", date: "", notes: [{ area: "Pub", text: "Kept" }] }]);
     for (const not of [undefined, null, "nope", { incoming: [] }]) expect(parseReleases(not)).toEqual([]);
+  });
+});
+
+describe("releaseAreas", () => {
+  it("counts lines by area, most first, ties in order, unnamed last", () => {
+    const n = (area: string | null) => ({ area, text: "x" });
+    expect(releaseAreas([n(null), n("Hut"), n("Fights"), n("Pub"), n("Fights"), n("Hut"), n("Fights")])).toEqual([
+      { area: "Fights", count: 3 },
+      { area: "Hut", count: 2 },
+      { area: "Pub", count: 1 },
+      { area: null, count: 1 },
+    ]);
+    expect(releaseAreas([])).toEqual([]);
+  });
+});
+
+describe("release summaries", () => {
+  const game = ["apps/game/src/client/App.tsx"];
+  const pr = (subject: string, body = "") => ({ subject, body, files: game });
+
+  it("joins the Release-summary trailers of commits that make lines, each once", () => {
+    const r = releaseFrom([
+      pr("Hut: a bar across the top", "Release-note: Hut: Leave is up top\nRelease-summary: The hut's had a refit"),
+      pr("Pub: dice", "Release-summary: The dice are rolling at the pub!"),
+      { subject: "Docs: readme", body: "Release-summary: Nobody hears this", files: ["README.md"] },
+      pr("Hut: again", "Release-summary: The hut's had a refit"),
+    ]);
+    expect(r.summary).toBe("The hut's had a refit. The dice are rolling at the pub!");
+    expect(r.notes).toHaveLength(3);
+  });
+
+  it("says nothing for a skipped commit, and has no summary when none is written", () => {
+    expect(releaseFrom([pr("Hut: x", "Release-note: skip\nRelease-summary: Hidden")]).summary).toBeUndefined();
+    expect(releaseFrom([pr("Hut: x")]).summary).toBeUndefined();
+  });
+
+  it("takes a summary written for the tag over the trailers", () => {
+    const r = releaseFrom([pr("Hut: x", "Release-summary: From the trailer")], "game-v1", { "game-v1": "From the overrides." });
+    expect(r.summary).toBe("From the overrides.");
+  });
+
+  it("puts the summary over the list in the GitHub release, and keeps it through another build's answer", () => {
+    const r: Release = { id: "game-v1", date: "", notes: [{ area: "Hut", text: "Leave is up top" }], summary: "A refit." };
+    expect(releaseMarkdown(r)).toBe("A refit.\n\n- **Hut:** Leave is up top\n");
+    expect(parseReleases([r])[0].summary).toBe("A refit.");
+    expect(parseReleases([{ ...r, summary: 3 }])[0].summary).toBeUndefined();
   });
 });

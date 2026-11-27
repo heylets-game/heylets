@@ -20,6 +20,13 @@
 // Several Release-note lines make several lines; "skip" leaves it out.
 // Commits already merged are corrected in release-note-overrides.ts instead.
 //
+// A release's summary is a short paragraph over its lines, in a seafaring
+// voice (AGENTS.md says how to write one). It is every Release-summary:
+// trailer from the commits that make lines, in order:
+//   Release-summary: The hut's had a refit, with every tool hung on a rail up top.
+// or, for a release already tagged, its entry in release-note-overrides.ts.
+// A release with neither has no summary, and shows its lines alone.
+//
 // Needs the whole history and the tags (actions/checkout with fetch-depth: 0).
 // Without git it returns no releases rather than failing the build.
 
@@ -28,7 +35,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Plugin } from "vite";
 import type { Release, ReleaseNote } from "../src/releases.ts";
-import { OVERRIDES } from "./release-note-overrides.ts";
+import { OVERRIDES, SUMMARIES } from "./release-note-overrides.ts";
 
 const TAG_GLOB = "game-v*";
 /** Code that ships in the game, from the repository root. */
@@ -81,6 +88,32 @@ export function notesFor(c: Commit, overrides: Record<string, string[]> = OVERRI
   return note ? [note] : [];
 }
 
+/** A commit's Release-summary trailers, when it makes lines: a commit left off the board says nothing in the summary either. */
+export function summariesFor(c: Commit, notes: readonly ReleaseNote[]): string[] {
+  if (notes.length === 0) return [];
+  return [...c.body.matchAll(/^Release-summary:[ \t]*(.+)$/gim)].map((m) => m[1].trim()).filter(Boolean);
+}
+
+/** Ends a sentence that has no stop of its own. */
+const sentence = (s: string) => (/[.!?…]["'”’)]?$/.test(s) ? s : `${s}.`);
+
+/**
+ * A release's lines and its summary, from its commits. A summary written for the
+ * tag in release-note-overrides.ts wins; otherwise the commits' Release-summary
+ * trailers make it, each once, in order.
+ */
+export function releaseFrom(list: readonly Commit[], tag?: string, summaries: Record<string, string> = SUMMARIES): Pick<Release, "notes" | "summary"> {
+  const notes: ReleaseNote[] = [];
+  const said: string[] = [];
+  for (const c of list) {
+    const lines = notesFor(c);
+    notes.push(...lines);
+    for (const s of summariesFor(c, lines)) if (!said.includes(s)) said.push(s);
+  }
+  const summary = (tag && summaries[tag]) || said.map(sentence).join(" ");
+  return summary ? { notes, summary } : { notes };
+}
+
 /** Commits in a range, oldest first. */
 function commits(cwd: string | undefined, range: string): Commit[] {
   // Each commit: RS, hash, US, subject, US, body, GS, then --name-only's file list.
@@ -104,15 +137,15 @@ export function readReleases(opts: ReadOptions = {}): Release[] {
   const releases: Release[] = tags.map((tag, i) =>
     i === 0
       ? { id: tag, date: dateOf(tag), notes: [], first: true }
-      : { id: tag, date: dateOf(tag), notes: commits(cwd, `${tags[i - 1]}..${tag}`).flatMap((c) => notesFor(c)) },
+      : { id: tag, date: dateOf(tag), ...releaseFrom(commits(cwd, `${tags[i - 1]}..${tag}`), tag) },
   );
 
   if (opts.unreleased) {
     const range = tags.length > 0 ? `${tags.at(-1)}..HEAD` : "HEAD";
-    const notes = commits(cwd, range).flatMap((c) => notesFor(c));
-    if (notes.length > 0) {
+    const next = releaseFrom(commits(cwd, range));
+    if (next.notes.length > 0) {
       const head = git(cwd, ["rev-parse", "--short", "HEAD"]).trim();
-      releases.push({ id: `next-${head}`, date: dateOf("HEAD"), notes, unreleased: true });
+      releases.push({ id: `next-${head}`, date: dateOf("HEAD"), ...next, unreleased: true });
     }
   }
   return releases.reverse().slice(0, KEEP);
@@ -132,7 +165,8 @@ export function readReleasesSafely(opts: ReadOptions = {}, warn: (msg: string) =
 export function releaseMarkdown(r: Release): string {
   if (r.first) return "The first release of The Harbor of Heylets.\n";
   if (r.notes.length === 0) return "Fixes and small changes behind the scenes.\n";
-  return r.notes.map((n) => `- ${n.area ? `**${n.area}:** ` : ""}${n.text}`).join("\n") + "\n";
+  const list = r.notes.map((n) => `- ${n.area ? `**${n.area}:** ` : ""}${n.text}`).join("\n") + "\n";
+  return r.summary ? `${r.summary}\n\n${list}` : list;
 }
 
 const VIRTUAL = "virtual:release-notes";

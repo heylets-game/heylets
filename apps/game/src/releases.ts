@@ -24,6 +24,8 @@ export interface Release {
   /** When it was cut: the tagged commit's date, ISO 8601. */
   date: string;
   notes: ReleaseNote[];
+  /** A short paragraph over the notes, in a seafaring voice, when one was written (see scripts/release-notes.ts). */
+  summary?: string;
   /** The first tag of all: everything before it is the game itself, so it lists nothing. */
   first?: boolean;
   /** Commits since the last tag. Only in development and staging builds. */
@@ -82,7 +84,8 @@ export function parseReleases(raw: unknown): Release[] {
     const notes = r.notes
       .filter((n) => !!n && typeof n.text === "string" && n.text !== "")
       .map((n) => ({ area: typeof n.area === "string" && n.area ? n.area : null, text: n.text }));
-    out.push({ id: r.id, date: typeof r.date === "string" ? r.date : "", notes, ...(r.unreleased ? { unreleased: true } : {}) });
+    const summary = typeof r.summary === "string" && r.summary.trim() ? r.summary.trim() : null;
+    out.push({ id: r.id, date: typeof r.date === "string" ? r.date : "", notes, ...(summary ? { summary } : {}), ...(r.unreleased ? { unreleased: true } : {}) });
   }
   return out;
 }
@@ -97,6 +100,28 @@ export function incomingNotes(newer: readonly Release[], mine: readonly Release[
   const line = (n: ReleaseNote) => `${n.area ?? ""}\n${n.text}`;
   const have = new Set(mine.filter((r) => r.unreleased).flatMap((r) => r.notes.map(line)));
   return newer.map((r) => ({ ...r, notes: r.notes.filter((n) => !have.has(line(n))) })).filter((r) => r.notes.length > 0);
+}
+
+// ---------- a release at a glance ----------
+
+/** One part of the game a release touches, and how many of its lines are about it. Null is the lines that name no area. */
+export interface AreaCount {
+  area: string | null;
+  count: number;
+}
+
+/**
+ * The parts of the game a release's notes are about, most lines first (ties in the
+ * order they first appear), with the lines that name no area last. A release
+ * with many lines is shown as this until the player asks for the details.
+ */
+export function releaseAreas(notes: readonly ReleaseNote[]): AreaCount[] {
+  const counts = new Map<string | null, number>();
+  for (const n of notes) counts.set(n.area, (counts.get(n.area) ?? 0) + 1);
+  return [...counts]
+    .map(([area, count], at) => ({ area, count, at }))
+    .sort((a, b) => (a.area === null ? 1 : 0) - (b.area === null ? 1 : 0) || b.count - a.count || a.at - b.at)
+    .map(({ area, count }) => ({ area, count }));
 }
 
 /** "13 November 2026 · update 9" for `game-v2026.11.13.9`; "Coming next" for untagged commits. */
