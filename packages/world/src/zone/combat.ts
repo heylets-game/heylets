@@ -691,6 +691,23 @@ const rollDamage = (ctx: Ctx, unit: Unit, def: AbilityDef, dice: Dice, also: Rol
 /** What a heal adds on top of its dice: the user's stat (never less than nothing) and half their level. */
 const healBonus = (unit: Unit, def: AbilityDef): number => Math.max(0, mod(statOf(unit, def.stat))) + Math.floor(unit.level / 2);
 
+/**
+ * What a healer's heals add or lose for the moment, over their own (healBonus), a short name each, shown with the dice
+ * (Rolled `mods`) as damageMods are. None yet: a bonus or penalty to healing of the moment is an entry here.
+ */
+function healMods(_state: ZoneState, _unit: Unit): RollMod[] {
+  return [];
+}
+
+/**
+ * Healing dice as `unit` rolls them with an ability: its own bonus (healBonus), what of the moment it has (healMods),
+ * and `also`, what this heal adds besides (a Druid's heal on one standing in water).
+ */
+const rollHeal = (ctx: Ctx, unit: Unit, def: AbilityDef, dice: Dice, also: RollMod[] = []): Rolled => {
+  const mods = [...healMods(ctx.state, unit), ...also];
+  return rollShown(ctx.rng, dice, healBonus(unit, def) + mods.reduce((n, m) => n + m.n, 0), false, mods);
+};
+
 /** An ability's damage as `unit` would roll it now: its dice, and all it adds on top (damageBonus) in `plus`. What its tooltip shows. */
 export const damageRoll = (state: ZoneState, unit: Unit, def: AbilityDef): Dice => {
   const dice = abilityDice(def);
@@ -864,8 +881,8 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
     // Healing for the caster's side alone, the fallen got up with it; then the water, which soaks whoever is there.
     const area = abilityArea(state, unit, ability, aim.at, undefined, aim.lean);
     const keys = new Set(area.map(posKey));
-    const amount = rollDice(ctx.rng, healDice(def)) + healBonus(unit, def);
-    for (const u of state.units.filter((x) => x.side === unit.side && caught(x, keys))) heal(ctx, u, amount, { actor: unit.id, what: def.id });
+    const mended = rollHeal(ctx, unit, def, healDice(def));
+    for (const u of state.units.filter((x) => x.side === unit.side && caught(x, keys))) heal(ctx, u, mended.total, { actor: unit.id, what: def.id, dice: mended });
     placeSurface(ctx, area, "water", tactic.splash.water, unit.id);
     landed = true;
   } else if (tactic.summon) {
@@ -1033,14 +1050,14 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
     const soaked = tactic.regen && inWater(state, target) ? tactic.regen.water : 0;
     if (def.heal && !tactic.soothe) {
       const bonus = healBonus(unit, def);
-      const mended = rollShown(ctx.rng, healDice(def), bonus + soaked);
+      const mended = rollHeal(ctx, unit, def, healDice(def), soaked ? [{ name: "In water", n: soaked }] : []);
       heal(ctx, target, mended.total, { actor: unit.id, what: def.id, dice: mended });
       // The same heal again as their next turn starts (Rejuvenate): the bonus kept on the condition, the dice rolled then.
       if (tactic.echo) addCondition(ctx, target, "rejuvenating", tactic.echo, bonus);
     }
     // A heal that spreads: to every ally beside the one it is aimed at (Clarion Call), or round the user (Soothing Tone).
     const healed = (u: Unit, base: number) => {
-      const mended = rollShown(ctx.rng, diceFor(Math.max(2, base - 1)), Math.max(0, mod(statOf(unit, def.stat))) + Math.floor(unit.level / 2));
+      const mended = rollHeal(ctx, unit, def, diceFor(Math.max(2, base - 1)));
       return heal(ctx, u, mended.total, { actor: unit.id, what: def.id, dice: mended });
     };
     if (tactic.ripple) for (const u of state.units) if (u.side === unit.side && !u.down && u.id !== target.id && gap(u, target) <= 1) healed(u, tactic.ripple);

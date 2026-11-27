@@ -240,7 +240,8 @@ export const inWater = (state: ZoneState, unit: Unit): boolean => span(unit).som
 export function regrow(ctx: Ctx, unit: Unit): void {
   if (unit.down) return;
   if (has(unit, "regenerating") && unit.hp < unit.maxHp) {
-    const rolled = rollShown(ctx.rng, AQUEOUS.tick, inWater(ctx.state, unit) ? AQUEOUS.water : 0);
+    const water = inWater(ctx.state, unit) ? AQUEOUS.water : 0;
+    const rolled = rollShown(ctx.rng, AQUEOUS.tick, water, false, water ? [{ name: "In water", n: water }] : []);
     heal(ctx, unit, rolled.total, { actor: null, what: "aqueous_regeneration", dice: rolled });
   }
   const again = unit.conditions.find((c) => c.kind === "rejuvenating");

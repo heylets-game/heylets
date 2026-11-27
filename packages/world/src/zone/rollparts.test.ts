@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { at, flatBoard, inAFight, standEnemy, standHero } from "../test/zoneBoard";
 import { posKey } from "@gantt-quest/core";
 import { makeRng } from "../rng";
-import { attackRoll, defenceMods, defenceOf, saveRoll, type Ctx } from "./engine";
+import { attackRoll, defenceMods, defenceOf, regrow, saveRoll, type Ctx } from "./engine";
+import { AQUEOUS } from "./kit";
 import { rollShown, swingsOf } from "./rules";
 import type { ZoneEvent, ZoneState } from "./types";
 
@@ -32,6 +33,17 @@ describe("what of the moment damage dice carry", () => {
     const rolled = rollShown(makeRng(3), { n: 1, d: 8, plus: 0 }, 5, false, [{ name: "Rallied", n: 2 }, { name: "Chorus", n: 0 }]);
     expect(rolled.mods).toEqual([{ name: "Rallied", n: 2 }]);
     expect(rolled.plus).toBe(5);
+  });
+
+  it("a heal carries what of the moment it adds: Aqueous Regeneration's tick on one standing in water", () => {
+    const { state, ann } = setUp();
+    ann.hp = 1;
+    ann.conditions.push({ kind: "regenerating", rounds: 2 });
+    state.surfaces[posKey(ann.pos)] = { kind: "water", rounds: 3 } as ZoneState["surfaces"][string];
+    const ctx = ctxOf(state);
+    regrow(ctx, ann);
+    const tick = ctx.events.find((e) => e.t === "heal" && e.what === "aqueous_regeneration");
+    expect(tick?.t === "heal" && tick.dice?.mods).toEqual([{ name: "In water", n: AQUEOUS.water }]);
   });
 
   it("carries none when there are none", () => {
