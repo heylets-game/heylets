@@ -3,7 +3,7 @@ import { at, flatBoard, has, must, standEnemy as enemy, standHero, unit } from "
 import { hexDistance, posKey, type HexPos } from "@gantt-quest/core";
 import { makeRng } from "../rng";
 import { checkCommon, coneHexes, enemyAct } from "./combat";
-import { lineFrom, zoneReach } from "./geometry";
+import { lineFrom, noWayThere, zoneReach } from "./geometry";
 import { BEHAVIOURS } from "./behaviours";
 import { ENEMIES } from "../content";
 import { DEFAULT_MIND, enemyStrikes } from "./kit";
@@ -167,6 +167,8 @@ describe("a Haunt's Ghastly Fetter", () => {
     expect(reach.size).toBeGreaterThan(1);
     for (const r of reach.values()) expect(hexDistance(r.pos, at(9, 6)), posKey(r.pos)).toBeLessThanOrEqual(1);
     expect(checkCommon(ctx.state, ann, "jump", { at: at(11, 6) }, ctx.state.encounter!.budgets.ann ?? null)).toBe("The chain will not reach.");
+    // Asked to walk further, they are told it is the chain that holds them.
+    expect(noWayThere(ctx.state, ann, at(12, 6))).toBe("You are chained to a spot: you cannot go more than a hex from it.");
   });
 
   it("keeps them chained to the first spot when fettered again, and lets one put further off come back toward it", () => {

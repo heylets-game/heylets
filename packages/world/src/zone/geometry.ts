@@ -265,11 +265,14 @@ export const roomFor = (state: Pick<ZoneState, "units" | "map">, who: Unit, at: 
 
 /**
  * Why `unit` cannot walk to `to` however much it had to spend, in words, or null if it could (and it is only too far):
- * a unit bigger than a hex with no room there, or no way through wide enough for it; or no way through at all.
+ * Fettered, and it is further from the spot than the chain lets it go; a unit bigger than a hex with no room there, or no
+ * way through wide enough for it; or no way through at all.
  */
 export function noWayThere(state: ZoneState, unit: Unit, to: HexPos): string | null {
   // Off the map: nothing more to say than that it cannot be got to.
   if (!tileAt(state.map, to)) return null;
+  const fetter = fetterOf(unit);
+  if (fetter && fetterBars(unit, unit.pos, to)) return `You are chained to a spot: you cannot go more than ${fetter.reach === 1 ? "a hex" : `${fetter.reach} hexes`} from it.`;
   const huge = big(unit);
   if (huge && !roomFor(state, unit, to)) return `There is no room for all of ${unit.name} there.`;
   if (zoneReach(state, unit, FREE_WALK, undefined, undefined, (r) => sameHex(r.pos, to)).has(posKey(to))) return null;

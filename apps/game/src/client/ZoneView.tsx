@@ -111,6 +111,7 @@ import {
   span,
   big,
   noWayThere,
+  fetterBars,
   unopened,
   unlooted,
   lootIn,
@@ -2340,7 +2341,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     const near = reach.get(posKey(hover));
     const got = near ?? far?.get(posKey(hover));
     // An enemy's own hex is nowhere to walk to (a click on it walks up beside it): no walk is priced over it, and it is not called "no way" either.
-    if (!got) return state.units.some((u) => u.side !== mover.side && !u.down && covers(u, hover)) ? null : { none: true as const, why: noWayThere(asState(state), mover, hover) };
+    if (!got) return state.units.some((u) => u.side !== mover.side && !u.down && covers(u, hover)) ? null : { none: true as const, why: noWayThere(asState(state), mover, hover), chained: fetterBars(mover, mover.pos, hover) };
     if (got.cost === 0) return null;
     const from = near ? reach : far!;
     const path = pathIn(from, hover) ?? [];
@@ -3173,7 +3174,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
 
       <div ref={cursor} className={`zone-cursor ${moveTip || aimHint ? "" : "off"} ${moveTip && (moveTip.none || moveTip.beyond || moveTip.taken) ? "bad" : ""}`} aria-hidden>
         {moveTip && (moveTip.none ? (
-          <><strong>No way there</strong>{moveTip.why && <span className="zone-cursor-note">{moveTip.why}</span>}</>
+          <><strong>{moveTip.chained ? "Fettered" : "No way there"}</strong>{moveTip.why && <span className="zone-cursor-note">{moveTip.why}</span>}</>
         ) : (
           <>
             {/* Your own movement, and beside it (a course charted) the course's: what of each the way takes. */}
