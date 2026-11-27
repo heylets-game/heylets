@@ -1580,7 +1580,7 @@ const GET_UP_HIPS = -1;
  * `n` counts the figure's actions, so two flinches in a row need not be the same.
  */
 interface Act {
-  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "slam" | "drop" | "pound" | "channel" | "spook" | "claw" | "flurry" | "howl" | "rake" | "roar" | "grasp" | "wail" | "hurl" | "engulf" | "spit" | "fang" | "web" | "dive" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
+  kind: "strike" | "stab" | "pounce" | "heavy" | "twin" | "slices" | "slam" | "drop" | "pound" | "channel" | "spook" | "claw" | "flurry" | "howl" | "breathe" | "rake" | "roar" | "grasp" | "wail" | "hurl" | "engulf" | "spit" | "fang" | "web" | "dive" | "cast" | "play" | "fire" | "guard" | "taunt" | "hit" | "hammer" | "stir" | "jump" | Emote;
   t: number;
   n: number;
   /** A jump's seconds off the ground (see JUMP), or how long a dive is held (see DIVE). */
@@ -1984,6 +1984,24 @@ export const HOWL = {
   rear: [[0, 0], [0.18, -0.05], [0.42, 0.38], [1.2, 0.36], [1.55, 0]] as Keys,
   head: [[0, 0], [0.18, 0.35], [0.42, -1.35], [1.2, -1.25], [1.55, 0]] as Keys,
   shake: [[0, 0], [0.42, 0], [0.5, 1], [1.15, 1], [1.3, 0]] as Keys,
+};
+
+/**
+ * A beast breathing something out over what is in front of it, for one on four legs that does (Rig.breathes): it
+ * draws breath, front lifted and head thrown up and back (`rear`, `head`, the body settled back on its haunches by
+ * `step`), then thrusts its head out and down at what it breathes on, braced and leant in, the front dipped, and holds
+ * it there with a tremble (`shake`) for as long as the breath pours out, coming back to stand by `over`. `hit` is when
+ * the breath bursts from its mouth, and it pours on for `pour`. Any four-legged beast's breath can use it (a Frost
+ * Wolf's Frost Breath, signatureMoves.ts).
+ */
+export const BREATHE = {
+  hit: 0.42,
+  pour: 0.6,
+  over: 1.4,
+  rear: [[0, 0], [0.32, 0.14], [0.42, -0.07], [1.02, -0.06], [1.4, 0]] as Keys,
+  head: [[0, 0], [0.32, -0.55], [0.42, 0.22], [1.02, 0.25], [1.4, 0]] as Keys,
+  step: [[0, 0], [0.32, -0.3], [0.42, 0.35], [1.02, 0.32], [1.4, 0]] as Keys,
+  shake: [[0, 0], [0.42, 0], [0.46, 1], [0.98, 1], [1.1, 0]] as Keys,
 };
 
 /**
@@ -2587,7 +2605,7 @@ const RECORDER_LENGTH = 6.4;
 const HAMMER = { hit: 0.4, over: 0.86, up: [[0, 0.25], [0.3, 1], [0.4, 0], [0.48, 0.18], [0.86, 0.25]] as Keys };
 const STIR = { over: 30, turns: 25 };
 /** How long each kind of action lasts. */
-const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, slam: SLAM.over, drop: SEAT_DROP.over, pound: POUND.over, channel: CHANNEL.over, spook: SPOOK.over, claw: CLAW.over, flurry: FLURRY.over, howl: HOWL.over, rake: RAKE.over, roar: ROAR.over, grasp: GRASP.over, wail: WAIL.over, hurl: HURL.over, engulf: ENGULF.over, spit: SPIT.over, fang: FANG.over, web: WEB.over, dive: DIVE.into + DIVE.flare + DIVE.settle, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
+const ACT_OVER: Record<Act["kind"], number> = { strike: SWING.over, stab: THRUST.over, slices: SLICES.over, slam: SLAM.over, drop: SEAT_DROP.over, pound: POUND.over, channel: CHANNEL.over, spook: SPOOK.over, claw: CLAW.over, flurry: FLURRY.over, howl: HOWL.over, breathe: BREATHE.over, rake: RAKE.over, roar: ROAR.over, grasp: GRASP.over, wail: WAIL.over, hurl: HURL.over, engulf: ENGULF.over, spit: SPIT.over, fang: FANG.over, web: WEB.over, dive: DIVE.into + DIVE.flare + DIVE.settle, pounce: POUNCE.over, heavy: SWEEP.over, twin: TWIN.over, cast: CAST.over, play: PLAY.over, fire: FIRE.ends, guard: GUARD.over, taunt: TAUNT.over, hit: FLINCH.over, hammer: HAMMER.over, stir: STIR.over, jump: JUMP.spring + JUMP.land, ...EMOTE_OVER };
 /** When each kind of blow lands. */
 const ACT_HIT = { strike: SWING.hit, stab: THRUST.hit, slices: SLICES.hit, slam: SLAM.hit, pounce: POUNCE.hit, heavy: SWEEP.hit, twin: TWIN.hit };
 /**
@@ -2623,6 +2641,8 @@ interface Rig {
   claws?: boolean;
   /** A beast that howls (see HOWL, Figure.howl): it plays that as an animation of its own. */
   howls?: boolean;
+  /** A beast on four legs that breathes something out (see BREATHE, Figure.strike "breathe"): it plays that as an animation of its own. */
+  breathes?: boolean;
   /** A flier that dives (see DIVE, Figure.dive): it plays that as an animation of its own. */
   dives?: boolean;
   /** A ghost: it plays its grasp and its wail (see GRASP, WAIL) as animations of its own, and is leant into the rest. */
@@ -9474,6 +9494,26 @@ function fourLegs(top: THREE.Group, legs: Part[], head: Part, tail: Part | null,
       head.joint.rotation.set(0, 0, 0);
       return;
     }
+    if (a.act?.kind === "breathe") {
+      // Drawing breath with its front lifted and head thrown back, then braced and leant in, head thrust out and down,
+      // trembling as the breath pours out. The forelegs splay a little to brace it.
+      const t = a.act.t;
+      const rear = along(BREATHE.rear, t);
+      const behind = -Math.min(...legs.map((leg) => leg.joint.position.z));
+      const hips = legs[0].joint.position.y;
+      const shake = along(BREATHE.shake, t) * Math.sin(t * 50) * 0.035;
+      const brace = Math.max(0, along(BREATHE.step, t));
+      top.rotation.set(-rear, 0, shake * 0.4);
+      top.position.set(0, (a.breath + 1) * 0.06 + Math.max(0, behind * Math.sin(rear) + hips * (1 - Math.cos(rear))), along(BREATHE.step, t) * STRIDE * 0.5 * a.scale);
+      for (const leg of legs) {
+        const fore = leg.joint.position.z > 0;
+        const side = Math.sign(leg.joint.position.x) || 1;
+        leg.joint.rotation.set(fore ? -rear * 0.6 - brace * 0.25 : rear + brace * 0.15, 0, fore ? -side * brace * 0.18 : 0);
+      }
+      head.joint.rotation.set(stoop + rear + along(BREATHE.head, t) + shake, shake * 0.5, 0);
+      if (tail) tail.joint.rotation.set(0, 0, 0);
+      return;
+    }
     if (a.act?.kind === "howl") {
       // Sat back on its haunches (lifted as it tips, so the hind feet stay on the ground), forelegs reaching a little,
       // the head thrown right up at the sky and trembling as it holds the note.
@@ -9708,7 +9748,7 @@ function wolf(top: THREE.Group, fur = "#7d8793", dark = "#59616c", eye = "#ffd23
     leg.shape(tone(dark, -0.06), sym([[0.72, -4.6, -0.55], [0.82, -4.6, 0.7], [0.5, -4.6, 1.35], [0, -4.6, 1.5], [0.58, -3.7, -0.5], [0.58, -3.8, 0.4], [0, -4, 1.2]]));
     return leg;
   });
-  return { parts, animate: fourLegs(top, legs, head, tail, mangy ? 3.2 : 2.6, 9, 0.3), getUp: BEAST_GET_UP, howls: true };
+  return { parts, animate: fourLegs(top, legs, head, tail, mangy ? 3.2 : 2.6, 9, 0.3), getUp: BEAST_GET_UP, howls: true, breathes: true };
 }
 
 /**
@@ -9763,7 +9803,7 @@ function bear(top: THREE.Group, fur = "#7a5232", dark = "#4f3420", muzzle = "#b9
   });
   // It swipes with its forepaws, right then left: the middle claw's tip leads each swoosh.
   const paws = [legs[0], legs[1]].map((leg) => pawOf(leg, new THREE.Vector3(0, -4.75, 2.55)));
-  return { parts, animate: fourLegs(top, legs, head, null, 3.6, 12, 0, paws), getUp: BEAST_GET_UP, claws: true };
+  return { parts, animate: fourLegs(top, legs, head, null, 3.6, 12, 0, paws), getUp: BEAST_GET_UP, claws: true, breathes: true };
 }
 
 /**
@@ -10818,7 +10858,9 @@ export interface Figure {
    * FLURRY), the first blow landing when this says and the rest at FLURRY_BLOWS. "rake" is such a beast sweeping a
    * forepaw wide and flat across everything before it (see RAKE); for anything else it is "light". "roar" is such a
    * beast rearing right up and bellowing, head thrown back (see ROAR), and returns the seconds until the roar; anything
-   * else does nothing and returns 0. "grasp" is a ghost surging in with its arms stretched out to lay its hands on the
+   * else does nothing and returns 0. "breathe" is a beast on four legs drawing breath and thrusting its head out to
+   * breathe on what is before it (see BREATHE), and returns the seconds until the breath bursts out; anything else does
+   * nothing and returns 0. "grasp" is a ghost surging in with its arms stretched out to lay its hands on the
    * target (see GRASP); for anything else it is "light". "wail" is a ghost flinging itself up and back to scream (see
    * WAIL), and returns the seconds until the scream; anything else does nothing and returns 0. "engulf" is an ooze pouring
    * itself over the target (see ENGULF); for anything else it is "light". "spit" is an ooze squashing down and springing
@@ -10830,7 +10872,7 @@ export interface Figure {
    * returns the seconds until the blow lands, for whatever it hits to wait; a creature lunges at once, as it always
    * did, and this returns 0.
    */
-  strike(how?: "light" | "stab" | "heavy" | "slices" | "slam" | "drop" | "pound" | "channel" | "spook" | "claw" | "flurry" | "rake" | "roar" | "grasp" | "wail" | "hurl" | "engulf" | "spit" | "fang" | "web"): number;
+  strike(how?: "light" | "stab" | "heavy" | "slices" | "slam" | "drop" | "pound" | "channel" | "spook" | "claw" | "flurry" | "rake" | "roar" | "breathe" | "grasp" | "wail" | "hurl" | "engulf" | "spit" | "fang" | "web"): number;
   /**
    * How bright what glows on it is (eyes, gems, lamps), as a share of its own: 1 as made, more to flare it up (a
    * Guardian channelling). Greyed when down all the same.
@@ -11079,7 +11121,7 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
     const want = p.walking ? Math.sin(p.stride * 3.6) : 0;
     swing += (want - swing) * Math.min(1, dt * 20);
     const rowing = p.rowing !== undefined && !!rig.hands && !p.lying;
-    const anim: Anim = { t: p.time, swing, breath: Math.sin(p.time * 2.2 + beat), strike: Math.min(1, Math.abs(p.lean) * 2), act: action && (rig.acts || (rig.claws && CLAW_ACTS.has(action.kind)) || (rig.howls && action.kind === "howl") || (rig.dives && action.kind === "dive") || (rig.spectral && SPECTRAL_ACTS.has(action.kind)) || (rig.oozes && OOZE_ACTS.has(action.kind)) || (rig.spins && SPIN_ACTS.has(action.kind))) ? { kind: action.kind, t: action.kind === "cast" ? since / pace : since, n: action.n, air: action.air } : null, scale: 1 / scaler.scale.x, lying: p.lying, sitting: rowing ? 1 : typeof p.sitting === "number" ? Math.max(0, Math.min(1, p.sitting)) : p.sitting ? 1 : 0, floor: rowing || p.lying ? 0 : Math.max(0, Math.min(1, p.floor ?? 0)), oars: rowing ? Math.max(0, Math.min(1, p.rowing!)) : -1, getUp: null };
+    const anim: Anim = { t: p.time, swing, breath: Math.sin(p.time * 2.2 + beat), strike: Math.min(1, Math.abs(p.lean) * 2), act: action && (rig.acts || (rig.claws && CLAW_ACTS.has(action.kind)) || (rig.howls && action.kind === "howl") || (rig.breathes && action.kind === "breathe") || (rig.dives && action.kind === "dive") || (rig.spectral && SPECTRAL_ACTS.has(action.kind)) || (rig.oozes && OOZE_ACTS.has(action.kind)) || (rig.spins && SPIN_ACTS.has(action.kind))) ? { kind: action.kind, t: action.kind === "cast" ? since / pace : since, n: action.n, air: action.air } : null, scale: 1 / scaler.scale.x, lying: p.lying, sitting: rowing ? 1 : typeof p.sitting === "number" ? Math.max(0, Math.min(1, p.sitting)) : p.sitting ? 1 : 0, floor: rowing || p.lying ? 0 : Math.max(0, Math.min(1, p.floor ?? 0)), oars: rowing ? Math.max(0, Math.min(1, p.rowing!)) : -1, getUp: null };
     // A rig with no animations of its own is leant into a blow, and a little into a hit, easing off as it always has.
     if (action && !rig.acts && !anim.act) anim.strike = Math.max(anim.strike, Math.min(1, (action.kind === "hit" ? 0.5 : 1.8) * Math.exp(-8 * since)));
     if (sling) stow(sling, p.walking, Math.max(anim.strike, anim.act && anim.act.kind !== "hit" ? 1 : 0), dt);
@@ -11202,6 +11244,12 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
       }
       // Nothing to rear up and roar with: it does nothing.
       if (how === "roar") return 0;
+      if (how === "breathe") {
+        // Nothing of its own to breathe with: it does nothing, and the breath comes from where it stands.
+        if (!rig.breathes) return 0;
+        asked = "breathe";
+        return BREATHE.hit;
+      }
       if ((how === "grasp" || how === "wail" || how === "hurl") && rig.spectral) {
         asked = how;
         return how === "grasp" ? GRASP.hit : how === "hurl" ? HURL.hit : WAIL.peak;
