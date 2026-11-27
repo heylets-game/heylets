@@ -11,8 +11,8 @@ line off once it is done.
 
 ## UI
 
-- The pub (its "At the bar" panel) and the keepers' rooms (Talk on the strip over the bottom bar) could use the hut's
-  top bar, `apps/game/src/client/ui/TopBar.tsx`, with their panels as its drops.
+- The keepers' rooms (Talk on the strip over the bottom bar) could use the top bar the hut and the pub have,
+  `apps/game/src/client/ui/TopBar.tsx`: the room's name, what to do here, and Leave.
 
 ## Release notes
 

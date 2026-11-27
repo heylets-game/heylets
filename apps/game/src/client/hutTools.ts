@@ -1,6 +1,8 @@
 // The hut's pixel glyphs (drawn by PixelIcon) and the shape of one of its
 // controls: the buttons for a piece being carried, in the strip under the top
-// bar (HutView), and the top bar's own tabs.
+// bar (HutView), and the top bar's own tabs. The door is the one every place's top bar shares (ui/menuIcons.ts).
+
+import { DOOR } from "./ui/menuIcons";
 
 export const ICON = {
   move: ["...#....", "..###...", ".#.#.#..", "#######.", ".#.#.#..", "..###...", "...#....", "........"],
@@ -21,7 +23,7 @@ export const ICON = {
   anvil: ["........", "########", ".#######", "..#####.", "...###..", "...###..", "..#####.", ".#######"],
   roller: ["######..", "######.#", "######.#", ".......#", "...####.", "...#....", "...#....", "...#...."],
   lamp: ["...##...", "...##...", "..####..", ".#....#.", ".#.##.#.", ".#.##.#.", "..####..", "...##..."],
-  door: [".######.", ".#....#.", ".#....#.", ".#....#.", ".#...##.", ".#....#.", ".#....#.", "########"],
+  door: DOOR,
   check: ["........", ".......#", "......##", "#....##.", "##..##..", ".####...", "..##....", "........"],
 };
 
