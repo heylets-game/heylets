@@ -2132,11 +2132,13 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           if (!aura || fxs.holds(key) || !follow()) continue;
           fxs.dread({ key, follow, holding: () => !!standing(id) }, DREAD.color, DREAD.deep, (aura.radius + 0.5) * Math.sqrt(3));
         }
+        // One chain for each spot: fettered again somewhere else, the old one lets go and the new one is driven in there.
         const fetter = u.conditions.find((c) => c.kind === "fettered" && c.at);
-        const key = `fetter:${id}`;
-        if (fetter?.at && !fxs.holds(key) && follow()) {
-          const holding = () => !!standing(id)?.conditions.some((c) => c.kind === "fettered");
-          fxs.fetter({ key, follow, holding }, point(fetter.at), FETTER.iron, FETTER.glow);
+        const spot = fetter?.at;
+        const key = spot ? `fetter:${id}:${spot.q},${spot.r}` : "";
+        if (spot && !fxs.holds(key) && follow()) {
+          const holding = () => !!standing(id)?.conditions.some((c) => c.kind === "fettered" && c.at?.q === spot.q && c.at?.r === spot.r);
+          fxs.fetter({ key, follow, holding }, point(spot), FETTER.iron, FETTER.glow);
         }
       }
     };

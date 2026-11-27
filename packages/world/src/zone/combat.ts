@@ -1217,12 +1217,12 @@ export function fieldSlows(ctx: Ctx, unit: Unit): void {
 /**
  * Fetter `unit` where it stands (EnemyAbilityDef `tether`, a Haunt's Ghastly Fetter): for so many of its turns it goes
  * no further than `reach` from here by its own doing (geometry.ts fetterBars). Fettered again while it holds, it is
- * still chained to the spot it was first caught on, for as long as the longer of the two.
+ * chained to where it stands now instead, for as long as the longer of the two.
  */
 function fetter(ctx: Ctx, unit: Unit, tether: { reach: number; turns: number }): void {
   addCondition(ctx, unit, "fettered", tether.turns, tether.reach);
   const held = unit.conditions.find((c) => c.kind === "fettered");
-  if (held && !held.at) held.at = { q: unit.pos.q, r: unit.pos.r };
+  if (held) held.at = { q: unit.pos.q, r: unit.pos.r };
 }
 
 function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | null, at?: HexPos): void {
