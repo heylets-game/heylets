@@ -77,15 +77,24 @@ const SHAPES = new Set([4, 6, 8, 10, 12, 20]);
 const LOST: Record<Roll["kind"], string> = { attack: "hit", save: "save", shove: "shove", initiative: "roll" };
 const listOf = (names: string[]) => (names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`);
 
-/** What made the difference to a roll (swingsOf), as a sentence: "High ground made the difference", "Trees cost the hit". */
-export function swingText(roll: Roll, s: Swing): string {
-  const did = s.helped ? "made the difference" : `cost the ${LOST[roll.kind]}`;
-  if (s.adv) {
-    const which = roll.adv > 0 ? "Advantage" : "Disadvantage";
-    return `${s.names.length > 0 ? `${which} (${s.names.join(", ")})` : which} ${did}`;
-  }
-  if (s.between) return `Between them, ${listOf(s.names)} ${did}`;
-  return `${listOf(s.names)} ${s.names.length === 2 ? "both " : s.names.length > 2 ? "all " : ""}${did}`;
+/**
+ * Everything that made the difference to a roll (swingsOf) as one sentence: "High ground made the difference", "High
+ * ground and advantage (Inspired) both made the difference", "Trees cost the hit". They all went the same way (the way
+ * the roll did), so one verb does for all. Null: nothing did.
+ */
+export function swingText(roll: Roll, swings: Swing[]): string | null {
+  if (swings.length === 0) return null;
+  const did = swings[0].helped ? "made the difference" : `cost the ${LOST[roll.kind]}`;
+  const who = swings.flatMap((s) => {
+    if (s.adv) {
+      const which = roll.adv > 0 ? "advantage" : "disadvantage";
+      return [s.names.length > 0 ? `${which} (${s.names.join(", ")})` : which];
+    }
+    return s.between ? [`${listOf(s.names)} between them`] : s.names;
+  });
+  const each = swings.some((s) => s.between) ? "" : who.length === 2 ? "both " : who.length > 2 ? "all " : "";
+  const line = `${listOf(who)} ${each}${did}`;
+  return line[0].toUpperCase() + line.slice(1);
 }
 
 /**
@@ -153,7 +162,7 @@ function RollSum({ roll }: { roll: Roll }) {
           {parts.map((p, i) => <span key={i} className={`fl-part ${p.good ? "good" : "bad"} ${p.swung ? "swung" : ""}`}>{p.text}</span>)}
         </div>
       )}
-      {swings.map((s, i) => <div key={i} className={`fl-swing ${s.helped ? "good" : "bad"}`}>{swingText(roll, s)}</div>)}
+      {swings.length > 0 && <div className={`fl-swing ${roll.ok ? "good" : "bad"}`}>{swingText(roll, swings)}</div>}
     </>
   );
 }
@@ -164,7 +173,7 @@ export function logLine(e: LogEntry): string {
     case "head": return e.text;
     case "turn": return `${e.name}'s turn`;
     case "note": return e.text;
-    case "roll": return e.roll.kind === "initiative" ? `${e.who} rolls ${e.roll.total} for initiative` : `${e.who}: ${e.roll.label} ${e.roll.total} vs ${e.roll.vs}, ${rollOutcome(e.roll).word.toLowerCase()}${swingsOf(e.roll).map((s) => ` (${swingText(e.roll, s)})`).join("")}`;
+    case "roll": return e.roll.kind === "initiative" ? `${e.who} rolls ${e.roll.total} for initiative` : `${e.who}: ${e.roll.label} ${e.roll.total} vs ${e.roll.vs}, ${rollOutcome(e.roll).word.toLowerCase()}${((t) => (t ? ` (${t})` : ""))(swingText(e.roll, swingsOf(e.roll)))}`;
     case "hit": return e.actor ? `${e.actor} hits ${e.target} with ${e.what} for ${e.amount}${e.crit ? " (critical)" : ""}` : `${e.target} takes ${e.amount} from ${e.what}`;
     case "miss": return `${e.actor} misses ${e.target} with ${e.what}`;
     case "heal": return e.actor && e.actor !== e.target ? `${e.actor} heals ${e.target} for ${e.amount} with ${e.what}` : `${e.target} recovers ${e.amount} from ${e.what}`;
@@ -391,7 +400,7 @@ export function RollToast({ roll, who, dice, hold = 2200 }: RollToastProps) {
             {parts.map((p, i) => <span key={i} className={`fr-part ${p.good ? "good" : "bad"} ${p.swung ? "swung" : ""}`}>{p.text}</span>)}
           </div>
         )}
-        {swings.map((s, i) => <div key={i} className={`fr-swing ${s.helped ? "good" : "bad"}`}>{swingText(roll, s)}</div>)}
+        {swings.length > 0 && <div className={`fr-swing ${roll.ok ? "good" : "bad"}`}>{swingText(roll, swings)}</div>}
         {dice && (
           <div className="fr-dmg">
             <i>{dice.faces.length}d{dice.d}</i>
