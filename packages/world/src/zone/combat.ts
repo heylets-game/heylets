@@ -1009,68 +1009,61 @@ interface AbilityUse {
 interface AbilityKind {
   id: string;
   is(tactic: Tactic, aim: Aim, state: ZoneState): boolean;
-  /** Does it. True if it landed (the effects that wait on that: a Phase Treads blink's selfEffect). */
+  /** Does it. True if it landed: what waits on that (the ability's `selfEffect`) follows only then. */
   run(use: AbilityUse): boolean;
 }
 
 /** The other side's units still standing. */
 const foesOf = (state: ZoneState, unit: Unit): Unit[] => state.units.filter((u) => u.side !== unit.side && !u.down);
 
-function use_crate({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+/** A blow aimed at a crate: it is smashed (a shield set first, as for a blow at anyone). */
+function useCrate({ ctx, unit, def, tactic, aim }: AbilityUse): boolean {
   const { state } = ctx;
-  let landed = false;
   raiseShields(ctx, unit, tactic);
   // Aimed at a crate, a chain goes no further: there is nothing in a crate for it to jump from.
   smash(ctx, unit, def, tactic, crateById(state, aim.target)!);
-  landed = true;
-  return landed;
+  return true;
 }
 
-function use_weather({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+/** Weather laid over an area (a Soothing Rain, Trade Winds, a Coral Field). */
+function useWeather({ ctx, unit, tactic, aim, ability }: AbilityUse): boolean {
   const { state } = ctx;
-  let landed = false;
   makeWeather(ctx, tactic.weather!, abilityArea(state, unit, ability, aim.at, undefined, aim.lean), unit);
-  landed = true;
-  return landed;
+  return true;
 }
 
-function use_splash({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+/** A splash for the user's side (Revitalizing Splash): a heal on everyone of it there, then the water left. */
+function useSplash({ ctx, unit, def, tactic, aim, ability }: AbilityUse): boolean {
   const { state } = ctx;
-  let landed = false;
   // Healing for the caster's side alone, the fallen got up with it; then the water, which soaks whoever is there.
   const area = abilityArea(state, unit, ability, aim.at, undefined, aim.lean);
   const keys = new Set(area.map(posKey));
   const mended = rollHeal(ctx, unit, def, healDice(def));
   for (const u of state.units.filter((x) => x.side === unit.side && caught(x, keys))) heal(ctx, u, mended.total, { actor: unit.id, what: def.id, dice: mended });
   placeSurface(ctx, area, "water", tactic.splash!.water, unit.id);
-  landed = true;
-  return landed;
+  return true;
 }
 
-function use_summon({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
-  const { state } = ctx;
-  let landed = false;
+/** A call for help (a sea turtle): whoever comes is met by the ground they come to. */
+function useSummon({ ctx, unit, tactic, aim }: AbilityUse): boolean {
   for (const called of summonCall(ctx, unit, tactic.summon!, aim.at!)) if (!called.down) ctx.onStep?.(called, () => {});
-  landed = true;
-  return landed;
+  return true;
 }
 
-function use_chart({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
-  const { state } = ctx;
-  let landed = false;
+/** A course charted to a hex (Chart a Course): the mark, and movement toward it for the side. */
+function useChart({ ctx, unit, tactic, aim }: AbilityUse): boolean {
   // One mark at a time: the new one takes the old one's place.
   removeCondition(unit, "charted");
   addCondition(ctx, unit, "charted", tactic.chart!.rounds);
   const mark = unit.conditions.find((c) => c.kind === "charted");
   if (mark) mark.at = { q: aim.at!.q, r: aim.at!.r };
   chartCourse(ctx, unit);
-  landed = true;
-  return landed;
+  return true;
 }
 
-function use_constellation({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+/** The Constellation: every enemy on its links struck once and lit. */
+function useConstellation({ ctx, unit, def, tactic, ability }: AbilityUse): boolean {
   const { state } = ctx;
-  let landed = false;
   // The links pass harmlessly over the user's side; every enemy on one is struck once and lit, however many cross it.
   const keys = new Set(abilityArea(state, unit, ability).map(posKey));
   const rolled = rollDamage(ctx, unit, def, abilityDice(def));
@@ -1078,35 +1071,32 @@ function use_constellation({ ctx, unit, def, tactic, aim, ability, wasUnseen }: 
     damage(ctx, victim, rolled.total, { actor: unit.id, what: def.id, dice: rolled });
     if (!victim.down) addCondition(ctx, victim, "guiding_light", tactic.guide ?? 0);
   }
-  landed = true;
-  return landed;
+  return true;
 }
 
-function use_newMoon({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+/** New Moon: every lit enemy struck at once, the lights put out. */
+function useNewMoon({ ctx, unit, def }: AbilityUse): boolean {
   const { state } = ctx;
-  let landed = false;
   // Every light put out at once, each for a blow that cannot be dodged.
   const lit = litFoes(state, unit);
   const rolled = rollDamage(ctx, unit, def, abilityDice(def));
   for (const victim of lit) removeCondition(victim, "guiding_light");
   for (const victim of lit) damage(ctx, victim, rolled.total, { actor: unit.id, what: def.id, dice: rolled });
-  landed = true;
-  return landed;
+  return true;
 }
 
-function use_redSky({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+/** Red Sky: an omen on every enemy in the area, no roll and no save. */
+function useRedSky({ ctx, unit, tactic, aim, ability }: AbilityUse): boolean {
   const { state } = ctx;
-  let landed = false;
   // An omen, not a blow: no roll and no save, and only the other side reads it.
   const keys = new Set(abilityArea(state, unit, ability, aim.at, undefined, aim.lean).map(posKey));
   for (const foe of foesOf(state, unit).filter((u) => caught(u, keys))) addCondition(ctx, foe, "red_sky", tactic.redSky!.rounds);
-  landed = true;
-  return landed;
+  return true;
 }
 
-function use_unholy({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+/** Unholy Waters: water over the area, and fire where an enemy stands. */
+function useUnholy({ ctx, unit, tactic, aim, ability }: AbilityUse): boolean {
   const { state } = ctx;
-  let landed = false;
   // Water over it all, bar where an enemy stands: that hex comes up burning, whatever water or ice was on it gone first.
   // (Oil or poison under an enemy goes up with it, and takes the rest of its spill along.)
   const area = abilityArea(state, unit, ability, aim.at, undefined, aim.lean);
@@ -1115,11 +1105,11 @@ function use_unholy({ ctx, unit, def, tactic, aim, ability, wasUnseen }: Ability
   placeSurface(ctx, area.filter((p) => !held.has(posKey(p))), "water", tactic.unholy!.water, unit.id);
   clearSurfaces(ctx, burning.filter((p) => ["water", "ice"].includes(state.surfaces[posKey(p)]?.kind ?? "")));
   placeSurface(ctx, burning, "fire", tactic.unholy!.fire, unit.id);
-  landed = true;
-  return landed;
+  return true;
 }
 
-function use_single({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+/** One target: a blow or a spell at them, and whatever comes after it (a knock back, a drag, a blink away). */
+function useSingle({ ctx, unit, def, tactic, aim, wasUnseen }: AbilityUse): boolean {
   const { state } = ctx;
   let landed = false;
   const target = unitById(state, aim.target!)!;
@@ -1154,9 +1144,9 @@ function use_single({ ctx, unit, def, tactic, aim, ability, wasUnseen }: Ability
   return landed;
 }
 
-function use_sweep({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+/** A wave (Tidal Wave): everyone on its line saves for half, and those who fail are swept along it. */
+function useSweep({ ctx, unit, def, tactic, aim, ability }: AbilityUse): boolean {
   const { state } = ctx;
-  let landed = false;
   // A wave: the far ones are swept first, so the near ones have somewhere to go.
   const line = abilityArea(state, unit, ability, aim.at, undefined, aim.lean);
   const along = (u: Unit) => line.findIndex((p) => covers(u, p));
@@ -1175,11 +1165,11 @@ function use_sweep({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityU
   if (unit.side === "hero" && def.damage) for (const box of cratesOn(state, line)) hurtCrate(ctx, box, rolled, { actor: unit.id, what: def.id });
   // It leaves the line awash: whoever ends up on it is soaked.
   if (tactic.surface) placeSurface(ctx, line, tactic.surface.kind, tactic.surface.rounds, unit.id);
-  landed = true;
-  return landed;
+  return true;
 }
 
-function use_adjacent({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+/** Everyone beside the user, a blow at each (and every crate there). */
+function useAdjacent({ ctx, unit, def, tactic }: AbilityUse): boolean {
   const { state } = ctx;
   let landed = false;
   for (const foe of foesOf(state, unit).filter((u) => reaches(state.map, unit, u))) landed = strike(ctx, unit, def, tactic, foe) || landed;
@@ -1192,7 +1182,8 @@ function use_adjacent({ ctx, unit, def, tactic, aim, ability, wasUnseen }: Abili
   return landed;
 }
 
-function use_arc({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+/** A swing through the three hexes before the user, a blow at each one in them. */
+function useArc({ ctx, unit, def, tactic, aim }: AbilityUse): boolean {
   const { state } = ctx;
   let landed = false;
   const keys = new Set(arcHexes(state, unit.pos, aim.at!).map(posKey));
@@ -1206,7 +1197,8 @@ function use_arc({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse
   return landed;
 }
 
-function use_chain({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+/** A chain (Chain Lightning): from one to the next nearest, until a miss breaks it. */
+function useChain({ ctx, unit, def, tactic, aim }: AbilityUse): boolean {
   const { state } = ctx;
   let landed = false;
   const chain = [unitById(state, aim.target!)!];
@@ -1227,7 +1219,8 @@ function use_chain({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityU
   return landed;
 }
 
-function use_area({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+/** A blast, a burst, a line or a cone: everyone caught saves for half. */
+function useArea({ ctx, unit, def, tactic, aim, ability }: AbilityUse): boolean {
   const { state } = ctx;
   let landed = false;
   const area = abilityArea(state, unit, ability, aim.at, undefined, aim.lean);
@@ -1261,21 +1254,20 @@ function use_area({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUs
   return landed;
 }
 
-function use_blink({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+/** A blink (Smuggler's Route): the user, and an ally beside them if one is named, there at once. */
+function useBlink({ ctx, unit, aim }: AbilityUse): boolean {
   const { state } = ctx;
-  let landed = false;
   // Smuggler's Route: the ally's place beside the far end is settled before either of them goes.
   const ally = aim.target && aim.target !== unit.id ? unitById(state, aim.target) : undefined;
   const spot = ally ? carrySpot(state, unit, ally, aim.at!) : null;
   blinkTo(ctx, unit, aim.at!);
   if (ally && spot) blinkTo(ctx, ally, spot);
-  landed = true;
-  return landed;
+  return true;
 }
 
-function use_support({ ctx, unit, def, tactic, aim, ability, wasUnseen }: AbilityUse): boolean {
+/** Everything else: what a hero does for themselves or their side (heals, shields, shanties, taunts, hiding). */
+function useSupport({ ctx, unit, def, tactic, aim }: AbilityUse): boolean {
   const { state } = ctx;
-  let landed = false;
   const target = tactic.shape === "ally" && aim.target ? unitById(state, aim.target)! : unit;
   const soaked = tactic.regen && inWater(state, target) ? tactic.regen.water : 0;
   if (def.heal && !tactic.soothe) {
@@ -1358,8 +1350,7 @@ function use_support({ ctx, unit, def, tactic, aim, ability, wasUnseen }: Abilit
     if (target.id === unit.id) addCondition(ctx, unit, "contraband", tactic.smuggle.rounds, 2);
     else for (const u of [unit, target]) addCondition(ctx, u, "contraband", tactic.smuggle.rounds, 1);
   }
-  landed = true;
-  return landed;
+  return true;
 }
 
 /**
@@ -1367,23 +1358,23 @@ function use_support({ ctx, unit, def, tactic, aim, ability, wasUnseen }: Abilit
  * A new kind of ability is a new entry here (and its own function), not a new branch in the middle of one.
  */
 const ABILITY_KINDS: readonly AbilityKind[] = [
-  { id: "crate", is: (tactic, aim, state) => (tactic.shape === "single" || tactic.shape === "chain") && !!crateById(state, aim.target), run: use_crate },
-  { id: "weather", is: (tactic) => !!tactic.weather, run: use_weather },
-  { id: "splash", is: (tactic) => !!tactic.splash, run: use_splash },
-  { id: "summon", is: (tactic) => !!tactic.summon, run: use_summon },
-  { id: "chart", is: (tactic) => !!tactic.chart, run: use_chart },
-  { id: "constellation", is: (tactic) => !!tactic.constellation, run: use_constellation },
-  { id: "newMoon", is: (tactic) => !!tactic.newMoon, run: use_newMoon },
-  { id: "redSky", is: (tactic) => !!tactic.redSky, run: use_redSky },
-  { id: "unholy", is: (tactic) => !!tactic.unholy, run: use_unholy },
-  { id: "single", is: (tactic) => tactic.shape === "single", run: use_single },
-  { id: "sweep", is: (tactic) => !!tactic.sweep, run: use_sweep },
-  { id: "adjacent", is: (tactic) => tactic.shape === "adjacent", run: use_adjacent },
-  { id: "arc", is: (tactic) => tactic.shape === "arc", run: use_arc },
-  { id: "chain", is: (tactic) => tactic.shape === "chain", run: use_chain },
-  { id: "area", is: (tactic) => tactic.shape === "blast" || tactic.shape === "burst" || tactic.shape === "line" || tactic.shape === "cone", run: use_area },
-  { id: "blink", is: (tactic) => !!tactic.blink, run: use_blink },
-  { id: "support", is: () => true, run: use_support },
+  { id: "crate", is: (tactic, aim, state) => (tactic.shape === "single" || tactic.shape === "chain") && !!crateById(state, aim.target), run: useCrate },
+  { id: "weather", is: (tactic) => !!tactic.weather, run: useWeather },
+  { id: "splash", is: (tactic) => !!tactic.splash, run: useSplash },
+  { id: "summon", is: (tactic) => !!tactic.summon, run: useSummon },
+  { id: "chart", is: (tactic) => !!tactic.chart, run: useChart },
+  { id: "constellation", is: (tactic) => !!tactic.constellation, run: useConstellation },
+  { id: "newMoon", is: (tactic) => !!tactic.newMoon, run: useNewMoon },
+  { id: "redSky", is: (tactic) => !!tactic.redSky, run: useRedSky },
+  { id: "unholy", is: (tactic) => !!tactic.unholy, run: useUnholy },
+  { id: "single", is: (tactic) => tactic.shape === "single", run: useSingle },
+  { id: "sweep", is: (tactic) => !!tactic.sweep, run: useSweep },
+  { id: "adjacent", is: (tactic) => tactic.shape === "adjacent", run: useAdjacent },
+  { id: "arc", is: (tactic) => tactic.shape === "arc", run: useArc },
+  { id: "chain", is: (tactic) => tactic.shape === "chain", run: useChain },
+  { id: "area", is: (tactic) => tactic.shape === "blast" || tactic.shape === "burst" || tactic.shape === "line" || tactic.shape === "cone", run: useArea },
+  { id: "blink", is: (tactic) => !!tactic.blink, run: useBlink },
+  { id: "support", is: () => true, run: useSupport },
 ];
 
 /** Use an ability that has passed its check. Says what was used, then rolls and applies it. */

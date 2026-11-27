@@ -10,7 +10,7 @@ import { ENEMY_ABILITIES, type EnemyAbilityDef, type FieldKind } from "@gantt-qu
 import { BREATHE, ENGULF, FLARE, FLURRY_BLOWS, SLICES_APART, type Figure } from "./figures";
 import type { FxKind } from "./sprites";
 import { CRACK_DARK, CRACK_EDGE, crackGeometry, crackPaths, type CrackOpts } from "./cracks";
-import { AMBER, BLOOD_RED, FROST_WHITE, PALE_GOLD, PARCHMENT, SAND, WARM_WHITE, WHITE, YELLOW } from "./fxPalette";
+import { AMBER, CRIMSON, FROST_WHITE, PALE_GOLD, PARCHMENT, SAND, WARM_WHITE, WHITE, YELLOW } from "./fxPalette";
 
 /** One effect sprite: flown from `from` to `to` over `life` seconds, growing from one size to the other. */
 export interface FxOpts {
@@ -186,7 +186,6 @@ export interface SignatureMove {
   again?: { blurb: string; play(stage: MoveStage, ctx: MoveCtx): void };
 }
 
-const CHEAP_SHOT_RED = BLOOD_RED;
 
 /**
  * Two flat side slashes, one each way: a forehand across the front from the right, carried straight on into a
@@ -199,7 +198,7 @@ function cheapShot(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Mov
     // The swipe is drawn as a quarter circle bowed up and to one side; turned an eighth, it lies flat, an arch.
     const flip = second ? dir > 0 : dir < 0;
     const at = hitAt.clone().setY(hitAt.y + (second ? -0.1 : 0.12));
-    stage.spawnFx("slash", crit ? YELLOW : CHEAP_SHOT_RED, flip, { from: at, to: at, life: 0.24, size: [1.4, 2.3], turn: flip ? -Math.PI / 4 : Math.PI / 4, spin: (flip ? 1 : -1) * 0.5, fade: true });
+    stage.spawnFx("slash", crit ? YELLOW : CRIMSON, flip, { from: at, to: at, life: 0.24, size: [1.4, 2.3], turn: flip ? -Math.PI / 4 : Math.PI / 4, spin: (flip ? 1 : -1) * 0.5, fade: true });
     stage.jolt();
   };
   const first = figure.strike("slices");
@@ -254,7 +253,8 @@ export function pounceAt(s: number, far: number, air: number = POUNCE.air): { ah
 }
 
 const TEETH = "#f4efe2";
-const GOLD = YELLOW;
+/** A critical blow's glint, on whatever the move is made of. */
+const CRIT_GLINT = YELLOW;
 /** How long a lunge's jaws take to close: they meet as the wolf lands. A plain bite's are quicker. */
 const LUNGE_BITE = 0.1;
 const QUICK_BITE = 0.08;
@@ -267,7 +267,7 @@ const STREAK_PALE = "#d6e4ff";
  * over `life` seconds. `onShut` runs as they meet.
  */
 function jaws(stage: MoveStage, { hitAt, dir, crit }: MoveCtx, life: number, gape: number, onShut: () => void, teeth = TEETH) {
-  const color = crit ? GOLD : teeth;
+  const color = crit ? CRIT_GLINT : teeth;
   // The swipe is drawn as a quarter circle; turned an eighth it lies flat as an arch, and half a turn more turns it over.
   const flat = dir < 0 ? -Math.PI / 4 : Math.PI / 4;
   for (const upper of [false, true]) {
@@ -282,7 +282,7 @@ function jaws(stage: MoveStage, { hitAt, dir, crit }: MoveCtx, life: number, gap
 function wolfBite(stage: MoveStage, ctx: MoveCtx) {
   stage.lunge();
   jaws(stage, ctx, QUICK_BITE, 0.3, () => {
-    stage.spawnFx("burst", ctx.crit ? GOLD : TEETH, false, { from: ctx.hitAt, to: ctx.hitAt, life: 0.18, size: [0.5, 1.2], spin: 0.5, fade: true });
+    stage.spawnFx("burst", ctx.crit ? CRIT_GLINT : TEETH, false, { from: ctx.hitAt, to: ctx.hitAt, life: 0.18, size: [0.5, 1.2], spin: 0.5, fade: true });
     stage.jolt();
     ctx.onImpact();
   });
@@ -290,18 +290,18 @@ function wolfBite(stage: MoveStage, ctx: MoveCtx) {
 
 /** A troll's Chomp: a wolf's snap forward, its jaws closing on the target as two red arches. */
 function trollChomp(stage: MoveStage, ctx: MoveCtx) {
-  const red = ctx.crit ? GOLD : CHEAP_SHOT_RED;
+  const red = ctx.crit ? CRIT_GLINT : CRIMSON;
   stage.lunge();
   jaws(stage, ctx, QUICK_BITE, 0.3, () => {
     stage.spawnFx("burst", red, false, { from: ctx.hitAt, to: ctx.hitAt, life: 0.18, size: [0.5, 1.2], spin: 0.5, fade: true });
     stage.jolt();
     ctx.onImpact();
-  }, CHEAP_SHOT_RED);
+  }, CRIMSON);
 }
 
 /** A troll's Rake: its usual swing with a long clawed arm, leaving a red swoosh across the target. */
 function trollRake(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
-  const red = crit ? GOLD : CHEAP_SHOT_RED;
+  const red = crit ? CRIT_GLINT : CRIMSON;
   const wait = figure.strike("light");
   // A creature with no swing of its own springs at the target, and the swoosh lands as it does.
   if (wait <= 0) stage.lunge();
@@ -357,7 +357,7 @@ function lunge(stage: MoveStage, ctx: MoveCtx, great: boolean) {
         const at = body();
         for (let i = 0; i < (great ? 3 : 2); i++) {
           const from = at.clone().setY(at.y - 0.3 + Math.random() * (great ? 0.9 : 0.65)).addScaledVector(back, 0.2 + Math.random() * 0.25);
-          const color = crit ? GOLD : great && i === 2 ? SAVAGE_RED : STREAK_PALE;
+          const color = crit ? CRIT_GLINT : great && i === 2 ? SAVAGE_RED : STREAK_PALE;
           stage.spawnFx("streak", color, flip, { from, to: from.clone().addScaledVector(back, great ? 0.8 : 0.55), life: 0.16, size: great ? [1.5, 0.9] : [1.1, 0.7], spin: 0, fade: true });
         }
       }, s);
@@ -365,7 +365,7 @@ function lunge(stage: MoveStage, ctx: MoveCtx, great: boolean) {
   }
   stage.later(() => {
     jaws(stage, ctx, LUNGE_BITE, 0.4, () => {
-      const color = crit ? GOLD : TEETH;
+      const color = crit ? CRIT_GLINT : TEETH;
       stage.spawnFx("burst", color, false, { from: hitAt, to: hitAt, life: 0.26, size: [0.9, 2.4], spin: 0.6, fade: true });
       // Lines bursting out from where the jaws met, either side.
       for (const side of [false, true]) for (const turn of [-0.55, -0.15, 0.25, 0.6]) stage.spawnFx("streak", color, side, { from: hitAt, to: hitAt, life: 0.2, size: [0.6, 1.9], turn: side ? -turn : turn, spin: 0, fade: true });
@@ -377,7 +377,7 @@ function lunge(stage: MoveStage, ctx: MoveCtx, great: boolean) {
         // The ground shakes where it lands: a shock rolling out with dust after, dust and grit thrown up all round,
         // a second, bigger flash, and the target jolted again.
         const floor = feet.clone().setY(feet.y + 0.05);
-        stage.wave({ at: floor, radius: 2.2, life: 0.42, color: crit ? GOLD : PARCHMENT, width: 0.1 });
+        stage.wave({ at: floor, radius: 2.2, life: 0.42, color: crit ? CRIT_GLINT : PARCHMENT, width: 0.1 });
         stage.later(() => stage.wave({ at: floor, radius: 1.9, life: 0.5, color: DUST, width: 0.3 }), 0.05);
         for (let i = 0; i < 10; i++) {
           const a = (i / 10) * Math.PI * 2 + Math.random() * 0.3;
@@ -389,7 +389,7 @@ function lunge(stage: MoveStage, ctx: MoveCtx, great: boolean) {
           stage.spawnFx("fleck", ROCK_PALE, Math.random() < 0.5, { from: feet, to, life: 0.35, size: [0.4, 0.3], spin: 0, fade: true });
         }
         stage.later(() => {
-          stage.spawnFx("burst", crit ? GOLD : SAVAGE_RED, false, { from: hitAt, to: hitAt, life: 0.3, size: [1.2, 3.1], spin: -0.5, fade: true });
+          stage.spawnFx("burst", crit ? CRIT_GLINT : SAVAGE_RED, false, { from: hitAt, to: hitAt, life: 0.3, size: [1.2, 3.1], spin: -0.5, fade: true });
           stage.jolt();
         }, 0.09);
       }
@@ -407,8 +407,8 @@ const SAVAGE_DEEP = "#8f1414";
  */
 function savageBite(stage: MoveStage, ctx: MoveCtx) {
   const { hitAt, crit, onImpact } = ctx;
-  const red = crit ? GOLD : SAVAGE_RED;
-  const deep = crit ? GOLD : SAVAGE_DEEP;
+  const red = crit ? CRIT_GLINT : SAVAGE_RED;
+  const deep = crit ? CRIT_GLINT : SAVAGE_DEEP;
   stage.lunge();
   jaws(stage, ctx, LUNGE_BITE, 0.48, () => {
     stage.spawnFx("burst", red, false, { from: hitAt, to: hitAt, life: 0.24, size: [0.8, 2.3], spin: 0.6, fade: true });
@@ -439,8 +439,8 @@ function howlMove(stage: MoveStage, { figure, crit, onImpact }: MoveCtx) {
   const ground = feet.clone().setY(feet.y + 0.08);
   // Its muzzle, thrown up: about as high over its feet as its head is when it sits back.
   const mouth = () => figure.root.getWorldPosition(new THREE.Vector3()).setY(feet.y + 1.35);
-  const red = crit ? GOLD : SAVAGE_RED;
-  const deep = crit ? GOLD : SAVAGE_DEEP;
+  const red = crit ? CRIT_GLINT : SAVAGE_RED;
+  const deep = crit ? CRIT_GLINT : SAVAGE_DEEP;
   stage.later(() => {
     const at = mouth();
     stage.spawnFx("burst", red, false, { from: at, to: at, life: 0.3, size: [0.6, 1.9], spin: 0.5, fade: true });
@@ -490,8 +490,8 @@ const BEARS = ["bear", "snow_bear", "great_bear"] as const;
  */
 function bearMaul(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
   // Black claw marks and white slashes (all gold on a critical hit).
-  const dark = crit ? GOLD : MAUL_BLACK;
-  const pale = crit ? GOLD : TEETH;
+  const dark = crit ? CRIT_GLINT : MAUL_BLACK;
+  const pale = crit ? CRIT_GLINT : TEETH;
   const first = figure.strike("flurry");
   // A creature with no flurry of its own springs at the target, and the blows land quick as it does.
   if (first <= 0) stage.lunge();
@@ -529,7 +529,7 @@ function bearMaul(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Move
  * spray of red off it; it is jolted, and the blow is told.
  */
 function rendingSwipe(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
-  const color = crit ? GOLD : CHEAP_SHOT_RED;
+  const color = crit ? CRIT_GLINT : CRIMSON;
   const wait = figure.strike("claw");
   // A creature with no swipe of its own springs at the target, and the marks land as it does.
   if (wait <= 0) stage.lunge();
@@ -563,11 +563,11 @@ function clubSmash(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Mov
   if (wait <= 0) stage.lunge();
   stage.later(() => {
     const ground = hitAt.clone().setY(hitAt.y - 0.45);
-    const flash = crit ? GOLD : WARM_WHITE;
+    const flash = crit ? CRIT_GLINT : WARM_WHITE;
     stage.spawnFx("burst", flash, false, { from: ground, to: ground, life: 0.24, size: [1, 3], spin: 0.6, fade: true });
     // The shock pulsing out over the ground to the hexes all round, where any hero beside the target is caught by it.
     const floor = ground.clone().setY(ground.y + 0.05);
-    stage.wave({ at: floor, radius: SMASH_PULSE.radius, life: SMASH_PULSE.life, color: crit ? GOLD : PARCHMENT, width: 0.1 });
+    stage.wave({ at: floor, radius: SMASH_PULSE.radius, life: SMASH_PULSE.life, color: crit ? CRIT_GLINT : PARCHMENT, width: 0.1 });
     stage.later(() => stage.wave({ at: floor, radius: SMASH_PULSE.radius * 0.85, life: SMASH_PULSE.life * 1.15, color: DUST, width: 0.3 }), 0.05);
     // Shock lines bursting out from where it landed, all round.
     for (const side of [false, true]) for (const turn of [-0.7, -0.3, 0.1, 0.5]) stage.spawnFx("streak", flash, side, { from: ground, to: ground, life: 0.2, size: [0.7, 2.2], turn: side ? -turn : turn, spin: 0, fade: true });
@@ -618,9 +618,9 @@ function seatSlam(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alone
   // Only the first plays the drop: by the time the others are told, it has already landed.
   const lands = echo ? 0 : Math.max(0, figure.strike("drop"));
   if (!echo) stage.later(() => {
-    stage.wave({ at: ground, radius, life, color: crit ? GOLD : PARCHMENT, width: 0.08 });
+    stage.wave({ at: ground, radius, life, color: crit ? CRIT_GLINT : PARCHMENT, width: 0.08 });
     stage.later(() => stage.wave({ at: ground, radius: radius * 0.85, life: life * 1.15, color: DUST, width: 0.3 }), 0.06);
-    stage.spawnFx("burst", crit ? GOLD : WARM_WHITE, false, { from: offset(ground, 0, 0.3, 0), to: offset(ground, 0, 0.3, 0), life: 0.24, size: [1, 3], spin: 0.6, fade: true });
+    stage.spawnFx("burst", crit ? CRIT_GLINT : WARM_WHITE, false, { from: offset(ground, 0, 0.3, 0), to: offset(ground, 0, 0.3, 0), life: 0.24, size: [1, 3], spin: 0.6, fade: true });
     // Clouds of dust rolling out after the wave, all round, swelling as they go.
     for (let i = 0; i < 14; i++) {
       const a = (i / 14) * Math.PI * 2 + Math.random() * 0.25;
@@ -643,7 +643,7 @@ function seatSlam(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alone
   const far = Math.hypot(hitAt.x - feet.x, hitAt.z - feet.z);
   stage.later(() => {
     const at = hitAt.clone().setY(hitAt.y - 0.45);
-    for (const side of [-1, 1]) stage.spawnFx("dust", crit ? GOLD : DUST, side > 0, { from: at, to: offset(at, side * 0.6, 0.4, 0), life: 0.45, size: [0.7, 1.4], spin: 0, fade: true });
+    for (const side of [-1, 1]) stage.spawnFx("dust", crit ? CRIT_GLINT : DUST, side > 0, { from: at, to: offset(at, side * 0.6, 0.4, 0), life: 0.45, size: [0.7, 1.4], spin: 0, fade: true });
     stage.jolt();
     onImpact();
   }, lands + waveReaches(far, radius, life));
@@ -686,7 +686,7 @@ function immolate(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Move
     const from = hand();
     const { flight, arc, spread } = IMMOLATE;
     stage.spawnFx("burst", FLAME, false, { from, to: from, life: 0.16, size: [0.4, 1], spin: 0.4, fade: true });
-    stage.spawnFx("bolt", crit ? GOLD : FIRE, dir < 0, { from, to: ground, life: flight, size: [1.3, 1.5], spin: dir * 7, fade: false, arc, onEnd: () => blast() });
+    stage.spawnFx("bolt", crit ? CRIT_GLINT : FIRE, dir < 0, { from, to: ground, life: flight, size: [1.3, 1.5], spin: dir * 7, fade: false, arc, onEnd: () => blast() });
     // Embers and smoke falling off it all the way, along the same arc (WorldRenderer's fx: up by arc·4k(1−k)).
     for (let s = 0.03; s < flight; s += 0.035) {
       stage.later(() => {
@@ -698,7 +698,7 @@ function immolate(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Move
       }, s);
     }
     const blast = () => {
-      stage.spawnFx("burst", crit ? GOLD : FIRE_FLASH, false, { from: ground, to: ground, life: 0.2, size: [1.2, 3.4], spin: 0.6, fade: true });
+      stage.spawnFx("burst", crit ? CRIT_GLINT : FIRE_FLASH, false, { from: ground, to: ground, life: 0.2, size: [1.2, 3.4], spin: 0.6, fade: true });
       stage.spawnFx("burst", FIRE, true, { from: ground, to: ground.clone().setY(ground.y + 0.3), life: 0.38, size: [1, 2.8], spin: -0.5, fade: true });
       // A ring of flame rolling out over the hexes round it, a deeper red one just behind.
       const floor = ground.clone().setY(ground.y + 0.05);
@@ -768,7 +768,7 @@ function greatCleave(stage: MoveStage, ctx: MoveCtx) {
   const { radius, half, width, cut, life } = GREAT_CLEAVE;
   const feet = figure.root.getWorldPosition(new THREE.Vector3());
   const ahead = Math.atan2(hitAt.z - feet.z, hitAt.x - feet.x);
-  const color = crit ? GOLD : STEEL;
+  const color = crit ? CRIT_GLINT : STEEL;
   const from = (-dir) as 1 | -1;
   const lands = Math.max(0, wait);
   stage.later(() => {
@@ -798,7 +798,7 @@ export const BATTERING_RAM = { gather: 0.18 };
  */
 function batteringRam(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
   const flip = dir < 0;
-  const color = crit ? GOLD : WARM_WHITE;
+  const color = crit ? CRIT_GLINT : WARM_WHITE;
   const feet = figure.root.getWorldPosition(new THREE.Vector3());
   // Toward the target and on past it, along the ground: the way it charges, and the way the target is driven.
   const on = hitAt.clone().sub(feet).setY(0).normalize();
@@ -811,7 +811,7 @@ function batteringRam(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: 
       const at = figure.root.getWorldPosition(new THREE.Vector3());
       for (let i = 0; i < 2; i++) {
         const from = at.clone().setY(at.y + 0.3 + Math.random() * 0.7).addScaledVector(on, -(0.2 + Math.random() * 0.3));
-        stage.spawnFx("streak", crit ? GOLD : STREAK_PALE, flip, { from, to: from.clone().addScaledVector(on, -0.6), life: 0.16, size: [1.1, 0.7], spin: 0, fade: true });
+        stage.spawnFx("streak", crit ? CRIT_GLINT : STREAK_PALE, flip, { from, to: from.clone().addScaledVector(on, -0.6), life: 0.16, size: [1.1, 0.7], spin: 0, fade: true });
       }
     }, s);
   }
@@ -819,9 +819,9 @@ function batteringRam(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: 
     // A big flash where the shoulder meets them, a second, slower one swelling behind it, and a shock pulsing out
     // over the ground from their feet.
     stage.spawnFx("burst", color, false, { from: hitAt, to: hitAt, life: 0.26, size: [1.2, 3.4], spin: 0.6, fade: true });
-    stage.later(() => stage.spawnFx("burst", crit ? GOLD : DUST, true, { from: hitAt, to: hitAt, life: 0.34, size: [1, 2.6], spin: -0.5, fade: true }), 0.05);
+    stage.later(() => stage.spawnFx("burst", crit ? CRIT_GLINT : DUST, true, { from: hitAt, to: hitAt, life: 0.34, size: [1, 2.6], spin: -0.5, fade: true }), 0.05);
     const floor = hitAt.clone().setY(feet.y + 0.06);
-    stage.wave({ at: floor, radius: 1.6, life: 0.32, color: crit ? GOLD : PARCHMENT, width: 0.12 });
+    stage.wave({ at: floor, radius: 1.6, life: 0.32, color: crit ? CRIT_GLINT : PARCHMENT, width: 0.12 });
     // Shock lines bursting out ahead, the way they are going, and a few flung back the way it came.
     for (const turn of [-0.6, -0.3, 0, 0.3, 0.6]) stage.spawnFx("streak", color, flip, { from: hitAt, to: hitAt.clone().addScaledVector(on, 1.1), life: 0.24, size: [0.9, 2.4], turn, spin: 0, fade: true });
     for (const turn of [-0.4, 0.4]) stage.spawnFx("streak", color, !flip, { from: hitAt, to: hitAt.clone().addScaledVector(on, -0.5), life: 0.18, size: [0.6, 1.6], turn, spin: 0, fade: true });
@@ -855,7 +855,7 @@ export const RAIN_OF_ARROWS = { up: 3, down: 18, spread: HEX * 1.25, height: 5.5
  */
 function rainOfArrows(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
   const { up, down, spread, height, fall, over, stand } = RAIN_OF_ARROWS;
-  const color = crit ? GOLD : SHAFT;
+  const color = crit ? CRIT_GLINT : SHAFT;
   const feet = figure.root.getWorldPosition(new THREE.Vector3());
   const ground = hitAt.clone().setY(hitAt.y - 0.45);
   const wait = Math.max(0, figure.loose() || figure.cast());
@@ -888,7 +888,7 @@ function rainOfArrows(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: 
     }, start + (over * i) / down);
   }
   // As the first hit: a pale ring over the hexes it covers.
-  stage.later(() => stage.wave({ at: ground.clone().setY(ground.y + 0.05), radius: spread, life: 0.5, color: crit ? GOLD : PARCHMENT, width: 0.1 }), start + fall);
+  stage.later(() => stage.wave({ at: ground.clone().setY(ground.y + 0.05), radius: spread, life: 0.5, color: crit ? CRIT_GLINT : PARCHMENT, width: 0.1 }), start + fall);
   // The thick of it: everyone caught is told.
   stage.later(() => {
     stage.jolt();
@@ -957,7 +957,6 @@ export function groundSlash(o: SlashOpts): (group: THREE.Object3D) => (dt: numbe
   };
 }
 
-const BLOOD = BLOOD_RED;
 const BLOOD_DEEP = "#8c1420";
 /**
  * A Rending Cleave's slash on the ground: how far out it runs (through the middle of the hexes beside the bear), how
@@ -980,7 +979,7 @@ function rendingCleave(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }:
   const { radius, half, width, cut, life } = RENDING_CLEAVE;
   const feet = figure.root.getWorldPosition(new THREE.Vector3());
   const ahead = Math.atan2(hitAt.z - feet.z, hitAt.x - feet.x);
-  const color = crit ? GOLD : BLOOD;
+  const color = crit ? CRIT_GLINT : CRIMSON;
   const from = (-dir) as 1 | -1;
   const lands = Math.max(0, wait - cut / 2);
   stage.later(() => {
@@ -1022,7 +1021,7 @@ function thunderousRoar(stage: MoveStage, { figure, hitAt, crit, onImpact, echo,
   // Only the first plays the roar: by the time the others are told, it has already gone out.
   const roars = echo ? 0 : Math.max(0, figure.strike("roar"));
   if (!echo) stage.later(() => {
-    [crit ? GOLD : ROAR_PALE, REELING, REELING].forEach((color, n) =>
+    [crit ? CRIT_GLINT : ROAR_PALE, REELING, REELING].forEach((color, n) =>
       stage.later(() => stage.wave({ at: ground, radius: radius * (1 - n * 0.08), life, color, width: n ? 0.14 : 0.08 }), n * apart),
     );
     // Sound lines bursting out of its mouth every way, twice.
@@ -1032,7 +1031,7 @@ function thunderousRoar(stage: MoveStage, { figure, hitAt, crit, onImpact, echo,
         for (let i = 0; i < 10; i++) {
           const a = (i / 10) * Math.PI * 2 + again * 3;
           const to = offset(mouth, Math.cos(a) * 1.4, Math.sin(a) * 0.9, 0);
-          stage.spawnFx("streak", crit ? GOLD : i % 2 ? REELING : ROAR_PALE, Math.cos(a) < 0, { from: mouth, to, life: 0.3, size: [0.8, 1.8], turn: a, spin: 0, fade: true });
+          stage.spawnFx("streak", crit ? CRIT_GLINT : i % 2 ? REELING : ROAR_PALE, Math.cos(a) < 0, { from: mouth, to, life: 0.3, size: [0.8, 1.8], turn: a, spin: 0, fade: true });
         }
       }, again);
     }
@@ -1049,7 +1048,7 @@ function thunderousRoar(stage: MoveStage, { figure, hitAt, crit, onImpact, echo,
   const far = Math.hypot(hitAt.x - feet.x, hitAt.z - feet.z);
   stage.later(() => {
     const at = hitAt.clone().setY(hitAt.y - 0.45);
-    for (const side of [-1, 1]) stage.spawnFx("dust", crit ? GOLD : DUST, side > 0, { from: at, to: offset(at, side * 0.6, 0.4, 0), life: 0.45, size: [0.7, 1.4], spin: 0, fade: true });
+    for (const side of [-1, 1]) stage.spawnFx("dust", crit ? CRIT_GLINT : DUST, side > 0, { from: at, to: offset(at, side * 0.6, 0.4, 0), life: 0.45, size: [0.7, 1.4], spin: 0, fade: true });
     stage.jolt();
     stage.later(() => stage.jolt(), 0.08);
     onImpact();
@@ -1073,13 +1072,13 @@ function stoneFist(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Mov
   if (wait <= 0) stage.lunge();
   const feet = figure.root.getWorldPosition(new THREE.Vector3());
   const on = hitAt.clone().sub(feet).setY(0).normalize();
-  const color = crit ? GOLD : STONE;
+  const color = crit ? CRIT_GLINT : STONE;
   stage.later(() => {
     stage.spawnFx("burst", color, false, { from: hitAt, to: hitAt, life: 0.24, size: [1.1, 3.1], spin: 0.6, fade: true });
-    stage.later(() => stage.spawnFx("burst", crit ? GOLD : ROCK_PALE, true, { from: hitAt, to: hitAt, life: 0.34, size: [0.9, 2.4], spin: -0.5, fade: true }), 0.05);
+    stage.later(() => stage.spawnFx("burst", crit ? CRIT_GLINT : ROCK_PALE, true, { from: hitAt, to: hitAt, life: 0.34, size: [0.9, 2.4], spin: -0.5, fade: true }), 0.05);
     stage.spawnFx("spark", GUARDIAN_GLOW, flip, { from: hitAt, to: offset(hitAt, 0, 0.35, 0), life: 0.3, size: [0.7, 0.2], spin: 2, fade: true });
     const floor = hitAt.clone().setY(feet.y + 0.06);
-    stage.wave({ at: floor, radius: 1.4, life: 0.3, color: crit ? GOLD : PARCHMENT, width: 0.12 });
+    stage.wave({ at: floor, radius: 1.4, life: 0.3, color: crit ? CRIT_GLINT : PARCHMENT, width: 0.12 });
     // Shock lines driven on the way it is struck, and chips of stone flung on past them.
     for (const turn of [-0.5, -0.2, 0.2, 0.5]) stage.spawnFx("streak", color, flip, { from: hitAt, to: hitAt.clone().addScaledVector(on, 1.0), life: 0.22, size: [0.8, 2.2], turn, spin: 0, fade: true });
     for (let i = 0; i < 7; i++) {
@@ -1167,12 +1166,12 @@ function earthquake(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alo
   const f = EARTHQUAKE.first;
   const lands = echo ? 0 : Math.max(0, figure.strike("pound"));
   if (!echo) stage.later(() => {
-    stage.spawnFx("burst", crit ? GOLD : PARCHMENT, false, { from: offset(ground, 0, 0.2, 0), to: offset(ground, 0, 0.2, 0), life: 0.22, size: [0.8, 2.2], spin: 0.5, fade: true });
+    stage.spawnFx("burst", crit ? CRIT_GLINT : PARCHMENT, false, { from: offset(ground, 0, 0.2, 0), to: offset(ground, 0, 0.2, 0), life: 0.22, size: [0.8, 2.2], spin: 0.5, fade: true });
     for (const side of [-1, 1]) stage.spawnFx("dust", DUST, side > 0, { from: ground, to: offset(ground, side * 0.7, 0.3, 0), life: 0.45, size: [0.7, 1.4], spin: 0, fade: true });
     stage.lay(groundCracks(ground, { count: f.cracks, reach, width: f.width, step: 0.2, wander: 0.5, fork: 0.1, grow: 0.5, hold: 1.1, fade: 0.6 }));
     stage.shake?.(f.shake, 1.0);
     // Small tremors: thin ripples of dust, one after another.
-    for (let n = 0; n < f.ripples; n++) stage.later(() => stage.wave({ at: ground, radius: reach * (1 - n * 0.05), life: f.life, color: n === 0 && crit ? GOLD : DUST, width: 0.05 }), n * f.apart);
+    for (let n = 0; n < f.ripples; n++) stage.later(() => stage.wave({ at: ground, radius: reach * (1 - n * 0.05), life: f.life, color: n === 0 && crit ? CRIT_GLINT : DUST, width: 0.05 }), n * f.apart);
     // The ground stirring all over: little puffs of dust, and pebbles hopping.
     for (let k = 0; k < 16; k++) {
       stage.later(() => {
@@ -1186,7 +1185,7 @@ function earthquake(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alo
   const far = Math.hypot(hitAt.x - feet.x, hitAt.z - feet.z);
   stage.later(() => {
     const at = hitAt.clone().setY(feet.y + 0.12);
-    for (const side of [-1, 1]) stage.spawnFx("dust", crit ? GOLD : DUST, side > 0, { from: at, to: offset(at, side * 0.5, 0.3, 0), life: 0.4, size: [0.5, 1.1], spin: 0, fade: true });
+    for (const side of [-1, 1]) stage.spawnFx("dust", crit ? CRIT_GLINT : DUST, side > 0, { from: at, to: offset(at, side * 0.5, 0.3, 0), life: 0.4, size: [0.5, 1.1], spin: 0, fade: true });
     stage.jolt();
     onImpact();
   }, lands + waveReaches(far, reach, f.life));
@@ -1209,9 +1208,9 @@ function earthquakeHeave(stage: MoveStage, { figure, hitAt, crit, onImpact, echo
   if (!echo) stage.later(() => {
     stage.shake?.(h.shake, 1.4);
     stage.later(() => stage.shake?.(h.shake * 0.6, 0.9), 0.55);
-    stage.spawnFx("burst", crit ? GOLD : WARM_WHITE, false, { from: offset(ground, 0, 0.3, 0), to: offset(ground, 0, 0.3, 0), life: 0.28, size: [1.3, 3.8], spin: 0.6, fade: true });
+    stage.spawnFx("burst", crit ? CRIT_GLINT : WARM_WHITE, false, { from: offset(ground, 0, 0.3, 0), to: offset(ground, 0, 0.3, 0), life: 0.28, size: [1.3, 3.8], spin: 0.6, fade: true });
     stage.lay(groundCracks(ground, { count: h.cracks, reach: reach * 1.05, width: h.width, step: 0.28, wander: 0.4, fork: 0.2, start: 0.15, grow: 0.22, hold: 1.0, fade: 0.7 }));
-    stage.wave({ at: ground, radius: reach * 1.1, life: 0.5, color: crit ? GOLD : PARCHMENT, width: 0.1 });
+    stage.wave({ at: ground, radius: reach * 1.1, life: 0.5, color: crit ? CRIT_GLINT : PARCHMENT, width: 0.1 });
     // Broad rolling waves of dust behind it: the ground rumbling on.
     for (let n = 0; n < h.ripples; n++) stage.later(() => stage.wave({ at: ground, radius: reach * (1.05 - n * 0.06), life: h.life, color: DUST, width: 0.3 - n * 0.04 }), 0.06 + n * h.apart);
     // Dust bursting up in columns all over it, and chunks of rock thrown up.
@@ -1243,7 +1242,7 @@ function earthquakeHeave(stage: MoveStage, { figure, hitAt, crit, onImpact, echo
   const far = Math.hypot(hitAt.x - feet.x, hitAt.z - feet.z);
   stage.later(() => {
     const at = hitAt.clone().setY(feet.y + 0.12);
-    for (const side of [-1, 1]) stage.spawnFx("dust", crit ? GOLD : DUST, side > 0, { from: at, to: offset(at, side * 0.7, 0.5, 0), life: 0.5, size: [0.8, 1.6], spin: 0, fade: true });
+    for (const side of [-1, 1]) stage.spawnFx("dust", crit ? CRIT_GLINT : DUST, side > 0, { from: at, to: offset(at, side * 0.7, 0.5, 0), life: 0.5, size: [0.8, 1.6], spin: 0, fade: true });
     stage.jolt();
     stage.later(() => stage.jolt(), 0.08);
     onImpact();
@@ -1279,7 +1278,7 @@ function slowingField(stage: MoveStage, { figure, crit, onImpact, alone, hitAt }
   const feet = figure.root.getWorldPosition(new THREE.Vector3());
   const ground = feet.clone().setY(feet.y + 0.07);
   const { reach, rings, life, apart } = SLOWING_FIELD;
-  const color = crit ? GOLD : GUARDIAN_GLOW;
+  const color = crit ? CRIT_GLINT : GUARDIAN_GLOW;
   // Where the gem in its chest is, as it moves (Figure.glowAt); for a figure without one, well up its body. (Its eyes
   // only glow and pulse with the rest of its light: nothing comes off them.)
   const box = new THREE.Box3().setFromObject(figure.root);
@@ -1401,8 +1400,8 @@ function chillTouch(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Mo
   if (wait <= 0) stage.lunge();
   const lands = Math.max(0, wait);
   const flip = dir < 0;
-  const cold = crit ? GOLD : CHILL;
-  const pale = crit ? GOLD : WISP;
+  const cold = crit ? CRIT_GLINT : CHILL;
+  const pale = crit ? CRIT_GLINT : WISP;
   // Wisps streaming off it as it surges in, toward the target.
   for (let s = 0; s < lands; s += 0.035) {
     stage.later(() => {
@@ -1413,7 +1412,7 @@ function chillTouch(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Mo
   }
   stage.later(() => {
     stage.spawnFx("burst", pale, false, { from: hitAt, to: hitAt, life: 0.22, size: [0.8, 2.4], spin: 0.4, fade: true });
-    stage.later(() => stage.spawnFx("burst", crit ? GOLD : CHILL_DEEP, true, { from: hitAt, to: hitAt, life: 0.4, size: [0.9, 2.6], spin: -0.4, fade: true }), 0.05);
+    stage.later(() => stage.spawnFx("burst", crit ? CRIT_GLINT : CHILL_DEEP, true, { from: hitAt, to: hitAt, life: 0.4, size: [0.9, 2.6], spin: -0.4, fade: true }), 0.05);
     // Three pale finger marks drawn down across them, one after another.
     [-1, 0, 1].forEach((i, n) =>
       stage.later(() => {
@@ -1459,8 +1458,8 @@ function shadeWail(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alon
   const feet = figure.root.getWorldPosition(new THREE.Vector3());
   const ground = feet.clone().setY(feet.y + 0.08);
   const { radius, life, apart, rings } = SHADE_WAIL;
-  const pale = crit ? GOLD : WAIL_PALE;
-  const violet = crit ? GOLD : FUMBLING;
+  const pale = crit ? CRIT_GLINT : WAIL_PALE;
+  const violet = crit ? CRIT_GLINT : FUMBLING;
   // Only the first plays the wail: by the time the others are told, it has already gone out.
   const peak = echo ? 0 : Math.max(0, figure.strike("wail"));
   if (!echo) {
@@ -1476,7 +1475,7 @@ function shadeWail(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alon
     stage.later(() => {
       const head = upFigure(figure, 0.82);
       const middle = upFigure(figure, 0.45);
-      stage.spawnFx("burst", crit ? GOLD : "#2a1f3d", false, { from: head, to: head, life: 0.35, size: [0.8, 2.6], spin: 0.3, fade: true });
+      stage.spawnFx("burst", crit ? CRIT_GLINT : "#2a1f3d", false, { from: head, to: head, life: 0.35, size: [0.8, 2.6], spin: 0.3, fade: true });
       stage.spawnFx("burst", pale, true, { from: head, to: head, life: 0.3, size: [0.5, 1.8], spin: -0.5, fade: true });
       for (let n = 0; n < rings; n++) {
         stage.later(() => stage.wave({ at: ground, radius: radius * (1 - n * 0.06), life, color: n ? violet : pale, width: n ? 0.05 : 0.09 }), n * apart);
@@ -1527,7 +1526,6 @@ function shadeWail(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alon
 const BAT_VIOLET = "#9a6bd6";
 const BAT_DUSK = "#4a3b52";
 const BAT_FANG = "#f4efe2";
-const SWOOP_RED = BLOOD_RED;
 
 /**
  * A Cave Bat's Bite: it flicks up and back a little, then darts in, and its needle fangs snap shut on the target once,
@@ -1538,12 +1536,12 @@ function batBite(stage: MoveStage, ctx: MoveCtx) {
   const { hitAt, dir, crit, onImpact } = ctx;
   // A flick up and back before the dart: a little puff of violet off its wings.
   const wings = hitAt.clone().setY(hitAt.y + 0.35);
-  stage.spawnFx("streak", crit ? GOLD : BAT_VIOLET, dir < 0, { from: wings, to: wings.clone().setY(wings.y + 0.3), life: 0.14, size: [0.6, 0.9], turn: Math.PI / 2, spin: 0, fade: true });
+  stage.spawnFx("streak", crit ? CRIT_GLINT : BAT_VIOLET, dir < 0, { from: wings, to: wings.clone().setY(wings.y + 0.3), life: 0.14, size: [0.6, 0.9], turn: Math.PI / 2, spin: 0, fade: true });
   stage.later(() => {
     stage.lunge();
     jaws(stage, ctx, QUICK_BITE * 0.75, 0.2, () => {
-      stage.spawnFx("burst", crit ? GOLD : BAT_FANG, false, { from: hitAt, to: hitAt, life: 0.16, size: [0.35, 1], spin: 0.5, fade: true });
-      for (const side of [false, true]) for (const turn of [-0.35, 0.3]) stage.spawnFx("streak", crit ? GOLD : BAT_VIOLET, side, { from: hitAt, to: hitAt, life: 0.18, size: [0.4, 1.2], turn: side ? -turn : turn, spin: 0, fade: true });
+      stage.spawnFx("burst", crit ? CRIT_GLINT : BAT_FANG, false, { from: hitAt, to: hitAt, life: 0.16, size: [0.35, 1], spin: 0.5, fade: true });
+      for (const side of [false, true]) for (const turn of [-0.35, 0.3]) stage.spawnFx("streak", crit ? CRIT_GLINT : BAT_VIOLET, side, { from: hitAt, to: hitAt, life: 0.18, size: [0.4, 1.2], turn: side ? -turn : turn, spin: 0, fade: true });
       stage.jolt();
       onImpact();
     }, BAT_FANG);
@@ -1570,7 +1568,7 @@ function fellSwoop(stage: MoveStage, ctx: MoveCtx) {
   const start = body();
   // Back the way it came, along the ground: the way what it throws off goes.
   const back = start.clone().sub(hitAt).setY(0).normalize();
-  stage.spawnFx("burst", crit ? GOLD : BAT_VIOLET, flip, { from: start, to: start, life: 0.2, size: [0.6, 1.6], spin: 0.4, fade: true });
+  stage.spawnFx("burst", crit ? CRIT_GLINT : BAT_VIOLET, flip, { from: start, to: start, life: 0.2, size: [0.6, 1.6], spin: 0.4, fade: true });
   for (const side of [-1, 1]) stage.spawnFx("streak", BAT_DUSK, side > 0, { from: start, to: start.clone().addScaledVector(back, 0.5).setY(start.y + side * 0.3), life: 0.18, size: [0.9, 1.2], spin: 0, fade: true });
   // A stage with nowhere to dash plays it at its target, as a blow.
   const way: DashWay = stage.dash?.() ?? { passes: [{ at: hitAt, when: 0.05, jolt: () => stage.jolt() }], over: 0 };
@@ -1581,20 +1579,20 @@ function fellSwoop(stage: MoveStage, ctx: MoveCtx) {
       const at = body();
       for (let i = 0; i < 3; i++) {
         const from = at.clone().setY(at.y - 0.25 + Math.random() * 0.5).addScaledVector(back, 0.15 + Math.random() * 0.2);
-        const color = crit ? GOLD : i === 0 ? BAT_DUSK : i === 1 ? BAT_VIOLET : STREAK_PALE;
+        const color = crit ? CRIT_GLINT : i === 0 ? BAT_DUSK : i === 1 ? BAT_VIOLET : STREAK_PALE;
         stage.spawnFx("streak", color, flip, { from, to: from.clone().addScaledVector(back, 0.75), life: 0.16, size: [1.3, 0.8], spin: 0, fade: true });
       }
     }, s);
   }
   for (const pass of way.passes) {
     stage.later(() => {
-      const red = crit ? GOLD : SWOOP_RED;
+      const red = crit ? CRIT_GLINT : CRIMSON;
       // Three claw lines raked across them, the way it went, a white slash over them and a flash.
       for (const [n, lift] of [-0.18, 0, 0.18].entries()) {
         const at = pass.at.clone().setY(pass.at.y + lift);
         stage.spawnFx("streak", red, flip, { from: at.clone().addScaledVector(back, -0.25), to: at.clone().addScaledVector(back, 0.35), life: 0.22 + n * 0.03, size: [1.1, 1.3], turn: (flip ? 1 : -1) * 0.25, spin: 0, fade: true });
       }
-      stage.spawnFx("slash", crit ? GOLD : "#f6ecff", flip, { from: pass.at, to: pass.at, life: 0.2, size: [1, 1.8], spin: -dir * 0.8, fade: true });
+      stage.spawnFx("slash", crit ? CRIT_GLINT : "#f6ecff", flip, { from: pass.at, to: pass.at, life: 0.2, size: [1, 1.8], spin: -dir * 0.8, fade: true });
       stage.spawnFx("burst", red, false, { from: pass.at, to: pass.at, life: 0.2, size: [0.5, 1.4], spin: 0.5, fade: true });
       stage.sound();
       pass.jolt();
@@ -1602,7 +1600,7 @@ function fellSwoop(stage: MoveStage, ctx: MoveCtx) {
   }
   stage.later(() => {
     const at = body();
-    stage.spawnFx("burst", crit ? GOLD : BAT_VIOLET, flip, { from: at, to: at, life: 0.24, size: [0.7, 1.8], spin: -0.4, fade: true });
+    stage.spawnFx("burst", crit ? CRIT_GLINT : BAT_VIOLET, flip, { from: at, to: at, life: 0.24, size: [0.7, 1.8], spin: -0.4, fade: true });
     for (const side of [false, true]) stage.spawnFx("streak", BAT_DUSK, side, { from: at, to: at, life: 0.2, size: [0.5, 1.4], turn: side ? -1.2 : 1.2, spin: 0, fade: true });
     onImpact();
   }, Math.max(0.1, way.over));
@@ -1629,8 +1627,8 @@ function mementoMori(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, al
   const ground = feet.clone().setY(feet.y + 0.07);
   const { radius, life, apart, rings } = MEMENTO_MORI;
   const black = MORI_BLACK;
-  const shade = crit ? GOLD : MORI_SHADE;
-  const pale = crit ? GOLD : MORI_PALE;
+  const shade = crit ? CRIT_GLINT : MORI_SHADE;
+  const pale = crit ? CRIT_GLINT : MORI_PALE;
   // Only the first plays the gathering: by the time the others are told, it has already gone out.
   const peak = echo ? 0 : Math.max(0.35, figure.strike("spook") || figure.cast());
   if (!echo) {
@@ -1719,7 +1717,7 @@ function engulf(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCt
   // Anything that is not an ooze springs at the target, and it lands as it does.
   if (wait <= 0) stage.lunge();
   const lands = Math.max(0, wait);
-  const green = crit ? GOLD : ACID;
+  const green = crit ? CRIT_GLINT : ACID;
   // Drawing itself up: ooze running down off it.
   for (let s = 0; s < lands; s += 0.06) {
     stage.later(() => {
@@ -1731,7 +1729,7 @@ function engulf(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCt
   stage.later(() => {
     const feet = figure.root.getWorldPosition(new THREE.Vector3());
     const floor = hitAt.clone().setY(feet.y + 0.06);
-    stage.spawnFx("burst", crit ? GOLD : ACID_PALE, false, { from: hitAt, to: hitAt, life: 0.2, size: [1, 2.6], spin: 0.4, fade: true });
+    stage.spawnFx("burst", crit ? CRIT_GLINT : ACID_PALE, false, { from: hitAt, to: hitAt, life: 0.2, size: [1, 2.6], spin: 0.4, fade: true });
     // The slime round them: a deep green swell held over them a while, as it churns.
     const held = ENGULF.over - ENGULF.hit - 0.4;
     stage.spawnFx("burst", ACID_DEEP, true, { from: hitAt, to: hitAt, life: held + 0.1, size: [2.2, 2.6], spin: -0.3, fade: true });
@@ -1791,7 +1789,7 @@ function acidSplash(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Mo
     const from = upFigure(figure, 0.95);
     const { flight, arc, spread } = ACID_SPLASH;
     stage.spawnFx("splash", ACID, dir < 0, { from, to: offset(from, 0, 0.25, 0), life: 0.18, size: [0.5, 0.9], spin: 0, fade: true });
-    stage.spawnFx("burst", crit ? GOLD : ACID, dir < 0, { from, to: ground, life: flight, size: [0.8, 1], spin: dir * 5, fade: false, arc, onEnd: () => land() });
+    stage.spawnFx("burst", crit ? CRIT_GLINT : ACID, dir < 0, { from, to: ground, life: flight, size: [0.8, 1], spin: dir * 5, fade: false, arc, onEnd: () => land() });
     // Drips falling off it all the way, along the same arc.
     for (let s = 0.03; s < flight; s += 0.04) {
       stage.later(() => {
@@ -1804,7 +1802,7 @@ function acidSplash(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Mo
     const land = () => {
       stage.sound();
       const floor = ground.clone().setY(ground.y + 0.05);
-      stage.spawnFx("burst", crit ? GOLD : ACID_PALE, false, { from: ground, to: ground, life: 0.2, size: [1.1, 3], spin: 0.5, fade: true });
+      stage.spawnFx("burst", crit ? CRIT_GLINT : ACID_PALE, false, { from: ground, to: ground, life: 0.2, size: [1.1, 3], spin: 0.5, fade: true });
       stage.spawnFx("burst", ACID_DEEP, true, { from: ground, to: ground.clone().setY(ground.y + 0.25), life: 0.4, size: [1, 2.6], spin: -0.4, fade: true });
       stage.wave({ at: floor, radius: spread, life: 0.45, color: ACID, width: 0.16 });
       stage.later(() => stage.wave({ at: floor, radius: spread * 0.85, life: 0.6, color: ACID_DEEP, width: 0.35 }), 0.06);
@@ -1846,7 +1844,7 @@ function acidArmor(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Mov
     }, i * 0.03);
   }
   stage.later(() => {
-    stage.spawnFx("splash", crit ? GOLD : ACID, flip, { from: hitAt, to: offset(hitAt, dir * 0.25, 0.15, 0), life: 0.26, size: [0.7, 1.4], spin: 0, fade: true });
+    stage.spawnFx("splash", crit ? CRIT_GLINT : ACID, flip, { from: hitAt, to: offset(hitAt, dir * 0.25, 0.15, 0), life: 0.26, size: [0.7, 1.4], spin: 0, fade: true });
     stage.spawnFx("burst", ACID_PALE, false, { from: hitAt, to: hitAt, life: 0.18, size: [0.6, 1.5], spin: 0.4, fade: true });
     sizzle(stage, hitAt, 8, 0.45, 0.3);
     stage.jolt();
@@ -1878,7 +1876,7 @@ function venomousBite(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: 
   // Anything that is not a spider springs at the target, and the fangs go in as it does.
   if (wait <= 0) stage.lunge();
   const lands = Math.max(0.12, wait);
-  const green = crit ? GOLD : VENOM;
+  const green = crit ? CRIT_GLINT : VENOM;
   // Rearing up: venom beading on the fangs and dripping off them.
   for (let s = 0.04; s < lands - 0.06; s += 0.05) {
     stage.later(() => {
@@ -1891,13 +1889,13 @@ function venomousBite(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: 
   stage.later(() => {
     for (const side of [-1, 1]) {
       const from = offset(hitAt, side * 0.26 * dir, 0.6, 0.06);
-      stage.spawnFx("streak", crit ? GOLD : FANG_BONE, dir < 0, { from, to: offset(hitAt, side * 0.1 * dir, -0.08, 0.06), life: stab, size: [0.5, 0.9], turn: Math.PI / 2 - side * 0.3, spin: 0, fade: false });
+      stage.spawnFx("streak", crit ? CRIT_GLINT : FANG_BONE, dir < 0, { from, to: offset(hitAt, side * 0.1 * dir, -0.08, 0.06), life: stab, size: [0.5, 0.9], turn: Math.PI / 2 - side * 0.3, spin: 0, fade: false });
     }
   }, lands - stab);
   stage.later(() => {
     const feet = figure.root.getWorldPosition(new THREE.Vector3());
     const floor = hitAt.clone().setY(feet.y + 0.06);
-    stage.spawnFx("burst", crit ? GOLD : VENOM_PALE, false, { from: hitAt, to: hitAt, life: 0.18, size: [0.6, 1.7], spin: 0.5, fade: true });
+    stage.spawnFx("burst", crit ? CRIT_GLINT : VENOM_PALE, false, { from: hitAt, to: hitAt, life: 0.18, size: [0.6, 1.7], spin: 0.5, fade: true });
     stage.spawnFx("burst", VENOM_DEEP, true, { from: hitAt, to: hitAt, life: 0.32, size: [0.7, 1.9], spin: -0.4, fade: true });
     // Venom splashed out either side of the fangs.
     for (const side of [-1, 1]) for (const up of [0.05, 0.3]) stage.spawnFx("splash", green, side < 0, { from: hitAt, to: offset(hitAt, side * 0.6, up, 0), life: 0.28, size: [0.5, 1], spin: 0, fade: true });
@@ -1938,7 +1936,7 @@ function impalingFang(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: 
   const wait = figure.strike("fang");
   if (wait <= 0) stage.lunge();
   const lands = Math.max(0.12, wait);
-  const fang = crit ? GOLD : red;
+  const fang = crit ? CRIT_GLINT : red;
   // Held high a moment: red glints running down the fangs.
   for (let s = 0.04; s < lands - 0.08; s += 0.07) {
     stage.later(() => {
@@ -1958,7 +1956,7 @@ function impalingFang(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: 
   stage.later(() => {
     const feet = figure.root.getWorldPosition(new THREE.Vector3());
     const floor = hitAt.clone().setY(feet.y + 0.06);
-    stage.spawnFx("burst", crit ? GOLD : dark, false, { from: hitAt, to: hitAt, life: 0.3, size: [0.8, 2.4], spin: 0.5, fade: true });
+    stage.spawnFx("burst", crit ? CRIT_GLINT : dark, false, { from: hitAt, to: hitAt, life: 0.3, size: [0.8, 2.4], spin: 0.5, fade: true });
     stage.spawnFx("burst", fang, true, { from: hitAt, to: hitAt, life: 0.2, size: [0.5, 1.5], spin: -0.5, fade: true });
     // Straight through: the points coming out behind them.
     for (const side of [-1, 1]) {
@@ -2078,7 +2076,7 @@ const throwWeb = (how: WebThrow) => (stage: MoveStage, ctx: MoveCtx) => webThrow
 function webThrown(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx, how: WebThrow) {
   const ground = hitAt.clone().setY(hitAt.y - 0.45);
   const wait = Math.max(0, figure.strike("web") || figure.cast());
-  const silk = crit ? GOLD : SILK;
+  const silk = crit ? CRIT_GLINT : SILK;
   // Gathering silk at its spinnerets, high over its back.
   for (let s = 0; s < wait; s += 0.05) {
     stage.later(() => {
@@ -2223,7 +2221,7 @@ function graveGrasp(stage: MoveStage, { figure, hitAt, crit, onImpact }: MoveCtx
   const groundAt = (d: number) => feet.clone().addScaledVector(ahead, d).setY(feet.y + (hitAt.y - 0.45 - feet.y) * Math.min(1, d / reach));
   const near = groundAt(0.7).setY(feet.y + 0.95);
   const far = groundAt(reach);
-  const cold = crit ? GOLD : ICE;
+  const cold = crit ? CRIT_GLINT : ICE;
   stage.later(() => {
     // The hand: out to the far row, a moment to close, and back.
     stage.lay((group) => {
@@ -2282,8 +2280,8 @@ function graveGrasp(stage: MoveStage, { figure, hitAt, crit, onImpact }: MoveCtx
     // The slam at the far row: a cold flash, a ring of frost, frost sparks thrown up, and everyone caught told.
     stage.later(() => {
       const flash = far.clone().setY(far.y + 0.4);
-      stage.spawnFx("burst", crit ? GOLD : ICE_CORE, false, { from: flash, to: flash, life: 0.24, size: [1, 2.8], spin: 0.4, fade: true });
-      stage.later(() => stage.spawnFx("burst", crit ? GOLD : ICE_DEEP, true, { from: flash, to: flash, life: 0.4, size: [1.1, 3], spin: -0.4, fade: true }), 0.05);
+      stage.spawnFx("burst", crit ? CRIT_GLINT : ICE_CORE, false, { from: flash, to: flash, life: 0.24, size: [1, 2.8], spin: 0.4, fade: true });
+      stage.later(() => stage.spawnFx("burst", crit ? CRIT_GLINT : ICE_DEEP, true, { from: flash, to: flash, life: 0.4, size: [1.1, 3], spin: -0.4, fade: true }), 0.05);
       stage.wave({ at: far.clone().setY(far.y + 0.06), radius: HEX * 1.3, life: 0.5, color: cold, width: 0.14 });
       for (let i = 0; i < 10; i++) {
         const a = (i / 10) * Math.PI * 2 + Math.random() * 0.4;
@@ -2314,7 +2312,7 @@ function iceSpear(stage: MoveStage, { figure, hitAt, crit, onImpact }: MoveCtx) 
   const wait = Math.max(0, figure.strike("hurl"));
   if (wait <= 0) stage.lunge();
   const { feet, ahead } = aheadOf(figure, hitAt);
-  const cold = crit ? GOLD : ICE;
+  const cold = crit ? CRIT_GLINT : ICE;
   const above = () => upFigure(figure, 1).setY(upFigure(figure, 1).y + over);
   const end = feet.clone().addScaledVector(ahead, reach).setY(hitAt.y - 0.45 + 0.6);
   // Cold motes drawn in to it as it forms.
@@ -2398,7 +2396,7 @@ function iceSpear(stage: MoveStage, { figure, hitAt, crit, onImpact }: MoveCtx) 
   }, wait + fly * 0.5);
   // Shattered at the end of the line.
   stage.later(() => {
-    stage.spawnFx("burst", crit ? GOLD : ICE_CORE, false, { from: end, to: end, life: 0.22, size: [0.9, 2.6], spin: 0.5, fade: true });
+    stage.spawnFx("burst", crit ? CRIT_GLINT : ICE_CORE, false, { from: end, to: end, life: 0.22, size: [0.9, 2.6], spin: 0.5, fade: true });
     stage.wave({ at: end.clone().setY(end.y - 0.55), radius: HEX * 0.9, life: 0.45, color: cold, width: 0.14 });
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * Math.PI * 2 + Math.random() * 0.3;
@@ -2468,9 +2466,9 @@ function frostBreath(stage: MoveStage, { figure, hitAt, crit, onImpact }: MoveCt
   const pour = BREATHE.pour;
   const { feet, ahead } = aheadOf(figure, hitAt);
   const ground = feet.clone().setY(feet.y + 0.07);
-  const cold = crit ? GOLD : ICE;
-  const core = crit ? GOLD : ICE_CORE;
-  const deep = crit ? GOLD : ICE_DEEP;
+  const cold = crit ? CRIT_GLINT : ICE;
+  const core = crit ? CRIT_GLINT : ICE_CORE;
+  const deep = crit ? CRIT_GLINT : ICE_DEEP;
   // Across the way it breathes, along the ground.
   const across = new THREE.Vector3(-ahead.z, 0, ahead.x);
   /** A point `d` out along the cone, `side` of the way to its edge (-1 to 1), `up` off the ground. */
@@ -2535,9 +2533,9 @@ const FROST_MIST = "#dcefff";
  */
 function rimeBite(stage: MoveStage, ctx: MoveCtx) {
   const { figure, hitAt, dir, crit, onImpact } = ctx;
-  const cold = crit ? GOLD : ICE;
-  const core = crit ? GOLD : ICE_CORE;
-  const deep = crit ? GOLD : ICE_DEEP;
+  const cold = crit ? CRIT_GLINT : ICE;
+  const core = crit ? CRIT_GLINT : ICE_CORE;
+  const deep = crit ? CRIT_GLINT : ICE_DEEP;
   stage.lunge();
   for (let s = 0; s < 0.12; s += 0.03) {
     stage.later(() => {
@@ -2583,9 +2581,9 @@ function emberBurst(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alo
   const feet = figure.root.getWorldPosition(new THREE.Vector3());
   const ground = feet.clone().setY(feet.y + 0.07);
   const { radius, life, apart, held, flash, fade } = EMBER_BURST;
-  const flame = crit ? GOLD : FLAME;
-  const fire = crit ? GOLD : FIRE;
-  const deep = crit ? GOLD : FIRE_DEEP;
+  const flame = crit ? CRIT_GLINT : FLAME;
+  const fire = crit ? CRIT_GLINT : FIRE;
+  const deep = crit ? CRIT_GLINT : FIRE_DEEP;
   // Only the first plays the burst: by the time the others are told, it has already gone out.
   const wait = echo ? 0 : Math.max(0, figure.strike("flare"));
   if (!echo) {
@@ -2606,14 +2604,14 @@ function emberBurst(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alo
     }
     stage.later(() => {
       const heart = offset(feet, 0, 0.8, 0);
-      stage.spawnFx("burst", crit ? GOLD : FIRE_FLASH, false, { from: heart, to: heart, life: 0.2, size: [1, 3], spin: 0.6, fade: true });
+      stage.spawnFx("burst", crit ? CRIT_GLINT : FIRE_FLASH, false, { from: heart, to: heart, life: 0.2, size: [1, 3], spin: 0.6, fade: true });
       stage.spawnFx("burst", fire, true, { from: heart, to: heart, life: 0.36, size: [1, 3.2], spin: -0.5, fade: true });
       for (let s = 0; s <= fade; s += 0.03) stage.later(() => figure.setGlow(1 + (flash - 1) * (1 - s / fade) ** 2), s);
       stage.later(() => figure.setGlow(1), fade + 0.05);
       // Three rings of flame rolling out over the ground, and the scorch spread out under them (a fan all the way round).
       [flame, fire, deep].forEach((color, n) => stage.later(() => stage.wave({ at: ground, radius: radius * (1 - n * 0.07), life, color, width: n ? 0.2 : 0.12 }), n * apart));
       const round = new THREE.Vector3(1, 0, 0);
-      stage.lay(frostFan(ground.clone().setY(ground.y - 0.01), round, { reach: radius * 0.92, spread: Math.PI * 2, grow: life * 0.8, hold: 0.5, fade: 0.9, color: crit ? GOLD : EMBER_SCORCH, opacity: 0.45 }));
+      stage.lay(frostFan(ground.clone().setY(ground.y - 0.01), round, { reach: radius * 0.92, spread: Math.PI * 2, grow: life * 0.8, hold: 0.5, fade: 0.9, color: crit ? CRIT_GLINT : EMBER_SCORCH, opacity: 0.45 }));
       stage.lay(frostFan(ground, round, { reach: radius * 0.85, spread: Math.PI * 2, grow: life * 0.8, hold: 0.15, fade: 0.6, color: deep, opacity: 0.3 }));
       // Flame tongues licking up off the ground as the first ring passes over it.
       for (let i = 0; i < 26; i++) {
@@ -2665,8 +2663,8 @@ function emberBurst(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alo
  */
 function searingBite(stage: MoveStage, ctx: MoveCtx) {
   const { figure, hitAt, dir, crit, onImpact } = ctx;
-  const flame = crit ? GOLD : FLAME;
-  const fire = crit ? GOLD : FIRE;
+  const flame = crit ? CRIT_GLINT : FLAME;
+  const fire = crit ? CRIT_GLINT : FIRE;
   stage.lunge();
   for (let s = 0; s < 0.12; s += 0.03) {
     stage.later(() => {
@@ -2676,7 +2674,7 @@ function searingBite(stage: MoveStage, ctx: MoveCtx) {
     }, s);
   }
   jaws(stage, ctx, QUICK_BITE, 0.34, () => {
-    stage.spawnFx("burst", crit ? GOLD : FIRE_FLASH, false, { from: hitAt, to: hitAt, life: 0.18, size: [0.6, 1.6], spin: 0.5, fade: true });
+    stage.spawnFx("burst", crit ? CRIT_GLINT : FIRE_FLASH, false, { from: hitAt, to: hitAt, life: 0.18, size: [0.6, 1.6], spin: 0.5, fade: true });
     stage.later(() => stage.spawnFx("burst", fire, true, { from: hitAt, to: hitAt, life: 0.34, size: [0.8, 2.2], spin: -0.4, fade: true }), 0.05);
     for (const side of [false, true]) for (const [n, turn] of [-0.45, 0, 0.45].entries()) stage.spawnFx("streak", n === 1 ? FIRE_FLASH : flame, side, { from: hitAt, to: hitAt, life: 0.2, size: [0.5, 1.6], turn: side ? -turn : turn, spin: 0, fade: true });
     // Flame tongues licking up off them, one after another.
@@ -2719,7 +2717,7 @@ function ghastlyFetter(stage: MoveStage, { figure, hitAt, crit, onImpact }: Move
   const { fly, drop, fade, links: count } = GHASTLY_FETTER;
   const wait = Math.max(0, figure.strike("hurl"));
   if (wait <= 0) stage.lunge();
-  const glow = crit ? GOLD : FETTER.glow;
+  const glow = crit ? CRIT_GLINT : FETTER.glow;
   const hands = () => upFigure(figure, 0.95);
   const ground = hitAt.clone().setY(hitAt.y - 0.45);
   for (let s = 0; s < wait; s += 0.05) {
@@ -2730,7 +2728,7 @@ function ghastlyFetter(stage: MoveStage, { figure, hitAt, crit, onImpact }: Move
     }, s);
   }
   stage.lay((group) => {
-    const iron = new THREE.MeshLambertMaterial({ color: FETTER.iron, emissive: crit ? GOLD : FETTER.glow, emissiveIntensity: 0.25, transparent: true, opacity: 1 });
+    const iron = new THREE.MeshLambertMaterial({ color: FETTER.iron, emissive: crit ? CRIT_GLINT : FETTER.glow, emissiveIntensity: 0.25, transparent: true, opacity: 1 });
     const shapes = [new THREE.TorusGeometry(0.09, 0.026, 5, 10), new THREE.ConeGeometry(0.12, 0.8, 6), new THREE.TorusGeometry(0.5, 0.04, 6, 20)];
     const links = Array.from({ length: count }, () => new THREE.Mesh(shapes[0], iron));
     const stake = new THREE.Mesh(shapes[1], iron);
@@ -2846,7 +2844,7 @@ function spinWeb(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveC
   const ground = hitAt.clone().setY(hitAt.y - 0.45);
   const floor = ground.clone().setY(ground.y + 0.05);
   const wait = Math.max(0, figure.strike("web") || figure.cast());
-  const silk = crit ? GOLD : SILK;
+  const silk = crit ? CRIT_GLINT : SILK;
   // Silk gathering at her spinnerets, high over her back, quicker as she rears.
   for (let s = 0; s < wait; s += 0.04) {
     stage.later(() => {
@@ -2917,7 +2915,7 @@ function broodSwarm(stage: MoveStage, { figure, hitAt, crit, onImpact, calls }: 
   // Where they go: where the fight says they will stand, or either side of her.
   const side = new THREE.Vector3(-ahead.z, 0, ahead.x);
   const spots = calls?.length ? calls.map((p) => p.clone().setY(p.y + 0.05)) : [1, -1].map((s) => feet.clone().addScaledVector(side, s * HEX).setY(feet.y + 0.05));
-  const silk = crit ? GOLD : SILK;
+  const silk = crit ? CRIT_GLINT : SILK;
   const wait = Math.max(heave, figure.strike("web") || figure.cast());
   const rear = () => upFigure(figure, 0.85);
   // The shudder: dark pulses going out over her abdomen as she heaves.
@@ -2995,14 +2993,14 @@ function weakeningHex(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: 
     const land = () => {
       const feet = hitAt.clone().setY(hitAt.y - 0.45);
       const floor = feet.clone().setY(feet.y + 0.05);
-      stage.spawnFx("burst", crit ? GOLD : HEX_VIOLET, false, { from: hitAt, to: hitAt, life: 0.24, size: [0.8, 2.2], spin: 0.7, fade: true });
+      stage.spawnFx("burst", crit ? CRIT_GLINT : HEX_VIOLET, false, { from: hitAt, to: hitAt, life: 0.24, size: [0.8, 2.2], spin: 0.7, fade: true });
       stage.spawnFx("burst", HEX_DARK, true, { from: hitAt, to: hitAt, life: 0.34, size: [0.6, 1.6], spin: -0.5, fade: true });
       // The sigil: strokes laid round them, each across the way to the middle, drawn in tight as they fade.
       for (let i = 0; i < points; i++) {
         const a = (i / points) * Math.PI * 2;
         const out = offset(hitAt, Math.cos(a) * 0.75, Math.sin(a) * 0.55, 0);
         const into = offset(hitAt, Math.cos(a) * 0.3, Math.sin(a) * 0.22, 0);
-        stage.spawnFx("streak", crit ? GOLD : HEX_GREEN, Math.cos(a) < 0, { from: out, to: into, life: 0.4, size: [0.8, 0.4], turn: a + Math.PI / 2, spin: 0.6, fade: true });
+        stage.spawnFx("streak", crit ? CRIT_GLINT : HEX_GREEN, Math.cos(a) < 0, { from: out, to: into, life: 0.4, size: [0.8, 0.4], turn: a + Math.PI / 2, spin: 0.6, fade: true });
       }
       stage.wave({ at: floor, radius: 1.3, life: 0.4, color: HEX_GREEN, width: 0.18 });
       // The strength running out of them: pale motes sinking off them to the ground.
@@ -3019,7 +3017,7 @@ function weakeningHex(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: 
       stage.jolt();
       onImpact();
     };
-    stage.spawnFx("bolt", crit ? GOLD : HEX_GREEN, dir < 0, { from, to: hitAt, life: flight, size: [1.1, 1.3], spin: dir * 9, fade: false, onEnd: land });
+    stage.spawnFx("bolt", crit ? CRIT_GLINT : HEX_GREEN, dir < 0, { from, to: hitAt, life: flight, size: [1.1, 1.3], spin: dir * 9, fade: false, onEnd: land });
     // Dark motes dropping off it as it goes.
     for (let s = 0.03; s < flight; s += 0.04) {
       stage.later(() => {
@@ -3062,7 +3060,7 @@ function witchesBrew(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: M
     const { flight, arc, spread, rise } = WITCHES_BREW;
     const splash = () => {
       const floor = ground.clone().setY(ground.y + 0.05);
-      stage.spawnFx("burst", crit ? GOLD : BREW_GLOW, false, { from: ground, to: ground, life: 0.22, size: [1, 2.6], spin: 0.4, fade: true });
+      stage.spawnFx("burst", crit ? CRIT_GLINT : BREW_GLOW, false, { from: ground, to: ground, life: 0.22, size: [1, 2.6], spin: 0.4, fade: true });
       stage.spawnFx("splash", BREW, false, { from: ground, to: ground.clone().setY(ground.y + 0.35), life: 0.4, size: [1, 2.4], spin: 0, fade: true });
       stage.wave({ at: floor, radius: spread, life: 0.5, color: BREW_GLOW, width: 0.12 });
       stage.later(() => stage.wave({ at: floor, radius: spread * 0.9, life: 0.6, color: BREW_DEEP, width: 0.3 }), 0.06);
@@ -3078,14 +3076,14 @@ function witchesBrew(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: M
           const a = Math.random() * Math.PI * 2;
           const far = Math.sqrt(Math.random()) * spread * 0.85;
           const at = offset(ground, Math.cos(a) * far, 0.05, Math.sin(a) * far * 0.7);
-          stage.spawnFx("mote", Math.random() < 0.6 ? BREW : crit ? GOLD : BREW_GLOW, Math.cos(a) < 0, { from: at, to: offset(at, (Math.random() - 0.5) * 0.2, 0.8 + Math.random() * 0.6, 0), life: 0.9, size: [0.3, 0.15], spin: 0, fade: true });
+          stage.spawnFx("mote", Math.random() < 0.6 ? BREW : crit ? CRIT_GLINT : BREW_GLOW, Math.cos(a) < 0, { from: at, to: offset(at, (Math.random() - 0.5) * 0.2, 0.8 + Math.random() * 0.6, 0), life: 0.9, size: [0.3, 0.15], spin: 0, fade: true });
           if (Math.random() < 0.25) stage.spawnFx("dust", BREW_STEAM, Math.cos(a) < 0, { from: at, to: offset(at, 0, 0.9, 0), life: 1, size: [0.6, 1.4], spin: 0, fade: true });
         }, s);
       }
       stage.later(() => stage.wave({ at: floor, radius: spread, life: 1.1, color: BREW, width: 0.5 }), 0.35);
       onImpact();
     };
-    stage.spawnFx("bolt", crit ? GOLD : BREW, dir < 0, { from, to: ground, life: flight, size: [0.9, 1.1], spin: dir * 6, fade: false, arc, onEnd: splash });
+    stage.spawnFx("bolt", crit ? CRIT_GLINT : BREW, dir < 0, { from, to: ground, life: flight, size: [0.9, 1.1], spin: dir * 6, fade: false, arc, onEnd: splash });
     // Drops and steam falling off it on the way, along the same arc (WorldRenderer's fx: up by arc·4k(1−k)).
     for (let s = 0.03; s < flight; s += 0.045) {
       stage.later(() => {
@@ -3118,8 +3116,8 @@ function frostMote(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Mov
   if (wait <= 0) stage.lunge();
   const lands = Math.max(0, wait);
   const flip = dir < 0;
-  const cold = crit ? GOLD : ICE;
-  const core = crit ? GOLD : ICE_CORE;
+  const cold = crit ? CRIT_GLINT : ICE;
+  const core = crit ? CRIT_GLINT : ICE_CORE;
   const { feet, ahead } = aheadOf(figure, hitAt);
   const across = new THREE.Vector3(-ahead.z, 0, ahead.x);
   /** Where it forms: just before its chest, toward the target. */
@@ -3137,7 +3135,7 @@ function frostMote(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Mov
   stage.lay((group) => {
     // The mote: a bright faceted bead of ice inside a pale glow.
     const shapes = [new THREE.IcosahedronGeometry(size, 0), new THREE.IcosahedronGeometry(size * 1.9, 1)];
-    const beadMaterial = new THREE.MeshLambertMaterial({ color: core, emissive: crit ? GOLD : ICE, emissiveIntensity: 0.8, flatShading: true });
+    const beadMaterial = new THREE.MeshLambertMaterial({ color: core, emissive: crit ? CRIT_GLINT : ICE, emissiveIntensity: 0.8, flatShading: true });
     const glowMaterial = iceMaterial(cold, 0.35);
     const bead = new THREE.Mesh(shapes[0], beadMaterial);
     const glow = new THREE.Mesh(shapes[1], glowMaterial);
@@ -3178,7 +3176,7 @@ function frostMote(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Mov
   });
   stage.later(() => {
     stage.spawnFx("burst", core, false, { from: hitAt, to: hitAt, life: 0.2, size: [0.7, 2.1], spin: 0.4, fade: true });
-    stage.later(() => stage.spawnFx("burst", crit ? GOLD : ICE_DEEP, true, { from: hitAt, to: hitAt, life: 0.36, size: [0.8, 2.3], spin: -0.4, fade: true }), 0.05);
+    stage.later(() => stage.spawnFx("burst", crit ? CRIT_GLINT : ICE_DEEP, true, { from: hitAt, to: hitAt, life: 0.36, size: [0.8, 2.3], spin: -0.4, fade: true }), 0.05);
     // Frost glinting off them, then drifting slowly down.
     for (let i = 0; i < 10; i++) {
       const a = (i / 10) * Math.PI * 2 + Math.random() * 0.4;
@@ -3277,9 +3275,9 @@ export function iceSheet(at: THREE.Vector3, o: { radius: number; color: string; 
 function icyBomb(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
   const { flight, arc, ball, spread, spikes, hold, fade } = ICY_BOMB;
   const wait = Math.max(0, figure.strike("hurl") || figure.cast());
-  const cold = crit ? GOLD : ICE;
-  const core = crit ? GOLD : ICE_CORE;
-  const deep = crit ? GOLD : ICE_DEEP;
+  const cold = crit ? CRIT_GLINT : ICE;
+  const core = crit ? CRIT_GLINT : ICE_CORE;
+  const deep = crit ? CRIT_GLINT : ICE_DEEP;
   const ground = hitAt.clone().setY(hitAt.y - 0.45);
   const above = () => {
     const top = upFigure(figure, 1);
