@@ -7,6 +7,9 @@
 // Event names are the ones the game asks for (names.ts lists them all, most
 // specific first). You only need the general ones to start: "impact" covers
 // every blow until you add "impact.melee" or "impact.shock".
+//
+// A pool of takes is named with `#`, a take number: "sfx/zone/dice_#" is dice_01, dice_02 and so on, and
+// never catches "sfx/zone/dice_crit_01", which belongs to another sound. `*` matches anything but a slash.
 
 import { ABILITIES, ENEMIES, ENEMY_ABILITIES, type EffectKind } from "@gantt-quest/world";
 import { slug } from "./select";
@@ -23,12 +26,12 @@ const OUT_OF_THE_RAIN: Follow = { param: "rain", curve: [[0, 1], [0.15, 0.6], [0
 
 // Every event also names a built-in sound in `fallback` (audio/synth.ts): what plays until a recording
 // is added to `files`. Those are the game's sounds today, so nothing goes quiet while recordings arrive.
-const built = (sound: string) => `synth/combat/${sound}_*`;
+const built = (sound: string) => `synth/combat/${sound}_#`;
 
 /** Footsteps share one shape: a pool of takes, a little pitch and level variation. */
 const step = (surface: string, ground: string, gainDb = -6): SoundEvent => ({
-  files: `sfx/footsteps/${surface}_*`,
-  fallback: `synth/step/${ground}_*`,
+  files: `sfx/footsteps/${surface}_#`,
+  fallback: `synth/step/${ground}_#`,
   gainDb,
   reverb: -6,
   pitch: [-1.5, 1.5],
@@ -67,88 +70,88 @@ export const AUDIO: AudioManifest = {
     "footstep.mud": step("mud", "mud"),
 
     // ----- combat -----
-    "attack.melee": { files: "sfx/combat/swing_*", fallback: built("swing"), pitch: [-2, 2], volume: [-2, 0], reverb: -12 },
-    "attack.ranged": { files: "sfx/combat/bow_*", fallback: built("arrow_loose"), pitch: [-1, 1], reverb: -12 },
-    "attack.magic": { files: "sfx/combat/cast_*", fallback: built("spell_cast"), pitch: [-1, 1], reverb: -8 },
+    "attack.melee": { files: "sfx/combat/swing_#", fallback: built("swing"), pitch: [-2, 2], volume: [-2, 0], reverb: -12 },
+    "attack.ranged": { files: "sfx/combat/bow_#", fallback: built("arrow_loose"), pitch: [-1, 1], reverb: -12 },
+    "attack.magic": { files: "sfx/combat/cast_#", fallback: built("spell_cast"), pitch: [-1, 1], reverb: -8 },
     // A Pack Leader's Howl: a long, carrying call, heard across the field.
-    "attack.howl": { files: "sfx/combat/howl_*", fallback: built("howl"), pitch: [-1, 1], reverb: -4 },
+    "attack.howl": { files: "sfx/combat/howl_#", fallback: built("howl"), pitch: [-1, 1], reverb: -4 },
     // A Guardian's Slowing Field: a hum built up through it, and let go as the field goes out.
-    "attack.slowing_field": { files: "sfx/combat/slowing_field_*", fallback: built("channel"), pitch: [-1, 1], reverb: -4 },
+    "attack.slowing_field": { files: "sfx/combat/slowing_field_#", fallback: built("channel"), pitch: [-1, 1], reverb: -4 },
     // A Skeleton's Memento Mori: bones clattering as it twitches, over a low, sour drone.
-    "attack.memento_mori": { files: "sfx/combat/memento_mori_*", fallback: built("rattle"), pitch: [-1, 1], reverb: -4 },
+    "attack.memento_mori": { files: "sfx/combat/memento_mori_#", fallback: built("rattle"), pitch: [-1, 1], reverb: -4 },
     // A Shade's Wail, a ghost's scream heard all round it; and its Chill Touch, a cold breath and a frost.
-    "attack.wail": { files: "sfx/combat/wail_*", fallback: built("wail"), pitch: [-1, 1], reverb: -4 },
-    "attack.chill_touch": { files: "sfx/combat/chill_touch_*", fallback: built("chill"), pitch: [-1, 1], reverb: -8 },
+    "attack.wail": { files: "sfx/combat/wail_#", fallback: built("wail"), pitch: [-1, 1], reverb: -4 },
+    "attack.chill_touch": { files: "sfx/combat/chill_touch_#", fallback: built("chill"), pitch: [-1, 1], reverb: -8 },
     // A Haunt's Grave Grasp (a deeper cold breath), its Ice Spear (ice forming), and its Ghastly Fetter (chains clanking, and a stake going home).
-    "attack.grave_grasp": { files: "sfx/combat/grave_grasp_*", fallback: built("chill"), pitch: [-3, -2], reverb: -6 },
-    "attack.ice_spear": { files: "sfx/combat/ice_spear_*", fallback: built("ice"), pitch: [-1, 1], reverb: -8 },
+    "attack.grave_grasp": { files: "sfx/combat/grave_grasp_#", fallback: built("chill"), pitch: [-3, -2], reverb: -6 },
+    "attack.ice_spear": { files: "sfx/combat/ice_spear_#", fallback: built("ice"), pitch: [-1, 1], reverb: -8 },
     // A Frost Wolf's Frost Breath: a long, deep cold breath let out.
-    "attack.frost_breath": { files: "sfx/combat/frost_breath_*", fallback: built("chill"), pitch: [-4, -3], reverb: -6 },
+    "attack.frost_breath": { files: "sfx/combat/frost_breath_#", fallback: built("chill"), pitch: [-4, -3], reverb: -6 },
     // An Ember Hound's Ember Burst: fire catching all at once, low and wide.
-    "attack.ember_burst": { files: "sfx/combat/ember_burst_*", fallback: built("ignite"), pitch: [-4, -2], reverb: -6 },
-    "attack.ghastly_fetter": { files: "sfx/combat/ghastly_fetter_*", fallback: built("chains"), pitch: [-1, 1], reverb: -6 },
+    "attack.ember_burst": { files: "sfx/combat/ember_burst_#", fallback: built("ignite"), pitch: [-4, -2], reverb: -6 },
+    "attack.ghastly_fetter": { files: "sfx/combat/ghastly_fetter_#", fallback: built("chains"), pitch: [-1, 1], reverb: -6 },
     // A blow landing: a blunt thump by hand, unless it cuts or bites (blade abilities, below).
-    impact: { files: "sfx/combat/hit_*", fallback: built("blunt"), pitch: [-2, 2], volume: [-2, 0], reverb: -8 },
-    "impact.ranged": { files: "sfx/combat/arrow_hit_*", fallback: built("arrow_hit"), pitch: [-2, 2], reverb: -8 },
-    "impact.magic": { files: "sfx/combat/magic_hit_*", fallback: built("spell_hit"), pitch: [-2, 2], reverb: -6 },
+    impact: { files: "sfx/combat/hit_#", fallback: built("blunt"), pitch: [-2, 2], volume: [-2, 0], reverb: -8 },
+    "impact.ranged": { files: "sfx/combat/arrow_hit_#", fallback: built("arrow_hit"), pitch: [-2, 2], reverb: -8 },
+    "impact.magic": { files: "sfx/combat/magic_hit_#", fallback: built("spell_hit"), pitch: [-2, 2], reverb: -6 },
     ...bladeImpacts(),
     // Lightning landing: a zap with a crackle after (Shock, Chain Lightning, Lightning Strike).
-    "impact.shock": { files: "sfx/combat/zap_*", fallback: built("zap"), pitch: [-2, 2], reverb: -6 },
-    "impact.chain_lightning": { files: "sfx/combat/zap_*", fallback: built("zap"), pitch: [-2, 2], reverb: -6 },
-    "impact.lightning_strike": { files: "sfx/combat/zap_*", fallback: built("zap"), pitch: [-3, -1], reverb: -4 },
-    "impact.crit": { files: "sfx/combat/crit_*", fallback: built("crit"), gainDb: -3 },
-    miss: { files: "sfx/combat/miss_*", fallback: built("whiff"), pitch: [-2, 2], gainDb: -4 },
-    "miss.magic": { files: "sfx/combat/fizzle_*", fallback: built("fizzle"), pitch: [-2, 2], gainDb: -4 },
-    heal: { files: "sfx/combat/heal_*", fallback: built("heal") },
-    "heal.fail": { files: "sfx/combat/miss_*", fallback: built("heal_fail"), gainDb: -8, pitch: [-5, -3] },
-    tick: { files: "sfx/combat/tick_*", fallback: built("bleed"), gainDb: -6, pitch: [-2, 2] },
-    "tick.bleeding": { files: "sfx/combat/tick_*", fallback: built("bleed"), gainDb: -6, pitch: [-2, 2] },
-    "tick.burning": { files: "sfx/combat/tick_*", fallback: built("burn"), gainDb: -6, pitch: [-2, 2] },
+    "impact.shock": { files: "sfx/combat/zap_#", fallback: built("zap"), pitch: [-2, 2], reverb: -6 },
+    "impact.chain_lightning": { files: "sfx/combat/zap_#", fallback: built("zap"), pitch: [-2, 2], reverb: -6 },
+    "impact.lightning_strike": { files: "sfx/combat/zap_#", fallback: built("zap"), pitch: [-3, -1], reverb: -4 },
+    "impact.crit": { files: "sfx/combat/crit_#", fallback: built("crit"), gainDb: -3 },
+    miss: { files: "sfx/combat/miss_#", fallback: built("whiff"), pitch: [-2, 2], gainDb: -4 },
+    "miss.magic": { files: "sfx/combat/fizzle_#", fallback: built("fizzle"), pitch: [-2, 2], gainDb: -4 },
+    heal: { files: "sfx/combat/heal_#", fallback: built("heal") },
+    "heal.fail": { files: "sfx/combat/miss_#", fallback: built("heal_fail"), gainDb: -8, pitch: [-5, -3] },
+    tick: { files: "sfx/combat/tick_#", fallback: built("bleed"), gainDb: -6, pitch: [-2, 2] },
+    "tick.bleeding": { files: "sfx/combat/tick_#", fallback: built("bleed"), gainDb: -6, pitch: [-2, 2] },
+    "tick.burning": { files: "sfx/combat/tick_#", fallback: built("burn"), gainDb: -6, pitch: [-2, 2] },
     ...effectTells(),
-    down: { files: "sfx/combat/down_*", fallback: built("enemy_down"), reverb: -8 },
-    "enemy.down": { files: "sfx/combat/down_*", fallback: built("enemy_down"), reverb: -8 },
-    "hero.down": { files: "sfx/combat/hero_down_*", fallback: built("hero_down"), reverb: -8 },
+    down: { files: "sfx/combat/down_#", fallback: built("enemy_down"), reverb: -8 },
+    "enemy.down": { files: "sfx/combat/down_#", fallback: built("enemy_down"), reverb: -8 },
+    "hero.down": { files: "sfx/combat/hero_down_#", fallback: built("hero_down"), reverb: -8 },
     ...bossFalls(),
 
     // ----- a fight on the tiles (a zone) -----
     // Every one has a built-in sound, heard until a recording is bounced to the path in `files`.
-    "zone.roll": { files: "sfx/zone/dice_*", fallback: built("dice"), gainDb: -5, pitch: [-1, 1], cooldown: 0.12 },
-    "zone.roll.crit": { files: "sfx/zone/dice_crit_*", fallback: built("dice_crit"), gainDb: -3 },
+    "zone.roll": { files: "sfx/zone/dice_#", fallback: built("dice"), gainDb: -5, pitch: [-1, 1], cooldown: 0.12 },
+    "zone.roll.crit": { files: "sfx/zone/dice_crit_#", fallback: built("dice_crit"), gainDb: -3 },
     // A fight breaking out, as everyone rolls initiative.
     "zone.initiative": { files: "sfx/combat/battle_initiated", fallback: built("initiative"), cooldown: 2 },
     // Your turn in a fight (the pub's dice tables have "turn.yours", below).
     "zone.turn.yours": { files: "sfx/combat/start_turn", fallback: built("your_turn"), cooldown: 1 },
-    "zone.turn.enemy": { files: "sfx/zone/enemy_turn_*", fallback: built("enemy_turn"), gainDb: -8, cooldown: 0.4 },
-    "zone.reaction": { files: "sfx/zone/opportunity_*", fallback: built("opportunity"), gainDb: -3, reverb: -10 },
-    "zone.shove": { files: "sfx/zone/shove_*", fallback: built("shove"), pitch: [-2, 2], reverb: -10 },
-    "zone.fall": { files: "sfx/zone/fall_*", fallback: built("fall"), pitch: [-2, 2], reverb: -8 },
-    "zone.jump": { files: "sfx/zone/jump_*", fallback: built("jump"), pitch: [-1, 1], gainDb: -3, reverb: -10 },
-    "zone.throw": { files: "sfx/zone/throw_*", fallback: built("throw"), pitch: [-2, 2], gainDb: -3 },
-    "zone.shatter": { files: "sfx/zone/shatter_*", fallback: built("shatter"), pitch: [-2, 2], reverb: -8 },
-    "zone.burst": { files: "sfx/zone/burst_*", fallback: built("ignite"), pitch: [-5, -3], reverb: -6 },
-    "zone.chest_open": { files: "sfx/zone/chest_open_*", fallback: built("creak"), pitch: [-2, 1], reverb: -6 },
-    "zone.crate_hit": { files: "sfx/zone/crate_hit_*", fallback: built("knock"), pitch: [-2, 2], gainDb: -2, reverb: -10 },
-    "zone.crate_break": { files: "sfx/zone/crate_break_*", fallback: built("splinter"), pitch: [-2, 2], reverb: -6 },
+    "zone.turn.enemy": { files: "sfx/zone/enemy_turn_#", fallback: built("enemy_turn"), gainDb: -8, cooldown: 0.4 },
+    "zone.reaction": { files: "sfx/zone/opportunity_#", fallback: built("opportunity"), gainDb: -3, reverb: -10 },
+    "zone.shove": { files: "sfx/zone/shove_#", fallback: built("shove"), pitch: [-2, 2], reverb: -10 },
+    "zone.fall": { files: "sfx/zone/fall_#", fallback: built("fall"), pitch: [-2, 2], reverb: -8 },
+    "zone.jump": { files: "sfx/zone/jump_#", fallback: built("jump"), pitch: [-1, 1], gainDb: -3, reverb: -10 },
+    "zone.throw": { files: "sfx/zone/throw_#", fallback: built("throw"), pitch: [-2, 2], gainDb: -3 },
+    "zone.shatter": { files: "sfx/zone/shatter_#", fallback: built("shatter"), pitch: [-2, 2], reverb: -8 },
+    "zone.burst": { files: "sfx/zone/burst_#", fallback: built("ignite"), pitch: [-5, -3], reverb: -6 },
+    "zone.chest_open": { files: "sfx/zone/chest_open_#", fallback: built("creak"), pitch: [-2, 1], reverb: -6 },
+    "zone.crate_hit": { files: "sfx/zone/crate_hit_#", fallback: built("knock"), pitch: [-2, 2], gainDb: -2, reverb: -10 },
+    "zone.crate_break": { files: "sfx/zone/crate_break_#", fallback: built("splinter"), pitch: [-2, 2], reverb: -6 },
     // The alarm bell rung: five strokes, timed to the five waves drawn pulsing out of it.
-    "zone.bell": { files: "sfx/zone/bell_*", fallback: built("alarm"), pitch: [-1, 1], reverb: -4 },
-    surface: { files: "sfx/zone/surface_*", fallback: built("splash"), gainDb: -4, reverb: -8 },
-    "surface.poison": { files: "sfx/zone/surface_poison_*", fallback: built("poison"), gainDb: -2, reverb: -8 },
-    "surface.fire": { files: "sfx/zone/surface_fire_*", fallback: built("ignite"), reverb: -6 },
-    "surface.oil": { files: "sfx/zone/surface_oil_*", fallback: built("oil"), gainDb: -2, reverb: -10 },
-    "surface.water": { files: "sfx/zone/surface_water_*", fallback: built("splash"), gainDb: -2, reverb: -8 },
-    "surface.ice": { files: "sfx/zone/surface_ice_*", fallback: built("ice"), gainDb: -2, reverb: -6 },
-    "surface.slime": { files: "sfx/zone/surface_slime_*", fallback: built("oil"), pitch: [-4, -2], gainDb: -2, reverb: -10 },
-    "surface.web": { files: "sfx/zone/surface_web_*", fallback: built("oil"), pitch: [3, 5], gainDb: -6, reverb: -10 },
-    "effect.poisoned": { files: "sfx/combat/effect_poisoned_*", fallback: built("sick"), gainDb: -4 },
-    "effect.prone": { files: "sfx/combat/effect_prone_*", fallback: built("fall"), gainDb: -2 },
-    "effect.wet": { files: "sfx/combat/effect_wet_*", fallback: built("soak"), gainDb: -5 },
-    "tick.poison": { files: "sfx/combat/tick_poison_*", fallback: built("sick"), gainDb: -6, pitch: [-2, 2] },
-    "tick.fire": { files: "sfx/combat/tick_fire_*", fallback: built("burn"), gainDb: -4, pitch: [-2, 2] },
+    "zone.bell": { files: "sfx/zone/bell_#", fallback: built("alarm"), pitch: [-1, 1], reverb: -4 },
+    surface: { files: "sfx/zone/surface_#", fallback: built("splash"), gainDb: -4, reverb: -8 },
+    "surface.poison": { files: "sfx/zone/surface_poison_#", fallback: built("poison"), gainDb: -2, reverb: -8 },
+    "surface.fire": { files: "sfx/zone/surface_fire_#", fallback: built("ignite"), reverb: -6 },
+    "surface.oil": { files: "sfx/zone/surface_oil_#", fallback: built("oil"), gainDb: -2, reverb: -10 },
+    "surface.water": { files: "sfx/zone/surface_water_#", fallback: built("splash"), gainDb: -2, reverb: -8 },
+    "surface.ice": { files: "sfx/zone/surface_ice_#", fallback: built("ice"), gainDb: -2, reverb: -6 },
+    "surface.slime": { files: "sfx/zone/surface_slime_#", fallback: built("oil"), pitch: [-4, -2], gainDb: -2, reverb: -10 },
+    "surface.web": { files: "sfx/zone/surface_web_#", fallback: built("oil"), pitch: [3, 5], gainDb: -6, reverb: -10 },
+    "effect.poisoned": { files: "sfx/combat/effect_poisoned_#", fallback: built("sick"), gainDb: -4 },
+    "effect.prone": { files: "sfx/combat/effect_prone_#", fallback: built("fall"), gainDb: -2 },
+    "effect.wet": { files: "sfx/combat/effect_wet_#", fallback: built("soak"), gainDb: -5 },
+    "tick.poison": { files: "sfx/combat/tick_poison_#", fallback: built("sick"), gainDb: -6, pitch: [-2, 2] },
+    "tick.fire": { files: "sfx/combat/tick_fire_#", fallback: built("burn"), gainDb: -4, pitch: [-2, 2] },
 
     // ----- moments -----
     "turn.yours": { files: "sfx/ui/your_turn", fallback: built("your_turn"), gainDb: -4, cooldown: 1 },
     // A letter of someone's words as a conversation types them out: pitched up or down for each speaker's voice.
-    "ui.blip": { files: "sfx/ui/blip_*", fallback: built("blip"), gainDb: -12, pitch: [-0.4, 0.4], maxVoices: 3 },
+    "ui.blip": { files: "sfx/ui/blip_#", fallback: built("blip"), gainDb: -12, pitch: [-0.4, 0.4], maxVoices: 3 },
     level_up: { files: "sfx/ui/level_up", cooldown: 2 },
     loot: { files: "sfx/ui/loot", gainDb: -4 },
     gold: { files: "sfx/ui/gold", gainDb: -6, cooldown: 0.2 },
@@ -159,41 +162,41 @@ export const AUDIO: AudioManifest = {
     // sfx/weather/thunder_01.wav, thunder_02.wav, and so on. "shuffle" plays every take once before any
     // comes round again. The flash on screen follows the loudness of whichever take plays, so a take
     // with two cracks flickers twice. Follows the Atmosphere slider.
-    "weather.thunder": { files: "sfx/weather/thunder_*", group: "atmosphere", order: "shuffle", maxVoices: 2, reverb: -10 },
+    "weather.thunder": { files: "sfx/weather/thunder_#", group: "atmosphere", order: "shuffle", maxVoices: 2, reverb: -10 },
 
     // ----- felling: chopping and splitting -----
-    "gather.chop": { files: "sfx/gather/chop_*", fallback: built("blunt"), pitch: [-3, -1], volume: [-2, 0], reverb: -10 },
-    "gather.chop.perfect": { files: "sfx/gather/chop_clean_*", fallback: built("blade"), pitch: [-4, -2], reverb: -10 },
-    "gather.chop.good": { files: "sfx/gather/chop_*", fallback: built("blunt"), pitch: [-3, -1], volume: [-2, 0], reverb: -10 },
-    "gather.chop.miss": { files: "sfx/gather/glance_*", fallback: built("whiff"), pitch: [-2, 0], gainDb: -3 },
-    "gather.timber": { files: "sfx/gather/timber_*", fallback: built("enemy_down"), pitch: [-9, -6], reverb: -4 },
+    "gather.chop": { files: "sfx/gather/chop_#", fallback: built("blunt"), pitch: [-3, -1], volume: [-2, 0], reverb: -10 },
+    "gather.chop.perfect": { files: "sfx/gather/chop_clean_#", fallback: built("blade"), pitch: [-4, -2], reverb: -10 },
+    "gather.chop.good": { files: "sfx/gather/chop_#", fallback: built("blunt"), pitch: [-3, -1], volume: [-2, 0], reverb: -10 },
+    "gather.chop.miss": { files: "sfx/gather/glance_#", fallback: built("whiff"), pitch: [-2, 0], gainDb: -3 },
+    "gather.timber": { files: "sfx/gather/timber_#", fallback: built("enemy_down"), pitch: [-9, -6], reverb: -4 },
     // ----- the quarry's rock face -----
-    "gather.pick": { files: "sfx/gather/pick_*", fallback: built("blunt"), pitch: [3, 5], gainDb: -4, volume: [-2, 0], reverb: -10 },
-    "gather.pick.heavy": { files: "sfx/gather/pick_heavy_*", fallback: built("crack"), pitch: [-4, -2], gainDb: -2, reverb: -8 },
-    "gather.rock": { files: "sfx/gather/rock_*", fallback: built("enemy_down"), pitch: [-7, -4], gainDb: -3, reverb: -8 },
-    "gather.ore": { files: "sfx/gather/ore_*", fallback: built("heal"), pitch: [2, 4], gainDb: -4 },
-    "gather.gem": { files: "sfx/gather/gem_*", fallback: built("heal"), pitch: [7, 9], gainDb: -1, reverb: -6 },
+    "gather.pick": { files: "sfx/gather/pick_#", fallback: built("blunt"), pitch: [3, 5], gainDb: -4, volume: [-2, 0], reverb: -10 },
+    "gather.pick.heavy": { files: "sfx/gather/pick_heavy_#", fallback: built("crack"), pitch: [-4, -2], gainDb: -2, reverb: -8 },
+    "gather.rock": { files: "sfx/gather/rock_#", fallback: built("enemy_down"), pitch: [-7, -4], gainDb: -3, reverb: -8 },
+    "gather.ore": { files: "sfx/gather/ore_#", fallback: built("heal"), pitch: [2, 4], gainDb: -4 },
+    "gather.gem": { files: "sfx/gather/gem_#", fallback: built("heal"), pitch: [7, 9], gainDb: -1, reverb: -6 },
     // ----- fishing from the piers -----
-    "gather.fish.cast": { files: "sfx/fishing/cast_*", fallback: built("swing"), pitch: [2, 4], gainDb: -4 },
-    "gather.fish.plop": { files: "sfx/fishing/plop_*", fallback: built("arrow_hit"), pitch: [5, 8], gainDb: -6, volume: [-2, 0] },
-    "gather.fish.nibble": { files: "sfx/fishing/nibble_*", fallback: built("arrow_hit"), pitch: [9, 12], gainDb: -12 },
-    "gather.fish.plunge": { files: "sfx/fishing/plunge_*", fallback: built("spell_hit"), pitch: [-2, 0], gainDb: -4 },
-    "gather.fish.bite": { files: "sfx/fishing/bite_*", fallback: built("blunt"), pitch: [-1, 1], gainDb: -3 },
-    "gather.fish.splash": { files: "sfx/fishing/splash_*", fallback: built("spell_hit"), pitch: [-5, -3], gainDb: -3 },
-    "gather.fish.snap": { files: "sfx/fishing/snap_*", fallback: built("crack"), pitch: [6, 9], gainDb: -3 },
-    "gather.fish.reel": { files: "sfx/fishing/reel_*", fallback: built("swing"), pitch: [-6, -4], gainDb: -6 },
-    "gather.fish.land": { files: "sfx/fishing/land_*", fallback: built("heal"), pitch: [0, 2], gainDb: -3 },
+    "gather.fish.cast": { files: "sfx/fishing/cast_#", fallback: built("swing"), pitch: [2, 4], gainDb: -4 },
+    "gather.fish.plop": { files: "sfx/fishing/plop_#", fallback: built("arrow_hit"), pitch: [5, 8], gainDb: -6, volume: [-2, 0] },
+    "gather.fish.nibble": { files: "sfx/fishing/nibble_#", fallback: built("arrow_hit"), pitch: [9, 12], gainDb: -12 },
+    "gather.fish.plunge": { files: "sfx/fishing/plunge_#", fallback: built("spell_hit"), pitch: [-2, 0], gainDb: -4 },
+    "gather.fish.bite": { files: "sfx/fishing/bite_#", fallback: built("blunt"), pitch: [-1, 1], gainDb: -3 },
+    "gather.fish.splash": { files: "sfx/fishing/splash_#", fallback: built("spell_hit"), pitch: [-5, -3], gainDb: -3 },
+    "gather.fish.snap": { files: "sfx/fishing/snap_#", fallback: built("crack"), pitch: [6, 9], gainDb: -3 },
+    "gather.fish.reel": { files: "sfx/fishing/reel_#", fallback: built("swing"), pitch: [-6, -4], gainDb: -6 },
+    "gather.fish.land": { files: "sfx/fishing/land_#", fallback: built("heal"), pitch: [0, 2], gainDb: -3 },
 
     // ----- the pub's game tables -----
     // Small, close sounds: you are sat at the table. Each has a built-in take until a recording is added.
-    "table.shake": { files: "sfx/table/shake_*", fallback: "synth/table/shake_*", gainDb: -6, pitch: [-1, 1], cooldown: 0.3 },
-    "table.roll": { files: "sfx/table/roll_*", fallback: "synth/table/tumble_*", gainDb: -3, pitch: [-1, 1], volume: [-2, 0], maxVoices: 4, reverb: -14 },
-    "table.settle": { files: "sfx/table/settle_*", fallback: "synth/table/settle_*", gainDb: -10, pitch: [-2, 2], volume: [-3, 0], maxVoices: 8 },
-    "table.hold": { files: "sfx/table/hold_*", fallback: "synth/table/hold_*", gainDb: -4, pitch: [-1, 1], maxVoices: 3 },
-    "table.reveal": { files: "sfx/table/reveal_*", fallback: "synth/table/hold_*", gainDb: -6, pitch: [-3, -1], cooldown: 0.5 },
-    "table.coins": { files: "sfx/table/coins_*", fallback: "synth/table/coins_*", gainDb: -6, pitch: [-1, 1], cooldown: 0.4 },
+    "table.shake": { files: "sfx/table/shake_#", fallback: "synth/table/shake_#", gainDb: -6, pitch: [-1, 1], cooldown: 0.3 },
+    "table.roll": { files: "sfx/table/roll_#", fallback: "synth/table/tumble_#", gainDb: -3, pitch: [-1, 1], volume: [-2, 0], maxVoices: 4, reverb: -14 },
+    "table.settle": { files: "sfx/table/settle_#", fallback: "synth/table/settle_#", gainDb: -10, pitch: [-2, 2], volume: [-3, 0], maxVoices: 8 },
+    "table.hold": { files: "sfx/table/hold_#", fallback: "synth/table/hold_#", gainDb: -4, pitch: [-1, 1], maxVoices: 3 },
+    "table.reveal": { files: "sfx/table/reveal_#", fallback: "synth/table/hold_#", gainDb: -6, pitch: [-3, -1], cooldown: 0.5 },
+    "table.coins": { files: "sfx/table/coins_#", fallback: "synth/table/coins_#", gainDb: -6, pitch: [-1, 1], cooldown: 0.4 },
     // The Kraken takes a cargo: something big and wet rolling over below the table.
-    "table.kraken": { files: "sfx/table/kraken_*", fallback: built("boss_down"), gainDb: -4, pitch: [-3, -1], reverb: -6, cooldown: 1 },
+    "table.kraken": { files: "sfx/table/kraken_#", fallback: built("boss_down"), gainDb: -4, pitch: [-3, -1], reverb: -6, cooldown: 1 },
     "table.win": { files: "music/stingers/table_win", fallback: built("victory"), group: "music", cooldown: 2 },
 
     // Stingers follow the Music slider.
@@ -286,7 +289,7 @@ function bladeImpacts(): Record<string, SoundEvent> {
   const names = new Set([...Object.values(ABILITIES).map((a) => a.name), ...Object.values(ENEMY_ABILITIES).map((a) => a.name)]);
   const out: Record<string, SoundEvent> = {};
   for (const name of names) {
-    if (BLADE.has(name)) out[`impact.${slug(name)}`] = { files: "sfx/combat/hit_*", fallback: built("blade"), pitch: [-2, 2], volume: [-2, 0], reverb: -8 };
+    if (BLADE.has(name)) out[`impact.${slug(name)}`] = { files: "sfx/combat/hit_#", fallback: built("blade"), pitch: [-2, 2], volume: [-2, 0], reverb: -8 };
   }
   return out;
 }
@@ -294,15 +297,15 @@ function bladeImpacts(): Record<string, SoundEvent> {
 /** The short tell of each effect taking hold: a drip, a crackle, stars, and a rise or fall for the rest. */
 function effectTells(): Record<string, SoundEvent> {
   const tell = (e: EffectKind) => (e === "bleeding" ? "bleed" : e === "burning" ? "burn" : e === "stunned" ? "stun" : e === "guarded" || e === "taunting" || e === "hasted" ? "buff" : "debuff");
-  const out: Record<string, SoundEvent> = { effect: { files: "sfx/combat/effect_*", fallback: built("debuff"), gainDb: -4 } };
+  const out: Record<string, SoundEvent> = { effect: { files: "sfx/combat/effect_#", fallback: built("debuff"), gainDb: -4 } };
   const all: EffectKind[] = ["bleeding", "burning", "stunned", "guarded", "taunting", "slowed", "hasted", "fumbling", "exposed", "prone", "sundered", "reeling", "memento_mori"];
-  for (const e of all) out[`effect.${e}`] = { files: `sfx/combat/effect_${e}_*`, fallback: built(tell(e)), gainDb: -4 };
+  for (const e of all) out[`effect.${e}`] = { files: `sfx/combat/effect_${e}_#`, fallback: built(tell(e)), gainDb: -4 };
   return out;
 }
 
 /** A boss going down is heard as more than a puff. */
 function bossFalls(): Record<string, SoundEvent> {
   const out: Record<string, SoundEvent> = {};
-  for (const [kind, def] of Object.entries(ENEMIES)) if (def.boss) out[`enemy.${kind}.down`] = { files: "sfx/combat/boss_down_*", fallback: built("boss_down"), reverb: -6 };
+  for (const [kind, def] of Object.entries(ENEMIES)) if (def.boss) out[`enemy.${kind}.down`] = { files: "sfx/combat/boss_down_#", fallback: built("boss_down"), reverb: -6 };
   return out;
 }

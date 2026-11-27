@@ -5,7 +5,7 @@ This folder holds the WAV masters for the game's sound. The engine that plays th
 ## Adding a sound
 
 1. Bounce a WAV into this folder. Its path without the extension is its name: `sfx/footsteps/stone_04.wav` is `sfx/footsteps/stone_04`.
-2. Point at it from the manifest. An event's `files` can end in `*`, so `sfx/footsteps/stone_*` picks up every take in that folder with no further edit.
+2. Point at it from the manifest. An event's `files` can end in `#`, a take number, so `sfx/footsteps/stone_#` picks up every take (`stone_01`, `stone_02`, …) with no further edit. Use `#` rather than `*` for a pool of takes: `dice_*` would also catch `dice_crit_01`, which belongs to another sound.
 3. With `pnpm dev:game` running, the game plays the WAV as it is. Overwriting a file or saving the manifest is heard at once, with no reload.
 
 The top folder decides how a file is encoded: `music/`, `ambience/`, `sfx/` or `ir/` (impulse responses). Sounds placed in the world should be mono.
@@ -175,7 +175,7 @@ Players choose how placed sounds are rendered with **Headphones (3D sound)** in 
 A one-shot is heard in the reverb of the place you are in if its event sets `reverb`, its send level in dB:
 
 ```ts
-"footstep.cobble": { files: "sfx/footsteps/stone_*", reverb: -6 },
+"footstep.cobble": { files: "sfx/footsteps/stone_#", reverb: -6 },
 ```
 
 Events without it stay dry, which is right for stings and interface sounds. Music and atmosphere are never sent.
