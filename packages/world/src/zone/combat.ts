@@ -569,7 +569,7 @@ export function spreadOver(state: ZoneState, spread: Spread, from: HexPos, at: H
     case "arc":
       return arcHexes(state, from, at);
     case "burst":
-      return blast(state.map, from, spread.radius).filter((p) => !sameHex(p, from));
+      return blast(state.map, from, spread.radius).filter((p) => !sameHex(p, from) && (!spread.onMapOnly || !!tileAt(state.map, p)));
     case "adjacent":
       return hexNeighbors(from, state.map.grid);
   }
@@ -591,9 +591,9 @@ export function abilityArea(state: ZoneState, unit: Unit, ability: string, at?: 
   if (tactic.fortify) return at && !sameHex(at, unit.pos) ? wallHexes(state, unit.pos, at) : [];
   if (tactic.splash) return at ? spreadOver(state, { shape: "cluster", size: tactic.splash.hexes, lean }, unit.pos, at) : [];
   if (tactic.cluster) return at ? spreadOver(state, { shape: "cluster", size: tactic.cluster, lean }, unit.pos, at) : [];
-  if (tactic.shape === "blast") return at ? spreadOver(state, { shape: "blast", radius: tactic.radius ?? 1 }, unit.pos, at) : [];
+  if (tactic.shape === "blast") return at ? spreadOver(state, { shape: "blast", radius: tactic.radius ?? 1, onMapOnly: true }, unit.pos, at) : [];
   // Round the user, their own hex left out: it is thrown at the enemy, and no enemy ever stands there.
-  if (tactic.shape === "burst") return spreadOver(state, { shape: "burst", radius: tactic.radius ?? 1 }, unit.pos, unit.pos);
+  if (tactic.shape === "burst") return spreadOver(state, { shape: "burst", radius: tactic.radius ?? 1, onMapOnly: true }, unit.pos, unit.pos);
   if (tactic.shape === "line") return at ? spreadOver(state, { shape: "line", length: tactic.length ?? 3 }, unit.pos, at) : [];
   if (tactic.shape === "adjacent") return spreadOver(state, { shape: "adjacent" }, unit.pos, unit.pos);
   if (tactic.shape === "arc") return at && !sameHex(at, unit.pos) ? spreadOver(state, { shape: "arc" }, unit.pos, at) : [];
@@ -675,7 +675,7 @@ export function dashWay(state: ZoneState, unit: Unit, from: HexPos, toward: HexP
  * one of any other shape.
  */
 export function spreadHexes(state: ZoneState, kit: EnemyAttackKit, from: HexPos, at: HexPos): HexPos[] | null {
-  // An enemy's blast leaves out the hexes with no ground, as a hero's does not: that decides where its surfaces are laid.
+  // Both sides' blasts leave out the hexes with no ground: that decides where surfaces are laid.
   const shape = kit.spread;
   if (!shape) return null;
   // Aimed at its own hex, a swing, a cone or a line has nowhere to point.

@@ -717,8 +717,8 @@ export type Spread =
   | { shape: "line"; length: number }
   /** A swing's three hexes beside the user (arcHexes). */
   | { shape: "arc" }
-  /** Every hex within `radius` of the user, their own hex left out. */
-  | { shape: "burst"; radius: number }
+  /** Every hex within `radius` of the user, their own hex left out. `onMapOnly` leaves out any with no ground. */
+  | { shape: "burst"; radius: number; onMapOnly?: boolean }
   /** The hexes beside the user. */
   | { shape: "adjacent" };
 
