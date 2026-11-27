@@ -729,22 +729,25 @@ function immolate(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Move
 /** A hex's width on the map, in world units (places/placing.ts hexToWorld). */
 const HEX = Math.sqrt(3);
 const STEEL = "#dfe9ff";
-/** A Great Cleave's swing: how wide its arc is either side of straight ahead, in radians, and the seconds it takes to cross. */
-export const GREAT_CLEAVE = { half: Math.PI / 3, across: 0.16 };
+/**
+ * A Great Cleave's slash on the ground, laid over both rows of hexes in front of the Brute (combat.ts sweepHexes): how
+ * far out its middle runs (between the near row, a hex out, and the far one, two out), how far either side of straight
+ * ahead (past the middle of the near row's side hexes), how wide it is at its widest (from inside the near row's middle
+ * to past the far row's), and the seconds to cut it and then to fade.
+ */
+export const GREAT_CLEAVE = { radius: HEX * 1.45, half: Math.PI / 3 + 0.3, width: HEX * 1.25, cut: 0.16, life: 0.55 };
 
-/** The swing landing on one caught by a Great Cleave: a heavy slash across them, a red burst, and a jolt. */
-function cleaveHit(stage: MoveStage, { hitAt, dir, crit, onImpact }: MoveCtx) {
-  stage.spawnFx("slash", crit ? GOLD : STEEL, dir < 0, { from: hitAt, to: hitAt, life: 0.3, size: [1.7, 3], spin: -dir * 1.6, fade: true });
-  stage.spawnFx("burst", crit ? GOLD : CHEAP_SHOT_RED, dir < 0, { from: hitAt, to: hitAt, life: 0.22, size: [0.7, 1.6], spin: 0.5, fade: true });
+/** The swing landing on one caught by a Great Cleave: a jolt as the slash reaches them. */
+function cleaveHit(stage: MoveStage, { onImpact }: MoveCtx) {
   stage.jolt();
   onImpact();
 }
 
 /**
  * A Brute's Great Cleave: its great two-handed sweep from side to side (figures.ts SWEEP), carried right round
- * through both rows of hexes in front of it. As it comes across, a wide white swoosh runs over the near row and the
- * far one together, from one side to the other, dust kicked up off the ground under it and grit flung out past the
- * far edge. Everyone it catches takes a heavy slash with a red burst, and is jolted, as it lands.
+ * through both rows of hexes in front of it. As it comes across, one great steel-white slash is cut into the ground
+ * over the near row and the far one together, from one side to the other (groundSlash, as a Great Bear's Rending
+ * Cleave), dust kicked up along it and grit flung out past its far end. Everyone it catches is jolted as it lands.
  */
 function greatCleave(stage: MoveStage, ctx: MoveCtx) {
   const { figure, hitAt, dir, crit, echo } = ctx;
@@ -752,29 +755,25 @@ function greatCleave(stage: MoveStage, ctx: MoveCtx) {
   const wait = figure.strike("heavy");
   // A creature has no swing of its own: it springs at the target, and the sweep runs as it lands.
   if (wait <= 0) stage.lunge();
-  const lands = Math.max(0, wait);
+  const { radius, half, width, cut, life } = GREAT_CLEAVE;
   const feet = figure.root.getWorldPosition(new THREE.Vector3());
   const ahead = Math.atan2(hitAt.z - feet.z, hitAt.x - feet.x);
   const color = crit ? GOLD : STEEL;
-  const { half, across } = GREAT_CLEAVE;
-  const steps = 7;
-  for (let i = 0; i < steps; i++) {
-    const k = i / (steps - 1);
-    const a = ahead + half * (1 - 2 * k) * -dir;
-    stage.later(() => {
+  const from = (-dir) as 1 | -1;
+  const lands = Math.max(0, wait);
+  stage.later(() => {
+    stage.lay(groundSlash({ at: feet.clone().setY(feet.y + 0.08), radius, ahead, half, width, from, color, cut, life }));
+    // Dust kicked up along it as it is cut, and grit flung on out past its far end.
+    for (let i = 0; i <= 6; i++) {
+      const a = ahead + half * (1 - (2 * i) / 6) * from;
       const out = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
-      const flip = out.x < 0;
-      for (const row of [1, 2]) {
-        const at = new THREE.Vector3(feet.x, hitAt.y, feet.z).addScaledVector(out, HEX * row * 0.92);
-        stage.spawnFx("slash", color, flip, { from: at, to: at, life: 0.24, size: row === 1 ? [1.2, 2] : [1.4, 2.4], spin: -dir * 1.2, fade: true });
-        stage.spawnFx("streak", color, dir < 0, { from: at, to: at, life: 0.18, size: [0.9, 0.6], spin: 0, fade: true });
-        const ground = at.clone().setY(feet.y + 0.12);
-        stage.spawnFx("dust", DUST, flip, { from: ground, to: ground.clone().addScaledVector(out, 0.5).setY(ground.y + 0.35), life: 0.45, size: [0.6, 1.3], spin: 0, fade: true });
-        // Grit flung on out past the far edge.
-        if (row === 2) stage.spawnFx("fleck", ROCK_PALE, flip, { from: ground, to: ground.clone().addScaledVector(out, 0.9).setY(ground.y + 0.5), life: 0.3, size: [0.4, 0.3], spin: 0, fade: true });
-      }
-    }, Math.max(0, lands - across / 2 + across * k));
-  }
+      const at = feet.clone().addScaledVector(out, radius).setY(feet.y + 0.12);
+      stage.later(() => {
+        stage.spawnFx("dust", DUST, out.x < 0, { from: at, to: at.clone().addScaledVector(out, 0.5).setY(at.y + 0.35), life: 0.45, size: [0.6, 1.3], spin: 0, fade: true });
+        if (i >= 4) for (let n = 0; n < 2; n++) stage.spawnFx("fleck", ROCK_PALE, out.x < 0, { from: at, to: at.clone().addScaledVector(out, 0.7 + Math.random() * 0.5).setY(at.y + 0.3), life: 0.38, size: [0.4, 0.3], spin: 0, fade: true, arc: 0.4 });
+      }, (cut * i) / 6);
+    }
+  }, Math.max(0, lands - cut / 2));
   stage.later(() => cleaveHit(stage, ctx), lands);
 }
 
@@ -3384,7 +3383,7 @@ export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
     play: earthquake,
     again: { blurb: "Its next turn, as the cracked ground heaves on its own, out of the middle of it (the Guardian does nothing): the view shakes hard, wide cracks tear out all round, a bright flash and a heavy wave with rolling dust behind, columns of dust and chunks of rock thrown up all over it, and a second jolt.", play: earthquakeHeave },
   },
-  "Great Cleave": { who: "brute", sweeps: true, blurb: "A great two-handed sweep from side to side: a wide white swoosh runs across both rows of hexes in front of it, dust kicked up under it and grit flung past the far edge, and everyone caught takes a heavy slash with a red burst.", play: greatCleave },
+  "Great Cleave": { who: "brute", sweeps: true, blurb: "A great two-handed sweep from side to side: one great steel-white slash is cut into the ground across both rows of hexes in front of it, dust kicked up along it and grit flung off its far end, and everyone caught is jolted.", play: greatCleave },
   "Battering Ram": { who: "brute", blurb: "Drops its shoulder and charges in, dust kicked off its heels and speed lines streaming off it: a big flash, a shock pulsing over the ground, grit and shock lines bursting out ahead as it hits.", play: batteringRam },
   "Rain of Arrows": { who: "archer", blurb: "Draws and looses a sheaf of arrows straight up, then they come down slanting on the hex and all round it, one after another, each landing with a puff of dust and standing in the ground a moment, a pale ring pulsing out as the first hit.", play: rainOfArrows },
   "Rending Cleave": { who: "great_bear", blurb: "Rears a little and sweeps a forepaw flat across its whole front, a red swoosh behind its claws: one great red slash is cut into the ground through the three hexes before it, dust kicked up along it and red flecks thrown off its far end.", play: rendingCleave },
