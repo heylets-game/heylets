@@ -193,8 +193,8 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
       // The ground on the way, and where it would end up standing.
       if (!air) score -= mind.caution * (4 * path.filter((p) => harmful.has(posKey(p))).length + (harmful.has(posKey(pos)) ? 2 : 0));
       // Blows drawn by walking out of reach.
+      const drawn = new Set<string>();
       if (!budget.disengaged) {
-        const drawn = new Set<string>();
         let from = enemy.pos;
         for (const step of path) {
           for (const h of t.heroes) if (leavesReach(state, h, enemy, from, step) && !state.encounter?.reacted.includes(h.id) && !has(h, "stunned") && !has(h, "prone")) drawn.add(h.id);
@@ -202,7 +202,10 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
         }
         score -= mind.caution * 3 * drawn.size;
       }
-      const option = strike ? bestAttack(state, enemy, pos, fitting(walked, extra), targets, heaviest, t.whim) : null;
+      // What is only worth walking for where no blow is drawn on the way (Behaviour `riskFree`: calling more of its side) does
+      // not count here if one is.
+      const fit = fitting(walked, extra).filter((b) => drawn.size === 0 || !behaviourOf(b).riskFree);
+      const option = strike ? bestAttack(state, enemy, pos, fit, targets, heaviest, t.whim) : null;
       if (option) {
         score += option.worth;
         // Room, and high ground over its target, as much as it cares for them (those that shoot do).

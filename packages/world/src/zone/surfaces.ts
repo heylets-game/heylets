@@ -9,7 +9,7 @@
 import { hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/core";
 import { tileAt } from "../map";
 import { cratesOn, hurtCrate } from "./crates";
-import { addCondition, addStacks, inPlay, saveRoll, tick, type Ctx } from "./engine";
+import { addCondition, addStacks, has, inPlay, saveRoll, tick, type Ctx } from "./engine";
 import { flies, hovers, perkOf, solid, span } from "./geometry";
 import type { Condition, GroundSurface, SurfaceKind, Unit } from "./types";
 import { ENEMIES } from "../content";
@@ -71,13 +71,16 @@ function act(ctx: Ctx, unit: Unit, kind: SurfaceKind, moving: boolean): boolean 
   } else if (kind === "water") {
     addCondition(ctx, unit, "wet", 2);
   } else if (kind === "slime" && moving && !sure) {
-    addCondition(ctx, unit, "slowed", 1);
+    // Already Slowed: each further hex of it changes nothing, so nothing is said (no word, no pause, step after step).
+    if (!has(unit, "slowed")) addCondition(ctx, unit, "slowed", 1);
   } else if (HOLDS[kind] && (moving || HOLDS[kind].standing)) {
     // At home on it, quicker; anyone else, slower. Only for the turn it is in (or starting): out of it, its next turn
     // is its own pace again, as in a Slowing Field.
     const home = atHome(unit, kind);
     if (!home && sure) return false;
     const effect = home ? HOLDS[kind].home : "slowed";
+    // Already so: each further hex of it changes nothing, so nothing is said (no word, no pause, step after step).
+    if (has(unit, effect)) return false;
     addCondition(ctx, unit, effect, 1);
     const c = unit.conditions.find((x) => x.kind === effect);
     if (c) delete c.fresh;
