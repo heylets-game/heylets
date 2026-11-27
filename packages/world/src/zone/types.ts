@@ -148,7 +148,7 @@ export interface Weather {
    * made it (its name, for the log) rolls it, the DC of the Agility save against it, and where its maker stood (its
    * anchor) as it cracked the ground: the middle of it, where the heave is drawn from.
    */
-  shock?: { name: string; dice: Dice; dc: number; saveOr?: Inflict; from: HexPos };
+  shock?: { name: string; ability?: string; dice: Dice; dc: number; saveOr?: Inflict; from: HexPos };
 }
 
 export type SurfaceKind = "poison" | "fire" | "oil" | "water" | "ice" | "slime" | "web";
@@ -619,15 +619,15 @@ export type ZoneEvent =
    * `again`: the second part of something used on an earlier turn (an Earthquake's heave), not a new use of it; `at`
    * then is where its user stood (its anchor) when it was first used, where it goes off from.
    */
-  | { t: "used"; id: string; what: string; name: string; target?: string; at?: HexPos; lean?: Lean; again?: true }
+  | { t: "used"; id: string; what: string; name: string; /** An enemy ability's id (enemyabilities.ts): its animation is found by it, not by its name. */ ability?: string; target?: string; at?: HexPos; lean?: Lean; again?: true }
   | { t: "reaction"; id: string; target: string }
   /**
    * `dice`: what was rolled for it, where dice were. `splash`: not struck itself, but caught by the shock of the same
    * blow landing on someone beside it (EnemyAbilityDef `splash`).
    */
-  | { t: "hit"; actor: string | null; target: string; amount: number; what: string; crit: boolean; blocked?: number; dice?: Rolled; splash?: boolean }
-  | { t: "miss"; actor: string; target: string; what: string }
-  | { t: "heal"; actor: string | null; target: string; amount: number; what: string; dice?: Rolled }
+  | { t: "hit"; actor: string | null; target: string; amount: number; what: string; /** An enemy ability's id, as the `used` event's. */ ability?: string; crit: boolean; blocked?: number; dice?: Rolled; splash?: boolean }
+  | { t: "miss"; actor: string; target: string; what: string; /** An enemy ability's id, as the `used` event's. */ ability?: string }
+  | { t: "heal"; actor: string | null; target: string; amount: number; what: string; /** An enemy ability's id, as the `used` event's. */ ability?: string; dice?: Rolled }
   /** Someone drops off a height (shoved off it, or leaping from too high): how many levels. The harm follows as a `hit` by "fall". */
   | { t: "fell"; id: string; levels: number }
   /** Someone knocked toward a drop or a pit (`at`) catches the edge, and stays where they are. */

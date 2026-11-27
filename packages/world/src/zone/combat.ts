@@ -304,9 +304,9 @@ export function shoveDest(from: HexPos, at: HexPos): HexPos {
 const struckBy = (state: ZoneState, side: Side, on: (u: Unit) => boolean): Unit[] => state.units.filter((u) => u.side !== side && !u.down && !u.away && on(u));
 
 /** A drain (a Soul Drain, a troll's Chomp): its user heals its share of what the blow dealt, rounded to nearest and at least 1, unless something stops it. */
-function drainInto(ctx: Ctx, user: Unit, dealt: number, drain: Drain | undefined, what: string): void {
+function drainInto(ctx: Ctx, user: Unit, dealt: number, drain: Drain | undefined, what: string, ability?: string): void {
   if (!drain || dealt <= 0 || user.down || stopped(ctx.state, user, drain.unless)) return;
-  heal(ctx, user, Math.max(1, Math.round(dealt * drain.share)), { actor: user.id, what });
+  heal(ctx, user, Math.max(1, Math.round(dealt * drain.share)), { actor: user.id, what, ability });
 }
 
 /** What a blow's shock does to those beside its target (a Water Burst's spray, an Ogre's Club Smash). */
@@ -317,6 +317,8 @@ interface SplashSpec {
   save?: { stat: StatKey; dc: number; label: string };
   actor: string;
   what: string;
+  /** An enemy ability's id, told with the damage. */
+  ability?: string;
   /** The nearest to the target that counts as beside it: 1 leaves out one on the very same hex, 0 does not. */
   minGap: number;
   /** The damage is logged as the shock of a blow on someone beside its target, not a blow at them (the hit event's `splash`). */
@@ -333,7 +335,7 @@ function splashAround(ctx: Ctx, side: Side, target: Unit, spec: SplashSpec): voi
   for (const victim of beside) {
     const dice = "roll" in spec.amount ? spec.amount.roll() : undefined;
     const full = dice ? dice.total : share;
-    const hurt = { actor: spec.actor, what: spec.what, ...(dice ? { dice } : {}), ...(spec.splash ? { splash: true } : {}) };
+    const hurt = { actor: spec.actor, what: spec.what, ...(spec.ability ? { ability: spec.ability } : {}), ...(dice ? { dice } : {}), ...(spec.splash ? { splash: true } : {}) };
     if (spec.save) saveForHalf(ctx, [victim], { ...spec.save, amount: () => full, hurt });
     else damage(ctx, victim, full, hurt);
   }
@@ -348,7 +350,7 @@ interface HalfSave {
   /** What it would do to this one on a failed save, before halving. */
   amount: (victim: Unit) => number;
   /** What is passed to `damage` for the log: who did it, with what, and the dice when there were dice (the very object, with the parts of the moment it carries). */
-  hurt: { actor: string; what: string; dice?: Rolled; splash?: boolean };
+  hurt: { actor: string; what: string; ability?: string; dice?: Rolled; splash?: boolean };
   /** What this one victim takes on top of the roll, as parts of the moment (a Wet one takes more from lightning): added to their amount and shown with their dice. */
   more?: (victim: Unit) => RollMod[];
   /** After the damage, for one who failed the save, or for one who made it. */
@@ -1508,22 +1510,22 @@ export function mendedBy(state: ZoneState, enemy: Unit, from: HexPos, attack: En
 
 /** A mending for its own side (EnemyAbilityDef `heal`): its dice, rolled once for each it lands on (mendedBy). No attack: no Frenzy is spent. */
 function mendAllies(ctx: Ctx, enemy: Unit, attack: EnemyStrike, at: HexPos): void {
-  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name, at });
+  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name, ability: attack.id, at });
   for (const ally of mendedBy(ctx.state, enemy, enemy.pos, attack, at)) {
     const rolled = rollShown(ctx.rng, attack.kit.heal!);
-    heal(ctx, ally, rolled.total, { actor: enemy.id, what: attack.name, dice: rolled });
+    heal(ctx, ally, rolled.total, { actor: enemy.id, what: attack.name, ability: attack.id, dice: rolled });
   }
 }
 
 /** A call to its own side (a Pack Leader's Howl): every ally it reaches (alliesReached) is Frenzied for so many attacks. */
 function howl(ctx: Ctx, enemy: Unit, attack: EnemyStrike): void {
-  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name });
+  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name, ability: attack.id });
   for (const ally of alliesReached(ctx.state, enemy, enemy.pos, attack)) addCondition(ctx, ally, "frenzied", UNTIMED_KEEPS, attack.kit.rally!.attacks);
 }
 
 /** A call for more of its side (a Broodmother's Brood Swarm): so many of a kind come to stand beside it (summon.ts callKin). */
 function callForKin(ctx: Ctx, enemy: Unit, attack: EnemyStrike): void {
-  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name });
+  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name, ability: attack.id });
   for (const called of callKin(ctx, enemy, attack.kit.summon!)) if (!called.down) ctx.onStep?.(called, () => {});
 }
 
@@ -1534,7 +1536,7 @@ function callForKin(ctx: Ctx, enemy: Unit, attack: EnemyStrike): void {
  */
 function raiseField(ctx: Ctx, enemy: Unit, attack: EnemyStrike): void {
   const field = attack.kit.field!;
-  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name });
+  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name, ability: attack.id });
   addCondition(ctx, enemy, field.kind, field.rounds, field.radius);
   // However long it was up for before, it reaches as far as this one does.
   const held = enemy.conditions.find((c) => c.kind === field.kind);
@@ -1597,7 +1599,7 @@ export function fieldsCatch(ctx: Ctx, unit: Unit, start = false): void {
     (unit.caughtBy ??= []).push(holder.id);
     if (!strike.harmless) {
       const rolled = rollShown(ctx.rng, strike.dice);
-      damage(ctx, unit, rolled.total, { actor: holder.id, what: strike.name, dice: rolled });
+      damage(ctx, unit, rolled.total, { actor: holder.id, what: strike.name, ability: strike.id, dice: rolled });
     }
     const leave = strike.saveOr;
     if (unit.down || !leave || saveRoll(ctx, unit, SAVE_STAT[leave.effect], 8 + strike.potency, `Resist ${strike.name}`).ok) continue;
@@ -1623,7 +1625,7 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
   const { state } = ctx;
   const dc = 8 + attack.potency;
   const aim = at ?? target?.pos;
-  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name, target: target?.id, ...((spreads(attack.kit) || attack.kit.dash) && aim ? { at: aim } : {}) });
+  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name, ability: attack.id, target: target?.id, ...((spreads(attack.kit) || attack.kit.dash) && aim ? { at: aim } : {}) });
   // What it leaves on whoever it gets through to: `saveOr` unless they save (`save`: they may), and its lesser share
   // (`onSave`) if they do.
   const leave = (victim: Unit, save: boolean) => {
@@ -1636,7 +1638,7 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
   };
   // An Earthquake: the ground round it shakes now, and is left cracked to heave again as its next turn begins.
   if (attack.kit.aftershock) {
-    makeQuake(ctx, enemy, quakeHexes(state, span(enemy), ENEMY_BURST), attack.name, attack.dice, dc, attack.kit.aftershock);
+    makeQuake(ctx, enemy, quakeHexes(state, span(enemy), ENEMY_BURST), attack.name, attack.dice, dc, attack.kit.aftershock, attack.id);
     return;
   }
   if (attack.burst) {
@@ -1649,7 +1651,7 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
     }
     const dice = rollShown(ctx.rng, attack.dice);
     const rolled = dice.total;
-    saveForHalf(ctx, caught, { stat: "agi", dc, label: attack.name, amount: () => rolled, hurt: { actor: enemy.id, what: attack.name, dice }, onFail: (victim) => leave(victim, false) });
+    saveForHalf(ctx, caught, { stat: "agi", dc, label: attack.name, amount: () => rolled, hurt: { actor: enemy.id, what: attack.name, ability: attack.id, dice }, onFail: (victim) => leave(victim, false) });
     return;
   }
   // One that lands on several hexes at once (spreadHexes): thrown onto a clump round its aim or every hex within its
@@ -1662,7 +1664,7 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
     const dice = attack.harmless ? null : rollShown(ctx.rng, attack.dice);
     const victims = struckBy(state, enemy.side, (u) => spread.some((p) => covers(u, p)));
     if (!dice) for (const victim of victims) leave(victim, true);
-    else saveForHalf(ctx, victims, { stat: "agi", dc, label: attack.name, amount: () => dice.total, hurt: { actor: enemy.id, what: attack.name, dice }, onFail: (victim) => leave(victim, false) });
+    else saveForHalf(ctx, victims, { stat: "agi", dc, label: attack.name, amount: () => dice.total, hurt: { actor: enemy.id, what: attack.name, ability: attack.id, dice }, onFail: (victim) => leave(victim, false) });
     if (attack.kit.surface) placeSurface(ctx, spread, attack.kit.surface.kind, attack.kit.surface.rounds, enemy.id);
     return;
   }
@@ -1677,7 +1679,7 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
     ctx.events.push({ t: "jumped", id: enemy.id, from, to: way.land, dash: { name: attack.name, through: way.through } });
     const dice = rollShown(ctx.rng, attack.dice);
     const through = struckBy(state, enemy.side, (u) => way.through.some((p) => covers(u, p)));
-    saveForHalf(ctx, through, { stat: "agi", dc, label: attack.name, amount: () => dice.total, hurt: { actor: enemy.id, what: attack.name, dice }, onFail: (victim) => leave(victim, false) });
+    saveForHalf(ctx, through, { stat: "agi", dc, label: attack.name, amount: () => dice.total, hurt: { actor: enemy.id, what: attack.name, ability: attack.id, dice }, onFail: (victim) => leave(victim, false) });
     tumble(ctx, enemy, from, null, JUMP_DOWN);
     arrive(ctx, enemy);
     return;
@@ -1693,7 +1695,7 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
     const saved = saveRoll(ctx, target, attack.saveOr ? SAVE_STAT[attack.saveOr.effect] : "agi", dc, attack.name).ok;
     if (!attack.harmless) {
       const dice = rollShown(ctx.rng, attack.dice);
-      damage(ctx, target, saved ? Math.floor(dice.total / 2) : dice.total, { actor: enemy.id, what: attack.name, dice, halved: saved });
+      damage(ctx, target, saved ? Math.floor(dice.total / 2) : dice.total, { actor: enemy.id, what: attack.name, ability: attack.id, dice, halved: saved });
     }
     if (!saved) leave(target, false);
     else if (attack.kit.onSave && !target.down) inflict(ctx, target, attack.kit.onSave);
@@ -1701,19 +1703,19 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
   }
   const roll = attackRoll(ctx, enemy, target, { label: attack.name, bonus: attack.potency, melee });
   if (!roll.ok) {
-    ctx.events.push({ t: "miss", actor: enemy.id, target: target.id, what: attack.name });
+    ctx.events.push({ t: "miss", actor: enemy.id, target: target.id, what: attack.name, ability: attack.id });
     return;
   }
   if (!attack.harmless) {
     const rolled = rollShown(ctx.rng, attack.dice, 0, roll.crit);
-    const dealt = damage(ctx, target, rolled.total, { actor: enemy.id, what: attack.name, crit: roll.crit, dice: rolled });
+    const dealt = damage(ctx, target, rolled.total, { actor: enemy.id, what: attack.name, ability: attack.id, crit: roll.crit, dice: rolled });
     // A drain: its user grows back a share of what it tore off (a troll's, unless it is on fire).
-    drainInto(ctx, enemy, dealt, attack.kit.drain, attack.name);
+    drainInto(ctx, enemy, dealt, attack.kit.drain, attack.name, attack.id);
     if (melee) thorns(ctx, enemy, target);
     // A splash: the shock of the blow pulses out, and every other hero in the fight beside the target is battered by
     // a share of it, or by half that if they get clear (an Agility save).
     if (attack.kit.splash) {
-      splashAround(ctx, enemy.side, target, { amount: { share: SPLASH_SHARE, of: rolled.total }, save: { stat: "agi", dc, label: attack.name }, actor: enemy.id, what: attack.name, minGap: 1, splash: true });
+      splashAround(ctx, enemy.side, target, { amount: { share: SPLASH_SHARE, of: rolled.total }, save: { stat: "agi", dc, label: attack.name }, actor: enemy.id, what: attack.name, ability: attack.id, minGap: 1, splash: true });
     }
   }
   leave(target, true);

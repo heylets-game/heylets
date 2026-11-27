@@ -23,11 +23,13 @@ export type OwnRoute = "burst" | "at" | "dash" | "blow";
 const BY_NAME = new Map(Object.values(ENEMY_ABILITIES).map((a) => [a.name, a]));
 
 /**
- * The enemy ability called `name`, as the kind `kind` has it: several kinds have abilities of the same name that work
- * differently (a Giant Spider's Web Spit, a Spiderling's Bite), so its user's own
- * comes first. Any other by that name, if its kind has none (or none is known).
+ * The enemy ability an event is about: the one it names by id (`ability`, told with the event), or else the one called
+ * `name`, as the kind `kind` has it: several kinds have abilities of the same name that work differently (a Giant
+ * Spider's Web Spit, a Spiderling's Bite), so its user's own comes first. Any other by that name, if its kind has none
+ * (or none is known). A tab left open on an older build is told no id, and goes by the name.
  */
-export function enemyAbilityNamed(name: string, kind?: string) {
+export function enemyAbilityNamed(name: string, kind?: string, ability?: string) {
+  if (ability && ENEMY_ABILITIES[ability]) return ENEMY_ABILITIES[ability];
   const own = kind ? ENEMIES[kind.split("|")[0]]?.abilities.map((id) => ENEMY_ABILITIES[id]).find((a) => a?.name === name) : undefined;
   return own ?? BY_NAME.get(name);
 }
@@ -39,14 +41,14 @@ export const RETORTS: ReadonlySet<string> = new Set(Object.values(ENEMIES).flatM
  * How the enemy ability called `name`, used by a `kind`, reaches the fight's picture as a move of its own, or null if
  * there is none by that name.
  */
-export function ownRoute(name: string, kind?: string): OwnRoute | null {
+export function ownRoute(name: string, kind?: string, ability?: string): OwnRoute | null {
   if (RETORTS.has(name)) return "blow";
-  const def = enemyAbilityNamed(name, kind);
+  const def = enemyAbilityNamed(name, kind, ability);
   if (!def) return null;
   if (def.shape === "burst" || def.rally || def.field || def.summon) return "burst";
   if (def.dash) return "dash";
   const shape = def.spread?.shape;
-  return shape === "cluster" || shape === "blast" || shape === "cone" || shape === "line" || (shape === "sweep" && !SIGNATURE_MOVES[name]?.sweeps) ? "at" : "blow";
+  return shape === "cluster" || shape === "blast" || shape === "cone" || shape === "line" || (shape === "sweep" && !SIGNATURE_MOVES[def.id]?.sweeps) ? "at" : "blow";
 }
 
 /**
@@ -61,12 +63,12 @@ export function playsFor(move: { who: string; only?: readonly string[] }, unit: 
 }
 
 /**
- * The move of its own `unit` plays for the ability called `name`, if it has one: its kind's own (keyed `Name@kind`),
- * else the one by that name, if that is played for its kind (playsFor).
+ * The move of its own `unit` plays for an ability, if it has one: the ability's (SIGNATURE_MOVES is keyed by ability id,
+ * so renaming one loses nothing), found by its `ability` id if the event told one, else by its `name` as the unit's kind
+ * has it; a retort has no ability, and is keyed by its name. Played only if it is for the unit's kind (playsFor).
  */
-export function ownMove(name: string, unit: { kind: string }): SignatureMove | undefined {
-  const mine = SIGNATURE_MOVES[`${name}@${unit.kind.split("|")[0]}`];
-  if (mine) return mine;
-  const move = SIGNATURE_MOVES[name];
+export function ownMove(name: string, unit: { kind: string }, ability?: string): SignatureMove | undefined {
+  const id = enemyAbilityNamed(name, unit.kind, ability)?.id;
+  const move = (id && SIGNATURE_MOVES[id]) || SIGNATURE_MOVES[name];
   return move && playsFor(move, unit) ? move : undefined;
 }

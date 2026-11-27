@@ -1075,7 +1075,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           const aim = ev.at ? point(ev.at, 0.05) : struck ? point(struck, 0.05) : null;
           // An enemy ability with a move of its own is played as that, whatever its usual look (zone/ownMoves.ts): round
           // its user, or at the spot it is thrown at, now; one at a single target, as the blow is told (see hit).
-          const own = ev.what === "attack" && view?.ownsMove(ev.id, ev.name) ? ownRoute(ev.name, user?.kind) : null;
+          const own = ev.what === "attack" && view?.ownsMove(ev.id, ev.name, ev.ability) ? ownRoute(ev.name, user?.kind, ev.ability) : null;
           // Its second part (an Earthquake's heave) goes off from the middle of where its user stood when it was first
           // used: from the ground it cracked, not from wherever it is now.
           const centre = ev.again && ev.at && user ? span(user, ev.at).map((p) => point(p)).reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(span(user, ev.at).length) : undefined;
@@ -1085,7 +1085,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           if (own === "burst" && view) return void view.burst(ev.id, ev.name, false, thenOn(() => {}), !!ev.again, centre, calls);
           // One thrown onto a clump of hexes (`area`: an Acid Splash, an Immolate) lands in the middle of the clump, not
           // on the hex it was aimed at, which is at one edge of it.
-          const spread = enemyAbilityNamed(ev.name, user?.kind)?.spread;
+          const spread = enemyAbilityNamed(ev.name, user?.kind, ev.ability)?.spread;
           const area = spread?.shape === "cluster" ? spread.size : undefined;
           const clump = own === "at" && area && ev.at && user ? clusterHexes({ map: next.map }, user.pos, ev.at, area) : [];
           const middle = clump.length > 0 ? clump.map((p) => point(p, 0.05)).reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(clump.length) : aim;
@@ -1395,10 +1395,10 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         // An enemy's move of its own (zone/ownMoves.ts): one at a single target is played as this blow, struck by hand
         // whatever its usual look (WorldRenderer.attack plays it); one round its user or at a spot was played as it was
         // used, and whoever it catches just flinches.
-        const own = ev.actor && !(hit && ev.splash) && actor?.side === "enemy" && view?.ownsMove(ev.actor, ev.what) ? ownRoute(ev.what, actor?.kind) : null;
+        const own = ev.actor && !(hit && ev.splash) && actor?.side === "enemy" && view?.ownsMove(ev.actor, ev.what, ev.ability) ? ownRoute(ev.what, actor?.kind, ev.ability) : null;
         // A retort (a slime's Acid Armor) from one that cannot play it (it has just been killed): the victim just flinches.
         // A field round an enemy biting whoever is in it (a Blizzard Aura) is the field's doing: nobody swings.
-        const fielded = actor?.side === "enemy" && !!enemyAbilityNamed(ev.what, actor.kind)?.field;
+        const fielded = actor?.side === "enemy" && !!enemyAbilityNamed(ev.what, actor.kind, ev.ability)?.field;
         const passive = (!mine && (ev.what === "coral_field" || ev.what === "coral_armor")) || fielded || (!own && RETORTS.has(ev.what)) || (hit && !!ev.splash) || own === "burst" || own === "at" || own === "dash";
         const kind = passive ? "ground" : own === "blow" ? "melee" : !ev.actor || ev.actor === ev.target || ev.what.startsWith("throw:") || ev.what === "shove" || ev.what === "fall" ? "none" : (mine?.look.kind ?? "melee");
         // The log's line for it: the roll that decided it (if it has a card), then what it did.

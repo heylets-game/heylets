@@ -400,14 +400,14 @@ function soak(unit: Unit, amount: number): number {
  * Returns the HP it cost. `dice`: what was rolled for it, told with the hit (`halved`: the target saved for half).
  * `splash`: the shock of a blow on someone beside the target, not a blow at it (see the hit event).
  */
-export function damage(ctx: Ctx, target: Unit, amount: number, opts: { actor: string | null; what: string; crit?: boolean; dice?: Rolled; halved?: boolean; splash?: boolean }): number {
+export function damage(ctx: Ctx, target: Unit, amount: number, opts: { actor: string | null; what: string; ability?: string; crit?: boolean; dice?: Rolled; halved?: boolean; splash?: boolean }): number {
   if (target.down) return 0;
   let dealt = Math.max(1, Math.round(amount));
   if (has(target, "guarded")) dealt = Math.ceil(dealt / 2);
   const blocked = soak(target, dealt);
   dealt = wound(ctx, target, dealt - blocked);
   const dice = opts.dice ? { ...opts.dice, ...(opts.halved ? { halved: true } : {}) } : undefined;
-  ctx.events.push({ t: "hit", actor: opts.actor, target: target.id, amount: dealt, what: opts.what, crit: !!opts.crit, ...(blocked > 0 ? { blocked } : {}), ...(dice ? { dice } : {}), ...(opts.splash ? { splash: true } : {}) });
+  ctx.events.push({ t: "hit", actor: opts.actor, target: target.id, amount: dealt, what: opts.what, ...(opts.ability ? { ability: opts.ability } : {}), crit: !!opts.crit, ...(blocked > 0 ? { blocked } : {}), ...(dice ? { dice } : {}), ...(opts.splash ? { splash: true } : {}) });
   if (target.hp <= 0) fall(ctx, target);
   // North Star: whatever its bearer strikes on the other side catches fire.
   const by = opts.actor ? ctx.state.units.find((u) => u.id === opts.actor) : undefined;
@@ -426,7 +426,7 @@ export function tick(ctx: Ctx, target: Unit, kind: Condition | "poison" | "fire"
 }
 
 /** Heal a unit. Someone down is back on their feet. Any healing closes one stack of Bleeding. Returns what was healed. */
-export function heal(ctx: Ctx, target: Unit, amount: number, opts: { actor: string | null; what: string; dice?: Rolled }): number {
+export function heal(ctx: Ctx, target: Unit, amount: number, opts: { actor: string | null; what: string; ability?: string; dice?: Rolled }): number {
   if (amount > 0) staunch(target);
   if (target.down) {
     target.down = false;
@@ -434,7 +434,7 @@ export function heal(ctx: Ctx, target: Unit, amount: number, opts: { actor: stri
   }
   const healed = Math.max(0, Math.min(target.maxHp - target.hp, Math.round(amount)));
   target.hp += healed;
-  ctx.events.push({ t: "heal", actor: opts.actor, target: target.id, amount: healed, what: opts.what, ...(opts.dice ? { dice: opts.dice } : {}) });
+  ctx.events.push({ t: "heal", actor: opts.actor, target: target.id, amount: healed, what: opts.what, ...(opts.ability ? { ability: opts.ability } : {}), ...(opts.dice ? { dice: opts.dice } : {}) });
   return healed;
 }
 

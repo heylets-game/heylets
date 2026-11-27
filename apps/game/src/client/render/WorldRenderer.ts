@@ -2407,9 +2407,9 @@ export class WorldRenderer {
   }
 
   /** Whether this unit plays `ability` as a move of its own (signatureMoves.ts), not as the usual cast or blow. */
-  ownsMove(actorId: string, ability: string): boolean {
+  ownsMove(actorId: string, ability: string, id?: string): boolean {
     const unit = this.units.get(actorId);
-    return !!unit && !unit.lying && !!ownMove(ability, unit);
+    return !!unit && !unit.lying && !!ownMove(ability, unit, id);
   }
 
   /**

@@ -176,12 +176,12 @@ export function quakeHexes(state: Pick<ZoneState, "map">, from: readonly HexPos[
  * The ground shakes under every one of `by`'s foes on `hexes` who is in the fight and not flying: `dice` of damage,
  * or half on an Agility save against `dc`, and `saveOr` on a failure.
  */
-function shake(ctx: Ctx, by: Unit, hexes: HexPos[], name: string, dice: Dice, dc: number, saveOr?: Inflict): void {
+function shake(ctx: Ctx, by: Unit, hexes: HexPos[], name: string, dice: Dice, dc: number, saveOr?: Inflict, ability?: string): void {
   const state = ctx.state;
   const rolled = rollShown(ctx.rng, dice);
   for (const victim of state.units.filter((u) => u.side !== by.side && !u.down && !flies(u) && inFight(state, u.id) && hexes.some((p) => covers(u, p)))) {
     const saved = saveRoll(ctx, victim, "agi", dc, name).ok;
-    damage(ctx, victim, saved ? Math.floor(rolled.total / 2) : rolled.total, { actor: by.id, what: name, dice: rolled, halved: saved });
+    damage(ctx, victim, saved ? Math.floor(rolled.total / 2) : rolled.total, { actor: by.id, what: name, ability, dice: rolled, halved: saved });
     if (!saved && saveOr && !victim.down) inflict(ctx, victim, saveOr);
   }
 }
@@ -190,12 +190,12 @@ function shake(ctx: Ctx, by: Unit, hexes: HexPos[], name: string, dice: Dice, dc
  * An Earthquake, begun: the ground round `by` shakes now (`first` damage), and is left cracked over `hexes` until
  * `by`'s next turn, when it heaves (`shock`).
  */
-export function makeQuake(ctx: Ctx, by: Unit, hexes: HexPos[], name: string, first: Dice, dc: number, shock: { dice: Dice; saveOr?: Inflict }): void {
+export function makeQuake(ctx: Ctx, by: Unit, hexes: HexPos[], name: string, first: Dice, dc: number, shock: { dice: Dice; saveOr?: Inflict }, ability?: string): void {
   const state = ctx.state;
   // One quake at a time from each maker: a new one takes the place of the old.
-  state.weather = [...(state.weather ?? []).filter((w) => !(w.kind === "quake" && w.by === by.id)), { kind: "quake", hexes, rounds: WEATHER.quake.rounds, fresh: true, by: by.id, side: by.side, touched: {}, shock: { name, dice: shock.dice, dc, saveOr: shock.saveOr, from: { ...by.pos } } }];
+  state.weather = [...(state.weather ?? []).filter((w) => !(w.kind === "quake" && w.by === by.id)), { kind: "quake", hexes, rounds: WEATHER.quake.rounds, fresh: true, by: by.id, side: by.side, touched: {}, shock: { name, ...(ability ? { ability } : {}), dice: shock.dice, dc, saveOr: shock.saveOr, from: { ...by.pos } } }];
   ctx.events.push({ t: "weather", kind: "quake", hexes, by: by.id });
-  shake(ctx, by, hexes, name, first, dc);
+  shake(ctx, by, hexes, name, first, dc, undefined, ability);
 }
 
 /**
@@ -208,8 +208,8 @@ export function quakeAtTurn(ctx: Ctx, unit: Unit): void {
   ctx.state.weather = ctx.state.weather!.filter((w) => !mine.includes(w));
   for (const w of mine) {
     if (w.shock) {
-      ctx.events.push({ t: "used", id: unit.id, what: "attack", name: w.shock.name, again: true, at: w.shock.from });
-      shake(ctx, unit, w.hexes, w.shock.name, w.shock.dice, w.shock.dc, w.shock.saveOr);
+      ctx.events.push({ t: "used", id: unit.id, what: "attack", name: w.shock.name, ...(w.shock.ability ? { ability: w.shock.ability } : {}), again: true, at: w.shock.from });
+      shake(ctx, unit, w.hexes, w.shock.name, w.shock.dice, w.shock.dc, w.shock.saveOr, w.shock.ability);
     }
   }
 }
