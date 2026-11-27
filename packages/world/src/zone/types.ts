@@ -27,7 +27,11 @@ export type Side = "hero" | "enemy";
  * and the Warden's: Taunted, on an enemy (it attacks no one but the Warden who taunted it);
  * and the Warlock's (drowning.ts), all on an enemy: Drowning (stacks, `amount`), the Curse of Drowning, the Black Spot and Red Sky at Morning.
  */
-export type Condition = EffectKind | "poisoned" | "wet" | "beacon" | "mending" | "bolstered" | "invisible" | "contraband" | "regenerating" | "rejuvenating" | "rallied" | "coral_armor" | ShantyKind | "inspired" | "guiding_light" | "north_star" | "charted" | "taunted" | "drowning" | "drowning_curse" | "black_spot" | "red_sky" | "tailwind" | "lucky" | "frenzied" | "slowing_field" | "fettered";
+/** What an enemy's field round it is (EnemyAbilityDef `field`): a condition on the one that carries it. */
+export const FIELD_KINDS = ["slowing_field", "blizzard_aura"] as const;
+export type FieldKind = (typeof FIELD_KINDS)[number];
+
+export type Condition = EffectKind | "poisoned" | "wet" | "beacon" | "mending" | "bolstered" | "invisible" | "contraband" | "regenerating" | "rejuvenating" | "rallied" | "coral_armor" | ShantyKind | "inspired" | "guiding_light" | "north_star" | "charted" | "taunted" | "drowning" | "drowning_curse" | "black_spot" | "red_sky" | "tailwind" | "lucky" | "frenzied" | FieldKind | "fettered";
 
 /** The shanties a Bard sings (song.ts): a condition on the Bard, reaching everyone of theirs nearby. */
 export type ShantyKind = "lively_shanty" | "dour_shanty" | "windgod_shanty";
@@ -113,6 +117,8 @@ export interface Unit {
    * (`controller`) on the hero's initiative, and gone when it falls, when another is called in its place, or when the fight ends.
    */
   summon?: { by: string };
+  /** Who of the other side has caught it in a harmful field this turn of its own (combat.ts fieldsCatch): once a turn each. */
+  caughtBy?: string[];
   /**
    * A hero whose player is not on the map (their last connection to it closed): nothing draws them into a
    * fight, and no enemy blow meant for a fight lands on them. A fight they were already in goes on with them in it.

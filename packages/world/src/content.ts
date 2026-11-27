@@ -516,10 +516,10 @@ export const ENEMIES: Record<string, EnemyDef> = {
     kind: "ember_hound", name: "Ember Hound", hp: 16, defence: 12, move: 3, save: 0, init: 1, xp: 12,
     abilities: ["searing_bite", "ember_burst"],
   },
-  // A cave bear's white cousin: as slow, as thick-hided, and every bit as cross.
+  // A cave bear's white cousin: as slow, as thick-hided, and every bit as cross, and it brings the blizzard with it.
   snow_bear: {
     kind: "snow_bear", name: "Snow Bear", hp: 40, defence: 11, move: 2, save: 2, init: -1, xp: 21,
-    abilities: ["mauling_swipe", "roar", "shove"],
+    abilities: ["mauling_swipe", "blizzard_aura", "shove"],
   },
   // The frost's dead: it keeps its distance, and what its cold reaches is slow to move after.
   wraith: {

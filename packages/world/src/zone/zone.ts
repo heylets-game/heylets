@@ -28,7 +28,7 @@ import { addStats, maxHpFor } from "../progression";
 import { makeRng, seedFromString } from "../rng";
 import { enemyTurn } from "./ai";
 import { pickBellGoer, placeBell } from "./bell";
-import { abilityArea, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, doCommon, drinkItem, enemyAct, fieldSlows, isBlink, moveLeft, resolveAbility, throwItem, walk } from "./combat";
+import { abilityArea, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, doCommon, drinkItem, enemyAct, fieldsCatch, isBlink, moveLeft, resolveAbility, throwItem, walk } from "./combat";
 import { checkStrike } from "./strikes";
 import { UNTIMED_KEEPS, countDown, has, leaveFight, heal, regrow, removeCondition, tick, tickStacks, unseen, usesLeft, type Ctx } from "./engine";
 import { ALERT_RANGE, JOIN_RANGE, freeHexNear, generateZone } from "./gen";
@@ -511,8 +511,9 @@ function noticedBy(state: ZoneState, unit: Unit): string[] {
 
 /** After each step: has this unit walked into a fight, or brought one to somebody? True stops it where it is. */
 function onStep(ctx: Ctx, unit: Unit, flush: () => void): boolean {
-  // Into a Slowing Field: the rest of the way is slower.
-  fieldSlows(ctx, unit);
+  // Into a field of the other side's: a Slowing Field makes the rest of the way slower; a Blizzard Aura bites.
+  fieldsCatch(ctx, unit);
+  if (unit.down) return true;
   if (unit.side !== "hero") {
     // An enemy closing in draws nearby heroes into the fight; it carries on.
     pullIn(ctx);
@@ -535,6 +536,8 @@ function onStep(ctx: Ctx, unit: Unit, flush: () => void): boolean {
 
 /** Start a unit's turn: its conditions and the ground act on it, and it gets its budget. False if it has no turn to take. */
 function beginTurn(ctx: Ctx, enc: Encounter, unit: Unit): boolean {
+  // A new turn of its own: the fields it is in may catch it again.
+  delete unit.caughtBy;
   removeCondition(unit, "guarded");
   removeCondition(unit, "taunting");
   // A Lively Shanty's lift from those who joined it lasts until its Bard's turn comes round again.
@@ -566,8 +569,8 @@ function beginTurn(ctx: Ctx, enc: Encounter, unit: Unit): boolean {
     ctx.events.push({ t: "skip", id: unit.id, kind: "stunned" });
     return false;
   }
-  // Its turn starting in a Slowing Field of the other side's: Slowed for it.
-  fieldSlows(ctx, unit);
+  // Its turn starting in fields of the other side's: Slowed for it, or bitten.
+  fieldsCatch(ctx, unit, true);
   // What 1 AP of movement buys it.
   const base = strideOf(ctx.state, unit);
   // A Wind-god's Shanty: further, and no Slowing.

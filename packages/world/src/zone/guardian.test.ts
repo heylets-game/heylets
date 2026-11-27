@@ -249,7 +249,7 @@ describe("a Guardian's Slowing Field", () => {
 
   it("costs 2 AP, waits 4 turns, does no harm, and is weighed as a field", () => {
     expect(slowingField).toMatchObject({ cost: 2, cooldown: 4, harmless: true, behaviour: "field" });
-    expect(slowingField.kit.field).toEqual({ rounds: 3, radius: 2 });
+    expect(slowingField.kit.field).toEqual({ rounds: 3, radius: 2, kind: "slowing_field", slows: true });
     expect(slowingField.weight).toBeGreaterThanOrEqual(2);
   });
 
