@@ -9,7 +9,7 @@ import { enemyStrikes } from "./kit";
 import type { Ctx } from "./engine";
 import type { ZoneEvent, ZoneState } from "./types";
 
-// An Ember Hound: a bite that sets you Burning, and a pulse of fire all round it that you either dodge or take whole.
+// An Ember Hound: a bite that sets you Burning, and a pulse of fire all round it.
 
 const strike = (name: string) => enemyStrikes("ember_hound", 1).find((s) => s.name === name)!;
 const searingBite = strike("Searing Bite");
@@ -36,35 +36,30 @@ describe("an Ember Hound's kit", () => {
     expect(ENEMIES.ember_hound.abilities).toEqual(["searing_bite", "ember_burst"]);
     expect(searingBite).toMatchObject({ range: 1, saveOr: { effect: "burning" } });
     expect(emberBurst).toMatchObject({ burst: true, range: 1, cooldown: 3, saveOr: { effect: "burning" } });
-    expect(emberBurst.kit.dodge).toBe(true);
     expect(ENEMY_ABILITIES.ember_burst.damage).toBe(7);
   });
 });
 
 describe("an Ember Hound's Ember Burst", () => {
-  it("catches everyone beside it: all of it and a stack of Burning on a fail, none of it on a save, and nobody further off", () => {
+  it("catches everyone beside it: all of it and a stack of Burning on a fail, half and no Burning on a save, and nobody further off", () => {
     const { state, hound } = setUp(at(5, 6), [at(6, 6), at(4, 6), at(7, 6)]);
     let failed = 0;
-    let dodged = 0;
+    let halved = 0;
     for (let seed = 1; seed <= 20; seed++) {
       const ctx = ctxOf(state, seed);
       enemyAct(ctx, unit(ctx.state, hound), emberBurst, null);
       for (const id of ["ann", "bo"]) {
         const hit = hits(ctx, id);
-        if (hit.length === 0) {
-          expect(has(ctx.state, id, "burning"), `seed ${seed} ${id}`).toBe(false);
-          dodged++;
-        } else {
-          expect(hit, `seed ${seed} ${id}`).toHaveLength(1);
-          expect(hit[0].t === "hit" && hit[0].dice?.halved, `seed ${seed} ${id}`).toBeFalsy();
-          expect(stacks(ctx.state, id), `seed ${seed} ${id}`).toBe(1);
-          failed++;
-        }
+        expect(hit, `seed ${seed} ${id}`).toHaveLength(1);
+        const saved = hit[0].t === "hit" && !!hit[0].dice?.halved;
+        expect(stacks(ctx.state, id), `seed ${seed} ${id}`).toBe(saved ? 0 : 1);
+        if (saved) halved++;
+        else failed++;
       }
       expect(hits(ctx, "cy")).toHaveLength(0);
       expect(has(ctx.state, "cy", "burning")).toBe(false);
     }
     expect(failed).toBeGreaterThan(0);
-    expect(dodged).toBeGreaterThan(0);
+    expect(halved).toBeGreaterThan(0);
   });
 });
