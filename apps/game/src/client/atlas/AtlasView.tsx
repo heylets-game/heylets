@@ -29,7 +29,7 @@
 // spent as the map is made, with what it carries added to the place's own.
 // Anywhere but beside the Harbor there must be one. What a stone carries is
 // told by pointing at it. They are drawn up and worked down in the Harbor,
-// at the Chartmaker's, before coming up here.
+// at Charter & Trade, before coming up here.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { hexDistance, type HexPos } from "@gantt-quest/core";
@@ -583,7 +583,7 @@ export function AtlasView({ me, refresh, onLeave }: { me: Me; refresh(): Promise
                         </div>
                       )}
                     </div>
-                    {!begun && !inSlot && <p className="atlas-line muted">{!needs ? "No charter needed beside the Harbor." : held.length > 0 ? "Lay a charter in the slot to set out." : "It needs a charter, and you carry none. One can be drawn up at the Chartmaker's in the Harbor."}</p>}
+                    {!begun && !inSlot && <p className="atlas-line muted">{!needs ? "No charter needed beside the Harbor." : held.length > 0 ? "Lay a charter in the slot to set out." : "It needs a charter, and you carry none. One can be drawn up at Charter & Trade in the Harbor."}</p>}
                     {pay && (
                       <p className="atlas-line atlas-bounty" title={`${pay.gear >= 1 ? "With a piece of gear" : `And a ${Math.round(pay.gear * 100)}% chance of a piece of gear`}. Its spoils always hold a charter as good as the one that opened it (one in four times, a little better), and ${1 + (inSlot?.length ?? 0)} more ${inSlot?.length ? "chances" : "chance"} of another (about ${Math.round(Math.min(0.95, SPOIL_STONES.chance + SPOIL_STONES.perThing * (inSlot?.length ?? 0) + sum.stones) * 100)}% each). The more a charter says, the more charters its place gives back.`}>
                         Spoils <strong>{pay.xp} XP</strong> · <strong>{pay.gold[0]}–{pay.gold[1]} gold</strong> · <strong>1 to {2 + (inSlot?.length ?? 0)} charters</strong>

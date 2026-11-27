@@ -546,7 +546,7 @@ describe("the Lapidary: the lodestone bench, and gems", () => {
     expect(gems()).toBe(3);
     expect(gold("ann")).toBe(had + 2 * GEM_PRICE);
     // The stall sends them on: nothing is taken and nothing paid.
-    expect(await sellMaterial(db, "ann", "gem", 1)).toMatch(/Chartmaker/);
+    expect(await sellMaterial(db, "ann", "gem", 1)).toMatch(/Charter & Trade/);
     expect(gems()).toBe(3);
     expect(await sellGems(db, "ann", 3)).toBe(3 * GEM_PRICE);
     expect(gems()).toBe(0);

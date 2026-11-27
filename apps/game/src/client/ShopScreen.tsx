@@ -190,7 +190,7 @@ export function ShopScreen({ me, refresh, onClose }: { me: Me; refresh(): Promis
         purse={<span className="cost"><ThingIcon icon={GOLD_ICON} size={18} /> {c.gold}g</span>}
         loading={!shop && !said ? "Laying out the wares…" : null}
         shelves={shelves}
-        notes={(stock.gem ?? 0) > 0 && <p>The stall does not buy gems: take yours to the Chartmaker's.</p>}
+        notes={(stock.gem ?? 0) > 0 && <p>The stall does not buy gems: take yours to Charter & Trade.</p>}
       />
     </div>
   );

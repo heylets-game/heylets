@@ -18,7 +18,7 @@ It runs entirely on Cloudflare: Workers, Durable Objects, D1, Workers AI and Ema
 - **Your hut:** buy a plot, fill a resource bin to raise a shack, then furnish it, craft for it and upgrade it. Rest there to recover.
 - **The pub:** a meal that gives back a gathering outing, table games played for a stake, the regulars and their errands, and traveling salesmen who drop in from time to time.
 - **Crew projects:** pay together into the Apothecary and Smithy first; once both stand, the Lighthouse and the Galley unlock.
-- **Around town:** the market stall, the notice board with each release's news, the Chartmaker's (where charters are drawn up and worked), the town chest the crew shares, and trading or giving gear to crewmates.
+- **Around town:** the market stall, the notice board with each release's news, Charter & Trade (where charters are drawn up and worked), the town chest the crew shares, and trading or giving gear to crewmates.
 
 **The atlas** is the crew's chart of the world, opened at the waygate. Setting out for a place on it is a voyage.
 - **Places:** each node is a place to clear. Clearing one opens the ones beyond it; lookouts lift the cloud over a wide stretch, and lairs hold a boss.

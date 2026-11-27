@@ -108,7 +108,7 @@ const RULES: { icon: string; title: string; sub: string; tone?: string }[] = [
     // A cut gem.
     icon: "M4 2h4v1h-4zM3 3h6v2h-6zM4 5h4v2h-4zM5 7h2v2h-2z|M4 3h1v1h-1z",
     title: "Gems sparkle",
-    sub: `Rare · ${GEM_PRICE}g at the Chartmaker's`,
+    sub: `Rare · ${GEM_PRICE}g at Charter & Trade`,
     tone: "gem",
   },
 ];
