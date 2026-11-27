@@ -8,7 +8,7 @@
 import { hexDistance, hexNeighbors, hexSegment, posKey, type HexPos, type StatKey } from "@gantt-quest/core";
 import { ABILITIES, BARD_AURA, ENEMIES, onlyInFights, type AbilityDef, type EffectKind } from "../content";
 import { tileAt, type Poi } from "../map";
-import { DEBUFFS, advantageOf, UNTIMED_KEEPS, attackMade, addCondition, addUses, addShield, addStacks, inflict, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, removeCondition, liveBudget, momentOf, saveBonus, saveMods, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
+import { DEBUFFS, advantageOf, inPlay, UNTIMED_KEEPS, attackMade, addCondition, addUses, addShield, addStacks, inflict, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, removeCondition, liveBudget, momentOf, saveBonus, saveMods, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
 import { cratesOn, crateById, hurtCrate, isCrateId } from "./crates";
 import { ENEMY_ABILITIES } from "./enemyabilities";
 import { type Spread, bearing, big, caught, close, blast, blockerAt, courseShare, covers, directionToward, gap, gapTo, meet, nearOf, reaches, ringToward, elevOf, fetterBars, flies, heldAgainst, inFight, lineFrom, pathIn, perkOf, pitAt, reachFrom, roomAt, roomFor, sameHex, sees, seesFor, solid, span, stepCost, strikes, unitById, zoneReach, type Course, type Lean, type Pit } from "./geometry";
@@ -553,15 +553,20 @@ function pocket(ctx: Ctx, unit: Unit, target: Unit): void {
 
 // ---------- a hero's abilities ----------
 
-/** The hexes `spread` covers, used from `from` and aimed at `at` (which a burst and the hexes beside do not use). */
+/**
+ * The hexes `spread` covers, used from `from` and aimed at `at` (which a burst and the hexes beside do not use). Never
+ * a hex with no ground under it, whatever the shape: nothing stands there to be caught, and nothing is laid there.
+ */
 export function spreadOver(state: ZoneState, spread: Spread, from: HexPos, at: HexPos): HexPos[] {
+  return shapeHexes(state, spread, from, at).filter((p) => !!tileAt(state.map, p));
+}
+
+function shapeHexes(state: ZoneState, spread: Spread, from: HexPos, at: HexPos): HexPos[] {
   switch (spread.shape) {
     case "cluster":
       return clusterHexes(state, from, at, spread.size, spread.lean);
-    case "blast": {
-      const hexes = blast(state.map, at, spread.radius);
-      return spread.onMapOnly ? hexes.filter((p) => !!tileAt(state.map, p)) : hexes;
-    }
+    case "blast":
+      return blast(state.map, at, spread.radius);
     case "sweep":
       return sweepHexes(state, from, at, spread.rows);
     case "cone":
@@ -571,7 +576,7 @@ export function spreadOver(state: ZoneState, spread: Spread, from: HexPos, at: H
     case "arc":
       return arcHexes(state, from, at);
     case "burst":
-      return blast(state.map, from, spread.radius).filter((p) => !sameHex(p, from) && (!spread.onMapOnly || !!tileAt(state.map, p)));
+      return blast(state.map, from, spread.radius).filter((p) => !sameHex(p, from));
     case "adjacent":
       return hexNeighbors(from, state.map.grid);
   }
@@ -593,9 +598,9 @@ export function abilityArea(state: ZoneState, unit: Unit, ability: string, at?: 
   if (tactic.fortify) return at && !sameHex(at, unit.pos) ? wallHexes(state, unit.pos, at) : [];
   if (tactic.splash) return at ? spreadOver(state, { shape: "cluster", size: tactic.splash.hexes, lean }, unit.pos, at) : [];
   if (tactic.cluster) return at ? spreadOver(state, { shape: "cluster", size: tactic.cluster, lean }, unit.pos, at) : [];
-  if (tactic.shape === "blast") return at ? spreadOver(state, { shape: "blast", radius: tactic.radius ?? 1, onMapOnly: true }, unit.pos, at) : [];
+  if (tactic.shape === "blast") return at ? spreadOver(state, { shape: "blast", radius: tactic.radius ?? 1 }, unit.pos, at) : [];
   // Round the user, their own hex left out: it is thrown at the enemy, and no enemy ever stands there.
-  if (tactic.shape === "burst") return spreadOver(state, { shape: "burst", radius: tactic.radius ?? 1, onMapOnly: true }, unit.pos, unit.pos);
+  if (tactic.shape === "burst") return spreadOver(state, { shape: "burst", radius: tactic.radius ?? 1 }, unit.pos, unit.pos);
   if (tactic.shape === "line") return at ? spreadOver(state, { shape: "line", length: tactic.length ?? 3 }, unit.pos, at) : [];
   if (tactic.shape === "adjacent") return spreadOver(state, { shape: "adjacent" }, unit.pos, unit.pos);
   if (tactic.shape === "arc") return at && !sameHex(at, unit.pos) ? spreadOver(state, { shape: "arc" }, unit.pos, at) : [];
@@ -677,7 +682,6 @@ export function dashWay(state: ZoneState, unit: Unit, from: HexPos, toward: HexP
  * one of any other shape.
  */
 export function spreadHexes(state: ZoneState, kit: EnemyAttackKit, from: HexPos, at: HexPos): HexPos[] | null {
-  // Both sides' blasts leave out the hexes with no ground: that decides where surfaces are laid.
   const shape = kit.spread;
   if (!shape) return null;
   // Aimed at its own hex, a swing, a cone or a line has nowhere to point.
@@ -1629,7 +1633,8 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
   // What it leaves on whoever it gets through to: `saveOr` unless they save (`save`: they may), and its lesser share
   // (`onSave`) if they do.
   const leave = (victim: Unit, save: boolean) => {
-    if (victim.down || !attack.saveOr) return;
+    // Nothing it leaves takes hold on one out of the fight (engine.ts takesHold), so they are asked for no save.
+    if (victim.down || !attack.saveOr || !inPlay(ctx, victim)) return;
     const effect = attack.saveOr.effect;
     if (!save || !saveRoll(ctx, victim, SAVE_STAT[effect], dc, `Resist ${attack.name}`).ok) {
       inflict(ctx, victim, attack.saveOr);

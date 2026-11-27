@@ -34,7 +34,7 @@ describe("a Broodmother", () => {
   it("carries Impaling Fang, Spin Web and Brood Swarm", () => {
     expect(ENEMIES.broodmother.abilities).toEqual(["impaling_fang", "spin_web", "brood_swarm"]);
     expect(ENEMY_ABILITIES.impaling_fang.saveOr).toEqual({ effect: "sundered", turns: 2 });
-    expect(strike("Spin Web")).toMatchObject({ range: 3, cooldown: 4, harmless: true, kit: { spread: { shape: "blast", radius: 2, onMapOnly: true }, surface: { kind: "web" } } });
+    expect(strike("Spin Web")).toMatchObject({ range: 3, cooldown: 4, harmless: true, kit: { spread: { shape: "blast", radius: 2 }, surface: { kind: "web" } } });
     expect(strike("Brood Swarm")).toMatchObject({ cost: 1, cooldown: 2, behaviour: "summon", kit: { summon: { kind: "spiderling", count: 2, most: 14, share: 1 } } });
   });
 

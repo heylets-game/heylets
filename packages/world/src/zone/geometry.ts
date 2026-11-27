@@ -196,7 +196,7 @@ export function hexesBetween(from: HexPos, to: HexPos): HexPos[] {
 // What `sees` answered for each pair of hexes, kept with the tiles it was reckoned from (as the two above are): the
 // same answer comes up again and again as an enemy weighs where to stand. Past this many it starts afresh.
 const sightMemo = new WeakMap<Tile[], Map<string, boolean>>();
-const SIGHT_MEMO_MAX = 250_000;
+const SIGHT_MEMO_MAX = 20_000;
 
 /**
  * Whether a line can be drawn from one hex to another without crossing rock or a wall, or ground that stands
@@ -703,12 +703,12 @@ export function blast(map: WorldMap, center: HexPos, radius: number): HexPos[] {
   return out;
 }
 
-/** The shapes an attack can land on several hexes in, by size: a hero's ability (Tactic) and an enemy's (EnemyAbilityDef) each name one. */
+/** The shapes an attack can land on several hexes in, by size: a hero's ability (Tactic) and an enemy's (EnemyAbilityDef) each name one. None covers a hex with no ground (combat.ts spreadOver). */
 export type Spread =
   /** A clump of this many hexes round the hex aimed at (weather.ts clusterHexes), turned by `lean` when the pointer says. */
   | { shape: "cluster"; size: number; lean?: Lean }
-  /** Every hex within `radius` of the hex aimed at. `onMapOnly` leaves out any with no ground. */
-  | { shape: "blast"; radius: number; onMapOnly?: boolean }
+  /** Every hex within `radius` of the hex aimed at. */
+  | { shape: "blast"; radius: number }
   /** `rows` arcs of three, swung from the user toward the hex aimed at (sweepHexes). */
   | { shape: "sweep"; rows: number }
   /** A cone `rows` rows long (coneHexes). */
@@ -717,8 +717,8 @@ export type Spread =
   | { shape: "line"; length: number }
   /** A swing's three hexes beside the user (arcHexes). */
   | { shape: "arc" }
-  /** Every hex within `radius` of the user, their own hex left out. `onMapOnly` leaves out any with no ground. */
-  | { shape: "burst"; radius: number; onMapOnly?: boolean }
+  /** Every hex within `radius` of the user, their own hex left out. */
+  | { shape: "burst"; radius: number }
   /** The hexes beside the user. */
   | { shape: "adjacent" };
 

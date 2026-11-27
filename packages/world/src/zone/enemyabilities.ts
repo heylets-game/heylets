@@ -251,7 +251,7 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   impaling_fang: { id: "impaling_fang", name: "Impaling Fang", damage: 11, potency: 5, saveOr: { effect: "sundered", turns: 2 }, weight: 2 },
   // Silk thrown over a wide patch of ground, hurting nobody: the web it leaves slows whoever is not a spider and speeds
   // whoever is (surfaces.ts).
-  spin_web: { id: "spin_web", name: "Spin Web", damage: 0, potency: 4, range: 3, spread: { shape: "blast", radius: 2, onMapOnly: true }, surface: { kind: "web", rounds: 4 }, cooldown: 4, weight: 2 },
+  spin_web: { id: "spin_web", name: "Spin Web", damage: 0, potency: 4, range: 3, spread: { shape: "blast", radius: 2 }, surface: { kind: "web", rounds: 4 }, cooldown: 4, weight: 2 },
   // Its young, called out of the nest to its side.
   brood_swarm: { id: "brood_swarm", name: "Brood Swarm", damage: 0, potency: 0, cost: 1, cooldown: 2, summon: { kind: "spiderling", count: 2, most: 14, share: 1 }, weight: 2 },
   spiderling_bite: { id: "spiderling_bite", name: "Bite", damage: 5, potency: 2, weight: 1 },

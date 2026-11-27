@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { hexDistance } from "@gantt-quest/core";
 import { at, flatBoard, must, standEnemy as enemy, standHero, unit } from "../test/zoneBoard";
 import { makeRng } from "../rng";
 import { enemyAct } from "./combat";
@@ -49,6 +50,33 @@ describe("who an enemy's area attack hits", () => {
     expect(inFight(ctx.state, "cal")).toBe(false);
   });
 
+  it("a hero outside the fight standing on the ground an Earthquake shakes takes it", () => {
+    let state = flatBoard({ rng: 12345, start: at(2, 6), options: { party: 2 }, flags: { shareTurns: true } });
+    state.aiOff = true;
+    sturdy(standHero(state, "ann", at(5, 6), hero));
+    sturdy(standHero(state, "cal", at(7, 7), hero));
+    const guardian = enemy(state, "guardian", at(6, 5), "g1", { hp: 900, maxHp: 900 }).id;
+    state = must(state, { type: "dev", by: "ann", dev: { op: "start_fight" } });
+    state.encounter!.order = state.encounter!.order.filter((id) => id !== "cal");
+    const ctx = ctxOf(state);
+    enemyAct(ctx, unit(ctx.state, guardian), abilityStrikes(["earthquake"], 3)[0], null);
+    expect(hurt(ctx.events, "cal").length).toBe(1);
+  });
+
+  it("asks no save of one outside the fight against what would not take hold on them", () => {
+    let state = flatBoard({ rng: 12345, start: at(2, 6), options: { party: 2 }, flags: { shareTurns: true } });
+    state.aiOff = true;
+    sturdy(standHero(state, "ann", at(4, 6), hero));
+    sturdy(standHero(state, "cal", at(6, 6), hero));
+    const skeleton = enemy(state, "skeleton", at(5, 6), "g1", { hp: 900, maxHp: 900 }).id;
+    state = must(state, { type: "dev", by: "ann", dev: { op: "start_fight" } });
+    state.encounter!.order = state.encounter!.order.filter((id) => id !== "cal");
+    const ctx = ctxOf(state);
+    enemyAct(ctx, unit(ctx.state, skeleton), abilityStrikes(["memento_mori"], 3)[0], null);
+    expect(ctx.events.some((e) => e.t === "roll" && e.roll.id === "ann")).toBe(true);
+    expect(ctx.events.some((e) => e.t === "roll" && e.roll.id === "cal")).toBe(false);
+  });
+
   it("a hero whose player is away is still spared", () => {
     let state = flatBoard({ rng: 12345, start: at(2, 6), options: { party: 2 }, flags: { shareTurns: true } });
     state.aiOff = true;
@@ -78,7 +106,7 @@ describe("what an enemy weighs when it picks an attack", () => {
       }
       const bob = at(9, 6);
       for (const e of events) {
-        if (e.t === "used" && e.id === archer && e.at) expect(Math.abs(e.at.q - bob.q) + Math.abs(e.at.r - bob.r), `seed ${seed}`).toBeGreaterThan(1);
+        if (e.t === "used" && e.id === archer && e.at) expect(hexDistance(e.at, bob), `seed ${seed}`).toBeGreaterThan(1);
         if (e.t === "used" && e.id === archer) expect(e.target, `seed ${seed}`).not.toBe("bob");
       }
     }

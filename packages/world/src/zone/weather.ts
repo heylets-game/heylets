@@ -173,13 +173,14 @@ export function quakeHexes(state: Pick<ZoneState, "map">, from: readonly HexPos[
 }
 
 /**
- * The ground shakes under every one of `by`'s foes on `hexes` who is in the fight and not flying: `dice` of damage,
+ * The ground shakes under every one of `by`'s foes on `hexes` who is not flying: `dice` of damage,
  * or half on an Agility save against `dc`, and `saveOr` on a failure.
  */
 function shake(ctx: Ctx, by: Unit, hexes: HexPos[], name: string, dice: Dice, dc: number, saveOr?: Inflict, ability?: string): void {
   const state = ctx.state;
   const rolled = rollShown(ctx.rng, dice);
-  for (const victim of state.units.filter((u) => u.side !== by.side && !u.down && !flies(u) && inFight(state, u.id) && hexes.some((p) => covers(u, p)))) {
+  // Whoever stands on it, in the fight or not, as any area attack hits (bar a hero whose player is away).
+  for (const victim of state.units.filter((u) => u.side !== by.side && !u.down && !u.away && !flies(u) && hexes.some((p) => covers(u, p)))) {
     const saved = saveRoll(ctx, victim, "agi", dc, name).ok;
     damage(ctx, victim, saved ? Math.floor(rolled.total / 2) : rolled.total, { actor: by.id, what: name, ability, dice: rolled, halved: saved });
     if (!saved && saveOr && !victim.down) inflict(ctx, victim, saveOr);
