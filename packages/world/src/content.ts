@@ -516,6 +516,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   frost_wolf: {
     kind: "frost_wolf", name: "Frost Wolf", hp: 14, defence: 12, move: 3, save: 0, init: 2, xp: 11,
     abilities: ["rime_bite", "frost_breath"],
+    groundImmune: ["ice"],
   },
   // The ashlands' hounds: what they bite catches fire, and now and then the fire in them pulses out all round. (Searing
   // Bite first: it is the one it strikes with at whoever steps away, combat.ts provoke.)

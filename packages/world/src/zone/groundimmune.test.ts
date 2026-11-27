@@ -8,7 +8,7 @@ import type { SurfaceKind, ZoneEvent, ZoneState } from "./types";
 
 // Some creatures are at home in their own ground: whatever it does to anyone else, it does nothing to them (EnemyDef
 // groundImmune). An Ember Hound walks through fire, a Giant Spider through poison and slime, and the frost's own
-// (a Rime Wraith, a Snow Bear) cross ice without a slip.
+// (a Rime Wraith, a Snow Bear, a Frost Wolf) cross ice without a slip.
 
 const hero = { classId: "qa_paladin", level: 1, armor: 0, power: 1, abilities: ["bash"], items: {} };
 const ctxOf = (state: ZoneState, seed = 1): Ctx => ({ state: structuredClone(state), rng: makeRng(seed), events: [] as ZoneEvent[], effects: [] });
@@ -28,6 +28,7 @@ const CASES: [string, SurfaceKind][] = [
   ["spider", "slime"],
   ["wraith", "ice"],
   ["snow_bear", "ice"],
+  ["frost_wolf", "ice"],
 ];
 
 describe("ground a creature is immune to", () => {
