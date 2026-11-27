@@ -86,6 +86,9 @@ export const AUDIO: AudioManifest = {
     "attack.frost_breath": { files: "sfx/combat/frost_breath_*", fallback: built("chill"), pitch: [-4, -3], reverb: -6 },
     // An Ember Hound's Ember Burst: fire catching all at once, low and wide.
     "attack.ember_burst": { files: "sfx/combat/ember_burst_*", fallback: built("ignite"), pitch: [-4, -2], reverb: -6 },
+    // A Rime Wraith's Frost Mote (a small, high cold breath) and its Icy Bomb (ice forming, deeper).
+    "attack.frost_mote": { files: "sfx/combat/frost_mote_*", fallback: built("chill"), pitch: [2, 3], reverb: -8 },
+    "attack.icy_bomb": { files: "sfx/combat/icy_bomb_*", fallback: built("ice"), pitch: [-3, -2], reverb: -6 },
     "attack.ghastly_fetter": { files: "sfx/combat/ghastly_fetter_*", fallback: built("chains"), pitch: [-1, 1], reverb: -6 },
     // A blow landing: a blunt thump by hand, unless it cuts or bites (blade abilities, below).
     impact: { files: "sfx/combat/hit_*", fallback: built("blunt"), pitch: [-2, 2], volume: [-2, 0], reverb: -8 },

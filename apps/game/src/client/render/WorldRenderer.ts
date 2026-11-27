@@ -78,6 +78,8 @@ const SPELL_COLOR: Record<string, string> = {
   "Lightning Strike": "#ffe98a",
   "Dark Bolt": "#b06cff",
   Immolate: "#ff6a3c",
+  "Frost Mote": "#bfeaff",
+  "Icy Bomb": "#bfeaff",
 };
 const ARROW_ABILITIES = new Set(["Shot", "Volley"]);
 /** Thrown things: a rock lobbed in an arc, tumbling, that bursts into dust where it lands. */
