@@ -127,7 +127,7 @@ export interface EnemyAbilityDef {
   /**
    * Fetters whoever fails to save against it (a Haunt's Ghastly Fetter): for `turns` of their turns they cannot go further
    * than `reach` hexes, by their own doing, from where they stood when it first took hold of them (geometry.ts
-   * fetterBars). Fettered again while it holds, the old spot holds and it lasts the longer.
+   * fetterBars). Fettered again while it holds, it is chained where it stands now, and it lasts the longer.
    */
   tether?: { reach: number; turns: number };
   /**

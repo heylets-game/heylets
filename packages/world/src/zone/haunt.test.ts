@@ -32,6 +32,10 @@ function setUp(hauntAt: HexPos, heroes: HexPos[]) {
 }
 
 const ctxOf = (state: ZoneState, seed: number): Ctx => ({ state: structuredClone(state), rng: makeRng(seed), events: [] as ZoneEvent[], effects: [] });
+const sameSpot = (u: { conditions: { kind: string; at?: HexPos }[] }, p: HexPos) => {
+  const spot = u.conditions.find((c) => c.kind === "fettered")?.at;
+  return !!spot && spot.q === p.q && spot.r === p.r;
+};
 const hits = (ctx: Ctx, id: string) => ctx.events.filter((e) => e.t === "hit" && e.target === id);
 
 describe("a Haunt's kit", () => {
@@ -171,19 +175,20 @@ describe("a Haunt's Ghastly Fetter", () => {
     expect(noWayThere(ctx.state, ann, at(12, 6))).toBe("You are chained to a spot: you cannot go more than a hex from it.");
   });
 
-  it("keeps them chained to the first spot when fettered again, and lets one put further off come back toward it", () => {
+  it("chains them where they stand now when fettered again, and lets one put further off come back toward it", () => {
     const { ctx, haunt } = fettered();
     const ann = unit(ctx.state, "ann");
     // Moved off (as a shove would), two hexes from the spot: they may only come nearer it.
     ann.pos = at(11, 6);
-    for (let seed = 1; seed <= 10; seed++) {
-      ctx.rng = makeRng(seed);
-      enemyAct(ctx, unit(ctx.state, haunt), fetter, ann);
-    }
-    expect(ann.conditions.find((c) => c.kind === "fettered")?.at).toEqual(at(9, 6));
     for (const r of zoneReach(ctx.state, ann, 20).values()) {
       const far = hexDistance(r.pos, at(9, 6));
       expect(far <= 1 || (r.pos.q === ann.pos.q && r.pos.r === ann.pos.r), posKey(r.pos)).toBe(true);
     }
+    // Fettered again there: the spot moves to where they are.
+    for (let seed = 1; seed <= 40 && sameSpot(ann, at(9, 6)); seed++) {
+      ctx.rng = makeRng(seed);
+      enemyAct(ctx, unit(ctx.state, haunt), fetter, ann);
+    }
+    expect(ann.conditions.find((c) => c.kind === "fettered")?.at).toEqual(at(11, 6));
   });
 });
