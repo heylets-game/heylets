@@ -27,7 +27,7 @@ export type Side = "hero" | "enemy";
  * and the Warden's: Taunted, on an enemy (it attacks no one but the Warden who taunted it);
  * and the Warlock's (drowning.ts), all on an enemy: Drowning (stacks, `amount`), the Curse of Drowning, the Black Spot and Red Sky at Morning.
  */
-export type Condition = EffectKind | "poisoned" | "wet" | "beacon" | "mending" | "bolstered" | "invisible" | "contraband" | "regenerating" | "rejuvenating" | "rallied" | "coral_armor" | ShantyKind | "inspired" | "guiding_light" | "north_star" | "charted" | "taunted" | "drowning" | "drowning_curse" | "black_spot" | "red_sky" | "tailwind" | "lucky" | "frenzied" | "slowing_field";
+export type Condition = EffectKind | "poisoned" | "wet" | "beacon" | "mending" | "bolstered" | "invisible" | "contraband" | "regenerating" | "rejuvenating" | "rallied" | "coral_armor" | ShantyKind | "inspired" | "guiding_light" | "north_star" | "charted" | "taunted" | "drowning" | "drowning_curse" | "black_spot" | "red_sky" | "tailwind" | "lucky" | "frenzied" | "slowing_field" | "fettered";
 
 /** The shanties a Bard sings (song.ts): a condition on the Bard, reaching everyone of theirs nearby. */
 export type ShantyKind = "lively_shanty" | "dour_shanty" | "windgod_shanty";
@@ -38,11 +38,11 @@ export interface UnitCondition {
   rounds: number;
   /** Put on during the bearer's own turn: the end of that turn does not count against it. */
   fresh?: boolean;
-  /** Bolstered: the points of shield left, spent before HP. Bleeding, Burning: its stacks (none said is one), each hurting for the full tick. Drowning: its stacks. Tailwind: the movement it adds. Slowing Field: how many hexes it reaches. */
+  /** Bolstered: the points of shield left, spent before HP. Bleeding, Burning: its stacks (none said is one), each hurting for the full tick. Drowning: its stacks. Tailwind: the movement it adds. Slowing Field: how many hexes it reaches. Fettered: how far from its spot it may go. */
   amount?: number;
   /** Burning: each stack's own count of turns (`rounds` is the longest of them, `amount` how many there are). */
   stacks?: { rounds: number; fresh?: boolean }[];
-  /** A course charted (Chart a Course): the hex marked. */
+  /** A course charted (Chart a Course): the hex marked. Fettered: the hex it is chained to. */
   at?: HexPos;
   /** A shanty: the allies who have joined it (each once), each widening it a hex. */
   joined?: string[];

@@ -361,6 +361,24 @@ function footingFor(state: ZoneState, unit: Unit): Footing {
   return { held, blocked, tiles: tilesByKey(state.map), air: flies(unit) };
 }
 
+/** Where a Fettered unit is chained (a Haunt's Ghastly Fetter): the hex, and how far from it it may go by its own doing. Null: it is free. */
+export function fetterOf(unit: Unit): { at: HexPos; reach: number } | null {
+  const c = unit.conditions.find((x) => x.kind === "fettered");
+  return c?.at ? { at: c.at, reach: c.amount ?? 1 } : null;
+}
+
+/**
+ * Whether a Fettered unit is held back from going from `from` to `to` by its own doing (a step, a jump, a blink): it
+ * may go anywhere within its chain's reach of its spot, and, if something has put it further off, only nearer the spot.
+ * What is done to it (a shove, a pull) it cannot stop.
+ */
+export function fetterBars(unit: Unit, from: HexPos, to: HexPos): boolean {
+  const fetter = fetterOf(unit);
+  if (!fetter) return false;
+  const far = hexDistance(to, fetter.at);
+  return far > fetter.reach && far >= hexDistance(from, fetter.at);
+}
+
 /**
  * What one step costs `unit`, or Infinity if it cannot be made. Open ground is 1; forest and hills 2;
  * climbing a level 1 more; oil or slime underfoot 1 more (not for one in cleats or Cloudstep Boots; forest and hills are
@@ -370,7 +388,7 @@ function footingFor(state: ZoneState, unit: Unit): Footing {
  * their place; a dead enemy takes up no room and bars nobody), cannot be stepped onto, so it is neither stopped on
  * nor passed through. A unit's own side does not: up to `HEX_ROOM` of them stand on one hex, and a full one can
  * still be walked through, though not stopped on. What flies is barred the same way. Chests, crates and whatever
- * else stands in the way bar it too.
+ * else stands in the way bar it too. One Fettered goes no further from its spot than its chain lets it (fetterBars).
  *
  * A flood hands in what it worked out beforehand (`footing`; `fromElev`, how high `from` stands; and `toKey`, the
  * key of `to`): the answer is the same with them as without, only sooner.
@@ -379,6 +397,7 @@ function footingFor(state: ZoneState, unit: Unit): Footing {
  * step, and it costs what the dearest of them does.
  */
 export function stepCost(state: ZoneState, unit: Unit, from: HexPos, to: HexPos, shut?: ReadonlySet<string>, footing?: Footing, fromElev?: number, toKey: string = posKey(to)): { cost: number; stop: boolean } {
+  if (fetterBars(unit, from, to)) return { cost: Infinity, stop: false };
   if (!big(unit)) return hexStep(state, unit, from, to, shut, footing, fromElev, toKey);
   let cost = 0;
   let stop = true;

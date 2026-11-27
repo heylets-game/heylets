@@ -6,6 +6,7 @@
 // figure lab (FigureLab.tsx), where each one has a button of its own. A new one added here shows in both.
 
 import * as THREE from "three";
+import { ENEMY_ABILITIES } from "@gantt-quest/world";
 import { ENGULF, FLURRY_BLOWS, SLICES_APART, type Figure } from "./figures";
 import type { FxKind } from "./sprites";
 import { CRACK_DARK, CRACK_EDGE, crackGeometry, crackPaths, type CrackOpts } from "./cracks";
@@ -2041,6 +2042,360 @@ function webThrown(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Mov
   }, wait);
 }
 
+/** A Haunt's ice: pale blue, the near white at its heart, and the deeper blue in its shadows. */
+const ICE = "#bfeaff";
+const ICE_CORE = "#f2fbff";
+const ICE_DEEP = "#4f8fc4";
+/** A Haunt's dread (its Terror Aura, SpellFx.dread): a cold violet, and the near black under it. */
+export const DREAD = { color: "#7b5cc4", deep: "#1a1024" };
+/** A Ghastly Fetter's grave-iron, and the pale violet glow on it (SpellFx.fetter, while it holds). */
+export const FETTER = { iron: "#4a4658", glow: "#b8a8ff" };
+
+/** Where a figure's feet are, and the way along the ground from them toward `at` (straight ahead, if `at` is right on them). */
+function aheadOf(figure: Figure, at: THREE.Vector3): { feet: THREE.Vector3; ahead: THREE.Vector3 } {
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const ahead = new THREE.Vector3(at.x - feet.x, 0, at.z - feet.z);
+  if (ahead.lengthSq() < 1e-6) ahead.set(1, 0, 0);
+  return { feet, ahead: ahead.normalize() };
+}
+
+/** A see-through, faintly glowing material for what a ghost makes of cold (its hand, its spear). */
+const iceMaterial = (color: string, opacity: number) => new THREE.MeshLambertMaterial({ color, emissive: ICE_DEEP, emissiveIntensity: 0.55, transparent: true, opacity, depthWrite: false });
+
+/**
+ * A ghost's hand of ice, palm down and fingers forward along its own +z: a flattened palm, four long fingers and a
+ * thumb, each finger on a knuckle that `curl` bends down (0 open and spread, 1 a fist). Its pieces are its own, to
+ * dispose of with it.
+ */
+function iceHand(): { hand: THREE.Group; curl(k: number): void; fade(o: number): void; dispose(): void } {
+  const hand = new THREE.Group();
+  const skin = iceMaterial(ICE, 0.85);
+  const shapes: THREE.BufferGeometry[] = [];
+  const piece = (g: THREE.BufferGeometry) => (shapes.push(g), new THREE.Mesh(g, skin));
+  const palm = piece(new THREE.SphereGeometry(1, 12, 8));
+  palm.scale.set(0.42, 0.13, 0.48);
+  hand.add(palm);
+  const knuckles = [-0.27, -0.09, 0.09, 0.27].map((x, i) => {
+    const knuckle = new THREE.Group();
+    knuckle.position.set(x, 0, 0.36);
+    // The middle two longest, as a hand's are, the four fanned a little apart.
+    const long = i === 1 || i === 2 ? 0.5 : 0.4;
+    const finger = piece(new THREE.CapsuleGeometry(0.07, long, 3, 6).rotateX(Math.PI / 2));
+    finger.position.z = long / 2 + 0.05;
+    knuckle.add(finger);
+    knuckle.rotation.y = x * 0.5;
+    hand.add(knuckle);
+    return knuckle;
+  });
+  const thumb = new THREE.Group();
+  thumb.position.set(0.36, 0, 0.05);
+  const digit = piece(new THREE.CapsuleGeometry(0.075, 0.32, 3, 6).rotateX(Math.PI / 2));
+  digit.position.z = 0.2;
+  thumb.add(digit);
+  hand.add(thumb);
+  return {
+    hand,
+    curl(k) {
+      for (const knuckle of knuckles) knuckle.rotation.x = 0.15 + k * 1.9;
+      thumb.rotation.set(0.2 + k * 0.6, 0.9 - k * 1.3, 0);
+    },
+    fade(o) {
+      skin.opacity = 0.85 * o;
+    },
+    dispose() {
+      for (const g of shapes) g.dispose();
+      skin.dispose();
+    },
+  };
+}
+
+/**
+ * A Grave Grasp: how far its hand reaches (to the far row of its cone, EnemyAbilityDef `cone`), and the seconds the hand
+ * takes to reach out, to close on what it caught, and to drag it back.
+ */
+export const GRAVE_GRASP = { reach: HEX * ((ENEMY_ABILITIES.grave_grasp?.cone ?? 3) - 0.1), out: 0.28, close: 0.14, back: 0.55 };
+
+/**
+ * A Haunt's Grave Grasp: it draws up and back, then surges in with its arms stretched long (figures.ts GRASP), and a
+ * great hand of ice reaches out of it low over the ground, opening as it goes. At the far row it slams down, fingers spread: a cold flash, a ring of frost, frost sparks thrown up,
+ * and everyone caught is told (and flinches). Then the fingers close into a fist and it drags back to the Haunt over
+ * the ground, frost and cold wisps pulled along behind it, shrinking and fading as it goes back into it.
+ */
+function graveGrasp(stage: MoveStage, { figure, hitAt, crit, onImpact }: MoveCtx) {
+  const { reach, out, close, back } = GRAVE_GRASP;
+  const wait = Math.max(0, figure.strike("grasp"));
+  if (wait <= 0) stage.lunge();
+  const { feet, ahead } = aheadOf(figure, hitAt);
+  const groundAt = (d: number) => feet.clone().addScaledVector(ahead, d).setY(feet.y + (hitAt.y - 0.45 - feet.y) * Math.min(1, d / reach));
+  const near = groundAt(0.7).setY(feet.y + 0.95);
+  const far = groundAt(reach);
+  const cold = crit ? GOLD : ICE;
+  stage.later(() => {
+    // The hand: out to the far row, a moment to close, and back.
+    stage.lay((group) => {
+      const { hand, curl, fade, dispose } = iceHand();
+      group.add(hand);
+      const at = new THREE.Vector3();
+      let age = 0;
+      let trail = 0;
+      return (dt) => {
+        age += dt;
+        let size: number;
+        if (age < out) {
+          const k = age / out;
+          const e = 1 - (1 - k) * (1 - k);
+          at.lerpVectors(near, far.clone().setY(far.y + 0.35), e);
+          size = 0.6 + 1.1 * e;
+          curl(0.05);
+          fade(Math.min(1, k * 3));
+        } else if (age < out + close) {
+          const k = (age - out) / close;
+          at.copy(far).setY(far.y + 0.35 - 0.12 * Math.sin(Math.PI * k));
+          size = 1.7;
+          curl(k);
+          fade(1);
+        } else {
+          const k = Math.min(1, (age - out - close) / back);
+          const e = k * k * (3 - 2 * k);
+          at.lerpVectors(far.clone().setY(far.y + 0.3), near, e);
+          size = 1.7 - 1.2 * e;
+          curl(1);
+          fade(k < 0.7 ? 1 : (1 - k) / 0.3);
+          // What it caught, dragged along behind it: frost off the ground and cold wisps pulled after it.
+          if (age >= trail) {
+            trail = age + 0.03;
+            const from = at.clone().setY(far.y + 0.1).addScaledVector(ahead, 0.3 + Math.random() * 0.4);
+            stage.spawnFx("mote", Math.random() < 0.5 ? ICE_CORE : cold, ahead.x < 0, { from, to: at.clone().setY(at.y + 0.1), life: 0.3, size: [0.4, 0.15], spin: 0, fade: true });
+            if (Math.random() < 0.5) stage.spawnFx("dust", "#dfefff", Math.random() < 0.5, { from, to: offset(from, 0, 0.3, 0), life: 0.4, size: [0.4, 0.8], spin: 0, fade: true });
+          }
+        }
+        hand.position.copy(at);
+        hand.scale.setScalar(size);
+        hand.lookAt(at.clone().add(ahead));
+        if (age < out + close + back) return true;
+        group.remove(hand);
+        dispose();
+        return false;
+      };
+    });
+    // Cold wisps streaming off the hand as it reaches out.
+    for (let s = 0; s < out; s += 0.03) {
+      stage.later(() => {
+        const at = near.clone().lerp(far, s / out).setY(near.y + (far.y + 0.35 - near.y) * (s / out));
+        stage.spawnFx("mote", Math.random() < 0.5 ? ICE_CORE : cold, ahead.x < 0, { from: at, to: at.clone().addScaledVector(ahead, -0.6).setY(at.y + 0.2), life: 0.3, size: [0.35, 0.12], spin: 0, fade: true });
+      }, s);
+    }
+    // The slam at the far row: a cold flash, a ring of frost, frost sparks thrown up, and everyone caught told.
+    stage.later(() => {
+      const flash = far.clone().setY(far.y + 0.4);
+      stage.spawnFx("burst", crit ? GOLD : ICE_CORE, false, { from: flash, to: flash, life: 0.24, size: [1, 2.8], spin: 0.4, fade: true });
+      stage.later(() => stage.spawnFx("burst", crit ? GOLD : ICE_DEEP, true, { from: flash, to: flash, life: 0.4, size: [1.1, 3], spin: -0.4, fade: true }), 0.05);
+      stage.wave({ at: far.clone().setY(far.y + 0.06), radius: HEX * 1.3, life: 0.5, color: cold, width: 0.14 });
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2 + Math.random() * 0.4;
+        const to = offset(flash, Math.cos(a) * (0.5 + Math.random() * 0.5), 0.3 + Math.random() * 0.5, Math.sin(a) * 0.4);
+        stage.spawnFx("spark", i % 2 ? ICE_CORE : cold, Math.cos(a) < 0, { from: flash, to, life: 0.5 + Math.random() * 0.25, size: [0.4, 0.15], spin: 2, fade: true });
+      }
+      stage.jolt();
+      onImpact();
+    }, out);
+  }, wait);
+}
+
+/**
+ * An Ice Spear: how far it flies (to the end of its line, EnemyAbilityDef `line`), how long it is, how high over its
+ * user's head it forms, and the seconds it takes to fly.
+ */
+export const ICE_SPEAR = { reach: HEX * (ENEMY_ABILITIES.ice_spear?.line ?? 5), length: 2, over: 0.6, fly: 0.3 };
+
+/**
+ * A Haunt's Ice Spear: it rises and leans back with its arms raised high and drawn together (figures.ts HURL), and a
+ * long, solid spear of ice (a faceted shaft, pointed at both ends) grows between its hands over its head, turning slowly, as cold motes are drawn in to it. Then it
+ * flings it: the spear shoots off straight and low down the whole line, a pale streak and frost motes trailing behind
+ * it and a line of frost laid along the ground under it, and everyone on the line is told (and flinches) as it passes
+ * the middle. At the end it shatters: a cold flash, shards and frost thrown every way, and a ring of frost.
+ */
+function iceSpear(stage: MoveStage, { figure, hitAt, crit, onImpact }: MoveCtx) {
+  const { reach, length, over, fly } = ICE_SPEAR;
+  const wait = Math.max(0, figure.strike("hurl"));
+  if (wait <= 0) stage.lunge();
+  const { feet, ahead } = aheadOf(figure, hitAt);
+  const cold = crit ? GOLD : ICE;
+  const above = () => upFigure(figure, 1).setY(upFigure(figure, 1).y + over);
+  const end = feet.clone().addScaledVector(ahead, reach).setY(hitAt.y - 0.45 + 0.6);
+  // Cold motes drawn in to it as it forms.
+  for (let s = 0; s < wait; s += 0.04) {
+    stage.later(() => {
+      const at = above();
+      const a = Math.random() * Math.PI * 2;
+      const from = offset(at, Math.cos(a) * 1.1, (Math.random() - 0.5) * 0.8, Math.sin(a) * 1.1);
+      stage.spawnFx("mote", Math.random() < 0.5 ? ICE_CORE : cold, Math.cos(a) < 0, { from, to: at, life: 0.3, size: [0.35, 0.12], spin: 0, fade: true });
+    }, s);
+  }
+  stage.lay((group) => {
+    // A solid icicle, point first along its own +z: a long six-sided shaft of ice and a short point at its back end, cut
+    // flat so its facets catch the light.
+    const shapes = [
+      new THREE.ConeGeometry(0.27, length, 6).rotateX(Math.PI / 2),
+      new THREE.ConeGeometry(0.27, 0.45, 6).rotateX(-Math.PI / 2).translate(0, 0, -length / 2 - 0.22),
+    ];
+    const outer = new THREE.MeshLambertMaterial({ color: cold, emissive: ICE_DEEP, emissiveIntensity: 0.35, flatShading: true });
+    const spear = new THREE.Group();
+    spear.add(new THREE.Mesh(shapes[0], outer), new THREE.Mesh(shapes[1], outer));
+    group.add(spear);
+    // The frost laid along the ground under it, from where it set off to where it is.
+    const frost = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: cold, transparent: true, opacity: 0, depthWrite: false }));
+    frost.renderOrder = 7;
+    group.add(frost);
+    const frostMaterial = frost.material as THREE.MeshBasicMaterial;
+    let from: THREE.Vector3 | null = null;
+    let age = 0;
+    let trail = 0;
+    return (dt) => {
+      age += dt;
+      if (age < wait) {
+        // Forming over its head: growing, and turning slowly, its point ahead.
+        const k = age / wait;
+        const at = above();
+        spear.position.copy(at);
+        spear.scale.setScalar(Math.max(0.05, k));
+        spear.lookAt(at.clone().add(ahead).setY(at.y + 0.15));
+        spear.rotateZ(age * 4);
+      } else if (age < wait + fly) {
+        from ??= above();
+        const k = (age - wait) / fly;
+        const at = from.clone().lerp(end, k);
+        spear.position.copy(at);
+        spear.scale.setScalar(1);
+        spear.lookAt(end.clone().addScaledVector(ahead, 0.5));
+        const ground = feet.clone().lerp(end, k).setY(feet.y + (end.y - 0.6 - feet.y) * k + 0.05);
+        const start = feet.clone().addScaledVector(ahead, 0.5).setY(feet.y + 0.05);
+        frost.position.lerpVectors(start, ground, 0.5);
+        frost.scale.set(0.45, 1, Math.max(0.01, start.distanceTo(ground)));
+        frost.lookAt(ground.x, frost.position.y, ground.z);
+        frostMaterial.opacity = 0.45;
+        if (age >= trail) {
+          trail = age + 0.04;
+          // Behind it, not over it: the spear itself stays in plain sight.
+          const tail = at.clone().addScaledVector(ahead, -length * 0.75);
+          stage.spawnFx("streak", cold, ahead.x < 0, { from: tail, to: tail.clone().addScaledVector(ahead, -0.8), life: 0.16, size: [1, 0.4], spin: 0, fade: true });
+          stage.spawnFx("mote", ICE_CORE, ahead.x < 0, { from: tail, to: offset(tail, 0, -0.5, 0), life: 0.45, size: [0.3, 0.1], spin: 0, fade: true });
+        }
+      } else {
+        spear.visible = false;
+        frostMaterial.opacity = 0.45 * Math.max(0, 1 - (age - wait - fly) / 0.8);
+      }
+      if (age < wait + fly + 0.8) return true;
+      group.remove(spear, frost);
+      for (const g of shapes) g.dispose();
+      frost.geometry.dispose();
+      outer.dispose();
+      frostMaterial.dispose();
+      return false;
+    };
+  });
+  // Everyone on the line told as it passes the middle of it.
+  stage.later(() => {
+    stage.jolt();
+    onImpact();
+  }, wait + fly * 0.5);
+  // Shattered at the end of the line.
+  stage.later(() => {
+    stage.spawnFx("burst", crit ? GOLD : ICE_CORE, false, { from: end, to: end, life: 0.22, size: [0.9, 2.6], spin: 0.5, fade: true });
+    stage.wave({ at: end.clone().setY(end.y - 0.55), radius: HEX * 0.9, life: 0.45, color: cold, width: 0.14 });
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2 + Math.random() * 0.3;
+      const to = offset(end, Math.cos(a) * (0.5 + Math.random() * 0.6), Math.sin(a) * 0.5 + 0.1, (Math.random() - 0.5) * 0.4);
+      stage.spawnFx(i % 3 ? "spark" : "fleck", i % 2 ? ICE_CORE : cold, Math.cos(a) < 0, { from: end, to, life: 0.4 + Math.random() * 0.25, size: [0.4, 0.2], spin: 3, fade: true, arc: i % 3 ? 0 : 0.3 });
+    }
+  }, wait + fly);
+}
+
+/** A Ghastly Fetter: the seconds its chain takes to fly, the stake to come down, and the thrown chain to fade after. */
+export const GHASTLY_FETTER = { fly: 0.28, drop: 0.12, fade: 0.45, links: 14 };
+
+/**
+ * A Haunt's Ghastly Fetter: it rises with its arms raised overhead (figures.ts HURL) as pale violet motes gather to its
+ * hands, then flings a chain of grave-iron at the target, link after link paying out through the air. Where it lands
+ * a stake of iron comes down into the ground at their feet with a violet flash and a ring, the chain wraps round them
+ * in a tightening loop, and the blow is told (and they jolt). The thrown chain then fades, from the Haunt's end; what
+ * holds them after, while they are Fettered, is drawn for as long as it lasts (SpellFx.fetter).
+ */
+function ghastlyFetter(stage: MoveStage, { figure, hitAt, crit, onImpact }: MoveCtx) {
+  const { fly, drop, fade, links: count } = GHASTLY_FETTER;
+  const wait = Math.max(0, figure.strike("hurl"));
+  if (wait <= 0) stage.lunge();
+  const glow = crit ? GOLD : FETTER.glow;
+  const hands = () => upFigure(figure, 0.95);
+  const ground = hitAt.clone().setY(hitAt.y - 0.45);
+  for (let s = 0; s < wait; s += 0.05) {
+    stage.later(() => {
+      const at = hands();
+      const a = Math.random() * Math.PI * 2;
+      stage.spawnFx("mote", glow, Math.cos(a) < 0, { from: offset(at, Math.cos(a) * 0.9, -0.3, Math.sin(a) * 0.9), to: at, life: 0.3, size: [0.35, 0.12], spin: 0, fade: true });
+    }, s);
+  }
+  stage.lay((group) => {
+    const iron = new THREE.MeshLambertMaterial({ color: FETTER.iron, emissive: crit ? GOLD : FETTER.glow, emissiveIntensity: 0.25, transparent: true, opacity: 1 });
+    const shapes = [new THREE.TorusGeometry(0.09, 0.026, 5, 10), new THREE.ConeGeometry(0.12, 0.8, 6), new THREE.TorusGeometry(0.5, 0.04, 6, 20)];
+    const links = Array.from({ length: count }, () => new THREE.Mesh(shapes[0], iron));
+    const stake = new THREE.Mesh(shapes[1], iron);
+    stake.rotation.x = Math.PI;
+    const loop = new THREE.Mesh(shapes[2], iron);
+    loop.rotation.x = Math.PI / 2;
+    for (const m of [...links, stake, loop]) {
+      m.visible = false;
+      group.add(m);
+    }
+    let from: THREE.Vector3 | null = null;
+    let age = 0;
+    return (dt) => {
+      age += dt;
+      if (age >= wait) {
+        from ??= hands();
+        const k = Math.min(1, (age - wait) / fly);
+        // Paid out to where its end has got to, in a shallow arc.
+        const tip = from.clone().lerp(hitAt, k);
+        const way = tip.clone().sub(from);
+        const gone = Math.max(0, (age - wait - fly - drop) / fade);
+        links.forEach((m, i) => {
+          const t = (i + 0.5) / count;
+          m.position.copy(from!).addScaledVector(way, t);
+          m.position.y += 0.4 * k * 4 * t * (1 - t);
+          m.lookAt(m.position.clone().add(way));
+          m.rotateY(Math.PI / 2);
+          if (i % 2) m.rotateX(Math.PI / 2);
+          // Faded from the Haunt's end, once it has landed.
+          m.visible = t <= gone ? false : true;
+        });
+        if (k >= 1) {
+          // The stake coming down at their feet, and the loop round them pulled tight.
+          const d = Math.min(1, (age - wait - fly) / drop);
+          stake.visible = true;
+          stake.position.copy(ground).setY(ground.y + 0.25 + 1.2 * (1 - d * d));
+          loop.visible = gone < 1;
+          loop.position.copy(hitAt).setY(hitAt.y - 0.1);
+          loop.scale.setScalar(Math.max(0.6, 1.6 - 1 * Math.min(1, (age - wait - fly) / 0.18)));
+          iron.opacity = Math.max(0, 1 - Math.max(0, gone - 0.6) / 0.4);
+        }
+      }
+      if (age < wait + fly + drop + fade) return true;
+      for (const m of [...links, stake, loop]) group.remove(m);
+      for (const g of shapes) g.dispose();
+      iron.dispose();
+      return false;
+    };
+  });
+  stage.later(() => {
+    stage.spawnFx("burst", glow, false, { from: ground.clone().setY(ground.y + 0.3), to: ground.clone().setY(ground.y + 0.3), life: 0.26, size: [0.9, 2.4], spin: 0.5, fade: true });
+    stage.wave({ at: ground.clone().setY(ground.y + 0.06), radius: HEX * 0.8, life: 0.45, color: glow, width: 0.12 });
+    for (const side of [-1, 1]) stage.spawnFx("dust", DUST, side > 0, { from: ground, to: offset(ground, side * 0.5, 0.3, 0), life: 0.4, size: [0.5, 1], spin: 0, fade: true });
+    stage.jolt();
+    stage.later(() => stage.jolt(), 0.07);
+    onImpact();
+  }, wait + fly + drop);
+}
+
 /** A Brood Swarm: seconds it heaves before they come, how far they scatter, how many run out, and the dark of them. */
 export const BROOD_SWARM = { heave: 0.55, scatter: 2.2, young: 14, black: "#141416", eye: "#c8463a" };
 
@@ -2093,6 +2448,9 @@ function broodSwarm(stage: MoveStage, { figure, crit, onImpact }: MoveCtx) {
 }
 
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
+  "Grave Grasp": { who: "haunt", blurb: "Draws up and back and surges in with its arms out, and a great hand of ice reaches out low over the ground: it slams down on the far row with a cold flash and a ring of frost, closes into a fist and drags back to the Haunt over the ground, frost and wisps pulled along behind it.", play: graveGrasp },
+  "Ice Spear": { who: "haunt", blurb: "Rises with its arms raised high and a spear of ice grows over its head, cold motes drawn in to it; then it flings it straight and low down the whole line, a pale streak and frost trailing it and frost laid on the ground under it, and it shatters at the end in a cold flash and a spray of shards.", play: iceSpear },
+  "Ghastly Fetter": { who: "haunt", blurb: "Rises with its arms raised overhead as violet motes gather to its hands, then flings a chain of grave-iron at the target, link after link: a stake comes down into the ground at their feet with a violet flash and a ring, a loop of chain pulls tight round them, and the thrown chain fades from the Haunt's end.", play: ghastlyFetter },
   "Venomous Bite": { who: "spider", blurb: "Rears up, front legs thrown up wide and fangs spread, venom dripping off them, then plunges and drives its fangs in: two pale fang streaks stab down, a green flash, venom splashes out either side, green bubbles rise off the target and drops run down to a green ring at their feet.", play: venomousBite },
   "Web Spit@spider": { who: "spider", blurb: "Sinks on braced legs and arches its abdomen up over its back, then throws a spinning ball of silk in a high arc, a thread trailing behind it: it bursts where it lands into a web thrown out flat over the hexes, a pale ring rolling out under it, threads flung out round the edge and wisps of silk drifting down.", play: throwWeb(WEB_SPIT) },
   "Spin Web": { who: "broodmother", blurb: "Sinks on braced legs and arches its great abdomen up over its back, then throws a ball of silk high over the fight: it bursts where it lands into a web thrown out flat and wide over every hex round it, a pale ring rolling out under it, threads flung out all round the edge and wisps of silk drifting down.", play: throwWeb(SPIN_WEB) },

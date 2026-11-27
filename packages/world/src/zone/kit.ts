@@ -533,6 +533,7 @@ export const SAVE_STAT: Record<Condition, StatKey> = {
   lucky: "dex",
   frenzied: "int_stat",
   slowing_field: "vit",
+  fettered: "str",
 };
 
 const info = (kind: EffectKind, blurb: string) => ({ name: EFFECT_INFO[kind].name, color: EFFECT_INFO[kind].color, blurb });
@@ -553,7 +554,8 @@ export const CONDITION_INFO: Record<Condition, { name: string; blurb: string; co
   prone: info("prone", "Flat on the ground: getting up takes 1 AP of its next turn, and it cannot strike at anyone passing it until then. Melee attacks against it have advantage, ranged attacks disadvantage."),
   sundered: info("sundered", `Its armor is dented: ${SUNDERED_DEFENCE} less Defence.`),
   memento_mori: info("memento_mori", "Each time it takes damage it starts Fumbling, unless it is Fumbling already."),
-  reeling: info("reeling", `Shaken by a heavy blow: as much less AP on its next turn as its number says (${REELING_AP} unless said).`),
+  reeling: info("reeling", `Shaken by a heavy blow: as much less AP on each of its turns while it lasts as its number says (${REELING_AP} unless said).`),
+  fettered: { name: "Fettered", blurb: "Chained to a spot: it cannot go more than a hex from it by its own doing.", color: "#8fa8c8" },
   wet: { name: "Wet", blurb: "Soaked through: lightning hits it harder, and it cannot catch fire.", color: "#7dd3fc" },
   beacon: { name: "Beacon", blurb: `Gives light, and it and allies within 2 hexes get +${AURAS.beaconHit} to hit.`, color: "#fff7d6" },
   mending: { name: "Healing Aura", blurb: "At the start of each of its turns, it and every ally within 2 hexes heal a little.", color: "#5dffa0" },
@@ -605,7 +607,8 @@ const CONDITION_DETAIL: Partial<Record<Condition, (c: UnitCondition, by?: string
     const left = n === 1 ? `It burns out in ${plural(turns[0], "turn")}` : `Each stack burns out on its own: in ${turns.join(", ")} turns`;
     return `Loses ${EFFECT_TICK.burning * n} HP at the start of each of its turns (${EFFECT_TICK.burning} for each of its ${plural(n, "stack")}). ${left}. Water puts it all out.`;
   },
-  reeling: (c) => `Shaken by a heavy blow: ${c.amount ?? REELING_AP} AP less to spend on its next turn.`,
+  reeling: (c) => `Shaken by a heavy blow: ${c.amount ?? REELING_AP} AP less to spend on ${c.rounds > 1 ? `each of its next ${c.rounds} turns` : "its next turn"}.`,
+  fettered: (c) => `Chained to a spot: it cannot go more than ${plural(c.amount ?? 1, "hex", "hexes")} from it by its own doing, for ${plural(c.rounds, "more turn")}.`,
   fumbling: (c) => `${nextOf(c.amount ?? c.rounds, "roll to hit is", "rolls to hit is")} made with disadvantage. Gone when the fight ends.`.replace(/^./, (x) => x.toUpperCase()),
   inspired: (c) => `${nextOf(c.amount ?? c.rounds, "roll to hit has", "rolls to hit has")} advantage. Gone when the fight ends.`.replace(/^./, (x) => x.toUpperCase()),
   lucky: (c) => `A coin in the town well: ${nextOf(c.amount ?? c.rounds, "roll to hit has", "rolls to hit, one for each coin, has")} advantage.`,
@@ -745,7 +748,7 @@ export function commonCostFor(unit: Pick<Unit, "kind" | "perks">, what: CommonAc
 // ---------- enemies ----------
 
 /** What an enemy's ability does besides its damage, when it lands. */
-export type EnemyAttackKit = Pick<EnemyAbilityDef, "surface" | "push" | "chills" | "splash" | "drain" | "area" | "blast" | "sweep" | "dash" | "onSave" | "rally" | "field" | "summon"> & {
+export type EnemyAttackKit = Pick<EnemyAbilityDef, "surface" | "push" | "chills" | "splash" | "drain" | "area" | "blast" | "sweep" | "cone" | "line" | "dash" | "onSave" | "rally" | "field" | "summon" | "tether" | "saves"> & {
   /** Its second shaking (EnemyAbilityDef `aftershock`), its damage grown with level as the first's is. */
   aftershock?: { dice: Dice; saveOr?: Inflict };
 };
@@ -857,13 +860,13 @@ export const ENEMY_EDGE = 0;
 /**
  * Enemy abilities (by id) as they work on the tiles, for an enemy of this level. `more` is what
  * the map's modifiers add to every attack's damage and its potency (zone/mods.ts). An id the pool does not
- * have is passed over.
+ * have is passed over, and so is a passive one (an `aura`): it is never used, only had (engine.ts saveRoll).
  */
 export function abilityStrikes(ids: readonly string[], level: number, more = 0): EnemyStrike[] {
   const edge = ENEMY_EDGE + more;
   return ids.flatMap((id) => {
     const a = ENEMY_ABILITIES[id];
-    if (!a) return [];
+    if (!a || a.aura) return [];
     const burst = a.shape === "burst";
     return [
       {
@@ -880,7 +883,7 @@ export function abilityStrikes(ids: readonly string[], level: number, more = 0):
         cost: a.cost ?? ACTION_AP,
         cooldown: a.cooldown ?? 0,
         kit: {
-          surface: a.surface, push: a.push, chills: a.chills, splash: a.splash, drain: a.drain, area: a.area, blast: a.blast, sweep: a.sweep, dash: a.dash, onSave: a.onSave, rally: a.rally, field: a.field, summon: a.summon,
+          surface: a.surface, push: a.push, chills: a.chills, splash: a.splash, drain: a.drain, area: a.area, blast: a.blast, sweep: a.sweep, cone: a.cone, line: a.line, dash: a.dash, onSave: a.onSave, rally: a.rally, field: a.field, summon: a.summon, tether: a.tether, saves: a.saves,
           ...(a.aftershock ? { aftershock: { dice: diceFor(scaled(a.aftershock.damage, a.scales?.damage ?? DEFAULT_SCALE, level) + edge), saveOr: a.aftershock.saveOr } } : {}),
         },
       },

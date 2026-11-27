@@ -481,7 +481,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   // What is bound in the caverns' deepest chamber, guarding the hoard.
   haunt: {
     kind: "haunt", name: "Haunt", hp: 43, defence: 12, move: 2, save: 3, init: 0, xp: 44, boss: true,
-    abilities: ["grave_grasp", "keening"],
+    abilities: ["grave_grasp", "ice_spear", "ghastly_fetter", "terror_aura"],
   },
   // ---- what lives out on the atlas's maps ----
   // A hunting spider the size of a hound: quick and frail, its bite leaves venom on the ground, and its web slows

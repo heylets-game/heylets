@@ -11,8 +11,8 @@ import { tileAt, type Poi } from "../map";
 import { DEBUFFS, UNTIMED_KEEPS, attackMade, addCondition, addUses, addShield, addStacks, inflict, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, removeCondition, saveBonus, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
 import { cratesOn, crateById, hurtCrate, isCrateId } from "./crates";
 import { ENEMY_ABILITIES } from "./enemyabilities";
-import { bearing, big, caught, close, blast, blockerAt, courseShare, covers, directionToward, gap, gapTo, meet, nearOf, reaches, ringToward, elevOf, flies, heldAgainst, inFight, lineFrom, pathIn, perkOf, pitAt, reachFrom, roomAt, roomFor, sameHex, sees, seesFor, solid, span, stepCost, strikes, unitById, zoneReach, type Course, type Pit } from "./geometry";
-import { ACTION_AP, CHART, COMMON_ACTIONS, CORAL_ARMOR, ENEMY_EDGE, RALLY, SHANTY, SUMMON_CALLS, ENEMY_BURST, FLEE_RANGE, JUMP_DOWN, JUMP_UP, blinkRange, jumpRange, POTION_EDGE, SAVE_STAT, SMUGGLED, SPLASH_SHARE, THROWABLES, TORCH_GROUND_ROUNDS, abilityDice, abilityStrikes, enemySave, retortDice, unitStrikes, healDice, reactionStrike, tacticOf, throwRange, type EnemyStrike, type Tactic } from "./kit";
+import { bearing, big, caught, close, blast, blockerAt, courseShare, covers, directionToward, gap, gapTo, meet, nearOf, reaches, ringToward, elevOf, fetterBars, flies, heldAgainst, inFight, lineFrom, pathIn, perkOf, pitAt, reachFrom, roomAt, roomFor, sameHex, sees, seesFor, solid, span, stepCost, strikes, unitById, zoneReach, type Course, type Pit } from "./geometry";
+import { ACTION_AP, CHART, COMMON_ACTIONS, CORAL_ARMOR, ENEMY_EDGE, RALLY, SHANTY, SUMMON_CALLS, ENEMY_BURST, FLEE_RANGE, JUMP_DOWN, JUMP_UP, blinkRange, jumpRange, POTION_EDGE, SAVE_STAT, SMUGGLED, SPLASH_SHARE, THROWABLES, TORCH_GROUND_ROUNDS, abilityDice, abilityStrikes, enemySave, retortDice, unitStrikes, healDice, reactionStrike, tacticOf, throwRange, type EnemyAttackKit, type EnemyStrike, type Tactic } from "./kit";
 import { modsOf } from "./mods";
 import { d20, diceFor, hitChance, mod, proficiency, rollDice, rollShown, statOf } from "./rules";
 import { seenByHeroes } from "./light";
@@ -405,6 +405,7 @@ const standable = (state: ZoneState, pos: HexPos, who?: Unit): boolean => !!tile
 function blinkWrong(state: ZoneState, unit: Unit, at: HexPos | undefined, range: number): string | null {
   if (!at || sameHex(at, unit.pos) || !tileAt(state.map, at)) return "Pick a hex to go to.";
   if (hexDistance(unit.pos, at) > range) return "Too far.";
+  if (fetterBars(unit, unit.pos, at)) return "The chain will not reach.";
   return standable(state, at, unit) ? null : "There is nowhere to stand there.";
 }
 
@@ -542,6 +543,24 @@ export function dashWay(state: ZoneState, unit: Unit, from: HexPos, toward: HexP
   for (let i = line.length - 1; i >= 0; i--) if (standable(state, line[i], unit)) return { through: line.slice(0, i), land: line[i] };
   return null;
 }
+
+/**
+ * The hexes an enemy ability that lands on several at once (EnemyAbilityDef `area`, `blast`, `sweep`, `cone`, `line`) covers,
+ * used from `from` and aimed at `at`: everyone of the other side on them saves for half, with no roll to hit. Null for
+ * one of any other shape.
+ */
+export function spreadHexes(state: ZoneState, kit: EnemyAttackKit, from: HexPos, at: HexPos): HexPos[] | null {
+  if (kit.area) return clusterHexes(state, from, at, kit.area);
+  if (kit.blast) return blast(state.map, at, kit.blast).filter((p) => !!tileAt(state.map, p));
+  if (sameHex(from, at)) return kit.sweep || kit.cone || kit.line ? [] : null;
+  if (kit.sweep) return sweepHexes(state, from, at, kit.sweep);
+  if (kit.cone) return coneHexes(state, from, at, kit.cone);
+  if (kit.line) return lineFrom(state.map, from, at, kit.line);
+  return null;
+}
+
+/** Whether an enemy ability lands on several hexes at once (spreadHexes), and so is aimed at a hex, not at anyone. */
+export const spreads = (kit: EnemyAttackKit): boolean => !!(kit.area || kit.blast || kit.sweep || kit.cone || kit.line);
 
 /** Why `unit` cannot use this ability on this aim, in words, or null if it can. */
 export function checkAbility(state: ZoneState, unit: Unit, ability: string, aim: Aim): string | null {
@@ -1104,7 +1123,7 @@ export function lungeLanding(state: ZoneState, enemy: Unit, from: HexPos, attack
   if (hexDistance(from, target.pos) > attack.range || !seesFor(state, enemy.side, from, target.pos)) return null;
   const rise = elevOf(state.map, from) + JUMP_UP;
   const spots = hexNeighbors(target.pos, state.map.grid).filter(
-    (p) => !sameHex(p, from) && standable(state, p, enemy) && elevOf(state.map, p) <= rise && strikes(state.map, p, target.pos) && sees(state.map, from, p),
+    (p) => !sameHex(p, from) && !fetterBars(enemy, from, p) && standable(state, p, enemy) && elevOf(state.map, p) <= rise && strikes(state.map, p, target.pos) && sees(state.map, from, p),
   );
   const harmful = (p: HexPos) => { const kind = state.surfaces[posKey(p)]?.kind; return kind && HARMFUL.has(kind) ? 1 : 0; };
   return spots.sort((a, b) => harmful(a) - harmful(b) || hexDistance(from, a) - hexDistance(from, b) || a.q - b.q || a.r - b.r)[0] ?? null;
@@ -1164,12 +1183,6 @@ function callForKin(ctx: Ctx, enemy: Unit, attack: EnemyStrike): void {
   for (const called of callKin(ctx, enemy, attack.kit.summon!.kind, attack.kit.summon!.count)) if (!called.down) ctx.onStep?.(called, () => {});
 }
 
-/** The hexes an ability thrown onto more than one hex lands on, aimed at `at` by `enemy` from `from`: a clump (`area`), or every hex within its `blast`. */
-export function landsOn(state: ZoneState, from: HexPos, attack: EnemyStrike, at: HexPos): HexPos[] {
-  if (attack.kit.blast) return blast(state.map, at, attack.kit.blast).filter((p) => !!tileAt(state.map, p));
-  return clusterHexes(state, from, at, attack.kit.area ?? 1);
-}
-
 /**
  * A field round its user (a Guardian's Slowing Field): it carries it for so many of its turns, and whoever of the other
  * side is in it now is Slowed for the rest of their turn, if it is theirs (fieldSlows). No attack: no Frenzy is spent.
@@ -1201,18 +1214,31 @@ export function fieldSlows(ctx: Ctx, unit: Unit): void {
   if (c) delete c.fresh;
 }
 
+/**
+ * Fetter `unit` where it stands (EnemyAbilityDef `tether`, a Haunt's Ghastly Fetter): for so many of its turns it goes
+ * no further than `reach` from here by its own doing (geometry.ts fetterBars). Fettered again while it holds, it is
+ * still chained to the spot it was first caught on, for as long as the longer of the two.
+ */
+function fetter(ctx: Ctx, unit: Unit, tether: { reach: number; turns: number }): void {
+  addCondition(ctx, unit, "fettered", tether.turns, tether.reach);
+  const held = unit.conditions.find((c) => c.kind === "fettered");
+  if (held && !held.at) held.at = { q: unit.pos.q, r: unit.pos.r };
+}
+
 function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | null, at?: HexPos): void {
   const { state } = ctx;
   const dc = 8 + attack.potency;
   const aim = at ?? target?.pos;
-  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name, target: target?.id, ...((attack.kit.area || attack.kit.blast || attack.kit.sweep || attack.kit.dash) && aim ? { at: aim } : {}) });
+  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name, target: target?.id, ...((spreads(attack.kit) || attack.kit.dash) && aim ? { at: aim } : {}) });
   // What it leaves on whoever it gets through to: `saveOr` unless they save (`save`: they may), and its lesser share
   // (`onSave`) if they do.
   const leave = (victim: Unit, save: boolean) => {
     if (victim.down || !attack.saveOr) return;
     const effect = attack.saveOr.effect;
-    if (!save || !saveRoll(ctx, victim, SAVE_STAT[effect], dc, `Resist ${attack.name}`).ok) inflict(ctx, victim, attack.saveOr);
-    else if (attack.kit.onSave) inflict(ctx, victim, attack.kit.onSave);
+    if (!save || !saveRoll(ctx, victim, SAVE_STAT[effect], dc, `Resist ${attack.name}`).ok) {
+      inflict(ctx, victim, attack.saveOr);
+      if (attack.kit.tether) fetter(ctx, victim, attack.kit.tether);
+    } else if (attack.kit.onSave) inflict(ctx, victim, attack.kit.onSave);
   };
   // An Earthquake: the ground round it shakes now, and is left cracked to heave again as its next turn begins.
   if (attack.kit.aftershock) {
@@ -1236,14 +1262,15 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
     }
     return;
   }
-  // Thrown at their hex, it lands on a clump of hexes round it, or every hex within its blast: everyone there (in the
-  // fight) saves for half, and whatever it leaves on the ground is left on all of it. One that does no harm (Spin Web)
-  // is only what it leaves: they save against its `saveOr`, if it has one, not for half.
+  // One that lands on several hexes at once (spreadHexes): thrown onto a clump round its aim or every hex within its
+  // blast, swept through rows of hexes, reached out over a cone, or flung down a line. Everyone there (in the fight)
+  // saves for half, as from a burst, and whatever it leaves on the ground is left on all of it. One that does no harm
+  // (Spin Web) is only what it leaves: they save against its `saveOr`, if it has one, not for half.
   // (Aimed at a hex, it needs nobody on it: the combat sandbox aims these by hand. Anything else needs its target.)
-  if ((attack.kit.area || attack.kit.blast) && aim) {
-    const hexes = landsOn(state, enemy.pos, attack, aim);
+  const spread = aim && spreadHexes(state, attack.kit, enemy.pos, aim);
+  if (spread) {
     const dice = attack.harmless ? null : rollShown(ctx.rng, attack.dice);
-    for (const victim of state.units.filter((u) => u.side !== enemy.side && !u.down && !unseen(u) && inFight(state, u.id) && hexes.some((p) => covers(u, p)))) {
+    for (const victim of state.units.filter((u) => u.side !== enemy.side && !u.down && !unseen(u) && inFight(state, u.id) && spread.some((p) => covers(u, p)))) {
       if (!dice) {
         leave(victim, true);
         continue;
@@ -1252,18 +1279,7 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
       damage(ctx, victim, saved ? Math.floor(dice.total / 2) : dice.total, { actor: enemy.id, what: attack.name, dice, halved: saved });
       if (!saved) leave(victim, false);
     }
-    if (attack.kit.surface) placeSurface(ctx, hexes, attack.kit.surface.kind, attack.kit.surface.rounds, enemy.id);
-    return;
-  }
-  // A sweep: one great swing through rows of hexes. Everyone in it (in the fight) saves for half, as from a burst.
-  if (attack.kit.sweep && aim) {
-    const hexes = sweepHexes(state, enemy.pos, aim, attack.kit.sweep);
-    const dice = rollShown(ctx.rng, attack.dice);
-    for (const victim of state.units.filter((u) => u.side !== enemy.side && !u.down && !unseen(u) && inFight(state, u.id) && hexes.some((p) => covers(u, p)))) {
-      const saved = saveRoll(ctx, victim, "agi", dc, attack.name).ok;
-      damage(ctx, victim, saved ? Math.floor(dice.total / 2) : dice.total, { actor: enemy.id, what: attack.name, dice, halved: saved });
-      if (!saved) leave(victim, false);
-    }
+    if (attack.kit.surface) placeSurface(ctx, spread, attack.kit.surface.kind, attack.kit.surface.rounds, enemy.id);
     return;
   }
   // A dash: straight through everyone in the way, to the far end of the line. Everyone it passes (in the fight) saves
@@ -1292,6 +1308,18 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
   const leap = leaps(attack);
   if (leap && !lungeAt(ctx, enemy, attack, target)) return;
   const melee = attack.range === 1 || leap;
+  // One that is only saved against (`saves`): no roll to hit. They save against what it leaves (Agility, if it leaves
+  // nothing), taking half and none of it on a success; on a failure, all of it and what it leaves.
+  if (attack.kit.saves) {
+    const saved = saveRoll(ctx, target, attack.saveOr ? SAVE_STAT[attack.saveOr.effect] : "agi", dc, attack.name).ok;
+    if (!attack.harmless) {
+      const dice = rollShown(ctx.rng, attack.dice);
+      damage(ctx, target, saved ? Math.floor(dice.total / 2) : dice.total, { actor: enemy.id, what: attack.name, dice, halved: saved });
+    }
+    if (!saved) leave(target, false);
+    else if (attack.kit.onSave && !target.down) inflict(ctx, target, attack.kit.onSave);
+    return;
+  }
   const roll = attackRoll(ctx, enemy, target, { label: attack.name, bonus: attack.potency, melee });
   if (!roll.ok) {
     ctx.events.push({ t: "miss", actor: enemy.id, target: target.id, what: attack.name });
@@ -1367,6 +1395,7 @@ export function checkCommon(state: ZoneState, unit: Unit, what: CommonAction, ai
 function leapWrong(state: ZoneState, unit: Unit, at: HexPos): string | null {
   if (big(unit)) return "Too heavy to jump.";
   if (hexDistance(unit.pos, at) > jumpRange(unit)) return "Too far to jump.";
+  if (fetterBars(unit, unit.pos, at)) return "The chain will not reach.";
   if (solid(tileAt(state.map, at)) || blockerAt(state, at) || !roomAt(state, at, unit)) return "There is nowhere to land.";
   if (elevOf(state.map, at) - elevOf(state.map, unit.pos) > JUMP_UP) return "Too high to jump up to.";
   if (!sees(state.map, unit.pos, at)) return "Something is in the way.";

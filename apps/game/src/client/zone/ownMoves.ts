@@ -6,7 +6,8 @@
 // - "burst": round its user, everyone near caught (an Ogre's Slam), a call to its own side (a Pack Leader's
 //   Howl), a field raised round it (a Guardian's Slowing Field), or a call for more of it (a Broodmother's Brood Swarm). Played round it as it is used (WorldRenderer.burst); each hero caught just flinches as their hit is told.
 // - "at": thrown at a spot, landing on the hexes round it (a Cultist's Immolate, a Broodmother's Spin Web), or swept toward one through the
-//   hexes in front of its user (a Great Bear's Rending Cleave). Played at the spot as it is used (WorldRenderer.moveAt);
+//   hexes in front of its user (a Great Bear's Rending Cleave), or reached out over a cone or down a line toward it
+//   (a Haunt's Grave Grasp, its Ice Spear). Played at the spot as it is used (WorldRenderer.moveAt);
 //   each hero caught just flinches. A sweep whose move strikes each hero caught in turn (`sweeps`: a Brute's Great
 //   Cleave) is a "blow" instead.
 // - "dash": straight through a line of heroes to the far end of it (a Cave Bat's Fell Swoop). Played as its user is
@@ -44,7 +45,7 @@ export function ownRoute(name: string, kind?: string): OwnRoute | null {
   if (!def) return null;
   if (def.shape === "burst" || def.rally || def.field || def.summon) return "burst";
   if (def.dash) return "dash";
-  return def.area || def.blast || (def.sweep && !SIGNATURE_MOVES[name]?.sweeps) ? "at" : "blow";
+  return def.area || def.blast || def.cone || def.line || (def.sweep && !SIGNATURE_MOVES[name]?.sweeps) ? "at" : "blow";
 }
 
 /**

@@ -39,6 +39,8 @@ export type SynthCombat =
   | "wail" | "chill"
   // A Skeleton's Memento Mori: bones clattering as it twitches, over a low, sour drone, and a dark rush as it goes out.
   | "rattle"
+  // A Haunt's Ghastly Fetter: a chain of iron jingling, paid out link after link, and a stake clanking home.
+  | "chains"
   // Words typed out in a conversation, a short soft note a letter.
   | "blip";
 
@@ -87,6 +89,7 @@ const COMBAT_LENGTH: Record<SynthCombat, number> = {
   wail: 1.6,
   chill: 0.8,
   rattle: 2.1,
+  chains: 1.7,
   blip: 0.09,
 };
 
@@ -347,6 +350,26 @@ function combat(r: Render, sound: SynthCombat) {
       }
       for (const f of [73.4, 77.8]) toneAt(r, t + 0.05, { type: "sawtooth", freq: f * p, freqTo: f * p * 0.94, attack: 0.55, decay: 1.4, gain: v * 0.16, cut: 420 });
       noiseAt(r, t + 0.55, { filter: "lowpass", freq: 900 * p, freqTo: 140 * p, q: 0.8, attack: 0.08, decay: 1.0, gain: v * 0.32 });
+      break;
+    }
+    case "chains": {
+      // Iron links knocking together: each a clink of a few partials pitched apart as struck metal's are (not in
+      // harmony), with a snap of bright noise. A soft jingle as it is gathered up, then a quick run of them as the chain
+      // pays out through the air, and a heavy clank as the stake goes home, ringing on after (timed to its move,
+      // signatureMoves.ts ghastlyFetter: thrown at about half a second, landing at about 0.85).
+      const clink = (when: number, loud: number, pitch: number) => {
+        const f = (900 + r.rnd() * 700) * pitch * p;
+        for (const [ratio, share] of [[1, 1], [2.76, 0.55], [5.4, 0.3]] as const) toneAt(r, when, { type: "sine", freq: f * ratio, decay: 0.05 + 0.04 / ratio, gain: v * loud * share * 0.16 });
+        noiseAt(r, when, { filter: "bandpass", freq: f * 3, q: 4, decay: 0.012, gain: v * loud * 0.12 });
+      };
+      for (let at = 0.02; at < 0.42; at += 0.06 + r.rnd() * 0.08) clink(t + at, 0.45, 0.9 + r.rnd() * 0.2);
+      for (let at = 0.46; at < 0.78; at += 0.025 + r.rnd() * 0.02) clink(t + at, 0.7 + 0.3 * r.rnd(), 0.85 + r.rnd() * 0.35);
+      const home = t + 0.86;
+      // The stake: a low iron clank with a dull thud under it, ringing on, and the chain settling after it.
+      for (const [f, share, decay] of [[220, 1, 0.5], [607, 0.5, 0.35], [1188, 0.3, 0.25], [1950, 0.18, 0.18]] as const) toneAt(r, home, { type: "sine", freq: f * p * wobble(r, 0.01), decay, gain: v * share * 0.35 });
+      noiseAt(r, home, { filter: "lowpass", freq: 700 * p, freqTo: 120 * p, q: 0.8, decay: 0.18, gain: v * 0.45 });
+      noiseAt(r, home, { filter: "bandpass", freq: 3200 * p, q: 3, decay: 0.03, gain: v * 0.2 });
+      for (let at = 0.1; at < 0.5; at += 0.07 + r.rnd() * 0.08) clink(home + at, 0.35 * (1 - at), 0.8 + r.rnd() * 0.2);
       break;
     }
     case "chill":
