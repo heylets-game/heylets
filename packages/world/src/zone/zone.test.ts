@@ -4663,7 +4663,7 @@ describe("the Warden's wall", () => {
     expect(shotAtAnn(true)).toBe(false);
   });
 
-  it("Bulwark Strike: an Action, 2 turns to wait; shields first, on top of what is there, then hits harder for the shield", () => {
+  it("Bulwark Strike: an Action, 2 turns to wait; shields first, on top of what is there, then hits harder for the shield, up to double", () => {
     const blow = (shield: number) => {
       for (let seed = 1; seed < 60; seed++) {
         let { state, foes } = party();
@@ -4680,8 +4680,16 @@ describe("the Warden's wall", () => {
     };
     const bare = blow(0);
     const braced = blow(20);
+    const walled = blow(1000);
     expect(braced.seed).toBe(bare.seed);
-    expect(braced.amount - bare.amount).toBe(Math.floor((20 + 5) * BULWARK.perShield) - Math.floor(5 * BULWARK.perShield));
+    expect(walled.seed).toBe(bare.seed);
+    // A shield far too big: it adds no more than the blow does without it (BULWARK.upTo), so it lands double.
+    expect(walled.amount % 2).toBe(0);
+    const base = walled.amount / 2;
+    // Short of that, half the shield carried (the 4 + level it gives first included).
+    const extra = (shield: number) => Math.min(Math.floor((shield + 5) * BULWARK.perShield), base * BULWARK.upTo);
+    expect(bare.amount).toBe(base + extra(0));
+    expect(braced.amount).toBe(base + extra(20));
   });
 
   it("Taunt: 2 AP, 3 turns to wait; every enemy within 2 hexes of the Warden is Taunted by them for 2 of its turns", () => {

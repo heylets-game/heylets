@@ -199,12 +199,13 @@ export const BOLSTER = { range: 2, shield: 10 };
  * The Warden's. Endure: a shield of `shield` plus the Warden's level on themselves (and they are Guarded: content.ts).
  * Overwhelm drives an enemy `hexes` back, and Stuns it `stun` of its turns if it is driven into a wall. Fortify raises a wall of
  * `hexes` hexes for `rounds` rounds; the user's side gets `defence` more Defence beside it. Bulwark Strike shields the Warden
- * `shield` plus their level first, then adds `perShield` of their shield to the damage. Taunt reaches `range` hexes, for `rounds`.
+ * `shield` plus their level first, then adds `perShield` of their shield to the damage, but never more than `upTo` times
+ * what the blow does without it. Taunt reaches `range` hexes, for `rounds`.
  */
 export const ENDURE = { range: 0, shield: 10 };
 export const OVERWHELM = { hexes: 2, stun: 1 };
 export const FORTIFY = { hexes: 3, rounds: 3, defence: 1 };
-export const BULWARK = { shield: 4, perShield: 0.25 };
+export const BULWARK = { shield: 4, perShield: 0.5, upTo: 1 };
 export const TAUNT = { range: 2, rounds: 2 };
 /** Sturdy Blow (the maul): a shield of `shield` plus the user's level, on top of any they have, hit or miss. */
 export const STURDY = { shield: 3 };
