@@ -162,6 +162,8 @@ describe("a Haunt's Ghastly Fetter", () => {
     const ann = unit(ctx.state, "ann");
     expect(ann.conditions.find((c) => c.kind === "reeling")).toMatchObject({ rounds: 3, amount: 1 });
     expect(ann.conditions.find((c) => c.kind === "fettered")).toMatchObject({ rounds: 3, amount: 1, at: at(9, 6) });
+    // The spot is told with it, so a picture built from what happened has the chain in the right place.
+    expect(ctx.events.find((e) => e.t === "condition" && e.kind === "fettered")).toMatchObject({ at: at(9, 6) });
   });
 
   it("lets them go no further than a hex from their spot", () => {

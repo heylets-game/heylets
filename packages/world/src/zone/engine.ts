@@ -2,7 +2,7 @@
 // off, damage dealt, someone healed, an attack or a save rolled. Each one
 // changes the state in the context and adds what happened to its events.
 
-import { hexDistance, posKey, type StatKey } from "@gantt-quest/core";
+import { hexDistance, posKey, type HexPos, type StatKey } from "@gantt-quest/core";
 import { tileAt } from "../map";
 import type { Rng } from "../rng";
 import { elevOf, gap, gapTo, inFight, meet, nearOf, perkOf, span } from "./geometry";
@@ -41,7 +41,7 @@ export function removeCondition(unit: Unit, kind: Condition): void {
  * Put a condition on a unit, or lengthen the one it has. Something soaked cannot be set burning.
  * `amount`: a shield's points (Bolstered), or the AP a Reeling takes; a bigger one replaces a smaller.
  */
-export function addCondition(ctx: Ctx, unit: Unit, kind: Condition, rounds: number, amount?: number): void {
+export function addCondition(ctx: Ctx, unit: Unit, kind: Condition, rounds: number, amount?: number, at?: HexPos): void {
   // Bleeding and Burning come in stacks that last as long as they always do, whatever asked for them.
   if (isStacking(kind)) return addStacks(ctx, unit, kind, amount ?? 1);
   if (unit.down || rounds <= 0 || !takesHold(ctx, unit, kind)) return;
@@ -71,7 +71,9 @@ export function addCondition(ctx: Ctx, unit: Unit, kind: Condition, rounds: numb
   }
   const now = unit.conditions.find((c) => c.kind === kind)!;
   if (amount !== undefined) now.amount = Math.max(now.amount ?? 0, amount);
-  ctx.events.push({ t: "condition", target: unit.id, kind, rounds, ...(now.amount !== undefined ? { amount: now.amount } : {}) });
+  // A hex it is tied to (Fettered's spot): the latest one given.
+  if (at) now.at = { q: at.q, r: at.r };
+  ctx.events.push({ t: "condition", target: unit.id, kind, rounds, ...(now.amount !== undefined ? { amount: now.amount } : {}), ...(now.at ? { at: now.at } : {}) });
 }
 
 /** Each stack of a Burning: one count of turns apiece (a Burning from before stacks had their own is read as that many of its `rounds`). */
