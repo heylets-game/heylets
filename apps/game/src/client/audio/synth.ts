@@ -267,14 +267,18 @@ function combat(r: Render, sound: SynthCombat) {
       toneAt(r, h, { type: "sawtooth", freq: 1200 * p, freqTo: 5200 * p, attack: 0.002, decay: 0.05, gain: v * 0.3, cut: 9000 });
       toneAt(r, h + 0.01, { type: "sine", freq: 3520 * p, decay: 1.8, gain: v * 0.12 });
       toneAt(r, h + 0.01, { type: "sine", freq: 3541 * p, decay: 1.8, gain: v * 0.12 });
-      toneAt(r, h + 0.01, { type: "sine", freq: 5280 * p, decay: 0.9, gain: v * 0.06 });
       toneAt(r, h + 0.02, { type: "sine", freq: 1760 * p, decay: 2.3, gain: v * 0.08 });
       toneAt(r, h + 0.02, { type: "sine", freq: 1766 * p, decay: 2.3, gain: v * 0.08 });
-      // A minor third over each ring (6:5, A to C), a touch quieter, beating as they do: the tail sounds a dark chord.
+      // Over each ring a full minor chord: its minor third (6:5, A to C) and its fifth (3:2, A to E), each a touch
+      // quieter than the root and beating as it does, the root ringing last so the tail ends on it.
       toneAt(r, h + 0.015, { type: "sine", freq: 4224 * p, decay: 1.6, gain: v * 0.08 });
       toneAt(r, h + 0.015, { type: "sine", freq: 4249 * p, decay: 1.6, gain: v * 0.08 });
+      toneAt(r, h + 0.01, { type: "sine", freq: 5280 * p, decay: 1.5, gain: v * 0.06 });
+      toneAt(r, h + 0.01, { type: "sine", freq: 5311 * p, decay: 1.5, gain: v * 0.06 });
       toneAt(r, h + 0.025, { type: "sine", freq: 2112 * p, decay: 2.2, gain: v * 0.06 });
       toneAt(r, h + 0.025, { type: "sine", freq: 2119 * p, decay: 2.2, gain: v * 0.06 });
+      toneAt(r, h + 0.03, { type: "sine", freq: 2640 * p, decay: 2.1, gain: v * 0.055 });
+      toneAt(r, h + 0.03, { type: "sine", freq: 2649 * p, decay: 2.1, gain: v * 0.055 });
       noiseAt(r, h + 0.01, { filter: "bandpass", freq: 6000 * p, freqTo: 900 * p, q: 1.5, decay: 0.22, gain: v * 0.8 });
       toneAt(r, h, { type: "sine", freq: 110 * p, freqTo: 40, decay: 0.18, gain: v * 1.4 });
       noiseAt(r, h, { filter: "lowpass", freq: 500 * p, q: 1, decay: 0.2, gain: v * 1.1 });
