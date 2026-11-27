@@ -837,6 +837,8 @@ const GLYPHS: Record<string, string[]> = {
   sundered: ["#.#.#.#", "#######", "#..#..#", "##.#.##", "#..#..#", "#######", ".#.#.#."],
   poisoned: ["..###..", ".#####.", "##.#.##", ".#####.", "..#.#..", ".......", ".#.#.#."],
   prone: [".......", ".......", "##.....", "#######", "#######", ".......", "......."],
+  // A cracked heart: a hero down, to be helped up (the mark over them, WorldRenderer DOWN_MARK).
+  downed: [".##.##.", "####.##", "###.###", "####.##", ".##.##.", "..#.#..", "...#..."],
   // A weight pressing down.
   reeling: ["#######", ".#####.", "...#...", "...#...", ".......", "#######", "#######"],
   // A cracked shield: the worse at shaking things off.
