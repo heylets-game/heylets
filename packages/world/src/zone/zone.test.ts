@@ -159,6 +159,11 @@ describe("the kit", () => {
     // Saved before enemies carried their own: given their kind's on load.
     b.abilities = [];
     expect(loadZone(state).units.find((u) => u.id === b.id)!.abilities).toEqual(ENEMIES[b.kind].abilities);
+    // Saved holding an ability since retired (a kit reworked since): given their kind's as it is now, not left with
+    // nothing to use. One whose abilities all still exist keeps its own.
+    b.abilities = ["thorn_hex", ...ENEMIES[b.kind].abilities];
+    expect(loadZone(state).units.find((u) => u.id === b.id)!.abilities).toEqual(ENEMIES[b.kind].abilities);
+    expect(loadZone(state).units.find((u) => u.id === a.id)!.abilities).toContain("frost_mote");
   });
 
   it("gives each kind a mind: the usual one, with those that shoot liking room and high ground", () => {

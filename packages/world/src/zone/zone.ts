@@ -37,6 +37,7 @@ import { checkLoot, checkOpen, leaveBody, look, lootFor, openChest, payBounty, t
 import { PARTY_SIZES, siteOpen, spaced } from "./sites";
 import { FREE_WALK, big, blast, blockerAt, caught, covers, gap, inFight, isDead, meet, noWayThere, pathIn, perkOf, roomAt, sameHex, sees, solid, span, unitAt, unitById, zoneReach } from "./geometry";
 import { AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, ENEMY_MOVE_AP, FLEE_RANGE, ITEM_AP, STROLL_GRACE_MS, STROLL_STEP_MS, SUMMONS, STARTING_ITEMS, THROWABLES, THROWABLE_KINDS, cleanItems, unitStrike, commonCostFor, enemyMove, tacticOf } from "./kit";
+import { ENEMY_ABILITIES } from "./enemyabilities";
 import { d20, heroMove, mod, rollDice, statOf } from "./rules";
 import { hiddenEnemies, sentToClient } from "./light";
 import { quakeAtTurn, tickWeather, weatherAtTurn } from "./weather";
@@ -147,11 +148,16 @@ export function ensureMouth(state: ZoneState): ZoneState {
 }
 
 /**
- * An enemy saved before enemies carried their own abilities has none: it is given what its kind starts with. Run on
+ * A saved enemy is given its kind's abilities as they are now when what it was saved with no longer works: none at all
+ * (from before enemies carried their own), or any ability since retired (a kit reworked since, which would otherwise
+ * leave it nothing to use, so it stood idle on its turns). One whose abilities all still exist keeps them. Run on
  * every saved zone as it is loaded (loadZone). Returns the same state, changed in place.
  */
 export function ensureEnemyAbilities(state: ZoneState): ZoneState {
-  for (const u of state.units) if (u.side === "enemy" && (u.abilities?.length ?? 0) === 0) u.abilities = [...(ENEMIES[u.kind]?.abilities ?? [])];
+  for (const u of state.units) {
+    const kit = u.side === "enemy" ? ENEMIES[u.kind]?.abilities : undefined;
+    if (kit && ((u.abilities?.length ?? 0) === 0 || u.abilities.some((id) => !ENEMY_ABILITIES[id]))) u.abilities = [...kit];
+  }
   return state;
 }
 
