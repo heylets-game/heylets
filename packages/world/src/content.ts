@@ -6,7 +6,7 @@ import type { ScaleRate } from "./zone/rules";
 import type { SurfaceKind } from "./zone/types";
 
 /** What an ability or an enemy's attack can leave on whoever it lands on. A fight on the tiles has more conditions of its own (zone/types.ts). */
-export type EffectKind = "bleeding" | "burning" | "stunned" | "guarded" | "taunting" | "slowed" | "hasted" | "fumbling" | "exposed" | "prone" | "sundered" | "reeling" | "memento_mori";
+export type EffectKind = "bleeding" | "burning" | "stunned" | "guarded" | "taunting" | "slowed" | "hasted" | "fumbling" | "exposed" | "prone" | "sundered" | "reeling" | "memento_mori" | "weakened";
 
 export const EFFECT_INFO: Record<EffectKind, { name: string; blurb: string; color: string }> = {
   bleeding: { name: "Bleeding", blurb: "Loses 2 HP at the start of each turn.", color: "#f87171" },
@@ -22,6 +22,7 @@ export const EFFECT_INFO: Record<EffectKind, { name: string; blurb: string; colo
   sundered: { name: "Sundered", blurb: "Its armor is dented: 2 less Defence.", color: "#b0a48a" },
   memento_mori: { name: "Memento Mori", blurb: "Each time it takes damage it starts Fumbling, unless it is Fumbling already.", color: "#c4b5fd" },
   reeling: { name: "Reeling", blurb: "Shaken by a heavy blow: as much less AP on its next turn as its number says.", color: "#c084fc" },
+  weakened: { name: "Weakened", blurb: "Hexed: as much less on every save as its number says.", color: "#9bbf3a" },
 };
 
 /** Sundered targets have this much less Defence. */
@@ -29,6 +30,9 @@ export const SUNDERED_DEFENCE = 2;
 
 /** AP a Reeling unit goes without on its next turn, when what left it Reeling does not say. */
 export const REELING_AP = 2;
+
+/** What a Weakened unit takes off every save it makes, when what Weakened it does not say (its `amount`). */
+export const WEAKENED_SAVES = 2;
 
 /** The effects that stack, each stack hurting for its tick at the start of the bearer's turn. */
 export type StackingEffect = "bleeding" | "burning";
@@ -58,7 +62,7 @@ export const isSpent = (kind: string): kind is SpentEffect => (SPENT as readonly
  */
 export type Inflict =
   | { effect: StackingEffect | SpentEffect; /** How many stacks: 1 when not said. */ stacks?: number }
-  | { effect: Exclude<EffectKind, StackingEffect | SpentEffect>; turns: number; /** Reeling: the AP it takes off the next turn (REELING_AP when not said). */ amount?: number };
+  | { effect: Exclude<EffectKind, StackingEffect | SpentEffect>; turns: number; /** Reeling: the AP it takes off each turn (REELING_AP when not said). Weakened: what it takes off every save (WEAKENED_SAVES). */ amount?: number };
 
 // ---------- classes ----------
 
@@ -526,11 +530,12 @@ export const ENEMIES: Record<string, EnemyDef> = {
     kind: "wraith", name: "Rime Wraith", hp: 16, defence: 12, move: 2, save: 0, init: 1, xp: 14,
     abilities: ["frost_lance", "wail"],
   },
-  // Whoever it is that lives alone in the wood or the fen, and does not care for callers. Thorns from across the
-  // clearing, and a hex that leaves whoever it lands on easy to hit.
+  // Whoever it is that lives alone in the wood or the fen, and does not care for callers. A hex from across the
+  // clearing that leaves whoever it lands on the worse at shaking off what comes next, and a brew flung over its own
+  // to mend them.
   witch: {
     kind: "witch", name: "Hedge Witch", hp: 17, defence: 11, move: 2, save: 0, init: 0, xp: 15,
-    abilities: ["thorn_hex", "evil_eye"],
+    abilities: ["weakening_hex", "witches_brew"],
   },
   villain: {
     kind: "villain", name: "Villain", hp: 38, defence: 12, move: 2, save: 3, init: 0, xp: 40, boss: true,

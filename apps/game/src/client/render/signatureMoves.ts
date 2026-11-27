@@ -2940,7 +2940,154 @@ function broodSwarm(stage: MoveStage, { figure, hitAt, crit, onImpact, calls }: 
   }, wait);
 }
 
+const HEX_GREEN = "#9bbf3a";
+const HEX_VIOLET = "#8a4fc7";
+const HEX_DARK = "#3c2a4d";
+const HEX_PALE = "#d9f08a";
+
+/** The hand a person casts from, in the world; for one with no hands, a little over its middle. */
+const castingHand = (figure: Figure) => {
+  const held = figure.hands()?.[0];
+  if (held) return held.getWorldPosition(new THREE.Vector3());
+  const at = figure.root.getWorldPosition(new THREE.Vector3());
+  return at.setY(at.y + 1.1);
+};
+
+/** A Weakening Hex: how long its bolt is in the air, how many strokes its sigil has, and how long the strength runs out of them after. */
+export const WEAKENING_HEX = { flight: 0.38, points: 6, drain: 0.9 };
+
+/**
+ * A Hedge Witch's Weakening Hex: sickly green and violet motes curl in round its casting hand as the staff swings round
+ * (the cast), then a spinning bolt of the hex goes straight at the target, dark motes falling off it. Where it lands a
+ * sigil is drawn round them, six green strokes about a violet flash, pulled in tight; then the strength runs out of
+ * them: pale motes sink off them to the ground, a dark ring closes in at their feet and a violet one goes out after it.
+ * The blow is told as it lands.
+ */
+function weakeningHex(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const wait = Math.max(0, figure.cast());
+  // Winding up: motes curling in to the hand from all round, green and violet by turns.
+  for (let s = 0; s < wait; s += 0.05) {
+    stage.later(() => {
+      const at = castingHand(figure);
+      const a = Math.random() * Math.PI * 2;
+      const from = offset(at, Math.cos(a) * 0.5, (Math.random() - 0.5) * 0.4, Math.sin(a) * 0.5);
+      stage.spawnFx("mote", Math.random() < 0.5 ? HEX_GREEN : HEX_VIOLET, Math.cos(a) < 0, { from, to: at, life: 0.3, size: [0.35, 0.15], spin: 2, fade: true });
+    }, s);
+  }
+  stage.later(() => {
+    const from = castingHand(figure);
+    const { flight, points, drain } = WEAKENING_HEX;
+    stage.spawnFx("burst", HEX_VIOLET, false, { from, to: from, life: 0.14, size: [0.3, 0.9], spin: 0.5, fade: true });
+    const land = () => {
+      const feet = hitAt.clone().setY(hitAt.y - 0.45);
+      const floor = feet.clone().setY(feet.y + 0.05);
+      stage.spawnFx("burst", crit ? GOLD : HEX_VIOLET, false, { from: hitAt, to: hitAt, life: 0.24, size: [0.8, 2.2], spin: 0.7, fade: true });
+      stage.spawnFx("burst", HEX_DARK, true, { from: hitAt, to: hitAt, life: 0.34, size: [0.6, 1.6], spin: -0.5, fade: true });
+      // The sigil: strokes laid round them, each across the way to the middle, drawn in tight as they fade.
+      for (let i = 0; i < points; i++) {
+        const a = (i / points) * Math.PI * 2;
+        const out = offset(hitAt, Math.cos(a) * 0.75, Math.sin(a) * 0.55, 0);
+        const into = offset(hitAt, Math.cos(a) * 0.3, Math.sin(a) * 0.22, 0);
+        stage.spawnFx("streak", crit ? GOLD : HEX_GREEN, Math.cos(a) < 0, { from: out, to: into, life: 0.4, size: [0.8, 0.4], turn: a + Math.PI / 2, spin: 0.6, fade: true });
+      }
+      stage.wave({ at: floor, radius: 1.3, life: 0.4, color: HEX_GREEN, width: 0.18 });
+      // The strength running out of them: pale motes sinking off them to the ground.
+      for (let s = 0.12; s < drain; s += 0.06) {
+        stage.later(() => {
+          const a = Math.random() * Math.PI * 2;
+          const at = offset(hitAt, Math.cos(a) * 0.35, 0.2 + Math.random() * 0.3, Math.sin(a) * 0.2);
+          stage.spawnFx("mote", Math.random() < 0.6 ? HEX_PALE : HEX_GREEN, Math.cos(a) < 0, { from: at, to: offset(feet, Math.cos(a) * 0.25, 0.05, Math.sin(a) * 0.15), life: 0.5, size: [0.32, 0.12], spin: 0, fade: true });
+        }, s);
+      }
+      // A dark ring closing in at their feet, a violet one out after it.
+      stage.later(() => stage.wave({ at: floor, radius: 1.1, life: 0.55, color: HEX_DARK, width: 0.4 }), 0.15);
+      stage.later(() => stage.wave({ at: floor, radius: 1.5, life: 0.6, color: HEX_VIOLET, width: 0.12 }), 0.4);
+      stage.jolt();
+      onImpact();
+    };
+    stage.spawnFx("bolt", crit ? GOLD : HEX_GREEN, dir < 0, { from, to: hitAt, life: flight, size: [1.1, 1.3], spin: dir * 9, fade: false, onEnd: land });
+    // Dark motes dropping off it as it goes.
+    for (let s = 0.03; s < flight; s += 0.04) {
+      stage.later(() => {
+        const at = from.clone().lerp(hitAt, s / flight);
+        stage.spawnFx("mote", HEX_DARK, Math.random() < 0.5, { from: at, to: offset(at, (Math.random() - 0.5) * 0.2, -0.35, 0), life: 0.35, size: [0.3, 0.15], spin: 0, fade: true });
+      }, s);
+    }
+  }, wait);
+}
+
+const BREW = "#6fdc6a";
+const BREW_DEEP = "#2f9e5a";
+const BREW_GLOW = "#e9ffb8";
+const BREW_STEAM = "#cfe8c8";
+/** A Witches' Brew: how long the flask is in the air, how high it goes over the straight line, how far the brew splashes (a hex and the ring round it), and how long the mending rises after. */
+export const WITCHES_BREW = { flight: 0.6, arc: 1.4, spread: HEX * 1.45, rise: 1.3 };
+
+/**
+ * A Hedge Witch's Witches' Brew: bubbles rise and pop round its casting hand as it swings round (the cast), and as it
+ * points a flask of green brew goes up in a high arc, tumbling, drops and steam falling off it. Where it comes down it
+ * breaks in a soft splash of green: a glow and a splash, a pale ring and a deeper one rolling out over the hexes round
+ * it, drops flung out in arcs; then the mending rises off all of it, green and pale gold motes drifting up and wisps of
+ * sweet steam, a slow green ring breathing out under them. `hitAt` is over the hex it is thrown at; the heal is told as
+ * it lands.
+ */
+function witchesBrew(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const ground = hitAt.clone().setY(hitAt.y - 0.45);
+  const wait = Math.max(0, figure.cast());
+  // Brewing: bubbles rising round the hand and popping.
+  for (let s = 0; s < wait; s += 0.06) {
+    stage.later(() => {
+      const at = castingHand(figure);
+      const a = Math.random() * Math.PI * 2;
+      const from = offset(at, Math.cos(a) * 0.25, -0.15, Math.sin(a) * 0.25);
+      stage.spawnFx("mote", Math.random() < 0.5 ? BREW : BREW_GLOW, Math.cos(a) < 0, { from, to: offset(from, 0, 0.45, 0), life: 0.35, size: [0.2, 0.4], spin: 0, fade: true });
+    }, s);
+  }
+  stage.later(() => {
+    const from = castingHand(figure);
+    const { flight, arc, spread, rise } = WITCHES_BREW;
+    const splash = () => {
+      const floor = ground.clone().setY(ground.y + 0.05);
+      stage.spawnFx("burst", crit ? GOLD : BREW_GLOW, false, { from: ground, to: ground, life: 0.22, size: [1, 2.6], spin: 0.4, fade: true });
+      stage.spawnFx("splash", BREW, false, { from: ground, to: ground.clone().setY(ground.y + 0.35), life: 0.4, size: [1, 2.4], spin: 0, fade: true });
+      stage.wave({ at: floor, radius: spread, life: 0.5, color: BREW_GLOW, width: 0.12 });
+      stage.later(() => stage.wave({ at: floor, radius: spread * 0.9, life: 0.6, color: BREW_DEEP, width: 0.3 }), 0.06);
+      // Drops of brew flung out every way in arcs.
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2 + Math.random() * 0.4;
+        const far = 0.6 + Math.random() * spread * 0.5;
+        stage.spawnFx("fleck", i % 2 ? BREW : BREW_DEEP, Math.cos(a) < 0, { from: ground, to: offset(ground, Math.cos(a) * far, 0, Math.sin(a) * far * 0.6), life: 0.45 + Math.random() * 0.2, size: [0.35, 0.22], spin: 0, fade: true, arc: 0.4 + Math.random() * 0.4 });
+      }
+      // The mending rising off all of it: motes drifting up, and wisps of steam.
+      for (let s = 0.1; s < rise; s += 0.04) {
+        stage.later(() => {
+          const a = Math.random() * Math.PI * 2;
+          const far = Math.sqrt(Math.random()) * spread * 0.85;
+          const at = offset(ground, Math.cos(a) * far, 0.05, Math.sin(a) * far * 0.7);
+          stage.spawnFx("mote", Math.random() < 0.6 ? BREW : crit ? GOLD : BREW_GLOW, Math.cos(a) < 0, { from: at, to: offset(at, (Math.random() - 0.5) * 0.2, 0.8 + Math.random() * 0.6, 0), life: 0.9, size: [0.3, 0.15], spin: 0, fade: true });
+          if (Math.random() < 0.25) stage.spawnFx("dust", BREW_STEAM, Math.cos(a) < 0, { from: at, to: offset(at, 0, 0.9, 0), life: 1, size: [0.6, 1.4], spin: 0, fade: true });
+        }, s);
+      }
+      stage.later(() => stage.wave({ at: floor, radius: spread, life: 1.1, color: BREW, width: 0.5 }), 0.35);
+      onImpact();
+    };
+    stage.spawnFx("bolt", crit ? GOLD : BREW, dir < 0, { from, to: ground, life: flight, size: [0.9, 1.1], spin: dir * 6, fade: false, arc, onEnd: splash });
+    // Drops and steam falling off it on the way, along the same arc (WorldRenderer's fx: up by arc·4k(1−k)).
+    for (let s = 0.03; s < flight; s += 0.045) {
+      stage.later(() => {
+        const k = s / flight;
+        const at = from.clone().lerp(ground, k);
+        at.y += arc * 4 * k * (1 - k);
+        stage.spawnFx("fleck", BREW, Math.random() < 0.5, { from: at, to: offset(at, (Math.random() - 0.5) * 0.3, -0.3, 0), life: 0.3, size: [0.3, 0.18], spin: 0, fade: true });
+        if (Math.random() < 0.35) stage.spawnFx("dust", BREW_STEAM, Math.random() < 0.5, { from: at, to: offset(at, 0, 0.2, 0), life: 0.4, size: [0.3, 0.6], spin: 0, fade: true });
+      }, s);
+    }
+  }, wait);
+}
+
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
+  "Weakening Hex": { who: "witch", blurb: "Green and violet motes curl in round its hand as it swings its staff round and points, then a spinning bolt of the hex flies straight at the target, dark motes falling off it: a violet flash, a sigil of six green strokes drawn tight round them, the strength sinking out of them in pale motes to the ground, and a dark ring closing in at their feet.", play: weakeningHex },
+  "Witches' Brew": { who: "witch", blurb: "Bubbles rise and pop round its hand as it swings round and points, then a flask of green brew goes up in a high arc, dripping and steaming, and breaks over the hexes where it lands: a soft green glow and a splash, rings rolling out, drops flung every way, then green and pale gold motes and sweet steam rising off all of it as its own are mended.", play: witchesBrew },
   "Grave Grasp": { who: "haunt", blurb: "Draws up and back and surges in with its arms out, and a great hand of ice reaches out low over the ground: it slams down on the far row with a cold flash and a ring of frost, closes into a fist and drags back to the Haunt over the ground, frost and wisps pulled along behind it.", play: graveGrasp },
   "Ice Spear": { who: "haunt", blurb: "Rises with its arms raised high and a spear of ice grows over its head, cold motes drawn in to it; then it flings it straight and low down the whole line, a pale streak and frost trailing it and frost laid on the ground under it, and it shatters at the end in a cold flash and a spray of shards.", play: iceSpear },
   "Frost Breath": { who: "frost_wolf", blurb: "Draws breath with its front lifted and head thrown back, cold motes pulled in to its jaws, then thrusts its head out low and breathes: a pale flash at its mouth, freezing mist billowing out over the whole cone with frost motes, glints and shards of ice streaming through it, frost running out over the ground to the far row and lying there glinting, and a ring of frost where it ends.", play: frostBreath },

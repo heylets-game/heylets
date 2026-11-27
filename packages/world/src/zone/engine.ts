@@ -6,7 +6,7 @@ import { hexDistance, posKey, type HexPos, type StatKey } from "@gantt-quest/cor
 import { tileAt } from "../map";
 import type { Rng } from "../rng";
 import { elevOf, gap, gapTo, inFight, meet, nearOf, perkOf, span } from "./geometry";
-import { ABILITIES, EFFECT_TICK, STACK_TURNS, SUNDERED_DEFENCE, isSpent, isStacking, type Inflict, type SpentEffect, type StackingEffect } from "../content";
+import { ABILITIES, EFFECT_TICK, STACK_TURNS, SUNDERED_DEFENCE, WEAKENED_SAVES, isSpent, isStacking, type Inflict, type SpentEffect, type StackingEffect } from "../content";
 import { ENEMY_ABILITIES } from "./enemyabilities";
 import { AQUEOUS, AURAS, CONDITION_INFO, CORAL_ARMOR, ENEMY_KIT, FORTIFY, SHIELD_SET_ASIDE, enemyDefence, enemySave, healDice } from "./kit";
 import { inDark } from "./light";
@@ -203,7 +203,7 @@ export function dreadOver(state: ZoneState, unit: Unit): string | null {
 }
 
 /** The conditions that count as wounds, for abilities that grow with them. */
-export const DEBUFFS: readonly Condition[] = ["bleeding", "burning", "stunned", "slowed", "fumbling", "exposed", "poisoned", "prone", "sundered", "reeling", "memento_mori", "fettered"];
+export const DEBUFFS: readonly Condition[] = ["bleeding", "burning", "stunned", "slowed", "fumbling", "exposed", "poisoned", "prone", "sundered", "reeling", "memento_mori", "fettered", "weakened"];
 
 /** Fortify: one of the side that raised a wall, standing beside it, is the steadier for it. */
 export const wallDefence = (state: Pick<ZoneState, "weather">, unit: Unit): number =>
@@ -236,7 +236,15 @@ export function regrow(ctx: Ctx, unit: Unit): void {
   }
 }
 
-export const saveBonus = (unit: Unit, stat: StatKey): number => (unit.side === "hero" ? mod(statOf(unit, stat)) : enemySave(unit.kind));
+/** What a unit adds to a save with `stat`: its own bonus, less what Weakened takes off every save (its `amount`). */
+export const saveBonus = (unit: Unit, stat: StatKey): number =>
+  (unit.side === "hero" ? mod(statOf(unit, stat)) : enemySave(unit.kind)) - weakenedBy(unit);
+
+/** What Weakened takes off every save `unit` makes: its `amount` (WEAKENED_SAVES unless said), or 0 if it is not Weakened. */
+export const weakenedBy = (unit: Unit): number => {
+  const c = unit.conditions.find((x) => x.kind === "weakened");
+  return c ? (c.amount ?? WEAKENED_SAVES) : 0;
+};
 
 /** A unit goes down: no HP left, nothing on it any more. */
 export function strikeDown(ctx: Ctx, unit: Unit): void {

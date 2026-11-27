@@ -18,7 +18,7 @@ import type { Unit, ZoneState } from "./types";
 export type StrikeAim = "self" | "hex" | "unit";
 
 export const strikeAim = (attack: EnemyStrike): StrikeAim =>
-  attack.burst || attack.kit.rally || attack.kit.aftershock || attack.kit.field || attack.kit.summon ? "self" : spreads(attack.kit) || attack.kit.dash ? "hex" : "unit";
+  attack.burst || attack.kit.rally || attack.kit.aftershock || attack.kit.field || attack.kit.summon ? "self" : spreads(attack.kit) || attack.kit.dash || attack.kit.heal ? "hex" : "unit";
 
 /** Why `enemy` cannot use `attack` on this aim from where it stands, in words, or null if it can. `anywhere`: range and line of sight are not asked. */
 export function checkStrike(state: ZoneState, enemy: Unit, attack: EnemyStrike, aim: { target?: Unit; at?: HexPos }, anywhere = false): string | null {
