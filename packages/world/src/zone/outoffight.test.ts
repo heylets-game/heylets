@@ -55,6 +55,8 @@ describe("out of a fight", () => {
       const events: ZoneEvent[] = [];
       const after = must(state, { type: "use", by: "ann", unit: "ann", ability: "hex", target: foe }, events);
       expect(after.encounter?.order).toContain(foe);
+      // Its band is told as having come because it was struck, by Ann.
+      expect(events).toContainEqual(expect.objectContaining({ t: "alert", why: { kind: "struck", by: "ann" } }));
       const failed = events.some((e) => e.t === "roll" && e.roll.kind === "save" && e.roll.id === foe && !e.roll.ok);
       expect(has(after, foe, "fumbling"), `seed ${seed}`).toBe(failed);
       if (failed) landed++;

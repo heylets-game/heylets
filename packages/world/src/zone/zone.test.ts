@@ -2346,7 +2346,7 @@ describe("a delve", () => {
     expect(next.map.pois.find((p) => p.id === door.id)!.cleared).toBe(true);
     expect(tileOf(next, door.pos)!.biome).toBe("cave");
     expect(events).toContainEqual({ t: "door", id: "ann", poi: door.id, how: "key" });
-    expect(events.some((e) => e.t === "noise" || e.t === "roll")).toBe(false);
+    expect(events.some((e) => e.t === "alert" || e.t === "roll")).toBe(false);
     expect(fails(next, { type: "unlock", by: "ann", unit: "ann", poi: door.id })).toMatch(/open already/);
   });
 
@@ -2368,7 +2368,7 @@ describe("a delve", () => {
       expect(step.state.map.pois.find((p) => p.id === door.id)!.cleared).toBe(ok);
       expect(events).toContainEqual({ t: "door", id: "ann", poi: door.id, how: ok ? "forced" : "held" });
       // Heard either way, if a band is near enough.
-      expect(events.some((e) => e.t === "noise")).toBe(near.length > 0);
+      expect(events.some((e) => e.t === "alert" && e.why.kind === "noise" && e.why.by === "ann")).toBe(near.length > 0);
       // A fight starts (it may be over within the step: a lone hero stunned by a band can go down before it ends).
       if (near.length > 0) expect(events.some((e) => e.t === "fight_start")).toBe(true);
       if (ok) forced = true;

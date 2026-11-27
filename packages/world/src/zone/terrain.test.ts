@@ -20,7 +20,7 @@ import { HEX_DIRS, HEX_ROOM, HIGH_REACH, MAX_ELEV, elevOf, heldAgainst, isDead, 
 import { ACTION_AP, AP_MAX, AP_TURN, SUMMON_AP_TURN, COMMON_ACTIONS, ENEMY_KIT, ENEMY_MOVE_AP, JUMP_DOWN, JUMP_UP, enemyMove, enemyStrikes, tacticOf } from "./kit";
 import { mod, proficiency, rollShown } from "./rules";
 import { SITE_IDS, siteInside, siteOpen } from "./sites";
-import { HEAR_RANGE, stepZone } from "./zone";
+import { stepZone } from "./zone";
 import { pickBellGoer } from "./bell";
 import type { Rolled, Unit, ZoneAction, ZoneEffect, ZoneEvent, ZoneState } from "./types";
 
@@ -75,6 +75,8 @@ function seek(state: ZoneState, action: ZoneAction, want: (o: Outcome) => boolea
 
 const rolls = (events: ZoneEvent[], label: string) => events.flatMap((e) => (e.t === "roll" && e.roll.label === label ? [e.roll] : []));
 const got = <T extends ZoneEvent["t"]>(events: ZoneEvent[], t: T) => events.filter((e): e is Extract<ZoneEvent, { t: T }> => e.t === t);
+/** The bands that came because they heard: the fight, or a door forced. */
+const heardAlerts = (events: ZoneEvent[]) => got(events, "alert").filter((e) => e.why.kind === "heard" || e.why.kind === "noise");
 /** Whether a shove (or what stands in for one) was won, and whether whoever was sent toward an edge caught it. */
 const won = (events: ZoneEvent[], label = "Shove") => rolls(events, label).some((r) => r.ok);
 const caught = (events: ZoneEvent[]) => rolls(events, "Catch the edge").some((r) => r.ok);
@@ -1120,18 +1122,17 @@ describe("abilities that move someone", () => {
 // ---------- a fight is heard ----------
 
 describe("a fight is heard", () => {
-  /** Ann and a bandit beside her; a second band HEAR_RANGE off, and a third a hex beyond that from anyone. */
+  /** Ann and a bandit beside her; a second band ALERT_RANGE off, and a third a hex beyond that from anyone. */
   function threeBands() {
     const state = board();
     hero(state, "ann", "qa_paladin", at(2, 6));
     const first = enemy(state, "bandit", at(3, 6), "g1", 200);
-    const near = [enemy(state, "bandit", at(2 + HEAR_RANGE, 6), "g2", 200), enemy(state, "bandit", at(2 + HEAR_RANGE, 7), "g2", 200)];
-    const far = enemy(state, "bandit", at(2 + 2 * HEAR_RANGE + 1, 6), "g3", 200);
+    const near = [enemy(state, "bandit", at(2 + ALERT_RANGE, 6), "g2", 200), enemy(state, "bandit", at(2 + ALERT_RANGE, 7), "g2", 200)];
+    const far = enemy(state, "bandit", at(2 + 2 * ALERT_RANGE + 1, 6), "g3", 200);
     return { state, first: first.id, near: near.map((u) => u.id), far: far.id };
   }
 
   it("at the start of each round, a band with one of its own within earshot of someone still fighting comes to join it", () => {
-    expect(HEAR_RANGE).toBeGreaterThan(ALERT_RANGE);
     const made = threeBands();
     const { first, near, far } = made;
     const events: ZoneEvent[] = [];
@@ -1139,23 +1140,23 @@ describe("a fight is heard", () => {
     // The first round: the fight is Ann's and the one bandit's, and nobody else has stirred.
     expect([...state.encounter!.order].sort()).toEqual(["ann", first].sort());
     expect(state.groups).toMatchObject({ g1: { alerted: true }, g2: { alerted: false }, g3: { alerted: false } });
-    expect(got(events, "noise")).toEqual([]);
+    expect(heardAlerts(events)).toEqual([]);
     // Round the order once: the second band has heard it.
     const round: ZoneEvent[] = [];
     while (state.encounter!.round === 1) state = must(state, { type: "timeout" }, round);
     const told = round.map((e) => e.t);
-    expect(round).toContainEqual({ t: "noise", group: "g2" });
-    expect(told.indexOf("noise")).toBeGreaterThan(told.indexOf("round"));
-    expect(round).toContainEqual({ t: "alert", group: "g2", by: "ann" });
-    for (const id of near) expect(round).toContainEqual({ t: "fight_join", id });
+    // Told once, as a band, with who came and whom they heard: the bandit beside Ann, the nearer of the two to them.
+    expect(round).toContainEqual({ t: "alert", group: "g2", units: near, why: { kind: "heard", near: first } });
+    expect(told.indexOf("alert")).toBeGreaterThan(told.indexOf("round"));
+    expect(got(round, "fight_join")).toEqual([]);
     expect(rolls(round, "Initiative").map((r) => r.id).sort()).toEqual([...near].sort());
     expect([...state.encounter!.order].sort()).toEqual(["ann", first, ...near].sort());
     expect(state.groups).toMatchObject({ g2: { alerted: true }, g3: { alerted: false } });
     // The third is a hex too far from every one of them, and stays where it is, round after round.
-    expect(Math.min(...state.encounter!.order.map((id) => hexDistance(unit(state, id).pos, unit(state, far).pos)))).toBe(HEAR_RANGE + 1);
+    expect(Math.min(...state.encounter!.order.map((id) => hexDistance(unit(state, id).pos, unit(state, far).pos)))).toBe(ALERT_RANGE + 1);
     const later: ZoneEvent[] = [];
     while (state.encounter!.round < 5) state = must(state, { type: "timeout" }, later);
-    expect(got(later, "noise")).toEqual([]);
+    expect(heardAlerts(later)).toEqual([]);
     expect(state.encounter!.order).not.toContain(far);
     expect(state.groups.g3.alerted).toBe(false);
   });
@@ -1172,7 +1173,7 @@ describe("a fight is heard", () => {
     Object.assign(unit(state, made.first), { hp: 0, down: true });
     const events: ZoneEvent[] = [];
     while (state.encounter!.round < 3) state = must(state, { type: "timeout" }, events);
-    expect(got(events, "noise")).toEqual([]);
+    expect(heardAlerts(events)).toEqual([]);
     expect(state.groups.g2.alerted).toBe(false);
   });
 
@@ -1636,6 +1637,10 @@ describe("the alarm bell rouses the place", () => {
     expect([...state.encounter!.order].sort()).toEqual(["ann", made.first, made.mate, ...made.second, made.third, ...made.den].sort());
     expect(state.groups).toMatchObject({ g1: { alerted: true }, g2: { alerted: true }, g3: { alerted: true }, g4: { alerted: true } });
     expect(got(events, "fight_join")).toEqual([]);
+    // Each band is told as having come for the bell, rung by the one who rang it.
+    const came = got(events, "alert").filter((e) => e.group !== "g1");
+    expect(came.map((e) => e.group).sort()).toEqual(["g2", "g3", "g4"]);
+    for (const e of came) expect(e.why).toEqual({ kind: "bell", by: bells[0].id });
   });
 
   it("whoever stands in the way does not make it no way: a band comes though the one gap between it and the fight is held, by a hero or by its own", () => {
@@ -1706,20 +1711,20 @@ describe("the alarm bell rouses the place", () => {
       let state = must(made.state, { type: "dev", by: "ann", dev: { op: "start_fight" } }, events);
       // The one band met, and nobody else: not the two bands with a clear way to the fight, which the open air would have brought.
       expect(got(events, "roused"), site).toEqual([]);
-      expect(got(events, "alert"), site).toEqual([{ t: "alert", group: "g1", by: "ann" }]);
+      expect(got(events, "alert"), site).toEqual([expect.objectContaining({ group: "g1", why: { kind: "seen", by: "ann" } })]);
       expect([...state.encounter!.order].sort(), site).toEqual(["ann", made.first, made.mate].sort());
       expect(state.groups, site).toMatchObject({ g1: { alerted: true }, g2: { alerted: false }, g3: { alerted: false }, g4: { alerted: false } });
       // Nor at any later round, while they are out of earshot.
       while (state.encounter!.round < 4) state = must(state, { type: "timeout" }, events);
       expect(got(events, "roused"), site).toEqual([]);
-      expect(got(events, "noise"), site).toEqual([]);
+      expect(heardAlerts(events), site).toEqual([]);
       expect(state.groups, site).toMatchObject({ g2: { alerted: false }, g3: { alerted: false }, g4: { alerted: false } });
       // Someone in the fight comes within earshot of the second band: at the next round it is in it, heard and not roused, and still alone.
-      unit(state, made.first).pos = at(8 - HEAR_RANGE, 1);
+      unit(state, made.first).pos = at(8 - ALERT_RANGE, 1);
       const round = state.encounter!.round;
       const after: ZoneEvent[] = [];
       while (state.encounter!.round === round) state = must(state, { type: "timeout" }, after);
-      expect(after, site).toContainEqual({ t: "noise", group: "g2" });
+      expect(heardAlerts(after).map((e) => e.group), site).toEqual(["g2"]);
       expect(got(after, "roused"), site).toEqual([]);
       for (const id of made.second) expect(state.encounter!.order, site).toContain(id);
       expect(state.groups, site).toMatchObject({ g2: { alerted: true }, g3: { alerted: false }, g4: { alerted: false } });

@@ -170,6 +170,7 @@ import { useZone, type ZoneSend } from "./useZone";
 import { Icon } from "./items";
 import { label } from "./labels";
 import { FLOURISH, GUARDS, SONG_MOOD, SOUND_KIND, SUMMONS, THROW_COLOR, aimKind, fxFor } from "./zone/abilityFx";
+import { JOIN_WORDS, bandName, joinCauseUnit } from "./zone/joinCause";
 import { RETORTS, enemyAbilityNamed, ownRoute } from "./zone/ownMoves";
 import { COMMON_ICON, ITEM_ICON, abilityIcon } from "./zone/actionIcons";
 import { BAR_SLOTS, assignSlot, barChoices, loadBar, moveSlot, saveBar } from "./zone/hotbar";
@@ -339,7 +340,7 @@ function dwell(ev: ZoneEvent, many: boolean, next: ZoneEvent | undefined, carrie
     case "stood": return 450;
     case "reeled": return 400;
     case "surface": return many ? 80 : 240;
-    case "up": case "fight_join": case "round": return 240;
+    case "up": case "fight_join": case "round": case "alert": return 240;
     case "burst": case "reaction": return 300;
     case "shoved": return 400;
     // The crouch, the leap and the landing: what follows waits for the feet to come down.
@@ -1689,7 +1690,13 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         later(() => sounds.zone("reaction", view?.whereIs(ev.id)));
         say(`${name(ev.id)} strikes at ${name(ev.target)} as they leave reach.`);
       } else if (ev.t === "alert") {
-        say(`${name(ev.by)} has been seen.`);
+        // A band is in the fight: why it came in the log (zone/joinCause.ts), and a word over each of its heads.
+        const words = JOIN_WORDS[ev.why.kind];
+        const band = bandName(ev.units.map(name));
+        if (words.line) say(words.line(band, ev.units.length > 1, name(joinCauseUnit(ev.why)), next.options.biome === "caves"), "bad");
+        later(() => {
+          for (const id of ev.units) view?.floatOver(id, words.float, "#ffb070");
+        });
       } else if (ev.t === "fight_start") {
         // The view goes to the middle of it, and the screen says a fight is on while the dice come up.
         const fighters = ev.units.map(find).filter((u): u is Unit => !!u);
@@ -1814,8 +1821,6 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           }
         });
         say(`The alarm is up. The whole place is roused: ${ev.units.length} more ${ev.units.length === 1 ? "is" : "are"} coming.`, "bad");
-      } else if (ev.t === "noise") {
-        say(next.options.biome === "caves" ? "The noise carries through the tunnels. Something is coming." : "The fight is heard. More of them are coming.", "bad");
       } else if (ev.t === "opened") {
         const chest = draft.pois.find((p) => p.id === ev.poi);
         if (chest) chest.cleared = true;

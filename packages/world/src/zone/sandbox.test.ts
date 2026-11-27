@@ -106,7 +106,7 @@ describe("placing enemies", () => {
   it("starts a fight when put down in sight of a hero", () => {
     const { state, placed, events } = fresh(at(8, 6));
     expect(state.encounter!.order).toEqual(expect.arrayContaining([placed.id, "ann"]));
-    expect(events).toContainEqual(expect.objectContaining({ t: "alert", group: placed.group, by: "ann" }));
+    expect(events).toContainEqual(expect.objectContaining({ t: "alert", group: placed.group, why: { kind: "seen", by: "ann" } }));
     expect(events.some((e) => e.t === "fight_start")).toBe(true);
   });
 

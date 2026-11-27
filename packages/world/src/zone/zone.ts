@@ -50,7 +50,7 @@ import { drown, drowningAtStart, drowningOwed, holdBreath } from "./drowning";
 import { shantyOf, songMove, windward } from "./song";
 import { courseMarks } from "./stars";
 import { modsOf } from "./mods";
-import type { Budget, Condition, DevOp, Encounter, Throwable, Unit, ZoneAction, ZoneEffect, ZoneEvent, ZoneHero, ZoneOptions, ZoneState, ZoneStep, ZoneView } from "./types";
+import type { Budget, Condition, DevOp, Encounter, JoinCause, Throwable, Unit, ZoneAction, ZoneEffect, ZoneEvent, ZoneHero, ZoneOptions, ZoneState, ZoneStep, ZoneView } from "./types";
 
 /** Rounds a surface painted from the dev toolbox lasts. */
 const PAINT_ROUNDS = 6;
@@ -411,27 +411,31 @@ function flee(ctx: Ctx, unit: Unit): void {
 
 /**
  * Enemy groups have noticed someone: they are in a fight. One starts if none is on, and in the open that rouses the
- * rest of the place (rouse). `quiet`: they come as one crowd, and are not each announced.
+ * rest of the place (rouse). Each band is told once (`alert`), with who of it comes and why (`why`, a cause per
+ * band, or one for them all); a hero who set it off and was not in the fight joins it with them.
  */
-function engage(ctx: Ctx, groups: string[], by: Unit, quiet = false): void {
+function engage(ctx: Ctx, groups: string[], why: JoinCause | ((group: string) => JoinCause)): void {
   const { state } = ctx;
   const fresh = groups.filter((g) => state.groups[g] && !state.groups[g].alerted);
   if (fresh.length === 0) return;
+  const members = state.units.filter((u) => u.group && fresh.includes(u.group) && !u.down);
   for (const g of fresh) {
     state.groups[g].alerted = true;
-    ctx.events.push({ t: "alert", group: g, by: by.id });
+    ctx.events.push({ t: "alert", group: g, units: members.filter((u) => u.group === g).map((u) => u.id), why: typeof why === "function" ? why(g) : why });
   }
-  const members = state.units.filter((u) => u.group && fresh.includes(u.group) && !u.down);
   if (members.length === 0) return;
   const starting = !state.encounter;
   const enc: Encounter = state.encounter ?? { round: 1, order: [], init: {}, acting: [], done: [], budgets: {}, reacted: [], turnNo: 0, deadline: null };
   state.encounter = enc;
-  const joining = [...members, ...(by.side === "hero" && !by.down ? [by] : [])];
+  const cause = typeof why === "function" ? null : why;
+  const by = cause && cause.kind !== "heard" ? unitById(state, cause.by) : undefined;
+  const joining = [...members, ...(by && by.side === "hero" && !by.down ? [by] : [])];
   if (starting) ctx.events.push({ t: "fight_start", units: joining.map((u) => u.id) });
   for (const u of joining) {
     if (enc.order.includes(u.id)) continue;
     enter(ctx, enc, u);
-    if (!starting && !quiet) ctx.events.push({ t: "fight_join", id: u.id });
+    // The band was told as one (alert); a hero coming in with it is told on their own.
+    if (!starting && u.side === "hero") ctx.events.push({ t: "fight_join", id: u.id });
   }
   pullIn(ctx);
 }
@@ -450,7 +454,7 @@ const open = (state: ZoneState) => !!state.scene && siteOpen(state.scene.site);
  * roused: walls keep the noise in, and only those near enough to hear come. Called when the bell is rung, and by nothing else:
  * a fight no longer rouses the place of itself.
  */
-function rouse(ctx: Ctx): void {
+function rouse(ctx: Ctx, ringer: Unit): void {
   const { state } = ctx;
   const enc = state.encounter;
   if (!enc || !open(state)) return;
@@ -477,15 +481,14 @@ function rouse(ctx: Ctx): void {
   }
   if (coming.length === 0) return;
   ctx.events.push({ t: "roused", groups: coming, units: coming.flatMap((g) => bands.get(g)!.map((u) => u.id)) });
-  engage(ctx, coming, hero, true);
+  engage(ctx, coming, { kind: "bell", by: ringer.id });
 }
 
-/** How near a fight a band has to be to hear it: at the start of each round, one that near comes to join it. */
-export const HEAR_RANGE = 5;
-
 /**
- * A fight is heard. Any band that has noticed nobody, with one of its own within HEAR_RANGE of someone still
- * standing in the fight, turns on the party: it is in the fight from now on. Called as each new round begins.
+ * A fight is heard. Any band that has noticed nobody, with one of its own within ALERT_RANGE of someone still
+ * standing in the fight (either side), turns on the party: it is in the fight from now on. Hearing reaches as far
+ * as sight does (noticedBy), by the one value, but needs no line to the fight: walls do not stop it. Called as
+ * each new round begins.
  */
 function reinforce(ctx: Ctx, only?: readonly string[]): void {
   const { state } = ctx;
@@ -494,13 +497,16 @@ function reinforce(ctx: Ctx, only?: readonly string[]): void {
   const fighters = state.units.filter((u) => enc.order.includes(u.id) && !u.down);
   const hero = fighters.find((u) => u.side === "hero");
   if (!hero) return;
-  const heard = new Set<string>();
+  // Each band heard, and the one in the fight nearest any of it (whom it heard).
+  const heard = new Map<string, { near: string; gap: number }>();
   for (const e of standing(state, "enemy")) {
-    if (!e.group || state.groups[e.group]?.alerted || heard.has(e.group) || (only && !only.includes(e.group))) continue;
-    if (fighters.some((f) => gap(f, e) <= HEAR_RANGE)) heard.add(e.group);
+    if (!e.group || state.groups[e.group]?.alerted || (only && !only.includes(e.group))) continue;
+    for (const f of fighters) {
+      const d = gap(f, e);
+      if (d <= ALERT_RANGE && d < (heard.get(e.group)?.gap ?? Infinity)) heard.set(e.group, { near: f.id, gap: d });
+    }
   }
-  for (const group of heard) ctx.events.push({ t: "noise", group });
-  if (heard.size > 0) engage(ctx, [...heard], hero);
+  if (heard.size > 0) engage(ctx, [...heard.keys()], (g) => ({ kind: "heard", near: heard.get(g)!.near }));
 }
 
 /** The groups, not yet alerted, with someone who can see `unit` from close by. */
@@ -528,7 +534,7 @@ function onStep(ctx: Ctx, unit: Unit, flush: () => void): boolean {
   const noticed = noticedBy(ctx.state, unit);
   if (noticed.length > 0) {
     flush();
-    engage(ctx, noticed, unit);
+    engage(ctx, noticed, { kind: "seen", by: unit.id });
     return true;
   }
   const enc = ctx.state.encounter;
@@ -817,7 +823,7 @@ function advance(ctx: Ctx): void {
     // In the sandbox an enemy's turn waits on the dev, as a hero's does.
     if (next[0].side === "enemy" && !state.sandbox) {
       // The bell, rung: the whole place is roused.
-      if (enemyTurn(ctx, next[0], enc.budgets[next[0].id])) rouse(ctx);
+      if (enemyTurn(ctx, next[0], enc.budgets[next[0].id])) rouse(ctx, next[0]);
       enc.done = [next[0].id];
       continue;
     }
@@ -919,7 +925,7 @@ function dev(ctx: Ctx, by: string, op: DevOp): string | null {
     // Put down where it can see a hero (by the rule a hero's step is noticed by): it is on them at once, starting a
     // fight if none is on, as if they had walked into its sight.
     const spotted = standing(state, "hero").find((h) => noticedBy(state, h).includes(group));
-    if (spotted) engage(ctx, [group], spotted);
+    if (spotted) engage(ctx, [group], { kind: "seen", by: spotted.id });
     // Put down near enough to a fight to hear it: it is in it at once, as it would be at the end of the round.
     reinforce(ctx, [group]);
   } else if (op.op === "paint") {
@@ -953,7 +959,7 @@ function dev(ctx: Ctx, by: string, op: DevOp): string | null {
       .filter((u) => u.side === "enemy" && !u.down && u.group && !state.groups[u.group]?.alerted)
       .sort((a, b) => hexDistance(a.pos, owner?.pos ?? state.start) - hexDistance(b.pos, owner?.pos ?? state.start))[0];
     if (!owner || !nearest) return "There is nobody to fight.";
-    engage(ctx, [nearest.group!], owner);
+    engage(ctx, [nearest.group!], { kind: "seen", by: owner.id });
   } else if (op.op === "kit") {
     const u = unitById(state, op.unit);
     if (!u || u.side !== "hero" || u.summon || (u.id !== by && u.controller !== by)) return "That is not one of your heroes.";
@@ -989,7 +995,7 @@ function dev(ctx: Ctx, by: string, op: DevOp): string | null {
     }
     const foe = enc?.acting.map((id) => unitById(state, id)).find((u) => u?.side === "enemy" && !u.down && !enc.done.includes(u.id));
     if (enc && foe && enc.budgets[foe.id]) {
-      if (enemyTurn(ctx, foe, enc.budgets[foe.id])) rouse(ctx);
+      if (enemyTurn(ctx, foe, enc.budgets[foe.id])) rouse(ctx, foe);
       enc.done.push(foe.id);
     }
   } else if (op.op === "strike") {
@@ -1233,7 +1239,7 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
     ctx.opening = opens(state, struck, touched);
     resolveAbility(ctx, unit, action.ability, aim);
     ctx.opening = false;
-    engage(ctx, struck, unit);
+    engage(ctx, struck, { kind: "struck", by: unit.id });
     reachIn(ctx, unit, touched);
     shedOutside(state, [unit, ...touched]);
     return null;
@@ -1251,7 +1257,7 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
     ctx.opening = !!target && opens(state, struck, [target]);
     doCommon(ctx, unit, action.what, aim, budget);
     ctx.opening = false;
-    engage(ctx, struck, unit);
+    engage(ctx, struck, { kind: "struck", by: unit.id });
     if (target) reachIn(ctx, unit, [target]);
     shedOutside(state, [unit, ...(target ? [target] : [])]);
     if (action.what === "flee") flee(ctx, unit);
@@ -1317,10 +1323,7 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
     // A key is quiet. Forcing it is heard, whether the door gives or not: the nearest band that has not noticed anyone comes.
     const { forced } = workDoor(ctx, unit, door!);
     const heard = forced ? heardBy(state, door!.pos) : undefined;
-    if (heard) {
-      ctx.events.push({ t: "noise", group: heard });
-      engage(ctx, [heard], unit);
-    }
+    if (heard) engage(ctx, [heard], { kind: "noise", by: unit.id });
     return null;
   }
   if (action.type === "light") {
@@ -1355,7 +1358,7 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
   ctx.opening = opens(state, struck, touched);
   throwItem(ctx, unit, action.item, action.at);
   ctx.opening = false;
-  engage(ctx, struck, unit);
+  engage(ctx, struck, { kind: "struck", by: unit.id });
   reachIn(ctx, unit, touched);
   shedOutside(state, [unit, ...touched]);
   return null;

@@ -6,14 +6,14 @@
 import { describe, expect, it } from "vitest";
 import { hexDistance, posKey, type HexPos } from "@gantt-quest/core";
 import { ENEMIES } from "../content";
-import { zoneOptions } from "./gen";
+import { ALERT_RANGE, zoneOptions } from "./gen";
 import { HEX_DIRS, HEX_ROOM, blockerAt, flies, isDead, solid, zoneReach, type Reached } from "./geometry";
 import { ENEMY_MOVE_AP, enemyMove } from "./kit";
 import { modsOf } from "./mods";
 import { LAY_GRIDS, layZone, type Laid } from "./lay";
 import { PROPS, propOf } from "./props";
 import { SITES, SITE_IDS, siteInside, siteOpen, type SiteId } from "./sites";
-import { HEAR_RANGE, createZone, standInHero, stepZone } from "./zone";
+import { createZone, standInHero, stepZone } from "./zone";
 import type { ZoneAction, ZoneEvent, ZoneSize, ZoneState } from "./types";
 
 const INSIDE = SITE_IDS.filter(siteInside);
@@ -187,6 +187,8 @@ function must(state: ZoneState, action: ZoneAction, sink: ZoneEvent[] = []): Zon
   return step.state;
 }
 const got = <T extends ZoneEvent["t"]>(events: ZoneEvent[], t: T) => events.filter((e): e is Extract<ZoneEvent, { t: T }> => e.t === t);
+/** The bands that came because they heard: the fight, or a door forced. */
+const heardAlerts = (events: ZoneEvent[]) => got(events, "alert").filter((e) => e.why.kind === "heard" || e.why.kind === "noise");
 const zone = (site: SiteId, size: ZoneSize, seed: number, more: Record<string, unknown> = {}): ZoneState =>
   createZone("IN", `in-${site}-${size}-${seed}`, zoneOptions({ size, biome: "meadow", groups: 4, elevation: 2, obstacles: 1, clear: 4, party: 2, site, ...more }));
 const standing = (state: ZoneState) => state.units.filter((u) => u.side === "enemy" && !u.down);
@@ -208,8 +210,8 @@ describe("a fight under a roof or under ground", () => {
           const events: ZoneEvent[] = [];
           state = must(state, { type: "dev", by: "ann", dev: { op: "start_fight" } }, events);
           expect(got(events, "roused"), where).toEqual([]);
-          expect(got(events, "noise"), where).toEqual([]);
-          expect(got(events, "alert"), where).toEqual([{ t: "alert", group: met, by: "ann" }]);
+          expect(heardAlerts(events), where).toEqual([]);
+          expect(got(events, "alert"), where).toEqual([expect.objectContaining({ group: met, why: { kind: "seen", by: "ann" } })]);
           expect(alerted(state), where).toEqual([met]);
           expect([...state.encounter!.order].sort(), where).toEqual(["ann", ...standing(state).filter((u) => u.group === met).map((u) => u.id)].sort());
         }
@@ -236,7 +238,7 @@ describe("a fight under a roof or under ground", () => {
             grew = false;
             const fighters = [state.units.find((u) => u.id === "ann")!, ...standing(state).filter((u) => within.has(u.group!))];
             for (const e of standing(state)) {
-              if (within.has(e.group!) || !fighters.some((f) => hexDistance(f.pos, e.pos) <= HEAR_RANGE)) continue;
+              if (within.has(e.group!) || !fighters.some((f) => hexDistance(f.pos, e.pos) <= ALERT_RANGE)) continue;
               within.add(e.group!);
               grew = true;
             }
@@ -248,14 +250,14 @@ describe("a fight under a roof or under ground", () => {
           expect(alerted(state), where).toEqual([...within].sort());
           // Each that came after the first was heard coming; none was roused.
           expect(got(events, "roused"), where).toEqual([]);
-          expect(got(events, "noise").map((e) => e.group).sort(), where).toEqual([...within].filter((g) => !first.includes(g)).sort());
+          expect(heardAlerts(events).map((e) => e.group).sort(), where).toEqual([...within].filter((g) => !first.includes(g)).sort());
           came += within.size - first.length;
           stayed += Object.keys(state.groups).length - within.size;
         }
       }
     }
-    // Both happen: a band in the next room hears and comes, and (far more often) the rest of the place never knows.
-    expect(came).toBeGreaterThan(0);
+    // Bands are laid further apart than earshot (gen.ts, ALERT_RANGE), so with nobody moving the rest of the place
+    // nearly always never knows; one walked within earshot does come (terrain.test.ts "a fight is heard").
     expect(stayed).toBeGreaterThan(came);
   });
 
@@ -367,7 +369,7 @@ describe("a fight under a roof or under ground", () => {
         expect(got(events, "roused"), where).toEqual([]);
         const began = events.findIndex((e) => e.t === "fight_start");
         expect(got(events.slice(0, began), "alert").length, where).toBeGreaterThanOrEqual(1);
-        expect(got(events.slice(began), "alert").map((e) => e.group).sort(), where).toEqual(got(events, "noise").map((e) => e.group).sort());
+        expect(got(events.slice(began), "alert").map((e) => e.group).sort(), where).toEqual(heardAlerts(events).map((e) => e.group).sort());
         fights++;
       }
     }

@@ -563,11 +563,20 @@ export interface Rolled {
   halved?: boolean;
 }
 
+/**
+ * Why a band that had noticed nobody is now in the fight (zone.ts engage). Each names the unit that set it off:
+ * `seen`: a hero walked into its sight. `heard`: someone in the fight (either side) came near enough to hear.
+ * `struck`: a hero's blow, shove or throw reached it. `noise`: a hero forced a door, and it heard the crash.
+ * `bell`: the enemy that rang the alarm bell.
+ */
+export type JoinCause = { kind: "seen" | "struck" | "noise" | "bell"; by: string } | { kind: "heard"; near: string };
+
 export type ZoneEvent =
   | { t: "joined"; id: string }
   /** `cut`: the walk before this one was called off at this hex, and this one sets off from it. */
   | { t: "moved"; id: string; path: HexPos[]; cut?: HexPos }
-  | { t: "alert"; group: string; by: string }
+  /** A band has noticed the party and is in the fight: these of it (`units`), and why (`why`). */
+  | { t: "alert"; group: string; units: string[]; why: JoinCause }
   | { t: "fight_start"; units: string[] }
   | { t: "fight_join"; id: string }
   | { t: "roll"; roll: Roll }
@@ -650,8 +659,6 @@ export type ZoneEvent =
   | { t: "key"; keys: number; from: "chest" | "band"; id?: string }
   /** A door is worked: unlocked with a key, forced open, or forced and held. */
   | { t: "door"; id: string; poi: string; how: "key" | "forced" | "held" }
-  /** The crash of a forced door is heard by a band, which comes running. */
-  | { t: "noise"; group: string }
   /** An enemy is picked to go and ring the alarm bell (bell.ts pickBellGoer); it is marked to the players. */
   | { t: "bell_goer"; id: string }
   /** An enemy rings the alarm bell (bell.ts): the rest of the place is roused next. */

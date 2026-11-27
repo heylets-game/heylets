@@ -25,6 +25,7 @@ export const ZONE_GRIDS: Record<ZoneSize, HexGrid> = {
 /**
  * How near a hero has to come, in plain sight, for an enemy group to turn on them: within three hexes of
  * one of them, with nothing that blocks sight between. Out of sight, or further off, walking past starts nothing.
+ * It is how far a fight is heard, too (zone.ts reinforce): a band this near anyone in a fight joins it, seen or not.
  */
 export const ALERT_RANGE = 3;
 /** How near a fight a hero has to be to be drawn into it. */
