@@ -698,9 +698,11 @@ function strike(ctx: Ctx, unit: Unit, def: AbilityDef, tactic: Tactic, target: U
   if (tactic.edge && roll.adv === 1) more += tactic.edge;
   if (tactic.wading && inWater(ctx.state, unit)) more += tactic.wading;
   const rolled = rollShown(ctx.rng, abilityDice(def), more, roll.crit);
-  // Bulwark Strike: harder for the shield carried, but by no more than the blow does without it.
+  // Bulwark Strike: harder for the shield carried, but by no more than the most the blow could roll without it (no crit).
   if (tactic.bulwark) {
-    const extra = Math.min(Math.floor(shieldOf(unit) * tactic.bulwark.perShield), Math.floor(rolled.total * tactic.bulwark.upTo));
+    const dice = abilityDice(def);
+    const most = dice.n * dice.d + dice.plus + more;
+    const extra = Math.min(Math.floor(shieldOf(unit) * tactic.bulwark.perShield), Math.max(0, Math.floor(most * tactic.bulwark.upTo)));
     rolled.plus += extra;
     rolled.total += extra;
   }

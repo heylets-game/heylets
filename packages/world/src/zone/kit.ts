@@ -200,7 +200,7 @@ export const BOLSTER = { range: 2, shield: 10 };
  * Overwhelm drives an enemy `hexes` back, and Stuns it `stun` of its turns if it is driven into a wall. Fortify raises a wall of
  * `hexes` hexes for `rounds` rounds; the user's side gets `defence` more Defence beside it. Bulwark Strike shields the Warden
  * `shield` plus their level first, then adds `perShield` of their shield to the damage, but never more than `upTo` times
- * what the blow does without it. Taunt reaches `range` hexes, for `rounds`.
+ * the most the blow could roll without it (1d8 + 2: 10). Taunt reaches `range` hexes, for `rounds`.
  */
 export const ENDURE = { range: 0, shield: 10 };
 export const OVERWHELM = { hexes: 2, stun: 1 };
