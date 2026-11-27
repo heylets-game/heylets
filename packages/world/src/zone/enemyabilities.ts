@@ -18,11 +18,16 @@ export interface AbilityScales {
   damage?: ScaleRate;
 }
 
-/** A call for more of its side (EnemyAbilityDef `summon`): how many of what kind, and the most it has out at once (none: no limit). */
+/**
+ * A call for more of its side (EnemyAbilityDef `summon`): how many of what kind, the most it has out at once (none: no
+ * limit), and how many of that kind may already stand on a hex it calls one onto (none: it must be empty), so long as
+ * there is room on it (geometry.ts HEX_ROOM). Empty hexes are used first.
+ */
 export interface KinCall {
   kind: string;
   count: number;
   most?: number;
+  share?: number;
 }
 
 export interface EnemyAbilityDef {
@@ -250,7 +255,7 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   // whoever is (surfaces.ts).
   spin_web: { id: "spin_web", name: "Spin Web", damage: 0, potency: 4, range: 3, blast: 2, surface: { kind: "web", rounds: 4 }, cooldown: 4, weight: 2 },
   // Its young, called out of the nest to its side.
-  brood_swarm: { id: "brood_swarm", name: "Brood Swarm", damage: 0, potency: 0, cost: 1, cooldown: 2, summon: { kind: "spiderling", count: 2, most: 14 }, weight: 2 },
+  brood_swarm: { id: "brood_swarm", name: "Brood Swarm", damage: 0, potency: 0, cost: 1, cooldown: 2, summon: { kind: "spiderling", count: 2, most: 14, share: 1 }, weight: 2 },
   spiderling_bite: { id: "spiderling_bite", name: "Bite", damage: 5, potency: 2, weight: 1 },
   rime_bite: { id: "rime_bite", name: "Rime Bite", damage: 5, potency: 5, saveOr: { effect: "slowed", turns: 2 }, chills: true, weight: 1 },
   searing_bite: { id: "searing_bite", name: "Searing Bite", damage: 5, potency: 5, saveOr: { effect: "burning" }, weight: 1 },
