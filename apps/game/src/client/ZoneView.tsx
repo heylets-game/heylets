@@ -1085,7 +1085,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           if (own === "burst" && view) return void view.burst(ev.id, ev.name, false, thenOn(() => {}), !!ev.again, centre, calls);
           // One thrown onto a clump of hexes (`area`: an Acid Splash, an Immolate) lands in the middle of the clump, not
           // on the hex it was aimed at, which is at one edge of it.
-          const area = enemyAbilityNamed(ev.name, user?.kind)?.area;
+          const spread = enemyAbilityNamed(ev.name, user?.kind)?.spread;
+          const area = spread?.shape === "cluster" ? spread.size : undefined;
           const clump = own === "at" && area && ev.at && user ? clusterHexes({ map: next.map }, user.pos, ev.at, area) : [];
           const middle = clump.length > 0 ? clump.map((p) => point(p, 0.05)).reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(clump.length) : aim;
           if (own === "at" && view && middle) return view.moveAt(ev.id, ev.name, middle, landing());

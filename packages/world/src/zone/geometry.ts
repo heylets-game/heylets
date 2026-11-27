@@ -703,6 +703,25 @@ export function blast(map: WorldMap, center: HexPos, radius: number): HexPos[] {
   return out;
 }
 
+/** The shapes an attack can land on several hexes in, by size: a hero's ability (Tactic) and an enemy's (EnemyAbilityDef) each name one. */
+export type Spread =
+  /** A clump of this many hexes round the hex aimed at (weather.ts clusterHexes), turned by `lean` when the pointer says. */
+  | { shape: "cluster"; size: number; lean?: Lean }
+  /** Every hex within `radius` of the hex aimed at. `onMapOnly` leaves out any with no ground. */
+  | { shape: "blast"; radius: number; onMapOnly?: boolean }
+  /** `rows` arcs of three, swung from the user toward the hex aimed at (sweepHexes). */
+  | { shape: "sweep"; rows: number }
+  /** A cone `rows` rows long (coneHexes). */
+  | { shape: "cone"; rows: number }
+  /** A straight line `length` hexes long (geometry.ts lineFrom). */
+  | { shape: "line"; length: number }
+  /** A swing's three hexes beside the user (arcHexes). */
+  | { shape: "arc" }
+  /** Every hex within `radius` of the user, their own hex left out. */
+  | { shape: "burst"; radius: number }
+  /** The hexes beside the user. */
+  | { shape: "adjacent" };
+
 /**
  * Where in a hex something is aimed: how far off its middle, in hexes along q and r (fractions of a step). A shape that
  * turns with the pointer (nearestHexes) is laid about that spot, not the hex's middle.

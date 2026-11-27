@@ -105,7 +105,7 @@ describe("the rime wraith", () => {
     expect(attacksOf(wraith).map((a) => a.name)).toEqual(["Frost Mote", "Icy Bomb"]);
     expect(attacksOf(wraith).find((a) => a.name === "Frost Mote")).toMatchObject({ damage: 6, range: 5, saveOr: { effect: "slowed" }, chills: true });
     const bomb = attacksOf(wraith).find((a) => a.name === "Icy Bomb")!;
-    expect(bomb).toMatchObject({ damage: 8, range: 5, area: 3, cooldown: 3, surface: { kind: "ice" } });
+    expect(bomb).toMatchObject({ damage: 8, range: 5, spread: { shape: "cluster", size: 3 }, cooldown: 3, surface: { kind: "ice" } });
     expect(bomb.saveOr).toBeUndefined();
   });
 });
@@ -114,7 +114,7 @@ describe("the cultist", () => {
   it("bolts from range, and every few turns throws fire onto a clump of four hexes", () => {
     const { cultist } = ENEMIES;
     const immolate = attacksOf(cultist).find((a) => a.name === "Immolate")!;
-    expect(immolate).toMatchObject({ damage: 7, range: 5, area: 4, cooldown: 3, weight: 2, saveOr: { effect: "burning" }, surface: { kind: "fire" } });
+    expect(immolate).toMatchObject({ damage: 7, range: 5, spread: { shape: "cluster", size: 4 }, cooldown: 3, weight: 2, saveOr: { effect: "burning" }, surface: { kind: "fire" } });
     expect(attacksOf(cultist).find((a) => a.name === "Dark Bolt")).toMatchObject({ weight: 2 });
   });
 });

@@ -11,7 +11,7 @@ import { tileAt, type Poi } from "../map";
 import { DEBUFFS, advantageOf, UNTIMED_KEEPS, attackMade, addCondition, addUses, addShield, addStacks, inflict, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, removeCondition, liveBudget, momentOf, saveBonus, saveMods, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
 import { cratesOn, crateById, hurtCrate, isCrateId } from "./crates";
 import { ENEMY_ABILITIES } from "./enemyabilities";
-import { bearing, big, caught, close, blast, blockerAt, courseShare, covers, directionToward, gap, gapTo, meet, nearOf, reaches, ringToward, elevOf, fetterBars, flies, heldAgainst, inFight, lineFrom, pathIn, perkOf, pitAt, reachFrom, roomAt, roomFor, sameHex, sees, seesFor, solid, span, stepCost, strikes, unitById, zoneReach, type Course, type Lean, type Pit } from "./geometry";
+import { type Spread, bearing, big, caught, close, blast, blockerAt, courseShare, covers, directionToward, gap, gapTo, meet, nearOf, reaches, ringToward, elevOf, fetterBars, flies, heldAgainst, inFight, lineFrom, pathIn, perkOf, pitAt, reachFrom, roomAt, roomFor, sameHex, sees, seesFor, solid, span, stepCost, strikes, unitById, zoneReach, type Course, type Lean, type Pit } from "./geometry";
 import { ACTION_AP, CHART, COMMON_ACTIONS, CORAL_ARMOR, ENEMY_EDGE, RALLY, SHANTY, SUMMON_CALLS, ENEMY_BURST, FLEE_RANGE, JUMP_DOWN, JUMP_UP, blinkRange, jumpRange, POTION_EDGE, SAVE_STAT, SMUGGLED, SPLASH_SHARE, THROWABLES, TORCH_GROUND_ROUNDS, abilityDice, abilityStrikes, enemySave, retortDice, unitStrike, unitStrikes, healDice, reactionStrike, tacticOf, throwRange, type EnemyAttackKit, type EnemyStrike, type Tactic } from "./kit";
 import { modsOf } from "./mods";
 import { d20, diceFor, hitChance, mod, proficiency, rollDice, rollShown, statOf, type Dice } from "./rules";
@@ -551,25 +551,6 @@ function pocket(ctx: Ctx, unit: Unit, target: Unit): void {
 
 // ---------- a hero's abilities ----------
 
-/** The shapes an attack can land on several hexes in, by size: a hero's ability (Tactic) and an enemy's (EnemyAbilityDef) each name one. */
-export type Spread =
-  /** A clump of this many hexes round the hex aimed at (weather.ts clusterHexes), turned by `lean` when the pointer says. */
-  | { shape: "cluster"; size: number; lean?: Lean }
-  /** Every hex within `radius` of the hex aimed at. `onMapOnly` leaves out any with no ground. */
-  | { shape: "blast"; radius: number; onMapOnly?: boolean }
-  /** `rows` arcs of three, swung from the user toward the hex aimed at (sweepHexes). */
-  | { shape: "sweep"; rows: number }
-  /** A cone `rows` rows long (coneHexes). */
-  | { shape: "cone"; rows: number }
-  /** A straight line `length` hexes long (geometry.ts lineFrom). */
-  | { shape: "line"; length: number }
-  /** A swing's three hexes beside the user (arcHexes). */
-  | { shape: "arc" }
-  /** Every hex within `radius` of the user, their own hex left out. */
-  | { shape: "burst"; radius: number }
-  /** The hexes beside the user. */
-  | { shape: "adjacent" };
-
 /** The hexes `spread` covers, used from `from` and aimed at `at` (which a burst and the hexes beside do not use). */
 export function spreadOver(state: ZoneState, spread: Spread, from: HexPos, at: HexPos): HexPos[] {
   switch (spread.shape) {
@@ -695,17 +676,15 @@ export function dashWay(state: ZoneState, unit: Unit, from: HexPos, toward: HexP
  */
 export function spreadHexes(state: ZoneState, kit: EnemyAttackKit, from: HexPos, at: HexPos): HexPos[] | null {
   // An enemy's blast leaves out the hexes with no ground, as a hero's does not: that decides where its surfaces are laid.
-  if (kit.area) return spreadOver(state, { shape: "cluster", size: kit.area }, from, at);
-  if (kit.blast) return spreadOver(state, { shape: "blast", radius: kit.blast, onMapOnly: true }, from, at);
-  if (sameHex(from, at)) return kit.sweep || kit.cone || kit.line ? [] : null;
-  if (kit.sweep) return spreadOver(state, { shape: "sweep", rows: kit.sweep }, from, at);
-  if (kit.cone) return spreadOver(state, { shape: "cone", rows: kit.cone }, from, at);
-  if (kit.line) return spreadOver(state, { shape: "line", length: kit.line }, from, at);
-  return null;
+  const shape = kit.spread;
+  if (!shape) return null;
+  // Aimed at its own hex, a swing, a cone or a line has nowhere to point.
+  if ((shape.shape === "sweep" || shape.shape === "cone" || shape.shape === "line") && sameHex(from, at)) return [];
+  return spreadOver(state, shape, from, at);
 }
 
 /** Whether an enemy ability lands on several hexes at once (spreadHexes), and so is aimed at a hex, not at anyone. */
-export const spreads = (kit: EnemyAttackKit): boolean => !!(kit.area || kit.blast || kit.sweep || kit.cone || kit.line);
+export const spreads = (kit: EnemyAttackKit): boolean => !!kit.spread;
 
 /** Why `unit` cannot use this ability on this aim, in words, or null if it can. */
 export function checkAbility(state: ZoneState, unit: Unit, ability: string, aim: Aim): string | null {

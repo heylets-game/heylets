@@ -71,6 +71,9 @@ function aimReachesFrom(state: ZoneState, enemy: Unit, pos: HexPos, attack: Enem
   return (far <= attack.range || far <= reachFrom(state.map, pos, at, attack.range)) && seesFor(state, enemy.side, pos, at);
 }
 
+/** How far from the hex aimed at a clump or a blast covers: a clump (`cluster`) no further than one, a blast as far as it is wide. */
+const clumpRadius = (spread: EnemyStrike["kit"]["spread"]): number => (spread?.shape === "blast" ? spread.radius : spread?.shape === "cluster" ? 1 : 0);
+
 /** Where an ability that lands on more than one hex is aimed, the heroes caught there, and every hex it lands on. */
 interface Aim {
   at: HexPos;
@@ -98,8 +101,8 @@ function burnsOwn(look: Look, attack: EnemyStrike, aim: Aim): number {
  */
 function spreadAims(look: Look, from: HexPos, attack: EnemyStrike, targets: readonly Unit[]): Aim[] | null {
   const { state, enemy } = look;
-  const { area, blast: wide, sweep, cone, line, dash } = attack.kit;
-  if (!area && !wide && !sweep && !cone && !line && !dash) return null;
+  const { spread, dash } = attack.kit;
+  if (!spread && !dash) return null;
   if (dash) {
     // A dash goes as straight as hexes lie toward its aim: aimed at each hex of the ring as far out as it reaches, it
     // goes every way it can. It catches whoever is on the hexes it passes through, not where it comes to rest.
@@ -113,26 +116,26 @@ function spreadAims(look: Look, from: HexPos, attack: EnemyStrike, targets: read
     return out;
   }
   let aims: HexPos[];
-  if (area || wide) {
+  if (spread && (spread.shape === "cluster" || spread.shape === "blast")) {
     // What lands on a clump round the hex aimed at covers no hex further than one from it: so a hero's own hex, or one
     // beside it. What lands on a blast covers every hex as far from it as it is wide.
     const seen = new Set<string>();
     aims = [];
     for (const h of targets) {
-      for (const p of wide ? blast(state.map, h.pos, wide) : [h.pos, ...hexNeighbors(h.pos, state.map.grid)]) {
+      for (const p of spread.shape === "blast" ? blast(state.map, h.pos, spread.radius) : [h.pos, ...hexNeighbors(h.pos, state.map.grid)]) {
         const key = posKey(p);
         if (seen.has(key)) continue;
         seen.add(key);
         if (tileAt(state.map, p) && aimReaches(state, enemy, from, attack, p)) aims.push(p);
       }
     }
-  } else if (sweep) {
+  } else if (spread?.shape === "sweep") {
     // A sweep is swung toward a hex beside it.
     aims = hexNeighbors(from, state.map.grid).filter((p) => tileAt(state.map, p) && strikes(state.map, from, p));
   } else {
     // A cone or a line points whichever way it is aimed: aimed at each hex of the ring as far out as it reaches, it
     // points every way it can.
-    const far = (cone ?? line)!;
+    const far = spread!.shape === "cone" ? spread!.rows : (spread as { length: number }).length;
     aims = blast(state.map, from, far).filter((p) => hexDistance(from, p) === far);
   }
   const out: Aim[] = [];
@@ -351,7 +354,7 @@ const mend: Behaviour = {
     if (hurt.length === 0) return null;
     // Where it could land on one of them: their own hexes, and every hex as near to them as it spreads (a clump, `area`,
     // covers no hex further than one from the hex it is aimed at).
-    const wide = attack.kit.blast ?? (attack.kit.area ? 1 : 0);
+    const wide = clumpRadius(attack.kit.spread);
     const seen = new Set<string>();
     let best: Use | null = null;
     for (const ally of hurt) {
@@ -385,15 +388,22 @@ export function maxReach(attack: EnemyStrike): number | null {
     case "shove":
       return 1 + HIGH_REACH + SLACK;
     case "strike": {
-      const { area, blast: wide, sweep, cone, line, dash } = attack.kit;
+      const { spread, dash } = attack.kit;
       if (dash) return Math.max(attack.range, 1) + SLACK;
       if (leaps(attack)) return attack.range + 1 + SLACK;
-      if (area) return attack.range + 1 + HIGH_REACH + SLACK;
-      if (wide) return attack.range + wide + HIGH_REACH + SLACK;
-      if (sweep) return sweep + 1 + SLACK;
-      if (cone) return cone + SLACK;
-      if (line) return line + SLACK;
-      return attack.range + HIGH_REACH + SLACK;
+      if (!spread) return attack.range + HIGH_REACH + SLACK;
+      switch (spread.shape) {
+        case "cluster":
+          return attack.range + 1 + HIGH_REACH + SLACK;
+        case "blast":
+          return attack.range + spread.radius + HIGH_REACH + SLACK;
+        case "sweep":
+          return spread.rows + 1 + SLACK;
+        case "cone":
+          return spread.rows + SLACK;
+        case "line":
+          return spread.length + SLACK;
+      }
     }
     default:
       return null;

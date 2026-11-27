@@ -29,7 +29,7 @@ export function checkStrike(state: ZoneState, enemy: Unit, attack: EnemyStrike, 
   }
   if (kind === "hex") {
     if (!aim.at) return "Pick a hex.";
-    if (attack.kit.sweep || attack.kit.cone || attack.kit.line) return sameHex(aim.at, enemy.pos) ? "Pick a hex to aim toward." : null;
+    if (attack.kit.spread && ["sweep", "cone", "line"].includes(attack.kit.spread.shape)) return sameHex(aim.at, enemy.pos) ? "Pick a hex to aim toward." : null;
     if (attack.kit.dash) {
       if (sameHex(aim.at, enemy.pos)) return "Pick a hex to dash toward.";
       return dashWay(state, enemy, enemy.pos, aim.at, attack.range) ? null : `There is nowhere to come to rest that way.`;

@@ -28,7 +28,7 @@ function swing(seed: number) {
 
 describe("a brute's Great Cleave", () => {
   it("does 9, waits 4 turns, and weighs twice what Beatdown does", () => {
-    expect(ENEMY_ABILITIES.great_cleave).toMatchObject({ damage: 9, cooldown: 4, weight: 2, sweep: 2 });
+    expect(ENEMY_ABILITIES.great_cleave).toMatchObject({ damage: 9, cooldown: 4, weight: 2, spread: { shape: "sweep", rows: 2 } });
     expect(ENEMY_ABILITIES.beatdown.weight).toBe(1);
   });
 

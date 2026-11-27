@@ -8,6 +8,7 @@
 
 import type { Inflict } from "../content";
 import type { ScaleRate } from "./rules";
+import type { Spread } from "./geometry";
 import type { Drain } from "./unless";
 import type { FieldKind, SurfaceKind } from "./types";
 
@@ -84,12 +85,6 @@ export interface EnemyAbilityDef {
    */
   field?: { rounds: number; radius: number; kind: FieldKind; slows?: boolean };
   /**
-   * Thrown at a hex up to `range` off, it lands on every hex within this many of it (2: that hex and the two rings round
-   * it), as `area` does on its clump: everyone there saves for half, and its `surface` is left on all of it. One that
-   * does no harm only leaves its surface (and its `saveOr`, saved against).
-   */
-  blast?: number;
-  /**
    * Calls more of its own side into the fight (a Broodmother's Brood Swarm): `count` enemies of `kind`, each on an open
    * hex beside it (summon.ts callKin), never so many that it has more than `most` of them it called standing at once.
    * It does no harm, and is aimed at nobody.
@@ -112,29 +107,18 @@ export interface EnemyAbilityDef {
    */
   splash?: boolean;
   /**
-   * Thrown at the target's hex, it lands on this many hexes together round it (weather.ts clusterHexes), not on the
-   * target alone (7: that hex and the whole ring round it): no roll to hit, but everyone on them makes an Agility save, taking half on a success and suffering
-   * `saveOr` on a failure. Its `surface` is left on all of them.
+   * Lands on several hexes at once, not on one target: no roll to hit, but everyone of the other side on them makes an
+   * Agility save, taking half on a success and suffering `saveOr` on a failure. Its `surface` is left on all of them. One
+   * that does no harm only leaves its surface (and its `saveOr`, saved against). It is aimed at a hex, not at anyone, so
+   * an enemy picks the hex that catches the most. The shape (combat.ts spreadOver):
+   * - `cluster`: that many hexes together round the hex aimed at, up to `range` off (7: that hex and the whole ring round it);
+   * - `blast`: every hex within `radius` of the hex aimed at, up to `range` off (2: that hex and the two rings round it);
+   * - `sweep`: a wide swing at the hero beside it that carries on through `rows` rows of three hexes, each an arc one hex further out;
+   * - `cone`: `rows` rows long, reaching out from its user toward the hex aimed at (one hex, then two beyond it, then three);
+   * - `line`: a straight line `length` hexes long from its user toward the hex aimed at (it stops at rock and the map's edge,
+   *   and goes on through whoever is on it).
    */
-  area?: number;
-  /**
-   * A wide swing at the hero beside it that carries on through this many rows of three hexes, each an arc one hex
-   * further out (combat.ts sweepHexes): no roll to hit, but everyone in them makes an Agility save, taking half on
-   * a success and suffering `saveOr` on a failure.
-   */
-  sweep?: number;
-  /**
-   * A cone this many rows long, reaching out from its user toward the hex it is aimed at (combat.ts coneHexes: one hex,
-   * then two beyond it, then three): no roll to hit, but everyone in it makes an Agility save, taking half on a success
-   * and suffering `saveOr` on a failure.
-   */
-  cone?: number;
-  /**
-   * A straight line this many hexes long, from its user toward the hex it is aimed at (geometry.ts lineFrom: it stops at
-   * rock and the map's edge, and goes on through whoever is on it): no roll to hit, but everyone on it makes an Agility
-   * save, taking half on a success and suffering `saveOr` on a failure.
-   */
-  line?: number;
+  spread?: Extract<Spread, { shape: "cluster" | "blast" | "sweep" | "cone" | "line" }>;
   /**
    * Not something it does but something it is (a Haunt's Terror Aura): every one of the other side within `radius` hexes
    * of it, while it stands in a fight, makes every save with disadvantage (engine.ts saveRoll). It is never used, takes no
@@ -205,15 +189,15 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   // A troll's quick bite, its teeth in whoever is beside it: what it tears off, it grows back half of.
   chomp: { id: "chomp", name: "Chomp", damage: 6, potency: 3, drain: { share: 0.5, unless: [{ has: "burning" }] }, cost: 1, cooldown: 2, weight: 1 },
   dark_bolt: { id: "dark_bolt", name: "Dark Bolt", damage: 7, potency: 4, range: 5, weight: 2 },
-  immolate: { id: "immolate", name: "Immolate", damage: 7, potency: 2, range: 5, area: 4, saveOr: { effect: "burning" }, surface: { kind: "fire", rounds: 2 }, cooldown: 3, weight: 2 },
+  immolate: { id: "immolate", name: "Immolate", damage: 7, potency: 2, range: 5, spread: { shape: "cluster", size: 4 }, saveOr: { effect: "burning" }, surface: { kind: "fire", rounds: 2 }, cooldown: 3, weight: 2 },
   beatdown: { id: "beatdown", name: "Beatdown", damage: 11, potency: 3, saveOr: { effect: "prone", turns: 1 }, weight: 1 },
-  great_cleave: { id: "great_cleave", name: "Great Cleave", damage: 9, potency: 3, sweep: 2, cooldown: 4, weight: 2 },
+  great_cleave: { id: "great_cleave", name: "Great Cleave", damage: 9, potency: 3, spread: { shape: "sweep", rows: 2 }, cooldown: 4, weight: 2 },
   battering_ram: { id: "battering_ram", name: "Battering Ram", damage: 6, potency: 4, push: 3, cooldown: 2, weight: 2 },
   volley: { id: "volley", name: "Volley", damage: 6, potency: 4, range: 6, weight: 1 },
   // An archer's favourite: a sheaf of arrows loosed high, to come down on a hex and every hex round it. Nobody is
   // aimed at, so there is no roll to hit: everyone under it makes an Agility save for half. It takes all a turn's
   // AP, and a few turns to ready again.
-  rain_of_arrows: { id: "rain_of_arrows", name: "Rain of Arrows", damage: 5, potency: 3, range: 6, area: 7, cost: 4, cooldown: 3, weight: 2 },
+  rain_of_arrows: { id: "rain_of_arrows", name: "Rain of Arrows", damage: 5, potency: 3, range: 6, spread: { shape: "cluster", size: 7 }, cost: 4, cooldown: 3, weight: 2 },
   // A Pack Leader's bite tears deep: two stacks of Bleeding, or one for whoever pulls clear in time.
   savage_bite: { id: "savage_bite", name: "Savage Bite", damage: 9, potency: 5, saveOr: { effect: "bleeding", stacks: 2 }, onSave: { effect: "bleeding" }, weight: 2 },
   // A Pack Leader's leap: a Dire Wolf's Lunge with more weight behind it, that leaves whoever it lands on stunned.
@@ -223,7 +207,7 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   howl: { id: "howl", name: "Howl", damage: 0, potency: 0, range: 3, cost: 1, cooldown: 3, rally: { attacks: 2 }, behaviour: "rally", weight: 3 },
   // A Great Bear's everyday blow: one great rake of a forepaw across the three hexes in front of it. Nobody is singled
   // out, so there is no roll to hit: everyone in its path makes an Agility save, taking half and no wound on a success.
-  rending_cleave: { id: "rending_cleave", name: "Rending Cleave", damage: 10, potency: 5, sweep: 1, saveOr: { effect: "bleeding" }, weight: 2 },
+  rending_cleave: { id: "rending_cleave", name: "Rending Cleave", damage: 10, potency: 5, spread: { shape: "sweep", rows: 1 }, saveOr: { effect: "bleeding" }, weight: 2 },
   // A Great Bear's roar: everyone round it is shaken, and slow to act on their next turn unless they save (and then
   // take half). It needs a few turns to get its breath back for another.
   thunderous_roar: { id: "thunderous_roar", name: "Thunderous Roar", damage: 8, potency: 3, shape: "burst", saveOr: { effect: "reeling", turns: 1, amount: 2 }, cooldown: 3, weight: 2 },
@@ -250,24 +234,24 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   engulf: { id: "engulf", name: "Engulf", damage: 6, potency: 3, saveOr: { effect: "slowed", turns: 2 }, weight: 2 },
   // A slime's gob of acid, spat onto a clump of 3 hexes: it eats into the armor of whoever fails to get clear (2 less
   // Defence), and is spent: it leaves no pool behind (that is poison's way).
-  acid_splash: { id: "acid_splash", name: "Acid Splash", damage: 4, potency: 3, range: 3, area: 3, saveOr: { effect: "sundered", turns: 2 }, cooldown: 3, weight: 2 },
+  acid_splash: { id: "acid_splash", name: "Acid Splash", damage: 4, potency: 3, range: 3, spread: { shape: "cluster", size: 3 }, saveOr: { effect: "sundered", turns: 2 }, cooldown: 3, weight: 2 },
   // A Haunt's everyday blow: an icy hand reaches out of it across the three rows in front of it and drags at everyone
   // there. Nobody is singled out: each makes an Agility save, taking half and keeping their pace on a success.
-  grave_grasp: { id: "grave_grasp", name: "Grave Grasp", damage: 10, potency: 5, cone: 3, saveOr: { effect: "slowed", turns: 2 }, weight: 2 },
+  grave_grasp: { id: "grave_grasp", name: "Grave Grasp", damage: 10, potency: 5, spread: { shape: "cone", rows: 3 }, saveOr: { effect: "slowed", turns: 2 }, weight: 2 },
   // A Haunt's spear of ice, flung straight through five hexes and everyone on them, each saving for half. It has to
   // freeze another before it can throw again.
-  ice_spear: { id: "ice_spear", name: "Ice Spear", damage: 13, potency: 4, line: 5, cooldown: 2, weight: 2 },
+  ice_spear: { id: "ice_spear", name: "Ice Spear", damage: 13, potency: 4, spread: { shape: "line", length: 5 }, cooldown: 2, weight: 2 },
   // A Haunt's chain of grave-iron, flung at one hero from afar, with no missing them: whoever fails to shake it off is left reeling (an AP short
   // on each of their next three turns) and held within a hex of where it caught them while it holds. Quick to throw.
   ghastly_fetter: { id: "ghastly_fetter", name: "Ghastly Fetter", damage: 5, potency: 4, range: 5, cost: 1, cooldown: 3, saves: true, saveOr: { effect: "reeling", turns: 3, amount: 1 }, tether: { reach: 1, turns: 3 }, weight: 2 },
   // The dread round a Haunt: every hero within 2 hexes of it makes every save with disadvantage. Always on, never used.
   terror_aura: { id: "terror_aura", name: "Terror Aura", damage: 0, potency: 0, aura: { radius: 2, saves: "disadvantage" }, weight: 0 },
   venomous_bite: { id: "venomous_bite", name: "Venomous Bite", damage: 7, potency: 4, surface: { kind: "poison", rounds: 2 }, weight: 2 },
-  spider_web_spit: { id: "spider_web_spit", name: "Web Spit", damage: 6, potency: 3, range: 4, area: 3, saveOr: { effect: "slowed", turns: 2 }, surface: { kind: "slime", rounds: 2 }, cooldown: 3, weight: 3 },
+  spider_web_spit: { id: "spider_web_spit", name: "Web Spit", damage: 6, potency: 3, range: 4, spread: { shape: "cluster", size: 3 }, saveOr: { effect: "slowed", turns: 2 }, surface: { kind: "slime", rounds: 2 }, cooldown: 3, weight: 3 },
   impaling_fang: { id: "impaling_fang", name: "Impaling Fang", damage: 11, potency: 5, saveOr: { effect: "sundered", turns: 2 }, weight: 2 },
   // Silk thrown over a wide patch of ground, hurting nobody: the web it leaves slows whoever is not a spider and speeds
   // whoever is (surfaces.ts).
-  spin_web: { id: "spin_web", name: "Spin Web", damage: 0, potency: 4, range: 3, blast: 2, surface: { kind: "web", rounds: 4 }, cooldown: 4, weight: 2 },
+  spin_web: { id: "spin_web", name: "Spin Web", damage: 0, potency: 4, range: 3, spread: { shape: "blast", radius: 2, onMapOnly: true }, surface: { kind: "web", rounds: 4 }, cooldown: 4, weight: 2 },
   // Its young, called out of the nest to its side.
   brood_swarm: { id: "brood_swarm", name: "Brood Swarm", damage: 0, potency: 0, cost: 1, cooldown: 2, summon: { kind: "spiderling", count: 2, most: 14, share: 1 }, weight: 2 },
   spiderling_bite: { id: "spiderling_bite", name: "Bite", damage: 5, potency: 2, weight: 1 },
@@ -275,7 +259,7 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   // A Frost Wolf's breath: a cold blast over the three rows of a cone in front of it. Nobody is singled out, so there is
   // no roll to hit: everyone in it makes an Agility save, taking half and no Slowing on a success. It needs a few turns
   // to draw the cold back up.
-  frost_breath: { id: "frost_breath", name: "Frost Breath", damage: 7, potency: 4, cone: 3, saveOr: { effect: "slowed", turns: 2 }, cooldown: 3, weight: 2.5 },
+  frost_breath: { id: "frost_breath", name: "Frost Breath", damage: 7, potency: 4, spread: { shape: "cone", rows: 3 }, saveOr: { effect: "slowed", turns: 2 }, cooldown: 3, weight: 2.5 },
   // An Ember Hound's pulse of fire round it: every hero beside it makes an Agility save, taking half on
   // a success, and the lot and a stack of Burning on a failure.
   ember_burst: { id: "ember_burst", name: "Ember Burst", damage: 7, potency: 4, shape: "burst", range: 1, saveOr: { effect: "burning" }, cooldown: 3, weight: 2 },
@@ -284,11 +268,11 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   frost_mote: { id: "frost_mote", name: "Frost Mote", damage: 6, potency: 4, range: 5, saveOr: { effect: "slowed", turns: 2 }, chills: true, weight: 2 },
   // A Rime Wraith's bomb of ice, thrown onto a clump of 3 hexes: everyone there saves for half, and the ground is
   // left iced over whether they get clear or not.
-  icy_bomb: { id: "icy_bomb", name: "Icy Bomb", damage: 8, potency: 4, range: 5, area: 3, surface: { kind: "ice", rounds: 3 }, cooldown: 3, weight: 2 },
+  icy_bomb: { id: "icy_bomb", name: "Icy Bomb", damage: 8, potency: 4, range: 5, spread: { shape: "cluster", size: 3 }, surface: { kind: "ice", rounds: 3 }, cooldown: 3, weight: 2 },
   // A Hedge Witch's everyday hex, from across the clearing: whoever it lands on is the worse at shaking off whatever
   // comes next (2 less on every save) until their next turn is over, unless they shake this off first.
   weakening_hex: { id: "weakening_hex", name: "Weakening Hex", damage: 6, potency: 4, range: 5, saveOr: { effect: "weakened", turns: 1, amount: 2 }, weight: 2 },
   // A Hedge Witch's brew, flung over its own up to 5 hexes off: it splashes over a clump of 3 hexes there, and every
   // one of its side on them (itself too) is mended. It has to brew another before it can throw again.
-  witches_brew: { id: "witches_brew", name: "Witches' Brew", damage: 0, potency: 0, range: 5, area: 3, heal: 6, cooldown: 3, behaviour: "mend", weight: 2 },
+  witches_brew: { id: "witches_brew", name: "Witches' Brew", damage: 0, potency: 0, range: 5, spread: { shape: "cluster", size: 3 }, heal: 6, cooldown: 3, behaviour: "mend", weight: 2 },
 };

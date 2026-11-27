@@ -45,7 +45,8 @@ export function ownRoute(name: string, kind?: string): OwnRoute | null {
   if (!def) return null;
   if (def.shape === "burst" || def.rally || def.field || def.summon) return "burst";
   if (def.dash) return "dash";
-  return def.area || def.blast || def.cone || def.line || (def.sweep && !SIGNATURE_MOVES[name]?.sweeps) ? "at" : "blow";
+  const shape = def.spread?.shape;
+  return shape === "cluster" || shape === "blast" || shape === "cone" || shape === "line" || (shape === "sweep" && !SIGNATURE_MOVES[name]?.sweeps) ? "at" : "blow";
 }
 
 /**

@@ -6,7 +6,7 @@
 // figure lab (FigureLab.tsx), where each one has a button of its own. A new one added here shows in both.
 
 import * as THREE from "three";
-import { ENEMY_ABILITIES, type FieldKind } from "@gantt-quest/world";
+import { ENEMY_ABILITIES, type EnemyAbilityDef, type FieldKind } from "@gantt-quest/world";
 import { BREATHE, ENGULF, FLARE, FLURRY_BLOWS, SLICES_APART, type Figure } from "./figures";
 import type { FxKind } from "./sprites";
 import { CRACK_DARK, CRACK_EDGE, crackGeometry, crackPaths, type CrackOpts } from "./cracks";
@@ -2196,11 +2196,16 @@ function iceHand(): { hand: THREE.Group; curl(k: number): void; fade(o: number):
   };
 }
 
+/** How many rows long an enemy ability's cone is (its `spread`), if it has one. */
+function coneRows(def: EnemyAbilityDef | undefined): number | undefined {
+  return def?.spread?.shape === "cone" ? def.spread.rows : undefined;
+}
+
 /**
- * A Grave Grasp: how far its hand reaches (to the far row of its cone, EnemyAbilityDef `cone`), and the seconds the hand
+ * A Grave Grasp: how far its hand reaches (to the far row of its cone, EnemyAbilityDef `spread`), and the seconds the hand
  * takes to reach out, to close on what it caught, and to drag it back.
  */
-export const GRAVE_GRASP = { reach: HEX * ((ENEMY_ABILITIES.grave_grasp?.cone ?? 3) - 0.1), out: 0.28, close: 0.14, back: 0.55 };
+export const GRAVE_GRASP = { reach: HEX * ((coneRows(ENEMY_ABILITIES.grave_grasp) ?? 3) - 0.1), out: 0.28, close: 0.14, back: 0.55 };
 
 /**
  * A Haunt's Grave Grasp: it draws up and back, then surges in with its arms stretched long (figures.ts GRASP), and a
@@ -2290,10 +2295,10 @@ function graveGrasp(stage: MoveStage, { figure, hitAt, crit, onImpact }: MoveCtx
 }
 
 /**
- * An Ice Spear: how far it flies (to the end of its line, EnemyAbilityDef `line`), how long it is, how high over its
+ * An Ice Spear: how far it flies (to the end of its line, EnemyAbilityDef `spread`), how long it is, how high over its
  * user's head it forms, and the seconds it takes to fly.
  */
-export const ICE_SPEAR = { reach: HEX * (ENEMY_ABILITIES.ice_spear?.line ?? 5), length: 2, over: 0.6, fly: 0.3 };
+export const ICE_SPEAR = { reach: HEX * (ENEMY_ABILITIES.ice_spear?.spread?.shape === "line" ? ENEMY_ABILITIES.ice_spear.spread.length : 5), length: 2, over: 0.6, fly: 0.3 };
 
 /**
  * A Haunt's Ice Spear: it rises and leans back with its arms raised high and drawn together (figures.ts HURL), and a
@@ -2442,10 +2447,10 @@ function frostFan(from: THREE.Vector3, ahead: THREE.Vector3, o: { reach: number;
 }
 
 /**
- * A Frost Breath: how far it reaches (to the far row of its cone, EnemyAbilityDef `cone`), how wide it spreads (a
+ * A Frost Breath: how far it reaches (to the far row of its cone, EnemyAbilityDef `spread`), how wide it spreads (a
  * three-row cone on hexes is a sixth of a turn), and how long the frost it lays stays and fades.
  */
-export const FROST_BREATH = { reach: HEX * ((ENEMY_ABILITIES.frost_breath?.cone ?? 3) - 0.05), spread: Math.PI / 3, hold: 0.7, fade: 0.9 };
+export const FROST_BREATH = { reach: HEX * ((coneRows(ENEMY_ABILITIES.frost_breath) ?? 3) - 0.05), spread: Math.PI / 3, hold: 0.7, fade: 0.9 };
 
 /**
  * A Frost Wolf's Frost Breath: it draws breath, front lifted and head thrown back, as cold motes are pulled in to its

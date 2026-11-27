@@ -40,7 +40,7 @@ function outcomes(events: ZoneEvent[], state: ReturnType<typeof use>["state"], e
 describe("a Great Bear", () => {
   it("cleaves, roars and shoves", () => {
     expect(ENEMIES.great_bear.abilities).toEqual(["rending_cleave", "thunderous_roar", "shove"]);
-    expect(ENEMY_ABILITIES.rending_cleave).toMatchObject({ name: "Rending Cleave", damage: 10, sweep: 1, saveOr: { effect: "bleeding" } });
+    expect(ENEMY_ABILITIES.rending_cleave).toMatchObject({ name: "Rending Cleave", damage: 10, spread: { shape: "sweep", rows: 1 }, saveOr: { effect: "bleeding" } });
     expect(ENEMY_ABILITIES.thunderous_roar).toMatchObject({ damage: 8, shape: "burst", cooldown: 3, saveOr: { effect: "reeling", amount: 2 } });
   });
 
