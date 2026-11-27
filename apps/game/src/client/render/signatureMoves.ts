@@ -2194,7 +2194,7 @@ export const ICE_SPEAR = { reach: HEX * (ENEMY_ABILITIES.ice_spear?.line ?? 5), 
 
 /**
  * A Haunt's Ice Spear: it rises and leans back with its arms raised high and drawn together (figures.ts HURL), and a
- * long, solid spear of ice (a faceted shaft with shards off its back) grows between its hands over its head, turning slowly, as cold motes are drawn in to it. Then it
+ * long, solid spear of ice (a faceted shaft, pointed at both ends) grows between its hands over its head, turning slowly, as cold motes are drawn in to it. Then it
  * flings it: the spear shoots off straight and low down the whole line, a pale streak and frost motes trailing behind
  * it and a line of frost laid along the ground under it, and everyone on the line is told (and flinches) as it passes
  * the middle. At the end it shatters: a cold flash, shards and frost thrown every way, and a ring of frost.
@@ -2217,24 +2217,15 @@ function iceSpear(stage: MoveStage, { figure, hitAt, crit, onImpact }: MoveCtx) 
     }, s);
   }
   stage.lay((group) => {
-    // A solid icicle, point first along its own +z: a long six-sided shaft of ice, a short point at its back end, and
-    // three small shards growing off it near the back, pointing back and out, each cut flat so its facets catch the light.
+    // A solid icicle, point first along its own +z: a long six-sided shaft of ice and a short point at its back end, cut
+    // flat so its facets catch the light.
     const shapes = [
       new THREE.ConeGeometry(0.27, length, 6).rotateX(Math.PI / 2),
       new THREE.ConeGeometry(0.27, 0.45, 6).rotateX(-Math.PI / 2).translate(0, 0, -length / 2 - 0.22),
-      new THREE.ConeGeometry(0.09, 0.55, 5).rotateX(-Math.PI / 2),
     ];
     const outer = new THREE.MeshLambertMaterial({ color: cold, emissive: ICE_DEEP, emissiveIntensity: 0.35, flatShading: true });
-    const inner = new THREE.MeshLambertMaterial({ color: crit ? GOLD : ICE_CORE, emissive: ICE, emissiveIntensity: 0.4, flatShading: true });
     const spear = new THREE.Group();
     spear.add(new THREE.Mesh(shapes[0], outer), new THREE.Mesh(shapes[1], outer));
-    for (let i = 0; i < 3; i++) {
-      const a = (i / 3) * Math.PI * 2 + 0.4;
-      const shard = new THREE.Mesh(shapes[2], inner);
-      shard.position.set(Math.cos(a) * 0.2, Math.sin(a) * 0.2, -length * 0.22);
-      shard.lookAt(Math.cos(a) * 0.6, Math.sin(a) * 0.6, length * 0.4);
-      spear.add(shard);
-    }
     group.add(spear);
     // The frost laid along the ground under it, from where it set off to where it is.
     const frost = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: cold, transparent: true, opacity: 0, depthWrite: false }));
@@ -2283,7 +2274,6 @@ function iceSpear(stage: MoveStage, { figure, hitAt, crit, onImpact }: MoveCtx) 
       for (const g of shapes) g.dispose();
       frost.geometry.dispose();
       outer.dispose();
-      inner.dispose();
       frostMaterial.dispose();
       return false;
     };
