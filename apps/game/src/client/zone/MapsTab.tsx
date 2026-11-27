@@ -181,7 +181,7 @@ export function MapsTab() {
           </div>
           <div className="dev-row">
             <label><input type="checkbox" checked={dev.flags.aiOff} onChange={(e) => send({ op: "ai", off: e.target.checked })} /> Enemy takes no turns</label>
-            <label title="Only while the enemy takes its turns. A round at a time: the first hero's turn in the next round waits, and ending it (or the timer) plays that round."><input type="checkbox" checked={dev.flags.heroesIdle} onChange={(e) => send({ op: "heroes_idle", on: e.target.checked })} /> Heroes take no turns</label>
+            <label title="Only while the enemy takes its turns. A round at a time: the first hero's turn in the next round waits, and ending it (or the timer) plays that round."><input type="checkbox" checked={dev.flags.heroesIdle} onChange={(e) => send({ op: "heroes_idle", on: e.target.checked })} /> Heroes take no turns (skip all but first hero turn)</label>
             <label><input type="checkbox" checked={dev.flags.undying} onChange={(e) => send({ op: "undying", on: e.target.checked })} /> Heroes cannot die</label>
             <label><input type="checkbox" checked={dev.flags.timerOff} onChange={(e) => send({ op: "timer", off: e.target.checked })} /> No turn timer</label>
           </div>
