@@ -74,6 +74,25 @@ function aimReachesFrom(state: ZoneState, enemy: Unit, pos: HexPos, attack: Enem
 /** How far from the hex aimed at a clump or a blast covers: a clump (`cluster`) no further than one, a blast as far as it is wide. */
 const clumpRadius = (spread: EnemyStrike["kit"]["spread"]): number => (spread?.shape === "blast" ? spread.radius : spread?.shape === "cluster" ? 1 : 0);
 
+/**
+ * Every hex it could be aimed at from `from` that is round one of `spots` (`around` says which hexes that is for each: in
+ * its order, the first found deciding ties), once each, on the map, and within the attack's reach.
+ */
+function aimsNear(look: Look, from: HexPos, attack: EnemyStrike, spots: readonly HexPos[], around: (spot: HexPos) => HexPos[]): HexPos[] {
+  const { state, enemy } = look;
+  const seen = new Set<string>();
+  const out: HexPos[] = [];
+  for (const spot of spots) {
+    for (const p of around(spot)) {
+      const key = posKey(p);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (tileAt(state.map, p) && aimReaches(state, enemy, from, attack, p)) out.push(p);
+    }
+  }
+  return out;
+}
+
 /** Where an ability that lands on more than one hex is aimed, the heroes caught there, and every hex it lands on. */
 interface Aim {
   at: HexPos;
@@ -119,16 +138,7 @@ function spreadAims(look: Look, from: HexPos, attack: EnemyStrike, targets: read
   if (spread && (spread.shape === "cluster" || spread.shape === "blast")) {
     // What lands on a clump round the hex aimed at covers no hex further than one from it: so a hero's own hex, or one
     // beside it. What lands on a blast covers every hex as far from it as it is wide.
-    const seen = new Set<string>();
-    aims = [];
-    for (const h of targets) {
-      for (const p of spread.shape === "blast" ? blast(state.map, h.pos, spread.radius) : [h.pos, ...hexNeighbors(h.pos, state.map.grid)]) {
-        const key = posKey(p);
-        if (seen.has(key)) continue;
-        seen.add(key);
-        if (tileAt(state.map, p) && aimReaches(state, enemy, from, attack, p)) aims.push(p);
-      }
-    }
+    aims = aimsNear(look, from, attack, targets.map((h) => h.pos), (spot) => (spread.shape === "blast" ? blast(state.map, spot, spread.radius) : [spot, ...hexNeighbors(spot, state.map.grid)]));
   } else if (spread?.shape === "sweep") {
     // A sweep is swung toward a hex beside it.
     aims = hexNeighbors(from, state.map.grid).filter((p) => tileAt(state.map, p) && strikes(state.map, from, p));
@@ -355,20 +365,11 @@ const mend: Behaviour = {
     // Where it could land on one of them: their own hexes, and every hex as near to them as it spreads (a clump, `area`,
     // covers no hex further than one from the hex it is aimed at).
     const wide = clumpRadius(attack.kit.spread);
-    const seen = new Set<string>();
     let best: Use | null = null;
-    for (const ally of hurt) {
-      for (const own of span(ally)) {
-        for (const at of blast(state.map, own, wide)) {
-          const key = posKey(at);
-          if (seen.has(key)) continue;
-          seen.add(key);
-          if (!tileAt(state.map, at) || !aimReaches(state, enemy, from, attack, at)) continue;
-          const given = mendedBy(state, enemy, from, attack, at).reduce((sum, u) => sum + Math.min(average, u.maxHp - u.hp), 0);
-          const worth = given * HEAL_WORTH * (look.whim?.(attack, null) ?? 1);
-          if (worth > 0 && (!best || worth > best.worth)) best = { attack, target: null, at, worth };
-        }
-      }
+    for (const at of aimsNear(look, from, attack, hurt.flatMap((ally) => span(ally)), (spot) => blast(state.map, spot, wide))) {
+      const given = mendedBy(state, enemy, from, attack, at).reduce((sum, u) => sum + Math.min(average, u.maxHp - u.hp), 0);
+      const worth = given * HEAL_WORTH * (look.whim?.(attack, null) ?? 1);
+      if (worth > 0 && (!best || worth > best.worth)) best = { attack, target: null, at, worth };
     }
     return best;
   },
