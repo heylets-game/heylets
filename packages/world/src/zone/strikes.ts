@@ -45,7 +45,7 @@ export function strikeHexes(state: ZoneState, enemy: Unit, attack: EnemyStrike, 
   // An Earthquake shakes the ground round all of a big one; a burst reaches out from any of its hexes.
   if (attack.kit.aftershock) return quakeHexes(state, span(enemy), ENEMY_BURST);
   if (attack.kit.field) return quakeHexes(state, span(enemy), attack.kit.field.radius);
-  if (attack.kit.summon) return kinSpots(state, enemy, attack.kit.summon.count);
+  if (attack.kit.summon) return kinSpots(state, enemy, attack.kit.summon);
   if (strikeAim(attack) === "self") {
     const all = new Map(span(enemy).flatMap((p) => blast(state.map, p, attack.range)).map((p) => [`${p.q},${p.r}`, p]));
     return [...all.values()].filter((p) => !covers(enemy, p));

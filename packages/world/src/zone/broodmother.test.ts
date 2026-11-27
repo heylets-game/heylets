@@ -35,7 +35,7 @@ describe("a Broodmother", () => {
     expect(ENEMIES.broodmother.abilities).toEqual(["impaling_fang", "spin_web", "brood_swarm"]);
     expect(ENEMY_ABILITIES.impaling_fang.saveOr).toEqual({ effect: "sundered", turns: 2 });
     expect(strike("Spin Web")).toMatchObject({ range: 3, cooldown: 4, harmless: true, kit: { blast: 2, surface: { kind: "web" } } });
-    expect(strike("Brood Swarm")).toMatchObject({ cost: 1, cooldown: 2, behaviour: "summon", kit: { summon: { kind: "spiderling", count: 2 } } });
+    expect(strike("Brood Swarm")).toMatchObject({ cost: 1, cooldown: 2, behaviour: "summon", kit: { summon: { kind: "spiderling", count: 2, most: 14 } } });
   });
 
   it("spins web over every hex within two of where it aims, hurting nobody, and slowing whoever is caught", () => {
@@ -83,6 +83,26 @@ describe("a Broodmother", () => {
     const order = ctx.state.encounter!.order;
     expect(order.slice(order.indexOf(mother) + 1, order.indexOf(mother) + 3).sort()).toEqual(brood.map((s) => s.id).sort());
     expect(enemyStrikes("spiderling", 1)[0]).toMatchObject({ name: "Bite", range: 1 });
+  });
+
+  it("never has more than 14 Spiderlings of its own out at once", () => {
+    const { state, mother } = board();
+    // Open ground all round it, so only the cap stops it.
+    const ctx = ctxOf(state);
+    const call = () => {
+      const before = ctx.state.units.filter((u) => u.kind === "spiderling").length;
+      // Those already called stand off out of the way, leaving room beside it.
+      for (const u of ctx.state.units) if (u.kind === "spiderling") u.pos = { q: 40 + before, r: 40 };
+      enemyAct(ctx, unit(ctx.state, mother), strike("Brood Swarm"), null);
+      return ctx.state.units.filter((u) => u.kind === "spiderling").length;
+    };
+    const counts = Array.from({ length: 8 }, call);
+    expect(counts).toEqual([2, 4, 6, 8, 10, 12, 14, 14]);
+    // One falls: there is room for one more.
+    const fallen = ctx.state.units.find((u) => u.kind === "spiderling")!;
+    fallen.down = true;
+    expect(call()).toBe(15);
+    expect(ctx.state.units.filter((u) => u.kind === "spiderling" && !u.down)).toHaveLength(14);
   });
 });
 

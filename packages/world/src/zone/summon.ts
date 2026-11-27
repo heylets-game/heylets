@@ -13,6 +13,7 @@ import { tileAt } from "../map";
 import type { Ctx } from "./engine";
 import { blockerAt, sameHex, solid, span, unitAt } from "./geometry";
 import { SUMMON_AP_TURN, SUMMONS, SUMMON_CALLS, enemyHp, type SummonCall } from "./kit";
+import type { KinCall } from "./enemyabilities";
 import { modsOf } from "./mods";
 import { HARMFUL, enterSurface } from "./surfaces";
 import type { Unit, ZoneState } from "./types";
@@ -158,11 +159,14 @@ function arrive(ctx: Ctx, called: Unit[]): void {
 }
 
 /**
- * Where an enemy calling `count` more of its side (EnemyDef ability `summon`) would put them: open hexes beside it (any
- * of its hexes, for a big one), each to itself, ground that does no harm first, then nearest its anchor. As many as
- * there are, up to `count`.
+ * Where an enemy calling more of its side (EnemyDef ability `summon`) would put them: open hexes beside it (any of its
+ * hexes, for a big one), each to itself, ground that does no harm first, then nearest its anchor. As many as there are,
+ * up to the call's `count`, and only as many more as keep those it called standing to its `most`.
  */
-export function kinSpots(state: ZoneState, caller: Unit, count: number, from: HexPos = caller.pos): HexPos[] {
+export function kinSpots(state: ZoneState, caller: Unit, call: KinCall, from: HexPos = caller.pos): HexPos[] {
+  const out = summonsOf(state, caller.id).filter((u) => !u.down && u.kind === call.kind).length;
+  const count = Math.min(call.count, call.most === undefined ? Infinity : Math.max(0, call.most - out));
+  if (count <= 0) return [];
   const mine = span(caller, from);
   const seen = new Set(mine.map(posKey));
   const open: HexPos[] = [];
@@ -179,14 +183,16 @@ export function kinSpots(state: ZoneState, caller: Unit, count: number, from: He
 }
 
 /**
- * An enemy calls more of its side (a Broodmother's Brood Swarm): `count` of `kind`, at its level, in its group, on open
- * hexes beside it (kinSpots: fewer if there is no room). Each goes in the order just behind it (joinBehind).
+ * An enemy calls more of its side (a Broodmother's Brood Swarm): the call's `count` of its `kind`, at its level, in its
+ * group, on open hexes beside it (kinSpots: fewer if there is no room, or it has its `most` out). Each goes in the
+ * order just behind it (joinBehind).
  */
-export function callKin(ctx: Ctx, caller: Unit, kind: string, count: number): Unit[] {
+export function callKin(ctx: Ctx, caller: Unit, call: KinCall): Unit[] {
   const { state } = ctx;
+  const kind = call.kind;
   if (!ENEMIES[kind]) return [];
   const called: Unit[] = [];
-  for (const pos of kinSpots(state, caller, count)) {
+  for (const pos of kinSpots(state, caller, call)) {
     const unit = enemyUnit(state, kind, { q: pos.q, r: pos.r }, caller.group ?? "", caller.level);
     unit.summon = { by: caller.id };
     state.units.push(unit);
