@@ -3020,14 +3020,14 @@ const BREW = "#6fdc6a";
 const BREW_DEEP = "#2f9e5a";
 const BREW_GLOW = "#e9ffb8";
 const BREW_STEAM = "#cfe8c8";
-/** A Witches' Brew: how long the flask is in the air, how high it goes over the straight line, how far the brew splashes (a hex and the ring round it), and how long the mending rises after. */
-export const WITCHES_BREW = { flight: 0.6, arc: 1.4, spread: HEX * 1.45, rise: 1.3 };
+/** A Witches' Brew: how long the flask is in the air, how high it goes over the straight line, how far the brew splashes (over a clump of 3 hexes), and how long the mending rises after. */
+export const WITCHES_BREW = { flight: 0.6, arc: 1.4, spread: 1.6, rise: 1.3 };
 
 /**
  * A Hedge Witch's Witches' Brew: bubbles rise and pop round its casting hand as it swings round (the cast), and as it
  * points a flask of green brew goes up in a high arc, tumbling, drops and steam falling off it. Where it comes down it
- * breaks in a soft splash of green: a glow and a splash, a pale ring and a deeper one rolling out over the hexes round
- * it, drops flung out in arcs; then the mending rises off all of it, green and pale gold motes drifting up and wisps of
+ * breaks in a soft splash of green: a glow and a splash, a pale ring and a deeper one rolling out over the clump of
+ * hexes, drops flung out in arcs; then the mending rises off all of it, green and pale gold motes drifting up and wisps of
  * sweet steam, a slow green ring breathing out under them. `hitAt` is over the hex it is thrown at; the heal is told as
  * it lands.
  */
@@ -3353,7 +3353,7 @@ function icyBomb(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveC
 
 export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
   "Weakening Hex": { who: "witch", blurb: "Green and violet motes curl in round its hand as it swings its staff round and points, then a spinning bolt of the hex flies straight at the target, dark motes falling off it: a violet flash, a sigil of six green strokes drawn tight round them, the strength sinking out of them in pale motes to the ground, and a dark ring closing in at their feet.", play: weakeningHex },
-  "Witches' Brew": { who: "witch", blurb: "Bubbles rise and pop round its hand as it swings round and points, then a flask of green brew goes up in a high arc, dripping and steaming, and breaks over the hexes where it lands: a soft green glow and a splash, rings rolling out, drops flung every way, then green and pale gold motes and sweet steam rising off all of it as its own are mended.", play: witchesBrew },
+  "Witches' Brew": { who: "witch", blurb: "Bubbles rise and pop round its hand as it swings round and points, then a flask of green brew goes up in a high arc, dripping and steaming, and breaks over the 3 hexes where it lands: a soft green glow and a splash, rings rolling out, drops flung every way, then green and pale gold motes and sweet steam rising off all of it as its own are mended.", play: witchesBrew },
   "Frost Mote": { who: "wraith", blurb: "Draws up and back as cold motes swirl in to a point before its chest, where a little glowing mote of frost forms; then it thrusts its hands out and sends it drifting at the target, wobbling and turning, glints falling off it: a cold flash and a deeper blue one where it lands, frost glinting off and drifting down, and a ring of frost at their feet.", play: frostMote },
   "Icy Bomb": { who: "wraith", blurb: "Rises with its arms raised high as a ball of ice grows between its hands over its head, cold motes drawn in to it; then it flings it in a high arc, frost and snow falling off it: it bursts where it lands in a white flash and a deep blue one, shards of ice flung out every way, frost rings rolling out over the hexes, a sheet of ice spreading over the ground with crystals jutting up out of it, and cold mist rising after.", play: icyBomb },
   "Grave Grasp": { who: "haunt", blurb: "Draws up and back and surges in with its arms out, and a great hand of ice reaches out low over the ground: it slams down on the far row with a cold flash and a ring of frost, closes into a fist and drags back to the Haunt over the ground, frost and wisps pulled along behind it.", play: graveGrasp },

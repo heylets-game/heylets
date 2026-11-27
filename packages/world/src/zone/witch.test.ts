@@ -6,6 +6,7 @@ import { ENEMIES } from "../content";
 import { enemyTurn } from "./ai";
 import { HEAL_WORTH, behaviourOf } from "./behaviours";
 import { enemyAct } from "./combat";
+import { clusterHexes } from "./weather";
 import { ENEMY_ABILITIES } from "./enemyabilities";
 import { saveBonus, saveRoll, type Ctx } from "./engine";
 import { enemyStrikes, mindOf } from "./kit";
@@ -57,7 +58,7 @@ describe("a Hedge Witch", () => {
   it("has Weakening Hex and Witches' Brew", () => {
     expect(ENEMIES.witch.abilities).toEqual(["weakening_hex", "witches_brew"]);
     expect(ENEMY_ABILITIES.weakening_hex).toMatchObject({ damage: 6, potency: 4, range: 5, weight: 2, saveOr: { effect: "weakened", turns: 1, amount: 2 } });
-    expect(ENEMY_ABILITIES.witches_brew).toMatchObject({ range: 5, cooldown: 3, heal: 6, behaviour: "mend" });
+    expect(ENEMY_ABILITIES.witches_brew).toMatchObject({ range: 5, area: 3, cooldown: 3, heal: 6, behaviour: "mend" });
   });
 });
 
@@ -96,15 +97,20 @@ describe("Weakened", () => {
 });
 
 describe("Witches' Brew", () => {
-  it("mends every one of its side on the hex it lands on and the ring round it, itself too, and no hero", () => {
-    const { state, witch, pack } = setUp(at(5, 1), [at(5, 4), at(6, 4), at(5, 8)]);
+  it("mends every one of its side on the clump of 3 hexes it lands on, itself too, and no hero", () => {
+    const { state, witch, pack } = setUp(at(5, 1), [at(5, 4), at(6, 4), at(4, 4), at(5, 8)]);
     for (const id of [witch, ...pack]) hurt(state, id, 5);
     hurt(state, "ann", 50);
-    // Thrown at the hex between the two near wolves and the witch is two off: the wolves are mended, not the far one.
+    // Thrown at a hex three off: the wolves on its 3 hexes are mended, and no other.
+    const clump = clusterHexes(state, at(5, 1), at(5, 4), 3);
+    expect(clump).toHaveLength(3);
     const { after, events } = act(state, witch, brew, null, at(5, 4));
-    expect(unit(after, pack[0]).hp).toBeGreaterThan(unit(state, pack[0]).hp);
-    expect(unit(after, pack[1]).hp).toBeGreaterThan(unit(state, pack[1]).hp);
-    expect(unit(after, pack[2]).hp).toBe(unit(state, pack[2]).hp);
+    for (const wolf of pack) {
+      const on = clump.some((p) => p.q === unit(state, wolf).pos.q && p.r === unit(state, wolf).pos.r);
+      expect(unit(after, wolf).hp > unit(state, wolf).hp, wolf).toBe(on);
+    }
+    expect(pack.filter((w) => unit(after, w).hp > unit(state, w).hp).length).toBeGreaterThan(0);
+    expect(unit(after, pack[3]).hp).toBe(unit(state, pack[3]).hp);
     expect(unit(after, witch).hp).toBe(unit(state, witch).hp);
     expect(unit(after, "ann").hp).toBe(unit(state, "ann").hp);
     expect(events).toContainEqual(expect.objectContaining({ t: "used", name: "Witches' Brew", at: at(5, 4) }));
