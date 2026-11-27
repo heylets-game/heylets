@@ -548,6 +548,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
    */
   const [pointerSpot, setPointerSpot] = useState<Lean | null>(null);
   const spotSeen = useRef<(at: Lean | null) => void>(() => {});
+  /** What the spot taken last covers, for spotSeen: kept while nothing it depends on changes. */
+  const lastCover = useRef<{ key: string; z: unknown; cover: string } | null>(null);
   /** Where in the hex `at` the pointer is, for a shape that turns with it. */
   const leanIn = (at: HexPos | undefined): Lean | undefined => (at && pointerSpot ? { q: pointerSpot.q - at.q, r: pointerSpot.r - at.r } : undefined);
   // Alt (Option) held: the card for whoever is under the pointer says what each effect on them does, in full.
@@ -1073,7 +1075,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           const aim = ev.at ? point(ev.at, 0.05) : struck ? point(struck, 0.05) : null;
           // An enemy ability with a move of its own is played as that, whatever its usual look (zone/ownMoves.ts): round
           // its user, or at the spot it is thrown at, now; one at a single target, as the blow is told (see hit).
-          const own = ev.what === "attack" && view?.ownsMove(ev.id, ev.name) ? ownRoute(ev.name, user?.kind) : null;
+          const own = ev.what === "attack" && view?.ownsMove(ev.id, ev.name, ev.ability) ? ownRoute(ev.name, user?.kind, ev.ability) : null;
           // Its second part (an Earthquake's heave) goes off from the middle of where its user stood when it was first
           // used: from the ground it cracked, not from wherever it is now.
           const centre = ev.again && ev.at && user ? span(user, ev.at).map((p) => point(p)).reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(span(user, ev.at).length) : undefined;
@@ -1083,7 +1085,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           if (own === "burst" && view) return void view.burst(ev.id, ev.name, false, thenOn(() => {}), !!ev.again, centre, calls);
           // One thrown onto a clump of hexes (`area`: an Acid Splash, an Immolate) lands in the middle of the clump, not
           // on the hex it was aimed at, which is at one edge of it.
-          const area = enemyAbilityNamed(ev.name, user?.kind)?.area;
+          const spread = enemyAbilityNamed(ev.name, user?.kind, ev.ability)?.spread;
+          const area = spread?.shape === "cluster" ? spread.size : undefined;
           const clump = own === "at" && area && ev.at && user ? clusterHexes({ map: next.map }, user.pos, ev.at, area) : [];
           const middle = clump.length > 0 ? clump.map((p) => point(p, 0.05)).reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(clump.length) : aim;
           if (own === "at" && view && middle) return view.moveAt(ev.id, ev.name, middle, landing());
@@ -1392,10 +1395,10 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         // An enemy's move of its own (zone/ownMoves.ts): one at a single target is played as this blow, struck by hand
         // whatever its usual look (WorldRenderer.attack plays it); one round its user or at a spot was played as it was
         // used, and whoever it catches just flinches.
-        const own = ev.actor && !(hit && ev.splash) && actor?.side === "enemy" && view?.ownsMove(ev.actor, ev.what) ? ownRoute(ev.what, actor?.kind) : null;
+        const own = ev.actor && !(hit && ev.splash) && actor?.side === "enemy" && view?.ownsMove(ev.actor, ev.what, ev.ability) ? ownRoute(ev.what, actor?.kind, ev.ability) : null;
         // A retort (a slime's Acid Armor) from one that cannot play it (it has just been killed): the victim just flinches.
         // A field round an enemy biting whoever is in it (a Blizzard Aura) is the field's doing: nobody swings.
-        const fielded = actor?.side === "enemy" && !!enemyAbilityNamed(ev.what, actor.kind)?.field;
+        const fielded = actor?.side === "enemy" && !!enemyAbilityNamed(ev.what, actor.kind, ev.ability)?.field;
         const passive = (!mine && (ev.what === "coral_field" || ev.what === "coral_armor")) || fielded || (!own && RETORTS.has(ev.what)) || (hit && !!ev.splash) || own === "burst" || own === "at" || own === "dash";
         const kind = passive ? "ground" : own === "blow" ? "melee" : !ev.actor || ev.actor === ev.target || ev.what.startsWith("throw:") || ev.what === "shove" || ev.what === "fall" ? "none" : (mine?.look.kind ?? "melee");
         // The log's line for it: the roll that decided it (if it has a card), then what it did.
@@ -2448,7 +2451,14 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     const over = hoverNow.current;
     if (!at || !over || !z || !act || pick?.kind !== "ability") return;
     const cover = (s: Lean | null) => (s ? abilityArea(z, act, pick.id, over, undefined, { q: s.q - over.q, r: s.r - over.r }) : []).map(posKey).sort().join(" ");
-    if (cover(at) !== cover(pointerSpot)) setPointerSpot(at);
+    // What the spot taken now covers is the same until the hex, the ability, the lean or the zone changes: kept, so each move of the pointer works out only its own.
+    const key = `${over.q},${over.r}|${pick.id}|${act.id}|${pointerSpot ? `${pointerSpot.q},${pointerSpot.r}` : ""}`;
+    let was = lastCover.current;
+    if (!was || was.key !== key || was.z !== z) was = lastCover.current = { key, z, cover: cover(pointerSpot) };
+    if (cover(at) !== was.cover) {
+      lastCover.current = null;
+      setPointerSpot(at);
+    }
   };
   useEffect(() => layer.current?.setOverlays(overlays), [overlays]);
 

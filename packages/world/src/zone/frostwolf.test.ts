@@ -35,7 +35,7 @@ describe("a Frost Wolf's kit", () => {
     expect(ENEMIES.frost_wolf.abilities).toEqual(["rime_bite", "frost_breath"]);
     expect(rimeBite).toMatchObject({ range: 1 });
     expect(frostBreath).toMatchObject({ cooldown: 3, saveOr: { effect: "slowed", turns: 2 } });
-    expect(frostBreath.kit.cone).toBe(3);
+    expect(frostBreath.kit.spread).toEqual({ shape: "cone", rows: 3 });
     expect(ENEMY_ABILITIES.frost_breath.damage).toBe(7);
   });
 });

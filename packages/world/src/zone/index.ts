@@ -4,6 +4,8 @@
 // stays inside.
 
 export * from "./types";
+export type { Unless, Drain } from "./unless";
+export { stopped } from "./unless";
 export { createZone, ensureEnemyAbilities, ensureMouth, loadZone, stepZone, zoneView, zoneAwaiting, zoneUntimed, zoneHero, standInHero, growGroups, MAX_PARTY, MAP_FULL } from "./zone";
 export { ZONE_GRIDS, ALERT_RANGE, DEFAULT_ZONE_OPTIONS, BIOME_LEADS, zoneOptions, generateZone, groupKinds, type ZonePlan } from "./gen";
 export {

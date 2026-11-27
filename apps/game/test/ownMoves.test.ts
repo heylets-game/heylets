@@ -36,7 +36,7 @@ describe("an enemy's own moves in a fight", () => {
   });
 
   it("play only for the kinds they were made for, though others have abilities of the same name", () => {
-    const { Bite, Maul, "Rending Swipe": swipe } = SIGNATURE_MOVES;
+    const { wolf_bite: Bite, bear_maul: Maul, mauling_swipe: swipe } = SIGNATURE_MOVES;
     // A rendered unit's kind is its sprite key.
     expect(playsFor(Bite, { kind: "wolf|r2" })).toBe(true);
     expect(playsFor(Bite, { kind: "bat" })).toBe(false);
@@ -48,11 +48,11 @@ describe("an enemy's own moves in a fight", () => {
     expect(playsFor(swipe, { kind: "snow_bear" })).toBe(true);
   });
 
-  it("are a kind's own where it has one for an ability of a name others share (`Name@kind`)", () => {
-    expect(ownMove("Bite", { kind: "bat" })).toBe(SIGNATURE_MOVES["Bite@bat"]);
-    expect(ownMove("Bite", { kind: "wolf|r2" })).toBe(SIGNATURE_MOVES.Bite);
+  it("are a kind's own where it has one for an ability of a name others share (its own id)", () => {
+    expect(ownMove("Bite", { kind: "bat" })).toBe(SIGNATURE_MOVES.bat_bite);
+    expect(ownMove("Bite", { kind: "wolf|r2" })).toBe(SIGNATURE_MOVES.wolf_bite);
     expect(ownMove("Bite", { kind: "turtle" })).toBeUndefined();
-    expect(ownMove("Fell Swoop", { kind: "bat" })).toBe(SIGNATURE_MOVES["Fell Swoop"]);
+    expect(ownMove("Fell Swoop", { kind: "bat" })).toBe(SIGNATURE_MOVES.fell_swoop);
   });
 
   it("each play for every kind that has the ability they are shown for in the lab", () => {

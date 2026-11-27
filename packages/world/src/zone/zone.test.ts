@@ -5730,7 +5730,7 @@ describe("Warlock weapons", () => {
     const blow = after.events.find((e) => e.t === "hit" && e.target === foe);
     const healed = after.events.find((e) => e.t === "heal" && e.target === "ann");
     if (blow?.t !== "hit" || healed?.t !== "heal") throw new Error("no drain");
-    expect(ABILITIES.soul_drain.drain).toBe(0.5);
+    expect(ABILITIES.soul_drain.drain).toEqual({ share: 0.5 });
     expect(healed.amount).toBe(Math.min(unit(state, "ann").maxHp - 1, Math.max(1, Math.round(blow.amount * 0.5))));
   });
 
