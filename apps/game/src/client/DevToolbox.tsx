@@ -33,7 +33,7 @@ import { Suspense, lazy, useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { GEAR_BASES, HERO_CLASSES, RARITIES, RESOURCE_KINDS, SLOTS, SLOT_LABEL, WEAPONS, slotOfRef, type Rarity, type ResourceKind, type Slot } from "@gantt-quest/world";
 import { api, type Me } from "./api";
-import { SkyAndSound } from "./audio/SoundButton";
+import { SkyControls, SoundReadout } from "./audio/SoundButton";
 import { itemName, label } from "./labels";
 import { PixelIcon } from "./PixelIcon";
 import { BLOCKY_KEY } from "./render/figures";
@@ -211,14 +211,15 @@ export function DevToolbox({ me, refresh }: { me: Me; refresh(): Promise<void> }
                   <button className="small primary" onClick={() => setLab(true)}>Open the model preview</button>
                 </div>
               </DevSection>
-              <DevSection id="av.sounds" title="Sound lab" open>
+              <DevSection id="av.sound" title="Sound" open>
                 <p className="muted">Every sound in the game, to search and play at will: each event as the game plays it, each of its takes, and all the music and atmosphere.</p>
                 <div className="dev-row">
                   <button className="small primary" onClick={() => setSoundLab(true)}>Open the sound lab</button>
                 </div>
+                <SoundReadout />
               </DevSection>
-              <DevSection id="av.sky" title="Sky & sound" open>
-                <SkyAndSound />
+              <DevSection id="av.sky" title="Sky" open>
+                <SkyControls />
               </DevSection>
             </div>
           )}

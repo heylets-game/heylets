@@ -76,7 +76,7 @@ const clock = (t: number) => {
  * Development only: hold the time of day and the weather where you want them, to hear and see any
  * moment without waiting for it. They change the sky in this tab alone; "Follow the clock" lets go.
  */
-function SkyControls() {
+export function SkyControls() {
   const [time, setTime] = useState<number | undefined>(sky.__gqTime);
   const [weather, setWeather] = useState<number | undefined>(sky.__gqWeather);
   const holdTime = (t: number | undefined) => {
@@ -173,8 +173,8 @@ function SourceSwitch() {
   );
 }
 
-/** The dev toolbox's first tab: the sky's holds, then what the engine is doing right now, refreshed a few times a second. */
-export function SkyAndSound() {
+/** The dev toolbox's Sound section: which files play, then what the engine is doing right now, refreshed a few times a second. */
+export function SoundReadout() {
   const [d, setD] = useState(() => audio.debug());
   useEffect(() => {
     const t = setInterval(() => setD(audio.debug()), 250);
@@ -196,7 +196,6 @@ export function SkyAndSound() {
   ];
   return (
     <>
-      <SkyControls />
       {import.meta.env.DEV && <SourceSwitch />}
       <dl>
         {rows.map(([k, v]) => (
