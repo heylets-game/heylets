@@ -379,6 +379,8 @@ export interface EnemyDef {
   retort?: Retort;
   /** Ground it is at home on: what slows anyone else there quickens it instead (a spider on web; zone/surfaces.ts). */
   homeGround?: SurfaceKind[];
+  /** Ground that does nothing to it at all, as it walks on or stands in it (an ember hound in fire; zone/surfaces.ts). */
+  groundImmune?: SurfaceKind[];
 }
 
 /**
@@ -493,6 +495,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   spider: {
     kind: "spider", name: "Giant Spider", hp: 14, defence: 12, move: 3, save: 0, init: 1, xp: 11,
     abilities: ["venomous_bite", "spider_web_spit"],
+    groundImmune: ["poison", "slime"],
     homeGround: ["web"],
   },
   // What the nest belongs to: a spider the size of a cart, that webs the whole crew at once.
@@ -519,16 +522,19 @@ export const ENEMIES: Record<string, EnemyDef> = {
   ember_hound: {
     kind: "ember_hound", name: "Ember Hound", hp: 16, defence: 12, move: 3, save: 0, init: 1, xp: 12,
     abilities: ["searing_bite", "ember_burst"],
+    groundImmune: ["fire"],
   },
   // A cave bear's white cousin: as slow, as thick-hided, and every bit as cross, and it brings the blizzard with it.
   snow_bear: {
     kind: "snow_bear", name: "Snow Bear", hp: 40, defence: 11, move: 2, save: 2, init: -1, xp: 21,
     abilities: ["mauling_swipe", "blizzard_aura", "shove"],
+    groundImmune: ["ice"],
   },
   // The frost's dead: it keeps its distance, slows what its cold reaches, and ices the ground under whoever is bunched up.
   wraith: {
     kind: "wraith", name: "Rime Wraith", hp: 16, defence: 12, move: 2, save: 0, init: 1, xp: 14,
     abilities: ["frost_mote", "icy_bomb"],
+    groundImmune: ["ice"],
   },
   // Whoever it is that lives alone in the wood or the fen, and does not care for callers. A hex from across the
   // clearing that leaves whoever it lands on the worse at shaking off what comes next, and a brew flung over its own

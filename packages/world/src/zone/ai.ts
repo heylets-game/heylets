@@ -44,7 +44,7 @@ import { big, blast, close, elevOf, flies, gap, heldAgainst, inFight, pathIn, sa
 import { ENEMY_ABILITIES } from "./enemyabilities";
 import { ACTION_AP, AP_MAX, COMMON_ACTIONS, ENEMY_WHIM, jumpRange, mindOf, unitStrikes, type EnemyStrike, type Mind } from "./kit";
 import { seedFromString } from "../rng";
-import { HARMFUL } from "./surfaces";
+import { harms } from "./surfaces";
 import type { Budget, Unit, ZoneState } from "./types";
 
 interface Option {
@@ -165,7 +165,7 @@ function play(ctx: Ctx, enemy: Unit, budget: Budget, rang: { done: boolean }): v
   const standing = () => state.units.filter((u) => u.side === "hero" && !u.down && !unseen(u) && inFight(state, u.id));
   const mind = mindOf(enemy.kind);
   const air = flies(enemy);
-  const harmful = new Set(Object.entries(state.surfaces).filter(([, s]) => HARMFUL.has(s.kind)).map(([key]) => key));
+  const harmful = new Set(Object.entries(state.surfaces).filter(([, s]) => harms(enemy, s.kind)).map(([key]) => key));
   // The other side's coral cuts as well as fire does.
   for (const w of state.weather ?? []) if (w.kind === "coral" && w.side !== enemy.side) for (const p of w.hexes) harmful.add(posKey(p));
   const jumpAp = COMMON_ACTIONS.jump.cost;

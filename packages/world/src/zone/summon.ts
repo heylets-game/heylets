@@ -15,7 +15,7 @@ import { HEX_ROOM, blockerAt, isDead, sameHex, solid, span, unitAt, unitsAt } fr
 import { SUMMON_AP_TURN, SUMMONS, SUMMON_CALLS, enemyHp, type SummonCall } from "./kit";
 import type { KinCall } from "./enemyabilities";
 import { modsOf } from "./mods";
-import { HARMFUL, enterSurface } from "./surfaces";
+import { enterSurface, harms } from "./surfaces";
 import type { Unit, ZoneState } from "./types";
 import { enterWeather } from "./weather";
 
@@ -184,10 +184,8 @@ export function kinSpots(state: ZoneState, caller: Unit, call: KinCall, from: He
     if (there.length === 0 || (shared && there.length < HEX_ROOM)) open.push(p);
     crowd.set(key, there.length);
   }
-  const harmful = (p: HexPos) => {
-    const kind = state.surfaces[posKey(p)]?.kind;
-    return kind && HARMFUL.has(kind) ? 1 : 0;
-  };
+  // Ground that would hurt what is called (not what calls it).
+  const harmful = (p: HexPos) => (harms({ side: caller.side, kind: call.kind }, state.surfaces[posKey(p)]?.kind) ? 1 : 0);
   const held = (p: HexPos) => crowd.get(posKey(p)) ?? 0;
   return open.sort((a, b) => held(a) - held(b) || harmful(a) - harmful(b) || hexDistance(a, from) - hexDistance(b, from) || a.q - b.q || a.r - b.r).slice(0, count);
 }

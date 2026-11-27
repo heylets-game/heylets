@@ -15,7 +15,7 @@ import { has } from "./engine";
 import { HIGH_REACH, blast, covers, gap, inFight, meet, nearOf, reachFrom, reaches, sameHex, seesFor, span, strikes } from "./geometry";
 import { SPLASH_SHARE, type EnemyStrike, type Mind } from "./kit";
 import { diceAverage } from "./rules";
-import { HARMFUL } from "./surfaces";
+import { harms } from "./surfaces";
 import { kinSpots } from "./summon";
 import type { Unit, ZoneState } from "./types";
 
@@ -87,8 +87,8 @@ export const FRIENDLY_FIRE = 1.75;
 /** Those of its own side (itself too) that what it leaves on the ground would hurt, aimed as `aim` is. */
 function burnsOwn(look: Look, attack: EnemyStrike, aim: Aim): number {
   const ground = attack.kit.surface?.kind;
-  if (!ground || !HARMFUL.has(ground)) return 0;
-  return look.state.units.filter((u) => u.side === look.enemy.side && !u.down && aim.hexes.some((p) => covers(u, p))).length;
+  if (!ground) return 0;
+  return look.state.units.filter((u) => u.side === look.enemy.side && !u.down && harms(u, ground) && aim.hexes.some((p) => covers(u, p))).length;
 }
 
 /**
@@ -156,7 +156,7 @@ export function leapRisk(state: ZoneState, enemy: Unit, from: HexPos, land: HexP
     (u) => u.side !== enemy.side && !u.down && inFight(state, u.id) && !reacted.includes(u.id) && !has(u, "stunned") && !has(u, "prone") && leavesReach(state, u, enemy, from, land),
   ).length;
   const kind = state.surfaces[posKey(land)]?.kind;
-  return 0.5 ** strikers * (kind && HARMFUL.has(kind) ? 0.5 : 1);
+  return 0.5 ** strikers * (harms(enemy, kind) ? 0.5 : 1);
 }
 
 /** The heroes a burst from `pos` catches: everyone within its reach (`range`) it can see. */

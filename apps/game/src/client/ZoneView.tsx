@@ -3119,6 +3119,10 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         const retort = ENEMIES[u.kind]!.retort!;
         return <div className="muted"><strong>{retort.name}</strong>: {retort.blurb} ({diceText(retortDice(retort, u.level, modsOf(asState(state).options).edge))})</div>;
       })()}
+      {/* Ground that does nothing to it (EnemyDef groundImmune). */}
+      {u.side === "enemy" && ENEMIES[u.kind]?.groundImmune?.length ? (
+        <div className="muted"><strong>Unharmed by</strong>: {ENEMIES[u.kind]!.groundImmune!.map((k) => SURFACE_INFO[k].name.toLowerCase()).join(", ")} on the ground</div>
+      ) : null}
     </>
   );
   const ground = hover ? tileAt(state.map, hover) : undefined;
