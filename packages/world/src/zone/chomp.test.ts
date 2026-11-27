@@ -25,7 +25,7 @@ function bite(seed: number, trollHp: number, burning = false) {
 }
 
 describe("a troll's Chomp", () => {
-  it("heals the troll for half the damage it deals, rounded down", () => {
+  it("heals the troll for half the damage it deals, rounded to nearest and never less than 1", () => {
     let landed = 0;
     for (let seed = 1; seed <= 20; seed++) {
       const { troll, events, after } = bite(seed, 5);
@@ -37,8 +37,8 @@ describe("a troll's Chomp", () => {
         continue;
       }
       landed++;
-      expect(healed, `seed ${seed}`).toMatchObject({ actor: troll, what: "Chomp", amount: Math.floor(hit.amount / 2) });
-      expect(unit(after, troll).hp).toBe(5 + Math.floor(hit.amount / 2));
+      expect(healed, `seed ${seed}`).toMatchObject({ actor: troll, what: "Chomp", amount: Math.max(1, Math.round(hit.amount / 2)) });
+      expect(unit(after, troll).hp).toBe(5 + Math.max(1, Math.round(hit.amount / 2)));
     }
     expect(landed).toBeGreaterThan(0);
   });

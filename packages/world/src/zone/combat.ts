@@ -17,6 +17,7 @@ import { modsOf } from "./mods";
 import { d20, diceFor, hitChance, mod, proficiency, rollDice, rollShown, statOf, type Dice } from "./rules";
 import { seenByHeroes } from "./light";
 import { HINDERING, harms, chill, clearSurfaces, dropTorch, enterSurface, ignite, letGoTorch, placeSurface } from "./surfaces";
+import { stopped, type Drain } from "./unless";
 import { FIELD_KINDS, type Budget, type CommonAction, type FieldKind, type RollMod, type Side, type Rolled, type Throwable, type Unit, type ZoneState } from "./types";
 import { clusterHexes, enterWeather, makeQuake, makeWeather, quakeHexes, rainHexes, wallHexes } from "./weather";
 import { callKin, summonCall, summonSpots } from "./summon";
@@ -301,6 +302,12 @@ export function shoveDest(from: HexPos, at: HexPos): HexPos {
  * outside the fight out, as it does not know they are there: ai.ts. This is only who is really struck.)
  */
 const struckBy = (state: ZoneState, side: Side, on: (u: Unit) => boolean): Unit[] => state.units.filter((u) => u.side !== side && !u.down && !u.away && on(u));
+
+/** A drain (a Soul Drain, a troll's Chomp): its user heals its share of what the blow dealt, rounded to nearest and at least 1, unless something stops it. */
+function drainInto(ctx: Ctx, user: Unit, dealt: number, drain: Drain | undefined, what: string): void {
+  if (!drain || dealt <= 0 || user.down || stopped(ctx.state, user, drain.unless)) return;
+  heal(ctx, user, Math.max(1, Math.round(dealt * drain.share)), { actor: user.id, what });
+}
 
 /** One attack that everyone it catches saves against for half (see saveForHalf). */
 interface HalfSave {
@@ -808,7 +815,7 @@ function strike(ctx: Ctx, unit: Unit, def: AbilityDef, tactic: Tactic, target: U
     if (extra > 0) rolled.mods = [...(rolled.mods ?? []), { name: "Shield", n: extra }];
   }
   const dealt = damage(ctx, target, rolled.total, { actor: unit.id, what: def.id, crit: roll.crit, dice: rolled });
-  if (def.drain && dealt > 0 && !unit.down) heal(ctx, unit, Math.max(1, Math.round(dealt * def.drain)), { actor: unit.id, what: def.id });
+  drainInto(ctx, unit, dealt, def.drain, def.id);
   // A Warlock's critical hits drag the target under (Riptide).
   if (roll.crit && unit.kind === "data_warlock") drown(ctx, target, 1);
   afflict(ctx, unit, def, target, true);
@@ -1511,8 +1518,8 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
   if (!attack.harmless) {
     const rolled = rollShown(ctx.rng, attack.dice, 0, roll.crit);
     const dealt = damage(ctx, target, rolled.total, { actor: enemy.id, what: attack.name, crit: roll.crit, dice: rolled });
-    // A drain: its user grows back a share of what it tore off, unless it is on fire.
-    if (attack.kit.drain && dealt > 0 && !enemy.down && !has(enemy, "burning")) heal(ctx, enemy, Math.floor(dealt * attack.kit.drain), { actor: enemy.id, what: attack.name });
+    // A drain: its user grows back a share of what it tore off (a troll's, unless it is on fire).
+    drainInto(ctx, enemy, dealt, attack.kit.drain, attack.name);
     if (melee) thorns(ctx, enemy, target);
     // A splash: the shock of the blow pulses out, and every other hero in the fight beside the target is battered by
     // a share of it, or by half that if they get clear (an Agility save).

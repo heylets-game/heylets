@@ -8,6 +8,7 @@
 
 import type { Inflict } from "../content";
 import type { ScaleRate } from "./rules";
+import type { Drain } from "./unless";
 import type { FieldKind, SurfaceKind } from "./types";
 
 /**
@@ -162,8 +163,8 @@ export interface EnemyAbilityDef {
   aftershock?: { damage: number; saveOr?: Inflict };
   /** Freezes water under the target. */
   chills?: boolean;
-  /** When it lands, its user heals this share of the damage it dealt (a troll's Chomp). */
-  drain?: number;
+  /** When it lands, its user heals a share of the damage it dealt (a troll's Chomp), unless something stops it (unless.ts). */
+  drain?: Drain;
   /**
    * How an enemy weighs up using it (behaviours.ts): `strike` for one target, `burst` for everyone round, `shove` for
    * one beside it with a drop or a pit at their back, `rally` for a call to its own side, `summon` for calling more of it, `mend` for healing its own side. When not said, it follows the shape.
@@ -202,7 +203,7 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   // A troll's throw at whoever keeps away: a rock heavy enough to leave them reeling. It has to find another first.
   hurl_rock: { id: "hurl_rock", name: "Hurl Rock", damage: 6, potency: 3, range: 5, saveOr: { effect: "reeling", turns: 1, amount: 2 }, cooldown: 2, weight: 1 },
   // A troll's quick bite, its teeth in whoever is beside it: what it tears off, it grows back half of.
-  chomp: { id: "chomp", name: "Chomp", damage: 6, potency: 3, drain: 0.5, cost: 1, cooldown: 2, weight: 1 },
+  chomp: { id: "chomp", name: "Chomp", damage: 6, potency: 3, drain: { share: 0.5, unless: [{ has: "burning" }] }, cost: 1, cooldown: 2, weight: 1 },
   dark_bolt: { id: "dark_bolt", name: "Dark Bolt", damage: 7, potency: 4, range: 5, weight: 2 },
   immolate: { id: "immolate", name: "Immolate", damage: 7, potency: 2, range: 5, area: 4, saveOr: { effect: "burning" }, surface: { kind: "fire", rounds: 2 }, cooldown: 3, weight: 2 },
   beatdown: { id: "beatdown", name: "Beatdown", damage: 11, potency: 3, saveOr: { effect: "prone", turns: 1 }, weight: 1 },
