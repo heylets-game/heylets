@@ -285,7 +285,7 @@ export const KIN_WORTH = 5;
 
 /**
  * A call for more of its side (behaviour `summon`): worth KIN_WORTH for each that has room to stand beside it where it
- * would call them (summon.ts kinSpots), and only while one of the other side is in the fight. It reaches none of the
+ * would call them (summon.ts kinSpots: none once it has its most out), and only while one of the other side is in the fight. It reaches none of the
  * other side, so it is nothing to walk toward by itself.
  */
 const summon: Behaviour = {
@@ -293,7 +293,7 @@ const summon: Behaviour = {
   value(look, from, attack, targets) {
     const call = attack.kit.summon;
     if (!call || targets.length === 0) return null;
-    const room = kinSpots(look.state, look.enemy, call.count, from).length;
+    const room = kinSpots(look.state, look.enemy, call, from).length;
     return room > 0 ? { attack, target: null, worth: room * KIN_WORTH * (look.whim?.(attack, null) ?? 1) } : null;
   },
 };

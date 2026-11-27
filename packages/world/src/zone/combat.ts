@@ -1180,7 +1180,7 @@ function howl(ctx: Ctx, enemy: Unit, attack: EnemyStrike): void {
 /** A call for more of its side (a Broodmother's Brood Swarm): so many of a kind come to stand beside it (summon.ts callKin). */
 function callForKin(ctx: Ctx, enemy: Unit, attack: EnemyStrike): void {
   ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name });
-  for (const called of callKin(ctx, enemy, attack.kit.summon!.kind, attack.kit.summon!.count)) if (!called.down) ctx.onStep?.(called, () => {});
+  for (const called of callKin(ctx, enemy, attack.kit.summon!)) if (!called.down) ctx.onStep?.(called, () => {});
 }
 
 /**

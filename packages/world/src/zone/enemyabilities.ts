@@ -18,6 +18,13 @@ export interface AbilityScales {
   damage?: ScaleRate;
 }
 
+/** A call for more of its side (EnemyAbilityDef `summon`): how many of what kind, and the most it has out at once (none: no limit). */
+export interface KinCall {
+  kind: string;
+  count: number;
+  most?: number;
+}
+
 export interface EnemyAbilityDef {
   id: string;
   /** What it is called in the fight's log and on the enemy's card. */
@@ -74,9 +81,10 @@ export interface EnemyAbilityDef {
   blast?: number;
   /**
    * Calls more of its own side into the fight (a Broodmother's Brood Swarm): `count` enemies of `kind`, each on an open
-   * hex beside it (summon.ts callKin). It does no harm, and is aimed at nobody.
+   * hex beside it (summon.ts callKin), never so many that it has more than `most` of them it called standing at once.
+   * It does no harm, and is aimed at nobody.
    */
-  summon?: { kind: string; count: number };
+  summon?: KinCall;
   /** Left under the target when it lands. */
   surface?: { kind: SurfaceKind; rounds: number };
   /** Knocks the target back when it lands: `true` for a hex, or a number of hexes (it stops early at anything in the way). */
@@ -242,7 +250,7 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   // whoever is (surfaces.ts).
   spin_web: { id: "spin_web", name: "Spin Web", damage: 0, potency: 4, range: 3, blast: 2, surface: { kind: "web", rounds: 4 }, cooldown: 4, weight: 2 },
   // Its young, called out of the nest to its side.
-  brood_swarm: { id: "brood_swarm", name: "Brood Swarm", damage: 0, potency: 0, cost: 1, cooldown: 2, summon: { kind: "spiderling", count: 2 }, weight: 2 },
+  brood_swarm: { id: "brood_swarm", name: "Brood Swarm", damage: 0, potency: 0, cost: 1, cooldown: 2, summon: { kind: "spiderling", count: 2, most: 14 }, weight: 2 },
   spiderling_bite: { id: "spiderling_bite", name: "Bite", damage: 5, potency: 2, weight: 1 },
   rime_bite: { id: "rime_bite", name: "Rime Bite", damage: 5, potency: 5, saveOr: { effect: "slowed", turns: 2 }, chills: true, weight: 1 },
   searing_bite: { id: "searing_bite", name: "Searing Bite", damage: 5, potency: 5, saveOr: { effect: "burning" }, weight: 1 },
