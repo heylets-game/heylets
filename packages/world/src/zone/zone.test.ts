@@ -149,13 +149,13 @@ describe("the kit", () => {
     const [a, b] = state.units.filter((u) => u.side === "enemy");
     expect(a.abilities).toEqual(ENEMIES[a.kind].abilities);
     expect(a.abilities).not.toBe(ENEMIES[a.kind].abilities);
-    a.abilities.push("frost_lance");
-    expect(unitStrikes(state, a).map((s) => s.id)).toContain("frost_lance");
-    expect(b.abilities).not.toContain("frost_lance");
-    expect(ENEMIES[a.kind].abilities).not.toContain("frost_lance");
+    a.abilities.push("frost_mote");
+    expect(unitStrikes(state, a).map((s) => s.id)).toContain("frost_mote");
+    expect(b.abilities).not.toContain("frost_mote");
+    expect(ENEMIES[a.kind].abilities).not.toContain("frost_mote");
     // One that has to wait for an ability (a cooldown) does not have it to use.
-    a.cooldowns.frost_lance = 1;
-    expect(unitStrikes(state, a).map((s) => s.id)).not.toContain("frost_lance");
+    a.cooldowns.frost_mote = 1;
+    expect(unitStrikes(state, a).map((s) => s.id)).not.toContain("frost_mote");
     // Saved before enemies carried their own: given their kind's on load.
     b.abilities = [];
     expect(loadZone(state).units.find((u) => u.id === b.id)!.abilities).toEqual(ENEMIES[b.kind].abilities);
@@ -2123,6 +2123,33 @@ describe("fleeing", () => {
     }
     expect(events.some((e) => e.t === "hit" && e.target === "cy")).toBe(false);
     for (const p of hexes) expect(ctx.state.surfaces[posKey(p)]?.kind).toBe("fire");
+  });
+
+  it("throws a Rime Wraith's Icy Bomb onto three hexes: each hero there saves for half, and ice is left on all three whatever they roll", () => {
+    let state = board();
+    state.aiOff = true;
+    const ann = at(5, 6);
+    const wraithAt = at(5, 2);
+    const hexes = clusterHexes(state, wraithAt, ann, 3);
+    expect(hexes).toHaveLength(3);
+    Object.assign(hero(state, "ann", "qa_paladin", ann), { hp: 900, maxHp: 900 });
+    const wraith = enemy(state, "wraith", wraithAt);
+    state = provoke(state);
+    const bomb = enemyStrikes("wraith", 1).find((s) => s.name === "Icy Bomb")!;
+    // Over a few rolls, so it is seen to ice the ground on a save as well as on a failure.
+    const saves = new Set<boolean>();
+    for (let seed = 1; seed <= 12; seed++) {
+      const events: ZoneEvent[] = [];
+      const ctx: Ctx = { state: structuredClone(state), rng: makeRng(seed), events, effects: [] };
+      enemyAct(ctx, unit(ctx.state, wraith.id), bomb, unit(ctx.state, "ann"));
+      expect(events.some((e) => e.t === "roll" && e.roll.kind === "attack")).toBe(false);
+      const save = events.find((e): e is Extract<ZoneEvent, { t: "roll" }> => e.t === "roll" && e.roll.id === "ann")!;
+      const hit = events.find((e): e is Extract<ZoneEvent, { t: "hit" }> => e.t === "hit" && e.target === "ann")!;
+      expect(hit.amount).toBe(Math.max(1, save.roll.ok ? Math.floor(hit.dice!.total / 2) : hit.dice!.total));
+      saves.add(save.roll.ok);
+      for (const p of hexes) expect(ctx.state.surfaces[posKey(p)]?.kind).toBe("ice");
+    }
+    expect(saves).toEqual(new Set([true, false]));
   });
 
   it("brings a hero's class abilities with them, after the weapon's, and refreshes them on a return", () => {

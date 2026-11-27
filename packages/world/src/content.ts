@@ -525,10 +525,10 @@ export const ENEMIES: Record<string, EnemyDef> = {
     kind: "snow_bear", name: "Snow Bear", hp: 40, defence: 11, move: 2, save: 2, init: -1, xp: 21,
     abilities: ["mauling_swipe", "blizzard_aura", "shove"],
   },
-  // The frost's dead: it keeps its distance, and what its cold reaches is slow to move after.
+  // The frost's dead: it keeps its distance, slows what its cold reaches, and ices the ground under whoever is bunched up.
   wraith: {
     kind: "wraith", name: "Rime Wraith", hp: 16, defence: 12, move: 2, save: 0, init: 1, xp: 14,
-    abilities: ["frost_lance", "wail"],
+    abilities: ["frost_mote", "icy_bomb"],
   },
   // Whoever it is that lives alone in the wood or the fen, and does not care for callers. A hex from across the
   // clearing that leaves whoever it lands on the worse at shaking off what comes next, and a brew flung over its own

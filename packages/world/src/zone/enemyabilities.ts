@@ -279,7 +279,11 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   // a success, and the lot and a stack of Burning on a failure.
   ember_burst: { id: "ember_burst", name: "Ember Burst", damage: 7, potency: 4, shape: "burst", range: 1, saveOr: { effect: "burning" }, cooldown: 3, weight: 2 },
   searing_bite: { id: "searing_bite", name: "Searing Bite", damage: 5, potency: 5, saveOr: { effect: "burning" }, weight: 1 },
-  frost_lance: { id: "frost_lance", name: "Frost Lance", damage: 6, potency: 4, range: 5, saveOr: { effect: "slowed", turns: 2 }, chills: true, weight: 2 },
+  // A Rime Wraith's everyday shot: a mote of frost sent drifting at its target from afar, slowing whoever it gets to.
+  frost_mote: { id: "frost_mote", name: "Frost Mote", damage: 6, potency: 4, range: 5, saveOr: { effect: "slowed", turns: 2 }, chills: true, weight: 2 },
+  // A Rime Wraith's bomb of ice, thrown onto a clump of 3 hexes: everyone there saves for half, and the ground is
+  // left iced over whether they get clear or not.
+  icy_bomb: { id: "icy_bomb", name: "Icy Bomb", damage: 8, potency: 4, range: 5, area: 3, surface: { kind: "ice", rounds: 3 }, cooldown: 3, weight: 2 },
   // A Hedge Witch's everyday hex, from across the clearing: whoever it lands on is the worse at shaking off whatever
   // comes next (2 less on every save) until their next turn is over, unless they shake this off first.
   weakening_hex: { id: "weakening_hex", name: "Weakening Hex", damage: 6, potency: 4, range: 5, saveOr: { effect: "weakened", turns: 1, amount: 2 }, weight: 2 },
