@@ -178,6 +178,33 @@ describe("ZoneRoom", () => {
     }
   });
 
+  it("passes chat to everyone on the map, in a fight too and from a hero who is down, without touching the map", async () => {
+    const { code, zone, ann } = await arrive();
+    const bo = await connect(zone, code, "bo");
+    const say = (ws: FakeSocket, text: unknown) => zone.webSocketMessage(ws as unknown as WebSocket, JSON.stringify({ type: "say", text }));
+    const heard = (ws: FakeSocket) => (ws.sent as unknown as { type: string; id?: string; name?: string; text?: string }[]).filter((m) => m.type === "said");
+    const name = hero(ann.state, "ann").name;
+    const before = JSON.stringify(saved(code));
+    await say(ann, "  hello   there ");
+    expect(heard(bo)).toEqual([{ type: "said", id: "ann", name, text: "hello there" }]);
+    expect(heard(ann)).toHaveLength(1);
+    expect(JSON.stringify(saved(code))).toBe(before);
+    // Nothing is said for an empty line, and a long one is cut.
+    await say(bo, "   ");
+    await say(bo, 42);
+    expect(heard(ann)).toHaveLength(1);
+    await say(bo, "x".repeat(500));
+    expect(heard(ann).at(-1)!.text).toHaveLength(200);
+    await pickFight(zone, ann);
+    const turn = JSON.stringify(saved(code).encounter);
+    await say(ann, "on me!");
+    expect(heard(bo).at(-1)).toMatchObject({ id: "ann", text: "on me!" });
+    expect(JSON.stringify(saved(code).encounter)).toBe(turn);
+    (zone as unknown as { zone: ZoneState }).zone.units.find((u) => u.id === "ann")!.down = true;
+    await say(ann, "help");
+    expect(heard(bo).at(-1)).toMatchObject({ id: "ann", text: "help" });
+  });
+
   it("starts a fight with a turn clock when a hero walks within sight of a group", async () => {
     const { code, zone, ann } = await arrive();
     await pickFight(zone, ann);

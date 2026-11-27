@@ -495,6 +495,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const spells = useRef<SpellFx | null>(null);
   /** The map as the effects need it: the middle of a hex's top, `lift` above it. */
   const mapNow = useRef<ZoneViewState["map"] | null>(null);
+  /** Your own hero's id, as the map last said: your lines of chat are marked as yours in the log. */
+  const youNow = useRef("");
   const point = (pos: HexPos, lift = 0) => {
     const { x, z } = hexToWorld(pos);
     return new THREE.Vector3(x, tileTop(mapNow.current ? tileAt(mapNow.current, pos) : undefined) + lift, z + (lift > 0 ? 0.25 : 0));
@@ -654,9 +656,14 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     takeBack(told);
     uncut(told.entry, [], false);
     setAhead(told.ahead);
+  }, onSaid: (id, who, text) => {
+    // Over the speaker's head for a few seconds, and in the log for good.
+    renderer.current?.say(id, text);
+    logAdd({ k: "chat", who, text, ...(id === youNow.current ? { mine: true } : {}) });
   }, onUpdate: (next, events, prev, ack) => {
     for (const u of next.units) names.current.set(u.id, u.name);
     mapNow.current = next.map;
+    youNow.current = next.you;
     const name = (id: string | null | undefined) => (id ? (names.current.get(id) ?? (isCrateId(next, id) ? "the crate" : "Someone")) : "Something");
     // Anything still playing from the last update is finished at once.
     for (const t of timers.current) clearTimeout(t);
@@ -3326,7 +3333,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       )}
 
       {/* Everything that happens, and every roll: the whole fight, to read back through. */}
-      <CombatLog entries={log} open={logOpen} onToggle={toggleLog} />
+      <CombatLog entries={log} open={logOpen} onToggle={toggleLog} onSay={zone.say} />
 
       {lootSpot && me.character && (
         <LootPanel

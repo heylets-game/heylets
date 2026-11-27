@@ -4457,6 +4457,161 @@ let castEyes: THREE.Object3D[] = [];
 let talkFace = false;
 let mouths: THREE.Object3D[] = [];
 let lids: THREE.Object3D[] = [];
+/** Set by makeFigure for the figure being built: the loose pupil of each googly eye (see rollGooglies). */
+let googlies: Googly[] = [];
+
+/**
+ * A googly eye's pupil: a disc laid on the face (a part of its own on the head) that rolls loose in its white, as
+ * the plastic one does, pulled down by gravity, left behind as the head moves and turns, and bounced off the rim.
+ */
+interface Googly {
+  part: Part;
+  rings: readonly Ring[];
+  /** The middle of the white, in the head's space, and how far the pupil's middle may go from it across and up or down. */
+  cx: number;
+  cy: number;
+  rx: number;
+  ry: number;
+  /** Where the pupil's middle is from the white's, in the head's space. */
+  du: number;
+  dv: number;
+  /** The pupil as built (at the white's middle), to slide over the face: see fitGoogly. Null until it is built. */
+  drawn: { pos: THREE.BufferAttribute; geo: THREE.BufferGeometry; xy: Float32Array; lift: Float32Array; corner: Uint16Array; z: Float32Array; at: [number, number] } | null;
+  /** Its middle and its speed in the world, and the white's middle in the world last frame. */
+  at: THREE.Vector3;
+  vel: THREE.Vector3;
+  eye: THREE.Vector3;
+  placed: boolean;
+}
+
+/** Gravity on a googly eye's pupil, in the head's units a second squared: about what a swing feels (DANGLE_GRAVITY). */
+const GOOGLY_GRAVITY = 80;
+/** How much of its speed across the white a pupil loses a second, rubbing on it. */
+const GOOGLY_DRAG = 2.5;
+/** How much of its speed into the rim a pupil keeps, bounced back off it, and of its speed along the rim as it bounces. */
+const GOOGLY_BOUNCE = 0.55;
+const GOOGLY_SLIDE = 0.9;
+const _gq = new THREE.Quaternion();
+const _gqInv = new THREE.Quaternion();
+const _gs = new THREE.Vector3();
+const _gp = new THREE.Vector3();
+const _gEye = new THREE.Vector3();
+const _gEyeAt = new THREE.Vector3();
+const _gEyeVel = new THREE.Vector3();
+const _gRel = new THREE.Vector3();
+const _gOff = new THREE.Vector3();
+
+/** Once a googly pupil is built: what it needs to slide over the face. Each corner keeps how far it lies proud of the face under it. */
+function fitGoogly(g: Googly) {
+  const mesh = g.part.skin.children.find((o): o is THREE.Mesh => o instanceof THREE.Mesh);
+  if (!mesh) return;
+  const geo = mesh.geometry;
+  const pos = geo.getAttribute("position") as THREE.BufferAttribute;
+  // The corners stand on fewer points of the face (a front corner and its back share one): find each once.
+  const points = new Map<string, number>();
+  const xy: number[] = [];
+  const corner = new Uint16Array(pos.count);
+  const lift = new Float32Array(pos.count);
+  for (let i = 0; i < pos.count; i++) {
+    const [x, y, z] = [pos.getX(i), pos.getY(i), pos.getZ(i)];
+    const key = `${Math.round(x * 1e4)},${Math.round(y * 1e4)}`;
+    let at = points.get(key);
+    if (at === undefined) {
+      at = xy.length / 2;
+      points.set(key, at);
+      xy.push(x, y);
+    }
+    corner[i] = at;
+    lift[i] = z - faceZ(g.rings, x, y);
+  }
+  pos.setUsage(THREE.DynamicDrawUsage);
+  geo.computeBoundingSphere();
+  // Room for wherever it rolls in the white.
+  if (geo.boundingSphere) geo.boundingSphere.radius += Math.max(g.rx, g.ry) + 0.1;
+  g.drawn = { pos, geo, xy: new Float32Array(xy), lift, corner, z: new Float32Array(xy.length / 2), at: [0, 0] };
+  showGoogly(g);
+}
+
+/** Lay the pupil on the face where it now is: each corner moved across and up, and onto the face there (it bends over the head's facets). */
+function showGoogly(g: Googly) {
+  const d = g.drawn;
+  if (!d || (Math.abs(d.at[0] - g.du) < 1e-3 && Math.abs(d.at[1] - g.dv) < 1e-3)) return;
+  d.at = [g.du, g.dv];
+  for (let k = 0; k < d.z.length; k++) d.z[k] = faceZ(g.rings, d.xy[2 * k] + g.du, d.xy[2 * k + 1] + g.dv);
+  for (let i = 0; i < d.pos.count; i++) {
+    const k = d.corner[i];
+    d.pos.setXYZ(i, d.xy[2 * k] + g.du, d.xy[2 * k + 1] + g.dv, d.z[k] + d.lift[i]);
+  }
+  d.pos.needsUpdate = true;
+  d.geo.computeVertexNormals();
+}
+
+/**
+ * Roll each googly pupil about its white for `dt` seconds. It is a weight loose in the world (so it keeps its
+ * speed as the head moves under it, and gravity pulls it down whichever way the head is turned), held flat on the
+ * face and within the white's rim, off which it bounces. A first frame, or a jump across the map, puts it at rest
+ * at the bottom of the white.
+ */
+function rollGooglies(list: Googly[], dt: number, top: THREE.Object3D) {
+  top.updateWorldMatrix(true, true);
+  for (const g of list) {
+    const joint = g.part.joint;
+    joint.matrixWorld.decompose(_gp, _gq, _gs);
+    const scale = _gs.x || 1;
+    _gqInv.copy(_gq).invert();
+    _gEye.set(g.cx, g.cy, faceZ(g.rings, g.cx, g.cy)).applyMatrix4(joint.matrixWorld);
+    if (!g.placed || dt <= 0 || _gEye.distanceTo(g.eye) > 30 * scale) {
+      // At rest, straight down the white from its middle as the head is turned.
+      _gOff.set(0, -1, 0).applyQuaternion(_gqInv);
+      const k = Math.hypot(_gOff.x / g.rx, _gOff.y / g.ry);
+      [g.du, g.dv] = k > 1e-6 ? [_gOff.x / k, _gOff.y / k] : [g.du, g.dv];
+      g.at.copy(_gOff.set(g.du, g.dv, 0).applyQuaternion(_gq).multiplyScalar(scale).add(_gEye));
+      g.vel.set(0, 0, 0);
+      g.eye.copy(_gEye);
+      g.placed = true;
+      showGoogly(g);
+      continue;
+    }
+    _gEyeVel.subVectors(_gEye, g.eye).divideScalar(dt);
+    // A few small steps, the white carried along from last frame's place to this one's.
+    const steps = Math.min(8, Math.max(1, Math.ceil(dt * 240)));
+    const h = dt / steps;
+    const keep = Math.exp(-GOOGLY_DRAG * h);
+    for (let i = 1; i <= steps; i++) {
+      _gEyeAt.copy(g.eye).lerp(_gEye, i / steps);
+      // Pulled down, and slowed as it rubs on the white (by its speed across the white, not through the world).
+      g.vel.y -= GOOGLY_GRAVITY * scale * h;
+      g.vel.sub(_gEyeVel).multiplyScalar(keep).add(_gEyeVel);
+      g.at.addScaledVector(g.vel, h);
+      // Into the head's space, from the white's middle: held flat on the face, and inside the rim.
+      _gOff.subVectors(g.at, _gEyeAt).applyQuaternion(_gqInv).divideScalar(scale);
+      _gRel.subVectors(g.vel, _gEyeVel).applyQuaternion(_gqInv).divideScalar(scale);
+      _gOff.z = 0;
+      _gRel.z = 0;
+      const out = Math.hypot(_gOff.x / g.rx, _gOff.y / g.ry);
+      if (out > 1) {
+        _gOff.x /= out;
+        _gOff.y /= out;
+        // Off the rim: its speed out through the rim turned back (some of it), along the rim kept (most of it).
+        let nx = _gOff.x / (g.rx * g.rx);
+        let ny = _gOff.y / (g.ry * g.ry);
+        const n = Math.hypot(nx, ny) || 1;
+        [nx, ny] = [nx / n, ny / n];
+        const into = _gRel.x * nx + _gRel.y * ny;
+        if (into > 0) {
+          const [tx, ty] = [_gRel.x - into * nx, _gRel.y - into * ny];
+          _gRel.set(tx * GOOGLY_SLIDE - into * GOOGLY_BOUNCE * nx, ty * GOOGLY_SLIDE - into * GOOGLY_BOUNCE * ny, 0);
+        }
+      }
+      g.du = _gOff.x;
+      g.dv = _gOff.y;
+      g.at.copy(_gOff.applyQuaternion(_gq).multiplyScalar(scale).add(_gEyeAt));
+      g.vel.copy(_gRel.applyQuaternion(_gq).multiplyScalar(scale).add(_gEyeVel));
+    }
+    g.eye.copy(_gEye);
+    showGoogly(g);
+  }
+}
 /** The front of a long (wizard's) beard on the figure being built, if it has one: where an amulet goes. */
 let beardFront: { part: Part; at: Pt } | null = null;
 
@@ -4880,12 +5035,17 @@ function sheetEye(head: Part, rings: readonly Ring[], kind: string, s: number, x
       return true;
     }
     case "googly": {
-      // A round white with a small pupil of the eye's colour low and out toward its outer side, one lash on top.
+      // A round white with a small pupil of the eye's colour loose in it, one lash on top. The pupil is a part of
+      // its own, rolled about the white as the head moves (see rollGooglies).
       const o: EyeOutline = { rx: 0.4, up: 0.43, down: 0.43 };
       const white = eyeOutline(o, x, y, s);
       facePoly(head, OUTLINE, rings, eyeOutline(o, x, y, s, 0.07), L.rim);
       facePoly(head, EYE_WHITE, rings, white, L.white);
-      facePoly(head, iris === DARK_IRIS ? OUTLINE : iris, rings, ellipse2(x + s * 0.08, y - 0.1, 0.14, 0.14), L.iris);
+      const r = 0.14;
+      const pupilPart = new Part(head.joint);
+      facePoly(pupilPart, iris === DARK_IRIS ? OUTLINE : iris, rings, ellipse2(x, y, r, r), L.iris);
+      extraParts.push(pupilPart);
+      googlies.push({ part: pupilPart, rings, cx: x, cy: y, rx: o.rx - r - 0.03, ry: o.down - r - 0.03, du: 0, dv: 0, drawn: null, at: new THREE.Vector3(), vel: new THREE.Vector3(), eye: new THREE.Vector3(), placed: false });
       lash(o, Math.PI / 2 - 0.2, 0.16, 0.05);
       return true;
     }
@@ -11040,6 +11200,7 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
   castEyes = [];
   mouths = [];
   lids = [];
+  googlies = [];
   skirts = [];
   puffs = [];
   figureKind = kind;
@@ -11070,6 +11231,8 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
   const made: THREE.BufferGeometry[] = [];
   const allParts = [...rig.parts, ...extraParts];
   for (const part of allParts) part.build(mats, made);
+  const googly = googlies;
+  for (const g of googly) fitGoogly(g);
   const swinging = braids;
   const loose = dangles;
   const turners = spinners;
@@ -11255,6 +11418,7 @@ export function makeFigure(kind: string, look: Look, outfit?: Outfit, opts: Figu
         eye.scale.setScalar(Math.max(0.01, k));
       }
     }
+    if (googly.length > 0) rollGooglies(googly, first ? 0 : dt, top);
     if (lidParts.length > 0) {
       // A blink every few seconds, on the figure's own beat, so a room of them never blinks together.
       const every = 3 + (beat % 3);

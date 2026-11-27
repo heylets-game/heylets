@@ -936,7 +936,7 @@ export function HutView({ ownerId, me, refresh, onLeave }: { ownerId: string; me
           }}
         />
       )}
-      {heroSheet.open && you && <HeroSheet id={heroSheet.open} you={you} onClose={heroSheet.close} logbook={me.character ? { hero: me.character, open: () => { heroSheet.close(); setBook(true); } } : undefined} />}
+      {heroSheet.open && <HeroSheet id={heroSheet.open} you={me.player.id} onClose={heroSheet.close} logbook={me.character ? { hero: me.character, open: () => { heroSheet.close(); setBook(true); } } : undefined} />}
     </div>
   );
 }

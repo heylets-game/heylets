@@ -142,6 +142,11 @@ export interface PlateStats {
   shieldPoints?: number;
   /** Just earned XP: the name is lit up gold for a moment. */
   glow?: boolean;
+  /**
+   * How much bigger than usual the level's medallion is drawn (1, or absent, as usual): the renderer grows it as
+   * the camera closes in, where the usual one is small beside the hero.
+   */
+  medal?: number;
 }
 
 /**
@@ -172,6 +177,8 @@ const PX = RES / 2;
 
 const NAME_FONT = `${16 * PX}px "IM Fell English SC", "IM Fell English", Georgia, serif`;
 const LEVEL_FONT = `${14 * PX}px "Pirata One", "IM Fell English", Georgia, serif`;
+/** The level's face at `scale` times its usual size (see PlateStats.medal). */
+const levelFont = (scale: number) => (scale === 1 ? LEVEL_FONT : `${Math.round(14 * PX * scale)}px "Pirata One", "IM Fell English", Georgia, serif`);
 const SHIELD_FONT = `bold ${11 * PX}px "IM Fell English", Georgia, serif`;
 
 /** Screen pixels: the clear border round everything (room for the outline and a glow), the bars' width and heights. */
@@ -220,7 +227,8 @@ export function plateKey(text: string, plate?: PlateStats, tone: PlateTone = "pl
   if (!plate) return `${tone}|${text}`;
   const hp = plate.hp !== undefined ? fill(plate.hp, BAR_W) : "";
   const shield = plate.shield ? `${fill(plate.shield, BAR_W)}/${plate.shieldPoints ?? ""}` : "";
-  return `${tone}|${text}|${plate.level ?? ""}|${hp}|${shield}${plate.glow ? "|glow" : ""}`;
+  const medal = plate.level !== undefined && plate.medal && plate.medal !== 1 ? `|m${plate.medal}` : "";
+  return `${tone}|${text}|${plate.level ?? ""}|${hp}|${shield}${plate.glow ? "|glow" : ""}${medal}`;
 }
 
 /** A heater shield's outline, `w` by `h`, top-left at (x, y): flat across the top, curving in to a point. */
@@ -257,8 +265,14 @@ export function labelTexture(text: string, plate?: PlateStats, tone: PlateTone =
   const p = plate ?? {};
   const level = p.level !== undefined ? String(p.level) : "";
   const nameW = textWidth(text, NAME_FONT, NAME_SPACING) / PX;
-  const medalW = level ? Math.max(MEDAL, Math.ceil(textWidth(level, LEVEL_FONT) / PX) + 7) : 0;
+  const scale = level ? Math.max(1, p.medal ?? 1) : 1;
+  const medalFont = levelFont(scale);
+  const medalH = Math.round(MEDAL * scale);
+  const medalW = level ? Math.max(medalH, Math.ceil(textWidth(level, medalFont) / PX) + Math.round(7 * scale)) : 0;
   const levelW = level ? medalW + 4 : 0;
+  // A medallion taller than the name makes the line taller, the name staying level with its middle.
+  const lineH = Math.max(NAME_H, medalH + 2);
+  const nameTop = PAD + (lineH - NAME_H) / 2;
   const lineW = nameW + levelW;
   const bars = p.hp !== undefined;
   const shielded = bars && !!p.shield && p.shield > 0;
@@ -267,7 +281,7 @@ export function labelTexture(text: string, plate?: PlateStats, tone: PlateTone =
   const side = shielded ? BADGE_GAP + BADGE_W : 0;
   const w = Math.ceil(Math.max(lineW, bars ? BAR_W + 2 * side : 0)) + 2 * PAD;
   const below = bars ? GAP + Math.max(barsH, shielded ? BADGE_H - 3 : 0) : 0;
-  const h = PAD + NAME_H + below + PAD;
+  const h = PAD + lineH + below + PAD;
 
   const canvas = document.createElement("canvas");
   canvas.width = w * PX;
@@ -278,7 +292,7 @@ export function labelTexture(text: string, plate?: PlateStats, tone: PlateTone =
   const mid = w / 2;
 
   // The name (and level), outlined and with a short drop shadow, on no background.
-  const baseline = PAD + NAME_H - 3;
+  const baseline = nameTop + NAME_H - 3;
   const left = mid - lineW / 2;
   const ink = TONE_INK[tone];
   const word = (s: string, font: string, x: number, colour: string, glow = false) => {
@@ -307,34 +321,34 @@ export function labelTexture(text: string, plate?: PlateStats, tone: PlateTone =
   };
   if (level) {
     // The level on its medallion, level with the middle of the name.
-    const my = PAD + (NAME_H - MEDAL) / 2 + 0.5;
-    pillPath(ctx, left - 1, my - 1, medalW + 2, MEDAL + 2);
+    const my = nameTop + (NAME_H - medalH) / 2 + 0.5;
+    pillPath(ctx, left - 1, my - 1, medalW + 2, medalH + 2);
     ctx.fillStyle = PLATE_OUT;
     ctx.fill();
-    pillPath(ctx, left, my, medalW, MEDAL);
-    const g = ctx.createLinearGradient(0, my, 0, my + MEDAL);
+    pillPath(ctx, left, my, medalW, medalH);
+    const g = ctx.createLinearGradient(0, my, 0, my + medalH);
     g.addColorStop(0, LEVEL_FILL[0]);
     g.addColorStop(1, LEVEL_FILL[1]);
     ctx.fillStyle = g;
     ctx.fill();
-    pillPath(ctx, left + 1.5, my + 1.5, medalW - 3, MEDAL - 3);
-    ctx.lineWidth = 1;
+    pillPath(ctx, left + 1.5 * scale, my + 1.5 * scale, medalW - 3 * scale, medalH - 3 * scale);
+    ctx.lineWidth = scale;
     ctx.strokeStyle = LEVEL_RIM;
     ctx.stroke();
     ctx.save();
     ctx.scale(1 / PX, 1 / PX);
-    ctx.font = LEVEL_FONT;
+    ctx.font = medalFont;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillStyle = BADGE_INK;
-    ctx.fillText(level, (left + medalW / 2) * PX, (my + MEDAL / 2 + 0.5) * PX);
+    ctx.fillText(level, (left + medalW / 2) * PX, (my + medalH / 2 + 0.5 * scale) * PX);
     ctx.restore();
   }
   word(text, NAME_FONT, left + levelW, p.glow ? GLOW_INK : ink, !!p.glow);
 
   if (bars) {
     const x = mid - BAR_W / 2;
-    const y = PAD + NAME_H + GAP;
+    const y = PAD + lineH + GAP;
     // One dark frame round both bars, a hair of the turn order's rim colour outside it.
     ctx.fillStyle = PLATE_OUT;
     ctx.fillRect(x - 1, y - 1, BAR_W + 2, barsH + 2);

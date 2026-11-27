@@ -42,6 +42,8 @@ export interface ZoneConnection {
   resheet(): void;
   /** Wave, cheer, bow, dance or breakdance where your hero stands (in a fight too, for nothing; the server drops one from a hero who is down). */
   emote(emote: Emote): void;
+  /** Say a line of chat to everyone on the map: in a fight too, for nothing. */
+  say(text: string): void;
   clearError(): void;
 }
 
@@ -51,6 +53,8 @@ export interface ZoneHandlers {
   onUpdate(state: ZoneView, events: ZoneEvent[], prev: ZoneView | null, ack: number | undefined): void;
   /** The server refused your action with this number. */
   onRefused(n: number): void;
+  /** Someone on the map (you too) said something. */
+  onSaid?(id: string, name: string, text: string): void;
 }
 
 /** What the room sends, as far as it is read here. */
@@ -58,6 +62,7 @@ type ZoneMessage =
   | { type: "update"; state: ZoneView; events: ZoneEvent[]; online: string[]; acks?: unknown; ack?: unknown }
   | { type: "error"; message: string; ack?: unknown }
   | { type: "trades" }
+  | { type: "said"; id: string; name: string; text: string }
   | EmoteMessage;
 
 export function useZone(code: string, handlers: ZoneHandlers): ZoneConnection {
@@ -119,6 +124,8 @@ export function useZone(code: string, handlers: ZoneHandlers): ZoneConnection {
         setTrades((n) => n + 1);
       } else if (msg.type === "emoted") {
         emotes.emoted(msg.id, msg.emote);
+      } else if (msg.type === "said") {
+        handler.current.onSaid?.(msg.id, msg.name, msg.text);
       }
     },
   });
@@ -140,6 +147,9 @@ export function useZone(code: string, handlers: ZoneHandlers): ZoneConnection {
   const emote = useCallback((emote: Emote) => {
     post({ type: "emote", emote, ...(actingHero() ? { as: actingHero() } : {}) });
   }, []);
+  const say = useCallback((text: string) => {
+    post({ type: "say", text });
+  }, []);
   const clearError = useCallback(() => setError(null), []);
-  return { state, online, status: socket.status, error: socket.error, trades, send, resheet, emote, clearError };
+  return { state, online, status: socket.status, error: socket.error, trades, send, resheet, emote, say, clearError };
 }

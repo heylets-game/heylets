@@ -18,6 +18,9 @@
 // The log keeps everything it is handed (the view caps it), scrolls, and
 // stays at the newest line unless the player has scrolled up to read; then a
 // button brings them back. Folded, it is a single strip showing the last line.
+// What the crew say on the map is in it too, between the rolls, and open it
+// has a line at its foot to say something: in a fight or out of one, words
+// cost nothing and take no turn.
 //
 // RollToast is the one newest roll shown large for a moment over the turn
 // bar: the d20 tumbles in and lands on its number, then the sum, then how it
@@ -26,6 +29,7 @@
 
 import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import type { Roll, Rolled } from "@gantt-quest/world";
+import { ChatInput } from "../ChatInput";
 import "./fight.css";
 
 export type LogSide = "hero" | "enemy" | "none";
@@ -41,7 +45,9 @@ export type LogEntry =
   | { k: "roll"; id: number; who: string; side: LogSide; roll: Roll; target?: string }
   | { k: "hit"; id: number; actor?: string; side: LogSide; target: string; what: string; amount: number; dice?: Rolled; crit?: boolean; blocked?: number }
   | { k: "miss"; id: number; actor: string; side: LogSide; target: string; what: string }
-  | { k: "heal"; id: number; actor?: string; target: string; what: string; amount: number; dice?: Rolled };
+  | { k: "heal"; id: number; actor?: string; target: string; what: string; amount: number; dice?: Rolled }
+  /** Something a crewmate (or you) said. */
+  | { k: "chat"; id: number; who: string; text: string; mine?: boolean };
 
 export interface CombatLogProps {
   entries: LogEntry[];
@@ -49,6 +55,8 @@ export interface CombatLogProps {
   onToggle: () => void;
   /** More classes for the log's own box: "above" holds it over the rack and the turn bar whatever room there is beside them. */
   className?: string;
+  /** Say a line of chat to everyone on the map. Left out: the log has no line to type into. */
+  onSay?: (text: string) => void;
 }
 
 /** How a roll came out, in a word, and how it is coloured: "ok", "no", "crit" (a critical hit) or "flat" (nothing to beat). */
@@ -119,6 +127,7 @@ export function logLine(e: LogEntry): string {
     case "hit": return e.actor ? `${e.actor} hits ${e.target} with ${e.what} for ${e.amount}${e.crit ? " (critical)" : ""}` : `${e.target} takes ${e.amount} from ${e.what}`;
     case "miss": return `${e.actor} misses ${e.target} with ${e.what}`;
     case "heal": return e.actor && e.actor !== e.target ? `${e.actor} heals ${e.target} for ${e.amount} with ${e.what}` : `${e.target} recovers ${e.amount} from ${e.what}`;
+    case "chat": return `${e.who}: ${e.text}`;
   }
 }
 
@@ -168,11 +177,14 @@ const Row = memo(function Row({ e, fresh }: { e: LogEntry; fresh: boolean }) {
           {e.dice && <div className="fl-math"><DiceSum dice={e.dice} /></div>}
         </div>
       );
+    case "chat":
+      // Not "chat": that class is the place panels' own.
+      return <div className={`fl-e said ${e.mine ? "mine" : ""} ${fresh ? "fresh" : ""}`}><b>{e.who}:</b> {e.text}</div>;
   }
 });
 
 // Drawn again only when what it is handed changes: the view it sits in is drawn for every hex the pointer crosses.
-export const CombatLog = memo(function CombatLog({ entries, open, onToggle, className }: CombatLogProps) {
+export const CombatLog = memo(function CombatLog({ entries, open, onToggle, className, onSay }: CombatLogProps) {
   const body = useRef<HTMLDivElement>(null);
   /** At the newest line: new ones are followed. Off once the player scrolls up to read. */
   const stuck = useRef(true);
@@ -207,7 +219,7 @@ export const CombatLog = memo(function CombatLog({ entries, open, onToggle, clas
   };
 
   return (
-    <section className={`fight-ui fight-log ${open ? "open" : "shut"} ${className ?? ""}`} aria-label="Combat log">
+    <section className={`fight-ui fight-log ${open ? "open" : "shut"} ${onSay ? "talk" : ""} ${className ?? ""}`} aria-label="Combat log">
       <button type="button" className="fl-head" aria-expanded={open} onClick={onToggle} title={open ? "Fold the log away" : "Open the combat log"}>
         <span className="fl-title">Combat Log</span>
         {open ? <span className="fl-count">{entries.length ? `${entries.length} line${entries.length === 1 ? "" : "s"}` : ""}</span> : <span className="fl-last">{last ? logLine(last) : "Nothing yet"}</span>}
@@ -231,6 +243,7 @@ export const CombatLog = memo(function CombatLog({ entries, open, onToggle, clas
         </div>
       )}
       {open && away && <button type="button" className="fl-jump" onClick={toLatest}>Latest ↓</button>}
+      {open && onSay && <div className="fl-say"><ChatInput placeholder="Say something…" onSay={onSay} /></div>}
     </section>
   );
 });
