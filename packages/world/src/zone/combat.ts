@@ -8,7 +8,7 @@
 import { hexDistance, hexNeighbors, hexSegment, posKey, type HexPos } from "@gantt-quest/core";
 import { ABILITIES, BARD_AURA, ENEMIES, onlyInFights, type AbilityDef, type EffectKind } from "../content";
 import { tileAt, type Poi } from "../map";
-import { DEBUFFS, UNTIMED_KEEPS, attackMade, addCondition, addUses, addShield, addStacks, inflict, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, removeCondition, saveBonus, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
+import { DEBUFFS, UNTIMED_KEEPS, attackMade, addCondition, addUses, addShield, addStacks, inflict, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, removeCondition, momentOf, saveBonus, saveMods, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
 import { cratesOn, crateById, hurtCrate, isCrateId } from "./crates";
 import { ENEMY_ABILITIES } from "./enemyabilities";
 import { bearing, big, caught, close, blast, blockerAt, courseShare, covers, directionToward, gap, gapTo, meet, nearOf, reaches, ringToward, elevOf, fetterBars, flies, heldAgainst, inFight, lineFrom, pathIn, perkOf, pitAt, reachFrom, roomAt, roomFor, sameHex, sees, seesFor, solid, span, stepCost, strikes, unitById, zoneReach, type Course, type Lean, type Pit } from "./geometry";
@@ -252,7 +252,9 @@ export function shift(ctx: Ctx, target: Unit, dest: HexPos, by: string, dc?: num
   if (into.how !== "open") {
     const boss = target.side === "enemy" && !!ENEMIES[target.kind]?.boss;
     const vs = dc ?? edgeDc(unitById(state, by));
-    const roll = d20(ctx.rng, { kind: "save", id: target.id, label: "Catch the edge", bonus: saveBonus(target, "agi"), vs, adv: has(target, "prone") || has(target, "stunned") ? (boss ? 0 : -1) : boss ? 1 : 0 });
+    const down = [has(target, "prone") && "Prone", has(target, "stunned") && "Stunned"].filter((w): w is string => !!w);
+    const adv = down.length > 0 ? (boss ? 0 : -1) : boss ? 1 : 0;
+    const roll = d20(ctx.rng, { kind: "save", id: target.id, label: "Catch the edge", bonus: saveBonus(target, "agi"), vs, adv, ...momentOf({ mods: saveMods(target), advWhy: adv > 0 ? ["Boss"] : adv < 0 ? down : [] }) });
     ctx.events.push({ t: "roll", roll });
     if (roll.ok) {
       ctx.events.push({ t: "held", id: target.id, at: dest });
