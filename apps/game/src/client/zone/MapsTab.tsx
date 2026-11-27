@@ -2,7 +2,8 @@
 // it, and, while one is on screen, set up whatever is being tested: put an
 // enemy group down, paint the ground, add a stand-in crewmate, heal up,
 // end the fight, take every enemy off the map, stop the enemy (or the heroes) taking turns,
-// keep heroes from going down, take the time limit off turns, play a fight
+// keep heroes from going down, take the time limit off turns, keep the camera
+// still (this viewer's alone), play a fight
 // by hand (the combat sandbox: any hero or enemy in it, at any time),
 // and make any hero of yours on it (you, or a stand-in) any class, level and
 // weapon with any of the class's abilities. That last holds on that map,
@@ -16,7 +17,7 @@ import { useEffect, useState } from "react";
 import { ABILITIES, ENEMY_DEV_MAX_LEVEL, KIT_MAX_LEVEL, MAX_PARTY, CLIMES, DEFAULT_ZONE_OPTIONS, ENEMIES, HERO_CLASSES, SITES, SITE_IDS, SURFACE_INFO, WEAPONS, poolFor, type SurfaceKind, type ZoneBiome, type ZoneSize } from "@gantt-quest/world";
 import { api, PROFILE } from "../api";
 import { DevSection } from "../DevSection";
-import { setZoneDev, useZoneDev, type KitHero, type ZoneDevTool } from "./zoneDev";
+import { setCameraStill, setZoneDev, useZoneDev, type KitHero, type ZoneDevTool } from "./zoneDev";
 
 const SIZES: ZoneSize[] = ["small", "medium", "large"];
 const BIOMES: ZoneBiome[] = ["meadow", "woods", "caves", "shore"];
@@ -184,6 +185,7 @@ export function MapsTab() {
             <label title="Only while the enemy takes its turns. Every hero turn is skipped, with a 1s pause between rounds."><input type="checkbox" checked={dev.flags.heroesIdle} onChange={(e) => send({ op: "heroes_idle", on: e.target.checked })} /> Heroes take no turns</label>
             <label><input type="checkbox" checked={dev.flags.undying} onChange={(e) => send({ op: "undying", on: e.target.checked })} /> Heroes cannot die</label>
             <label><input type="checkbox" checked={dev.flags.timerOff} onChange={(e) => send({ op: "timer", off: e.target.checked })} /> No turn timer</label>
+            <label title="Nobody is followed and no shot is framed: the camera goes only where you pan it. Yours alone, remembered on this device."><input type="checkbox" checked={dev.cameraStill} onChange={(e) => setCameraStill(e.target.checked)} /> No camera follow</label>
           </div>
           </DevSection>
           <DevSection id="maps.place" title="Enemies & ground" open>

@@ -25,6 +25,8 @@ export interface ZoneDevState {
   picked: string | null;
   /** The sandbox's enemy abilities reach anywhere: no range or line of sight asked. */
   anywhere: boolean;
+  /** The camera never moves of itself (WorldRenderer.setStill). This viewer's alone, and remembered on this device (setCameraStill). */
+  cameraStill: boolean;
 }
 
 
@@ -48,7 +50,16 @@ export interface KitHero {
   abilities: string[];
 }
 
-let state: ZoneDevState = { open: null, tool: null, heroes: [], flags: NO_FLAGS, picked: null, anywhere: false };
+const STILL_KEY = "gq.dev.cameraStill";
+const recallStill = (): boolean => {
+  try {
+    return localStorage.getItem(STILL_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
+
+let state: ZoneDevState = { open: null, tool: null, heroes: [], flags: NO_FLAGS, picked: null, anywhere: false, cameraStill: recallStill() };
 const listeners = new Set<() => void>();
 
 export function setZoneDev(next: Partial<ZoneDevState>): void {
@@ -69,6 +80,17 @@ if (typeof window !== "undefined") {
     },
     true,
   );
+}
+
+/** Turn the camera that never moves of itself on or off, and remember it on this device. */
+export function setCameraStill(on: boolean): void {
+  try {
+    if (on) localStorage.setItem(STILL_KEY, "1");
+    else localStorage.removeItem(STILL_KEY);
+  } catch {
+    // Blocked storage: it lasts until the page is closed.
+  }
+  setZoneDev({ cameraStill: on });
 }
 
 export function useZoneDev(): ZoneDevState {
