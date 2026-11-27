@@ -101,6 +101,7 @@ export function zoneActionFrom(raw: unknown, by: string, dev: boolean): ZoneActi
     if (d.op === "sandbox") return { type: "dev", by, dev: { op: "sandbox", on: !!d.on } };
     if (d.op === "next_turn") return { type: "dev", by, dev: { op: "next_turn", ...(d.round ? { round: true } : {}) } };
     if (d.op === "undying") return { type: "dev", by, dev: { op: "undying", on: !!d.on } };
+    if (d.op === "heroes_idle") return { type: "dev", by, dev: { op: "heroes_idle", on: !!d.on } };
     if (d.op === "timer") return { type: "dev", by, dev: { op: "timer", off: !!d.off } };
     if (d.op === "kit" && text(d.unit) && text(d.classId) && text(d.weapon) && Array.isArray(d.abilities)) {
       return { type: "dev", by, dev: { op: "kit", unit: d.unit, classId: d.classId, weapon: d.weapon, level: Number(d.level) || 1, abilities: d.abilities.filter(text).slice(0, 20) } };

@@ -382,6 +382,13 @@ export interface ZoneState {
   /** Dev switch: a turn in a fight has no time limit (the server sets no deadline). */
   timerOff?: boolean;
   /**
+   * Dev switch: heroes take no turns. A hero's turn starts as ever (what is on them acts) and is passed over at once, so
+   * the enemy plays turn after turn. Only while the enemy plays its own (not with `aiOff` or in the sandbox, which would
+   * leave nobody to play at all): then a hero's turn waits as ever. They are passed over to the end of the round, and the
+   * first hero's in the next waits, so a fight the enemy cannot end does not run on.
+   */
+  heroesIdle?: boolean;
+  /**
    * Dev switch: the combat sandbox (the Maps tab). A fight goes by the dev's hand, not its own flow: no enemy plays its
    * turn, no turn ends of itself, and nothing is timed. Turns still come round, one after another, when the dev moves
    * them on (DevOp "next_turn"), and all that happens as one starts or a round ends happens as ever.
@@ -454,6 +461,8 @@ export type DevOp =
   | { op: "undying"; on: boolean }
   /** No time limit on a turn in a fight. */
   | { op: "timer"; off: boolean }
+  /** Heroes take no turns (ZoneState.heroesIdle). On in the middle of a hero's turn: it ends. */
+  | { op: "heroes_idle"; on: boolean }
   /** Take every enemy off the map, standing or not (bodies already left stay): a fight with them ends. */
   | { op: "clear_enemies" }
   /** Clear every surface off the ground, and every body and anything else left to loot. */

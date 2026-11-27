@@ -744,9 +744,15 @@ function turnEnd(enc: Encounter): number {
   return enc.resume === null ? enc.order.length - 1 : Math.max(-1, enc.order.indexOf(enc.resume) - 1);
 }
 
+/** Dev switch ZoneState.heroesIdle, while it has effect: only while the enemy plays its own turns, or nobody would play at all. */
+const heroesIdle = (state: ZoneState): boolean => !!state.heroesIdle && !state.aiOff && !state.sandbox;
+
 /** Move the fight on to whoever is next, playing enemy turns as they come, until a hero's turn or the end. */
 function advance(ctx: Ctx): void {
   const { state } = ctx;
+  // With heroes taking no turns, theirs are passed over to the end of the round: the first hero's in the next waits as ever,
+  // so a fight the enemy cannot end (heroes who cannot die, a Training Dummy) does not run on of itself.
+  const startRound = state.encounter?.round;
   for (let guard = 0; guard < 400; guard++) {
     const enc = state.encounter;
     if (!enc || settle(ctx)) return;
@@ -805,6 +811,11 @@ function advance(ctx: Ctx): void {
     enc.done = next.filter((u) => !ready.includes(u)).map((u) => u.id);
     if (settle(ctx)) return;
     if (ready.length === 0) continue;
+    // Heroes taking no turns (a dev switch): theirs has started, and is over.
+    if (heroesIdle(state) && next[0].side === "hero" && enc.round === startRound) {
+      enc.done = next.map((u) => u.id);
+      continue;
+    }
     // In the sandbox an enemy's turn waits on the dev, as a hero's does.
     if (next[0].side === "enemy" && !state.sandbox) {
       // The bell, rung: the whole place is roused.
@@ -963,6 +974,12 @@ function dev(ctx: Ctx, by: string, op: DevOp): string | null {
     else u.abilities = abilities;
   } else if (op.op === "ai") {
     state.aiOff = op.off;
+  } else if (op.op === "heroes_idle") {
+    if (op.on) state.heroesIdle = true;
+    else delete state.heroesIdle;
+    // A hero's turn under way is over (the fight moves on once the action is done, as after any).
+    const enc = state.encounter;
+    if (enc && heroesIdle(state)) for (const id of enc.acting) if (unitById(state, id)?.side === "hero" && !enc.done.includes(id)) enc.done.push(id);
   } else if (op.op === "sandbox") {
     if (op.on) {
       state.sandbox = true;

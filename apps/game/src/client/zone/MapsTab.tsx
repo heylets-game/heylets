@@ -1,7 +1,7 @@
 // The dev toolbox's Maps tab: make a zone to try fights in and walk into
 // it, and, while one is on screen, set up whatever is being tested: put an
 // enemy group down, paint the ground, add a stand-in crewmate, heal up,
-// end the fight, take every enemy off the map, stop the enemy taking turns,
+// end the fight, take every enemy off the map, stop the enemy (or the heroes) taking turns,
 // keep heroes from going down, take the time limit off turns, play a fight
 // by hand (the combat sandbox: any hero or enemy in it, at any time),
 // and make any hero of yours on it (you, or a stand-in) any class, level and
@@ -181,6 +181,7 @@ export function MapsTab() {
           </div>
           <div className="dev-row">
             <label><input type="checkbox" checked={dev.flags.aiOff} onChange={(e) => send({ op: "ai", off: e.target.checked })} /> Enemy takes no turns</label>
+            <label title="Only while the enemy takes its turns. A round at a time: the first hero's turn in the next round waits, and ending it (or the timer) plays that round."><input type="checkbox" checked={dev.flags.heroesIdle} onChange={(e) => send({ op: "heroes_idle", on: e.target.checked })} /> Heroes take no turns</label>
             <label><input type="checkbox" checked={dev.flags.undying} onChange={(e) => send({ op: "undying", on: e.target.checked })} /> Heroes cannot die</label>
             <label><input type="checkbox" checked={dev.flags.timerOff} onChange={(e) => send({ op: "timer", off: e.target.checked })} /> No turn timer</label>
           </div>

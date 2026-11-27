@@ -1933,8 +1933,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   useEffect(() => {
     setZoneDev({ heroes: mine.filter((u) => !u.summon && !!state && (ownHero(state, u.id) || ownHero(state, u.controller))).map((u) => ({ id: u.id, name: u.name, classId: u.kind, level: u.level, weapon: u.outfit?.main_hand?.ref, abilities: u.torchHand === "main" ? (u.stowed ?? []) : u.abilities })) });
   }, [mineKey]);
-  const flags = { aiOff: !!state?.aiOff, undying: !!state?.undying, timerOff: !!state?.timerOff, sandbox: !!state?.sandbox };
-  useEffect(() => setZoneDev({ flags }), [flags.aiOff, flags.undying, flags.timerOff, flags.sandbox]);
+  const flags = { aiOff: !!state?.aiOff, undying: !!state?.undying, timerOff: !!state?.timerOff, heroesIdle: !!state?.heroesIdle, sandbox: !!state?.sandbox };
+  useEffect(() => setZoneDev({ flags }), [flags.aiOff, flags.undying, flags.timerOff, flags.heroesIdle, flags.sandbox]);
   // In the sandbox, anyone in the fight may act whenever the dev likes.
   const ready = (u: Unit) => !!enc && !u.down && (sandboxed(u) || (enc.acting.includes(u.id) && !enc.done.includes(u.id)));
   const act = mine.find((u) => u.id === playAs && (!enc || !enc.order.includes(u.id) || ready(u))) ?? mine.find(ready) ?? mine.find((u) => u.id === state?.you) ?? mine[0];
