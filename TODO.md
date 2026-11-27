@@ -4,6 +4,10 @@ Work that still needs doing on the game. Agents: read this before you start, and
 something that should be done but is not part of your task (one line each, under the area it belongs to). Take a
 line off once it is done.
 
+## Combat
+
+- Merge the hero and enemy ability engines into one effect list (docs/combat-effects-design.md).
+
 ## Enemies
 
 - Adjust scaling for enemy abilities: how each one's numbers grow with level (`scales` in
