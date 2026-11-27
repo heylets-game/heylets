@@ -157,7 +157,7 @@ import { sounds } from "./audio/gameSounds";
 import { OptionsMenu } from "./OptionsMenu";
 import * as THREE from "three";
 import { SpellFx, WAVE_PACE } from "./render/SpellFx";
-import { DREAD, FETTER, fieldReach } from "./render/signatureMoves";
+import { DREAD, FETTER, FIELD_LOOKS, fieldReach } from "./render/signatureMoves";
 import { TacticsLayer, type Overlay } from "./render/TacticsLayer";
 import { spriteDataUrl } from "./render/sprites";
 import { WorldRenderer, hexToWorld, tileTop, type RenderState } from "./render/WorldRenderer";
@@ -1023,14 +1023,6 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           // Its second part (an Earthquake's heave) goes off from the middle of where its user stood when it was first
           // used: from the ground it cracked, not from wherever it is now.
           const centre = ev.again && ev.at && user ? span(user, ev.at).map((p) => point(p)).reduce((a, p) => a.add(p), new THREE.Vector3()).divideScalar(span(user, ev.at).length) : undefined;
-          // A field raised round it (a Guardian's Slowing Field, a Snow Bear's Blizzard Aura): once it has gone out, it
-          // stays round its user, following it, as far as it reaches, for as long as the picture shows it carrying the field.
-          const field = enemyAbilityNamed(ev.name, user?.kind)?.field;
-          if (field && !ev.again) {
-            const holder = ev.id;
-            const holding = () => !!shownNow.current?.units.find((u) => u.id === holder && u.hp > 0)?.conditions.some((c) => c.kind === field.kind);
-            timers.current.push(setTimeout(() => spells.current?.aura({ key: `field:${holder}:${field.kind}`, follow: () => renderer.current?.unitFeet(holder) ?? null, holding }, CONDITION_INFO[field.kind].color, fieldReach(field.radius)), 1150));
-          }
           // A call for more of its side (a Brood Swarm): where each it calls will stand, for its move to bring them there.
           // Where each was called, not where it is by the end of this: it may take its turn and walk off in it.
           const calls = events.flatMap((e) => (e.t === "summoned" && e.by === ev.id ? [point(e.at)] : []));
@@ -2128,7 +2120,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
 
   // What lasts as long as something on the map does, drawn whenever it is shown and nothing draws it yet (so too after
   // a reload, for a latecomer, or once it comes back into view): the dread round one with a Terror Aura (an `aura`
-  // ability, for as long as it stands), and the chain holding one Fettered to their spot.
+  // ability, for as long as it stands), a field round one that raised it (a Slowing Field's ring, a Blizzard Aura's
+  // storm: FIELD_LOOKS), and the chain holding one Fettered to their spot.
   useEffect(() => {
     const keep = () => {
       const fxs = spells.current;
@@ -2144,6 +2137,15 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           const key = `dread:${id}:${ability}`;
           if (!aura || fxs.holds(key) || !follow()) continue;
           fxs.dread({ key, follow, holding: () => !!standing(id) }, DREAD.color, DREAD.deep, (aura.radius + 0.5) * Math.sqrt(3));
+        }
+        for (const kind of FIELD_KINDS) {
+          const reach = u.conditions.find((c) => c.kind === kind)?.amount;
+          const key = `field:${id}:${kind}`;
+          if (reach === undefined || fxs.holds(key) || !follow()) continue;
+          const bind = { key, follow, holding: () => !!standing(id)?.conditions.some((c) => c.kind === kind) };
+          const color = CONDITION_INFO[kind].color;
+          if (FIELD_LOOKS[kind] === "storm") fxs.storm(bind, color, fieldReach(reach));
+          else fxs.aura(bind, color, fieldReach(reach));
         }
         // One chain for each of them, ever: fettered again somewhere else, a new one is driven in there, and drawing it
         // takes the old one away (SpellFx.fetter, under the same key).

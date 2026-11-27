@@ -6,7 +6,7 @@
 // figure lab (FigureLab.tsx), where each one has a button of its own. A new one added here shows in both.
 
 import * as THREE from "three";
-import { ENEMY_ABILITIES } from "@gantt-quest/world";
+import { ENEMY_ABILITIES, type FieldKind } from "@gantt-quest/world";
 import { BREATHE, ENGULF, FLURRY_BLOWS, SLICES_APART, type Figure } from "./figures";
 import type { FxKind } from "./sprites";
 import { CRACK_DARK, CRACK_EDGE, crackGeometry, crackPaths, type CrackOpts } from "./cracks";
@@ -1243,6 +1243,12 @@ function earthquakeHeave(stage: MoveStage, { figure, hitAt, crit, onImpact, echo
 
 /** A Slowing Field going up: how far it reaches from the middle of a Guardian (two hexes past its own), and its slow rings. */
 export const SLOWING_FIELD = { reach: HEX * 2.75, rings: 3, life: 1.3, apart: 0.32 };
+
+/**
+ * How each kind of field round an enemy looks while it lasts (ZoneView, as it goes up): a glowing ring at its edge
+ * (SpellFx.aura), or a storm of snow whirling round its bearer (SpellFx.storm).
+ */
+export const FIELD_LOOKS: Record<FieldKind, "ring" | "storm"> = { slowing_field: "ring", blizzard_aura: "storm" };
 
 /** How far out a field reaching `radius` hexes past its bearer's own is drawn (a Slowing Field's 2: SLOWING_FIELD.reach). */
 export const fieldReach = (radius: number): number => HEX * (radius + 0.75);

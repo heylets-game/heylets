@@ -168,6 +168,36 @@ const streakTex = painted(4, 32, (ctx) => linear(ctx, 4, 32, [[0, 0], [0.28, 0.2
 /** Up a column of light: strong at its foot, gone at its head. */
 const columnTex = painted(4, 64, (ctx) => linear(ctx, 4, 64, [[0, 0], [0.55, 0.25], [0.92, 0.85], [1, 0.5]]));
 
+/** A snowflake: six arms from its middle, each with a pair of little branches, and a soft bright heart. */
+const flakeTex = painted(32, 32, (ctx) => {
+  ctx.strokeStyle = "rgba(255,255,255,0.95)";
+  ctx.lineCap = "round";
+  ctx.translate(16, 16);
+  for (let i = 0; i < 6; i++) {
+    ctx.rotate(Math.PI / 3);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(0, -13);
+    ctx.stroke();
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(0, -7);
+    ctx.lineTo(-4, -10);
+    ctx.moveTo(0, -7);
+    ctx.lineTo(4, -10);
+    ctx.stroke();
+  }
+  const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 5);
+  g.addColorStop(0, "rgba(255,255,255,1)");
+  g.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(-5, -5, 10, 10);
+});
+
+/** A storm whirling round its bearer (SpellFx.storm): how many flakes, how big, how fast round, how high, and its haze. */
+export const STORM = { flakes: 70, fine: 0.5, big: 0.22, small: 0.09, turn: [1.6, 3.2], top: 2.4, haze: 0.18, gusts: 5 };
+
 /** What a flung speck is: one of the pixel effects (sprites.ts), or a drop of water. */
 type Speck = FxKind | "drop";
 
@@ -2128,6 +2158,97 @@ export class SpellFx {
           const d = Math.sqrt(Math.random()) * radius * 0.9;
           this.fling(feet.clone().add(new THREE.Vector3(Math.cos(a) * d, 0.1, Math.sin(a) * d)), color, 1, { out: 0.1, up: 0.9, fall: -0.4, life: 1 });
         }
+      }
+      if (k <= 0 && gone >= 0 && this.bound.get(bind.key) === release) this.bound.delete(bind.key);
+      return gone < 0 || k > 0;
+    });
+  }
+
+  /**
+   * A storm whirling round someone (a Snow Bear's Blizzard Aura), for as long as `bind.holding()` says, following them:
+   * flakes (snowflakes and finer specks of snow, `color`) swept round and round them out to `radius`, each on its own
+   * ring, height and pace, those nearer in going faster, rising and dipping as the wind takes them, tumbling as they go,
+   * and thrown out of the storm and caught up again when their time is up; a few pale gusts of driven snow sweeping
+   * round low; and a faint cold haze over the ground. No ring: it is weather, not a spell's edge. It blows itself out
+   * over a moment when it ends.
+   */
+  storm(bind: Binding, color: string, radius: number) {
+    let released = false;
+    const release = () => {
+      released = true;
+    };
+    this.bound.get(bind.key)?.();
+    this.bound.set(bind.key, release);
+    const { flakes, fine, big, small, turn, top, haze: hazeOpacity, gusts } = STORM;
+    const flakeMap = flakeTex();
+    // One flake of the storm: where it is round its bearer, and how it goes round; made again when its life is out.
+    const make = () => {
+      const fineOne = Math.random() < fine;
+      const r = radius * (0.3 + 0.75 * Math.sqrt(Math.random()));
+      return {
+        fineOne,
+        a: Math.random() * Math.PI * 2,
+        r,
+        h: rand(0.1, top),
+        w: rand(turn[0], turn[1]) * (radius / Math.max(0.4, r)) ** 0.6,
+        bob: rand(0.15, 0.45),
+        phase: Math.random() * Math.PI * 2,
+        spin: rand(-4, 4),
+        size: fineOne ? small * rand(0.7, 1.3) : big * rand(0.75, 1.25),
+        life: rand(1.8, 3.6),
+        age: -Math.random() * 1.5,
+      };
+    };
+    const states = Array.from({ length: flakes }, make);
+    const sprites = states.map((st) => {
+      const s = this.add(new THREE.Sprite(new THREE.SpriteMaterial({ map: st.fineOne ? softTex() : flakeMap, color, transparent: true, opacity: 0, depthWrite: false })));
+      s.renderOrder = 6;
+      return s;
+    });
+    // Gusts: soft streaks of driven snow low round it, sweeping the same way as the flakes.
+    const streaks = Array.from({ length: gusts }, () => new Ribbon(8, light(color, 0, streakTex())));
+    for (const g of streaks) this.add(g.mesh);
+    const gustAt = streaks.map((_, i) => ({ a: (i / gusts) * Math.PI * 2, r: radius * rand(0.55, 0.95), h: rand(0.2, 0.9), w: rand(2.2, 3.2) }));
+    const haze = this.sheet(new THREE.Vector3(), color, softTex(), 0);
+    let gone = -1;
+    this.run([...sprites, ...streaks.map((g) => g.mesh), haze], (age, dt) => {
+      const feet = bind.follow();
+      if (gone < 0 && (released || !feet || (age > GRACE && !bind.holding()) || age > 600)) gone = age;
+      const k = gone < 0 ? Math.min(1, age / 0.8) : Math.max(0, 1 - (age - gone) / 0.8);
+      if (feet) {
+        haze.position.copy(feet).setY(feet.y + 0.06);
+        haze.scale.setScalar(radius * 2.4 * (1 + Math.sin(age * 1.3) * 0.04));
+        haze.material.opacity = hazeOpacity * k;
+        sprites.forEach((s, i) => {
+          let st = states[i];
+          st.age += dt;
+          if (st.age > st.life) {
+            st = states[i] = make();
+            st.age = 0;
+            s.material.map = st.fineOne ? softTex() : flakeMap;
+          }
+          const u = Math.max(0, st.age) / st.life;
+          // Faded in as it is caught up, out as it is thrown off; a blown-out storm takes them all with it.
+          const fade = Math.min(1, u / 0.15) * Math.min(1, (1 - u) / 0.2) * k;
+          st.a += st.w * dt;
+          // Thrown a little wider as it goes, and more so as the storm blows out.
+          const r = st.r * (1 + 0.15 * u + (gone >= 0 ? (1 - k) * 0.6 : 0));
+          const y = st.h + Math.sin(st.age * 2.1 + st.phase) * st.bob;
+          s.position.set(feet.x + Math.cos(st.a) * r, feet.y + Math.max(0.05, y), feet.z + Math.sin(st.a) * r);
+          s.scale.setScalar(st.size);
+          s.material.rotation += st.spin * dt;
+          s.material.opacity = (st.fineOne ? 0.7 : 0.95) * fade * (st.age > 0 ? 1 : 0);
+        });
+        streaks.forEach((g, i) => {
+          const at = gustAt[i];
+          at.a += at.w * dt;
+          const line = Array.from({ length: 8 }, (_, j) => {
+            const b = at.a - j * 0.13;
+            return new THREE.Vector3(feet.x + Math.cos(b) * at.r, feet.y + at.h + Math.sin(age * 1.7 + i) * 0.12, feet.z + Math.sin(b) * at.r);
+          });
+          g.material.opacity = 0.3 * k * (0.6 + 0.4 * Math.sin(age * 2.3 + i * 1.7));
+          g.lay(line, (t) => 0.05 + 0.16 * Math.sin(Math.PI * t), this.eye);
+        });
       }
       if (k <= 0 && gone >= 0 && this.bound.get(bind.key) === release) this.bound.delete(bind.key);
       return gone < 0 || k > 0;
