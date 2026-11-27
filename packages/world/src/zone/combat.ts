@@ -551,6 +551,49 @@ function pocket(ctx: Ctx, unit: Unit, target: Unit): void {
 
 // ---------- a hero's abilities ----------
 
+/** The shapes an attack can land on several hexes in, by size: a hero's ability (Tactic) and an enemy's (EnemyAbilityDef) each name one. */
+export type Spread =
+  /** A clump of this many hexes round the hex aimed at (weather.ts clusterHexes), turned by `lean` when the pointer says. */
+  | { shape: "cluster"; size: number; lean?: Lean }
+  /** Every hex within `radius` of the hex aimed at. `onMapOnly` leaves out any with no ground. */
+  | { shape: "blast"; radius: number; onMapOnly?: boolean }
+  /** `rows` arcs of three, swung from the user toward the hex aimed at (sweepHexes). */
+  | { shape: "sweep"; rows: number }
+  /** A cone `rows` rows long (coneHexes). */
+  | { shape: "cone"; rows: number }
+  /** A straight line `length` hexes long (geometry.ts lineFrom). */
+  | { shape: "line"; length: number }
+  /** A swing's three hexes beside the user (arcHexes). */
+  | { shape: "arc" }
+  /** Every hex within `radius` of the user, their own hex left out. */
+  | { shape: "burst"; radius: number }
+  /** The hexes beside the user. */
+  | { shape: "adjacent" };
+
+/** The hexes `spread` covers, used from `from` and aimed at `at` (which a burst and the hexes beside do not use). */
+export function spreadOver(state: ZoneState, spread: Spread, from: HexPos, at: HexPos): HexPos[] {
+  switch (spread.shape) {
+    case "cluster":
+      return clusterHexes(state, from, at, spread.size, spread.lean);
+    case "blast": {
+      const hexes = blast(state.map, at, spread.radius);
+      return spread.onMapOnly ? hexes.filter((p) => !!tileAt(state.map, p)) : hexes;
+    }
+    case "sweep":
+      return sweepHexes(state, from, at, spread.rows);
+    case "cone":
+      return coneHexes(state, from, at, spread.rows);
+    case "line":
+      return lineFrom(state.map, from, at, spread.length);
+    case "arc":
+      return arcHexes(state, from, at);
+    case "burst":
+      return blast(state.map, from, spread.radius).filter((p) => !sameHex(p, from));
+    case "adjacent":
+      return hexNeighbors(from, state.map.grid);
+  }
+}
+
 /**
  * The hexes an ability covers, for one that takes a shape: what is lit up before it is used, and what it then hits.
  * `target`: the ally an ability that reaches round an ally (North Star) is used on. `lean`: where in `at` it is aimed (Aim).
@@ -565,15 +608,15 @@ export function abilityArea(state: ZoneState, unit: Unit, ability: string, at?: 
   }
   if (tactic.weather === "rain") return at ? rainHexes(state, unit.pos, at, lean) : [];
   if (tactic.fortify) return at && !sameHex(at, unit.pos) ? wallHexes(state, unit.pos, at) : [];
-  if (tactic.splash) return at ? clusterHexes(state, unit.pos, at, tactic.splash.hexes, lean) : [];
-  if (tactic.cluster) return at ? clusterHexes(state, unit.pos, at, tactic.cluster, lean) : [];
-  if (tactic.shape === "blast") return at ? blast(state.map, at, tactic.radius ?? 1) : [];
+  if (tactic.splash) return at ? spreadOver(state, { shape: "cluster", size: tactic.splash.hexes, lean }, unit.pos, at) : [];
+  if (tactic.cluster) return at ? spreadOver(state, { shape: "cluster", size: tactic.cluster, lean }, unit.pos, at) : [];
+  if (tactic.shape === "blast") return at ? spreadOver(state, { shape: "blast", radius: tactic.radius ?? 1 }, unit.pos, at) : [];
   // Round the user, their own hex left out: it is thrown at the enemy, and no enemy ever stands there.
-  if (tactic.shape === "burst") return blast(state.map, unit.pos, tactic.radius ?? 1).filter((p) => !sameHex(p, unit.pos));
-  if (tactic.shape === "line") return at ? lineFrom(state.map, unit.pos, at, tactic.length ?? 3) : [];
-  if (tactic.shape === "adjacent") return hexNeighbors(unit.pos, state.map.grid);
-  if (tactic.shape === "arc") return at && !sameHex(at, unit.pos) ? arcHexes(state, unit.pos, at) : [];
-  if (tactic.shape === "cone") return at && !sameHex(at, unit.pos) ? coneHexes(state, unit.pos, at, tactic.length ?? 3) : [];
+  if (tactic.shape === "burst") return spreadOver(state, { shape: "burst", radius: tactic.radius ?? 1 }, unit.pos, unit.pos);
+  if (tactic.shape === "line") return at ? spreadOver(state, { shape: "line", length: tactic.length ?? 3 }, unit.pos, at) : [];
+  if (tactic.shape === "adjacent") return spreadOver(state, { shape: "adjacent" }, unit.pos, unit.pos);
+  if (tactic.shape === "arc") return at && !sameHex(at, unit.pos) ? spreadOver(state, { shape: "arc" }, unit.pos, at) : [];
+  if (tactic.shape === "cone") return at && !sameHex(at, unit.pos) ? spreadOver(state, { shape: "cone", rows: tactic.length ?? 3 }, unit.pos, at) : [];
   return [];
 }
 
@@ -651,12 +694,13 @@ export function dashWay(state: ZoneState, unit: Unit, from: HexPos, toward: HexP
  * one of any other shape.
  */
 export function spreadHexes(state: ZoneState, kit: EnemyAttackKit, from: HexPos, at: HexPos): HexPos[] | null {
-  if (kit.area) return clusterHexes(state, from, at, kit.area);
-  if (kit.blast) return blast(state.map, at, kit.blast).filter((p) => !!tileAt(state.map, p));
+  // An enemy's blast leaves out the hexes with no ground, as a hero's does not: that decides where its surfaces are laid.
+  if (kit.area) return spreadOver(state, { shape: "cluster", size: kit.area }, from, at);
+  if (kit.blast) return spreadOver(state, { shape: "blast", radius: kit.blast, onMapOnly: true }, from, at);
   if (sameHex(from, at)) return kit.sweep || kit.cone || kit.line ? [] : null;
-  if (kit.sweep) return sweepHexes(state, from, at, kit.sweep);
-  if (kit.cone) return coneHexes(state, from, at, kit.cone);
-  if (kit.line) return lineFrom(state.map, from, at, kit.line);
+  if (kit.sweep) return spreadOver(state, { shape: "sweep", rows: kit.sweep }, from, at);
+  if (kit.cone) return spreadOver(state, { shape: "cone", rows: kit.cone }, from, at);
+  if (kit.line) return spreadOver(state, { shape: "line", length: kit.line }, from, at);
   return null;
 }
 
