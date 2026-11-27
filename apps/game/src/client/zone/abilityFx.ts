@@ -252,6 +252,8 @@ const ENEMY_FX: Record<string, Fx> = {
   "Dark Bolt": fx("bolt", "#a78bfa"),
   Immolate: fx("lob", "#ff7a2a"),
   "Acid Splash": fx("bolt", "#f0e44a"),
+  "Frost Mote": fx("bolt", "#bfeaff"),
+  "Icy Bomb": fx("lob", "#bfeaff"),
 };
 
 /** How a hero's ability (by id) or an enemy's attack (by name) looks. `burst` says an enemy attack was on every hero at once. */
