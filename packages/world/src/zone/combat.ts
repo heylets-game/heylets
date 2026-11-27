@@ -11,7 +11,7 @@ import { tileAt, type Poi } from "../map";
 import { DEBUFFS, UNTIMED_KEEPS, attackMade, addCondition, addUses, addShield, addStacks, inflict, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, removeCondition, saveBonus, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
 import { cratesOn, crateById, hurtCrate, isCrateId } from "./crates";
 import { ENEMY_ABILITIES } from "./enemyabilities";
-import { bearing, big, caught, close, blast, blockerAt, courseShare, covers, directionToward, gap, gapTo, meet, nearOf, reaches, ringToward, elevOf, fetterBars, flies, heldAgainst, inFight, lineFrom, pathIn, perkOf, pitAt, reachFrom, roomAt, roomFor, sameHex, sees, seesFor, solid, span, stepCost, strikes, unitById, zoneReach, type Course, type Pit } from "./geometry";
+import { bearing, big, caught, close, blast, blockerAt, courseShare, covers, directionToward, gap, gapTo, meet, nearOf, reaches, ringToward, elevOf, fetterBars, flies, heldAgainst, inFight, lineFrom, pathIn, perkOf, pitAt, reachFrom, roomAt, roomFor, sameHex, sees, seesFor, solid, span, stepCost, strikes, unitById, zoneReach, type Course, type Lean, type Pit } from "./geometry";
 import { ACTION_AP, CHART, COMMON_ACTIONS, CORAL_ARMOR, ENEMY_EDGE, RALLY, SHANTY, SUMMON_CALLS, ENEMY_BURST, FLEE_RANGE, JUMP_DOWN, JUMP_UP, blinkRange, jumpRange, POTION_EDGE, SAVE_STAT, SMUGGLED, SPLASH_SHARE, THROWABLES, TORCH_GROUND_ROUNDS, abilityDice, abilityStrikes, enemySave, retortDice, unitStrike, unitStrikes, healDice, reactionStrike, tacticOf, throwRange, type EnemyAttackKit, type EnemyStrike, type Tactic } from "./kit";
 import { modsOf } from "./mods";
 import { d20, diceFor, hitChance, mod, proficiency, rollDice, rollShown, statOf } from "./rules";
@@ -32,6 +32,8 @@ const THROW_SAVE = 12;
 export interface Aim {
   target?: string;
   at?: HexPos;
+  /** Where in `at` it is aimed, for a shape that turns with the pointer (clusterHexes). */
+  lean?: Lean;
 }
 
 // ---------- walking ----------
@@ -453,9 +455,9 @@ function pocket(ctx: Ctx, unit: Unit, target: Unit): void {
 
 /**
  * The hexes an ability covers, for one that takes a shape: what is lit up before it is used, and what it then hits.
- * `target`: the ally an ability that reaches round an ally (North Star) is used on.
+ * `target`: the ally an ability that reaches round an ally (North Star) is used on. `lean`: where in `at` it is aimed (Aim).
  */
-export function abilityArea(state: ZoneState, unit: Unit, ability: string, at?: HexPos, target?: string): HexPos[] {
+export function abilityArea(state: ZoneState, unit: Unit, ability: string, at?: HexPos, target?: string, lean?: Lean): HexPos[] {
   const tactic = tacticOf(ability);
   if (tactic.constellation) return constellationHexes(state, unit);
   if (tactic.newMoon) return litFoes(state, unit).map((u) => u.pos);
@@ -463,10 +465,10 @@ export function abilityArea(state: ZoneState, unit: Unit, ability: string, at?: 
     const ally = target ? unitById(state, target) : unit;
     return ally ? [ally.pos, ...hexNeighbors(ally.pos, state.map.grid)] : [];
   }
-  if (tactic.weather === "rain") return at ? rainHexes(state, unit.pos, at) : [];
+  if (tactic.weather === "rain") return at ? rainHexes(state, unit.pos, at, lean) : [];
   if (tactic.fortify) return at && !sameHex(at, unit.pos) ? wallHexes(state, unit.pos, at) : [];
-  if (tactic.splash) return at ? clusterHexes(state, unit.pos, at, tactic.splash.hexes) : [];
-  if (tactic.cluster) return at ? clusterHexes(state, unit.pos, at, tactic.cluster) : [];
+  if (tactic.splash) return at ? clusterHexes(state, unit.pos, at, tactic.splash.hexes, lean) : [];
+  if (tactic.cluster) return at ? clusterHexes(state, unit.pos, at, tactic.cluster, lean) : [];
   if (tactic.shape === "blast") return at ? blast(state.map, at, tactic.radius ?? 1) : [];
   // Round the user, their own hex left out: it is thrown at the enemy, and no enemy ever stands there.
   if (tactic.shape === "burst") return blast(state.map, unit.pos, tactic.radius ?? 1).filter((p) => !sameHex(p, unit.pos));
@@ -799,7 +801,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
   const def = ABILITIES[ability];
   const tactic = tacticOf(ability);
   const { state } = ctx;
-  ctx.events.push({ t: "used", id: unit.id, what: ability, name: def.name, target: aim.target, at: aim.at });
+  ctx.events.push({ t: "used", id: unit.id, what: ability, name: def.name, target: aim.target, at: aim.at, ...(aim.lean ? { lean: aim.lean } : {}) });
   const foes = () => state.units.filter((u) => u.side !== unit.side && !u.down);
   // Unseen, any ability gives the user away once it is done (bar going Unseen again, or a pocket picked unseen).
   const wasUnseen = unseen(unit);
@@ -814,11 +816,11 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
     smash(ctx, unit, def, tactic, crate);
     landed = true;
   } else if (tactic.weather) {
-    makeWeather(ctx, tactic.weather, abilityArea(state, unit, ability, aim.at), unit);
+    makeWeather(ctx, tactic.weather, abilityArea(state, unit, ability, aim.at, undefined, aim.lean), unit);
     landed = true;
   } else if (tactic.splash) {
     // Healing for the caster's side alone, the fallen got up with it; then the water, which soaks whoever is there.
-    const area = abilityArea(state, unit, ability, aim.at);
+    const area = abilityArea(state, unit, ability, aim.at, undefined, aim.lean);
     const keys = new Set(area.map(posKey));
     const amount = rollDice(ctx.rng, healDice(def)) + Math.max(0, mod(statOf(unit, def.stat))) + Math.floor(unit.level / 2);
     for (const u of state.units.filter((x) => x.side === unit.side && caught(x, keys))) heal(ctx, u, amount, { actor: unit.id, what: def.id });
@@ -853,13 +855,13 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
     landed = true;
   } else if (tactic.redSky) {
     // An omen, not a blow: no roll and no save, and only the other side reads it.
-    const keys = new Set(abilityArea(state, unit, ability, aim.at).map(posKey));
+    const keys = new Set(abilityArea(state, unit, ability, aim.at, undefined, aim.lean).map(posKey));
     for (const foe of foes().filter((u) => caught(u, keys))) addCondition(ctx, foe, "red_sky", tactic.redSky.rounds);
     landed = true;
   } else if (tactic.unholy) {
     // Water over it all, bar where an enemy stands: that hex comes up burning, whatever water or ice was on it gone first.
     // (Oil or poison under an enemy goes up with it, and takes the rest of its spill along.)
-    const area = abilityArea(state, unit, ability, aim.at);
+    const area = abilityArea(state, unit, ability, aim.at, undefined, aim.lean);
     const held = new Set(foes().map((u) => posKey(u.pos)));
     const burning = area.filter((p) => held.has(posKey(p)));
     placeSurface(ctx, area.filter((p) => !held.has(posKey(p))), "water", tactic.unholy.water, unit.id);
@@ -900,7 +902,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
     }
   } else if (tactic.sweep) {
     // A wave: the far ones are swept first, so the near ones have somewhere to go.
-    const line = abilityArea(state, unit, ability, aim.at);
+    const line = abilityArea(state, unit, ability, aim.at, undefined, aim.lean);
     const along = (u: Unit) => line.findIndex((p) => covers(u, p));
     const swept = foes().filter((u) => along(u) >= 0).sort((a, b) => along(b) - along(a));
     const dice = rollShown(ctx.rng, abilityDice(def), damageBonus(state, unit, def));
@@ -950,7 +952,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
       landed = true;
     }
   } else if (tactic.shape === "blast" || tactic.shape === "burst" || tactic.shape === "line" || tactic.shape === "cone") {
-    const area = abilityArea(state, unit, ability, aim.at);
+    const area = abilityArea(state, unit, ability, aim.at, undefined, aim.lean);
     const keys = new Set(area.map(posKey));
     // A burst is thrown at the enemy, and so is a chorus; a blast or a line catches whoever is standing in it.
     const inIt = state.units.filter((u) => !u.down && caught(u, keys) && ((tactic.shape !== "burst" && tactic.shape !== "cone" && !tactic.chorus && !tactic.foesOnly) || u.side !== unit.side));

@@ -14,6 +14,7 @@ import type { ResourceKind, Resources } from "../hut";
 import type { Clime, WorldMap } from "../map";
 import type { FurnishingGrant } from "../drops";
 import type { ZoneMod } from "./mods";
+import type { Lean } from "./geometry";
 
 export type Side = "hero" | "enemy";
 
@@ -488,7 +489,8 @@ export type ZoneAction =
    */
   | { type: "move"; by: string; unit: string; to: HexPos; from?: HexPos; now?: number }
   /** `target`: a unit's id, or a crate's (it is a poi on the map) for an ability that does damage. */
-  | { type: "use"; by: string; unit: string; ability: string; target?: string; at?: HexPos }
+  /** `lean`: where in `at` it is aimed, for a shape that turns with the pointer (Aim). */
+  | { type: "use"; by: string; unit: string; ability: string; target?: string; at?: HexPos; lean?: Lean }
   | { type: "common"; by: string; unit: string; what: CommonAction; target?: string; at?: HexPos }
   | { type: "throw"; by: string; unit: string; item: Throwable; at: HexPos }
   | { type: "drink"; by: string; unit: string; item: Throwable }
@@ -578,7 +580,7 @@ export type ZoneEvent =
    * `again`: the second part of something used on an earlier turn (an Earthquake's heave), not a new use of it; `at`
    * then is where its user stood (its anchor) when it was first used, where it goes off from.
    */
-  | { t: "used"; id: string; what: string; name: string; target?: string; at?: HexPos; again?: true }
+  | { t: "used"; id: string; what: string; name: string; target?: string; at?: HexPos; lean?: Lean; again?: true }
   | { t: "reaction"; id: string; target: string }
   /**
    * `dice`: what was rolled for it, where dice were. `splash`: not struck itself, but caught by the shock of the same

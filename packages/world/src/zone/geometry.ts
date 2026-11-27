@@ -683,3 +683,49 @@ export function blast(map: WorldMap, center: HexPos, radius: number): HexPos[] {
   }
   return out;
 }
+
+/**
+ * Where in a hex something is aimed: how far off its middle, in hexes along q and r (fractions of a step). A shape that
+ * turns with the pointer (nearestHexes) is laid about that spot, not the hex's middle.
+ */
+export type Lean = { q: number; r: number };
+
+/** A spot on the ground, in hexes along q and r, as a flat point: the same spacing in every direction (hexToWorld on the client). */
+const flat = (q: number, r: number) => ({ x: Math.sqrt(3) * (q + r / 2), y: 1.5 * r });
+
+/** How far it is from the spot `lean` off the middle of `at` to the middle of `p`, squared, measured flat. */
+function spotTo(at: HexPos, lean: Lean, p: HexPos): number {
+  const a = flat(at.q + lean.q, at.r + lean.r);
+  const b = flat(p.q, p.r);
+  return (a.x - b.x) ** 2 + (a.y - b.y) ** 2;
+}
+
+/**
+ * The `lean` brought in toward the middle of `at` until the spot it names lies in `at` (no other hex's middle nearer):
+ * aimed at a hex, a shape is aimed somewhere in it. Nothing that cannot be a number gets through.
+ */
+export function leanWithin(at: HexPos, lean: Lean): Lean {
+  if (!Number.isFinite(lean.q) || !Number.isFinite(lean.r)) return { q: 0, r: 0 };
+  let k = 1;
+  for (let i = 0; i < 40; i++, k *= 0.9) {
+    const l = { q: lean.q * k, r: lean.r * k };
+    if (HEX_DIRS.every((d) => spotTo(at, l, { q: at.q + d.q, r: at.r + d.r }) > spotTo(at, l, at))) return l;
+  }
+  return { q: 0, r: 0 };
+}
+
+/**
+ * The `n` hexes on the map whose middles lie nearest a spot in `at` (`lean` off its middle, kept within it: leanWithin),
+ * nearest first. So the shape is always the same for the same `n` (three: a triangle; four: a diamond; seven: a hex and
+ * its ring), and only turns as the spot moves about the hex: it is laid where the pointer is. `at` is always one of them.
+ * Hexes as near as each other go by q, then r.
+ */
+export function nearestHexes(map: WorldMap, at: HexPos, lean: Lean, n: number): HexPos[] {
+  const l = leanWithin(at, lean);
+  const far = Math.ceil(Math.sqrt(n)) + 1;
+  return blast(map, at, far)
+    .map((p) => ({ p, d: spotTo(at, l, p) }))
+    .sort((a, b) => a.d - b.d || a.p.q - b.p.q || a.p.r - b.p.r)
+    .slice(0, n)
+    .map((x) => x.p);
+}

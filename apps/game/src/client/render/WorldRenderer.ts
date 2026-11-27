@@ -923,6 +923,11 @@ export interface RendererCallbacks {
   onWaygateBurst?(): void;
   onHover(pos: HexPos | null): void;
   /**
+   * Where on the ground the pointer is, exactly, in hexes along q and r (fractions of one: not rounded to a hex), each
+   * time it moves; null off the ground. For a shape that turns with the pointer (nearestHexes).
+   */
+  onHoverSpot?(spot: { q: number; r: number } | null): void;
+  /**
    * The place whose model is under the pointer changed (null: none is). `onHover` gives that place's door all the
    * while, which cannot tell its roof from the ground at its door; this can.
    */
@@ -5573,6 +5578,7 @@ export class WorldRenderer {
   private armHold(x: number, y: number) {
     this.cancelHold();
     this.setHovered(this.pick());
+    this.tellSpot(this.pickedGround);
     const rect = this.renderer.domElement.getBoundingClientRect();
     const ring = this.holdRing;
     ring.style.left = `${x - rect.left}px`;
@@ -5651,6 +5657,14 @@ export class WorldRenderer {
     this.userDist = Math.max(MIN_ZOOM, Math.min(this.maxZoom, this.userDist * Math.exp(step)));
     this.dist = this.userDist;
   };
+
+  /** Tells onHoverSpot where on the ground the pointer is (the inverse of hexToWorld, not rounded). */
+  private tellSpot(ground: THREE.Intersection | undefined) {
+    if (!this.callbacks.onHoverSpot) return;
+    if (!ground) return this.callbacks.onHoverSpot(null);
+    const r = ground.point.z / 1.5;
+    this.callbacks.onHoverSpot({ q: ground.point.x / SQRT3 - r / 2, r });
+  }
 
   private setHovered(pos: HexPos | null) {
     if ((pos && this.hovered && key(pos) === key(this.hovered)) || (!pos && !this.hovered)) return;
@@ -5800,6 +5814,7 @@ export class WorldRenderer {
       // if it got as far as trying the ground.
       const ground = !this.terrain ? undefined : this.pickedOn === this.terrain ? this.pickedGround : this.raycaster.intersectObject(this.terrain)[0];
       if (ground) this.gaze = (this.gaze ?? new THREE.Vector3()).copy(ground.point);
+      this.tellSpot(ground);
       if (this.state?.holding) this.placeGhost();
       if (this.callbacks.onPropHover) {
         const prop = this.pickProp();

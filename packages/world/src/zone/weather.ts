@@ -15,7 +15,7 @@
 
 import { hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/core";
 import { addCondition, damage, heal, inPlay, inflict, saveRoll, type Ctx } from "./engine";
-import { HEX_DIRS, blockerAt, covers, directionToward, flies, inFight, solid, unitAt } from "./geometry";
+import { HEX_DIRS, blockerAt, covers, directionToward, flies, inFight, leanWithin, nearestHexes, solid, unitAt, type Lean } from "./geometry";
 import { FORTIFY, WEATHER } from "./kit";
 import { tileAt } from "../map";
 import { rollDice, rollShown, type Dice } from "./rules";
@@ -43,10 +43,15 @@ export function wallHexes(state: Pick<ZoneState, "map" | "units" | "weather">, f
 }
 
 /**
- * `n` hexes in a clump: the one aimed at, the one beside it nearest `from`, and then, nearest `from` first, those
- * beside the one aimed at that touch one already taken. Fewer at the edge of the map.
+ * `n` hexes in a clump about the one aimed at. Aimed at a spot in it (`lean`, as a hero aims with the pointer): the `n`
+ * whose middles lie nearest that spot (nearestHexes), so three are always a triangle and four a diamond, turned to
+ * where the pointer is. Aimed at the hex alone (an enemy): the one aimed at, the one beside it nearest `from`, and then,
+ * nearest `from` first, those beside the one aimed at that touch one already taken. Fewer at the edge of the map.
  */
-export function clusterHexes(state: Pick<ZoneState, "map">, from: HexPos, at: HexPos, n: number): HexPos[] {
+export function clusterHexes(state: Pick<ZoneState, "map">, from: HexPos, at: HexPos, n: number, lean?: Lean): HexPos[] {
+  // Right on the middle, every way is as near as every other: then it is turned toward `from`, as an enemy's is.
+  const spot = lean && leanWithin(at, lean);
+  if (spot && Math.hypot(spot.q, spot.r) > 0.02) return nearestHexes(state.map, at, spot, n);
   const near = hexNeighbors(at, state.map.grid).sort((a, b) => hexDistance(a, from) - hexDistance(b, from) || a.q - b.q || a.r - b.r);
   const out = [at];
   const taken: HexPos[] = [];
@@ -60,7 +65,7 @@ export function clusterHexes(state: Pick<ZoneState, "map">, from: HexPos, at: He
 }
 
 /** The three hexes a rain cloud covers: the one aimed at and the two beside it nearest the caster. */
-export const rainHexes = (state: Pick<ZoneState, "map">, from: HexPos, at: HexPos): HexPos[] => clusterHexes(state, from, at, 3);
+export const rainHexes = (state: Pick<ZoneState, "map">, from: HexPos, at: HexPos, lean?: Lean): HexPos[] => clusterHexes(state, from, at, 3, lean);
 
 /** Whether a unit is under a weather: on any of its hexes, for a big one. */
 const inside = (w: Weather, unit: Unit) => w.hexes.some((p) => covers(unit, p));

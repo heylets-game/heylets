@@ -1215,11 +1215,11 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
   if (action.type === "use") {
     const def = ABILITIES[action.ability];
     const tactic = tacticOf(action.ability);
-    const aim = { target: action.target, at: action.at };
+    const aim = { target: action.target, at: action.at, lean: action.lean };
     const wrong = checkAbility(state, unit, action.ability, aim);
     if (wrong) return wrong;
     // Something that takes a shape can catch a group that had not noticed anyone: it has now. A mark on the map touches nobody.
-    const area = new Set(tactic.chart ? [] : abilityArea(state, unit, action.ability, action.at, action.target).map(posKey));
+    const area = new Set(tactic.chart ? [] : abilityArea(state, unit, action.ability, action.at, action.target, action.lean).map(posKey));
     const touched = state.units.filter((u) => u.id === action.target || caught(u, area));
     const back = reachBack(state, unit, touched);
     if (back) return back;

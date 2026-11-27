@@ -142,6 +142,7 @@ import {
   type ShantyKind,
   type ZoneState,
   type ZoneView as ZoneViewState,
+  type Lean,
   modName,
   stoneName,
   carriesLantern,
@@ -533,6 +534,17 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const [chartAsk, setChartAsk] = useState(false);
   const [pick, setPick] = useState<Pick | null>(null);
   const [hover, setHover] = useState<HexPos | null>(null);
+  // The hex under the pointer as soon as the renderer says, before the state catches up: for spotSeen.
+  const hoverNow = useRef<HexPos | null>(null);
+  /**
+   * Exactly where on the ground the pointer is (fractions of a hex, see RendererCallbacks.onHoverSpot), for an ability
+   * whose shape turns with it (clusterHexes). Only taken when the hexes it would cover change, so it does not draw the
+   * view again on every move of the mouse.
+   */
+  const [pointerSpot, setPointerSpot] = useState<Lean | null>(null);
+  const spotSeen = useRef<(at: Lean | null) => void>(() => {});
+  /** Where in the hex `at` the pointer is, for a shape that turns with it. */
+  const leanIn = (at: HexPos | undefined): Lean | undefined => (at && pointerSpot ? { q: pointerSpot.q - at.q, r: pointerSpot.r - at.r } : undefined);
   // Alt (Option) held: the card for whoever is under the pointer says what each effect on them does, in full.
   const closer = useHeldKey("Alt");
   // Whoever of the party was selected before coming onto the map is played first (party.ts).
@@ -948,7 +960,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         const wave = look.kind === "wave" && from ? { from, at, rolled: new Promise<number>((done) => (rolled = done)) } : undefined;
         use = { id: ev.id, what: ev.what === "attack" ? ev.name : ev.what, look, last: from, wave };
         // What it covers, for the things that come up out of the ground or roll across it.
-        const covered = user && ABILITIES[ev.what] ? abilityArea(asState({ ...next, units: draft.units }), user, ev.what, ev.at, ev.target) : [];
+        const covered = user && ABILITIES[ev.what] ? abilityArea(asState({ ...next, units: draft.units }), user, ev.what, ev.at, ev.target, ev.lean) : [];
         // Constellation: the lines of starlight, from the user through each ally in turn, as they stood when it was cast.
         const links = user && tacticOf(ev.what)?.constellation ? constellationLinks(asState({ ...next, units: draft.units }), user).map((l) => [point(l.from.pos, 0.9), point(l.to.pos, 0.9)] as const) : [];
         const said = named === ev.id;
@@ -2036,7 +2048,18 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   /** A click on a hex, on the figure `unit` if one was clicked; `chosen` when the figure was picked from the which-one menu. */
   const click = useRef<(pos: HexPos, unit?: string, chosen?: boolean) => void>(() => {});
   useEffect(() => {
-    const view = new WorldRenderer(mount.current!, { onHexClick: (pos, _place, unit) => click.current(pos, unit), onHover: setHover }, { grow: true });
+    const view = new WorldRenderer(
+      mount.current!,
+      {
+        onHexClick: (pos, _place, unit) => click.current(pos, unit),
+        onHover: (p) => {
+          hoverNow.current = p;
+          setHover(p);
+        },
+        onHoverSpot: (at) => spotSeen.current(at),
+      },
+      { grow: true },
+    );
     renderer.current = view;
     layer.current = new TacticsLayer(view);
     spells.current = new SpellFx(view);
@@ -2335,7 +2358,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       if (tactic.shape !== "line" && tactic.shape !== "cone") out.push({ hexes: melee ? inArm() : within(tactic.range, !tactic.chart, !tactic.chart), color: "#ffd23f", fill: 0.1, line: 0.8 });
       // Round an ally (North Star): the ally under the pointer, or yourself.
       const ally = tactic.northStar && hover ? unitFor(hover, "friend")?.id : undefined;
-      const area = abilityArea(z, act, pick.id, hover ?? undefined, ally);
+      const area = abilityArea(z, act, pick.id, hover ?? undefined, ally, leanIn(hover ?? undefined));
       if (area.length > 0) out.push({ hexes: area, color: "#ff6b6b", fill: 0.3, line: 0.9 });
       // The hex under the pointer lights only when a click there would aim at someone (or a crate) it can be used on,
       // found as the click finds them (unitFor): never for a body, or for a friend under a blow.
@@ -2371,7 +2394,14 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       if (to && to.id !== act.id && inArm().some((t) => covers(to, t))) out.push({ hexes: span(to), color: pick.what === "help" ? "#7dff9a" : "#ff6b6b", fill: 0.3, line: 0.9 });
     }
     return out;
-  }, [state, z, act, pick, hover, dev.tool, foe, dev.anywhere, courseOnly, fighting, mover, reach, picking]);
+  }, [state, z, act, pick, hover, pointerSpot, dev.tool, foe, dev.anywhere, courseOnly, fighting, mover, reach, picking]);
+  // The pointer moved on the ground: taken (setPointerSpot) only when it would change what an ability being aimed covers.
+  spotSeen.current = (at) => {
+    const over = hoverNow.current;
+    if (!at || !over || !z || !act || pick?.kind !== "ability") return;
+    const cover = (s: Lean | null) => (s ? abilityArea(z, act, pick.id, over, undefined, { q: s.q - over.q, r: s.r - over.r }) : []).map(posKey).sort().join(" ");
+    if (cover(at) !== cover(pointerSpot)) setPointerSpot(at);
+  };
   useEffect(() => layer.current?.setOverlays(overlays), [overlays]);
 
   // ---------- what a move would cost, at the pointer ----------
@@ -2559,7 +2589,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   const use = (ability: string, aim: { target?: string; at?: HexPos } = {}) => {
     if (!act || !z) return;
     const sure = !checkAbility(z, act, ability, aim) && !(fighting && (act.cooldowns[ability] ?? 0) > 0);
-    declare({ type: "use", unit: act.id, ability, ...aim }, sure, { cost: tacticOf(ability).cost, slot: `ab:${ability}`, name: ABILITIES[ability]?.name, toward: aimedAt(aim) });
+    // Aimed at a hex: where in it, for a shape that turns with the pointer (what was lit up is what is sent).
+    const lean = leanIn(aim.at);
+    declare({ type: "use", unit: act.id, ability, ...aim, ...(lean ? { lean } : {}) }, sure, { cost: tacticOf(ability).cost, slot: `ab:${ability}`, name: ABILITIES[ability]?.name, toward: aimedAt(aim) });
     setPick(null);
   };
   const common = (what: CommonAction, aim: { target?: string; at?: HexPos } = {}) => {

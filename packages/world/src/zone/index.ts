@@ -9,7 +9,7 @@ export { ZONE_GRIDS, ALERT_RANGE, JOIN_RANGE, DEFAULT_ZONE_OPTIONS, BIOME_LEADS,
 export {
   FREE_WALK, MAX_ELEV, HEX_ROOM, HIGH_REACH,
   zoneReach, pathIn, sees, sameHex, elevOf, inFight, flies, hovers, perkOf, unitAt, unitsAt, roomAt, heldAgainst, unitById, isDead, lineFrom, stepCost, blockerAt, seesFor, wallAt, ladderBetween, strikes, reachFrom, pitAt, solid as zoneSolid,
-  blast as zoneBlast, big, bulk, span, spanAt, covers, noWayThere, fetterBars, roomFor, nearOf, gap, gapTo, meet, reaches, SPAN3, type Reached, type Course, type Pit,
+  blast as zoneBlast, big, bulk, span, spanAt, covers, noWayThere, fetterBars, roomFor, nearOf, gap, gapTo, meet, reaches, SPAN3, leanWithin, nearestHexes, type Lean, type Reached, type Course, type Pit,
 } from "./geometry";
 export { PROPS, PROP_KINDS, propOf, type PropKind, type PropDef } from "./props";
 export { SITES, SITE_IDS, FACTIONS, siteInside, siteOpen, siteFor, placeName, SITE_GROUNDS, LOOKOUT_INSIDE, LAIR_INSIDE, backdropOf, factionsOf, bandOf, type SiteId, type SiteGround, type SiteDef, type Backdrop, type PieceKind, type FactionId } from "./sites";
