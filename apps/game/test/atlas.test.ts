@@ -3,7 +3,7 @@
 
 import type { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
-import { ATLAS_HOME, GEM_PRICE, PLAIN_STONE_COST, STACK_MAX, TOWN_TABS_MAX, TOWN_TAB_CELLS, atlasNodeById, attuneCost, modsOf, nodePlace, townTabCost, needsStone, rerollCost, stoneItem, temperCost, type ZoneMod, type ZoneOptions } from "@gantt-quest/world";
+import { ATLAS_HOME, GEM_PRICE, PLAIN_STONE_COST, STACK_MAX, TOWN_TABS_MAX, TOWN_TAB_CELLS, atlasNodeById, attuneCost, modsOf, nodePlace, townTabCost, needsStone, rerollCost, stoneItem, temperCost, type ZoneMod, type ZoneOptions, atlasPassage, atlasWay } from "@gantt-quest/world";
 import { atlasSeed, chartFor, clearNode, devClearNode, devResetChart, enterProblem, openNode, scoutNode } from "../src/server/atlas";
 import { applyZoneGrant, carryState, sellMaterial } from "../src/server/db";
 import { sellGems } from "../src/server/lapidary";
@@ -25,8 +25,19 @@ beforeEach(() => {
 
 const home = (crew = CREW) => atlasNodeById(atlasSeed(crew), ATLAS_HOME)!;
 const first = (crew = CREW) => home(crew).links[0];
-/** A node a ring out that a route runs to from `from`. */
-const beyond = (from: string, crew = CREW) => atlasNodeById(atlasSeed(crew), from)!.links.find((id) => atlasNodeById(atlasSeed(crew), id)!.ring === 2)!;
+/** A node a ring out that a route runs to from `from`, over calm water. */
+const beyond = (from: string, crew = CREW) => atlasNodeById(atlasSeed(crew), from)!.links.find((id) => atlasNodeById(atlasSeed(crew), id)!.ring === 2 && atlasPassage(atlasSeed(crew), from, id)!.kind === "calm")!;
+/** A node a ring out from one of the landfalls by the Harbor, with an encounter on the only water to it: the landfall, the node and the passage. */
+const barred = (crew = CREW) => {
+  const seed = atlasSeed(crew);
+  for (const from of home(crew).links) {
+    for (const id of atlasNodeById(seed, from)!.links) {
+      const way = atlasNodeById(seed, id)!.ring === 2 ? atlasWay(seed, new Set([from]), id) : null;
+      if (way?.way === "beyond") return { from, node: id, passage: way.by!.id };
+    }
+  }
+  throw new Error("no barred place on this chart");
+};
 const states = async (crew = CREW) => new Map((await chartFor(db, crew)).nodes.map((n) => [n.id, n.state]));
 /** Put a lodestone in someone's pack: a plain one, or one that carries these. */
 const give = (who: string, stone: ZoneMod[] = []) =>
@@ -654,5 +665,35 @@ describe("ranks and boons", () => {
     expect(options.mods).toEqual(["hardy2", "gilded"]);
     expect(modsOf(options)).toMatchObject({ hp: 1.65, gold: 0.33 });
     expect((await chartFor(db, CREW)).nodes.find((n) => n.id === node)!.stone).toEqual(["hardy2", "gilded"]);
+  });
+});
+
+describe("a sea passage on the way", () => {
+  it("bars a place past it until it is beaten, and says so; a charter with a pilot's soundings slips past and leaves it unbeaten", async () => {
+    const { from, node, passage } = barred();
+    await went(from);
+    await clearNode(db, CREW, from);
+    expect((await states()).get(node)).toBe("beyond");
+    expect((await chartFor(db, CREW)).passages.find((p) => p.id === passage)).toMatchObject({ state: "open", kind: "salvage" });
+    // A plain charter will not do: the refusal names the water in the way.
+    give("ann");
+    const refused = await openNode(db, CREW, "ann", node, 2, "");
+    expect(refused).toMatchObject({ status: 409 });
+    expect("error" in refused && refused.error).toMatch(/Salvage waters lie on the way/);
+    expect(await scoutNode(db, CREW, node, "")).toEqual(refused);
+    // Soundings on the charter: the ship slips past, and the passage is as it was.
+    give("ann", ["piloted"]);
+    const slipped = await openNode(db, CREW, "ann", node, 2, "piloted");
+    expect(slipped).toMatchObject({ fresh: true });
+    expect((await chartFor(db, CREW)).passages.find((p) => p.id === passage)!.state).toBe("open");
+  });
+
+  it("is calm once beaten: the place past it is open to a plain charter", async () => {
+    const { from, node, passage } = barred();
+    await clearNode(db, CREW, from);
+    await clearNode(db, CREW, passage);
+    expect((await states()).get(node)).toBe("open");
+    expect((await chartFor(db, CREW)).passages.find((p) => p.id === passage)!.state).toBe("cleared");
+    expect(await went(node)).toMatchObject({ fresh: true });
   });
 });

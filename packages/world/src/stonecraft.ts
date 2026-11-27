@@ -48,6 +48,7 @@ export const ATTUNE_MATERIALS: Record<ZoneModId, Resources> = {
   storied: { herbs: 8, gem: 1 },
   laden: { iron: 8, gem: 1 },
   lodebearing: { stone: 10, iron: 6, gem: 2 },
+  piloted: { fur: 6, gem: 1 },
 };
 const ATTUNE_GOLD = 20;
 const TEMPER_GOLD = 60;

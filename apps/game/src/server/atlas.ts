@@ -8,7 +8,7 @@
 // the seed a node's map and its dice are made from is rolled afresh and never
 // leaves the server.
 
-import { MAX_PARTY, atlasNodeById, atlasOpen, atlasView, cleanStone, needsStone, nodeOptions, nodePlace, stoneKey, stoneName, stoneOn, type AtlasNodeView, type Lodestone } from "@gantt-quest/world";
+import { MAX_PARTY, PASSAGES, atlasNodeById, atlasOpen, atlasPassageById, atlasPassages, passageOpen, atlasView, atlasWay, cleanStone, needsStone, nodeOptions, nodePlace, stoneKey, stoneName, stoneOn, type AtlasNode, type AtlasNodeView, type AtlasPassageView, type Lodestone, type ZoneMod } from "@gantt-quest/world";
 import { spendStone } from "./lodestones";
 import { CAVE_IDLE_MS, createZoneRow, crewPlaces, type ZoneRow } from "./zones";
 
@@ -34,6 +34,8 @@ export interface Chart {
   /** What the chart was worked out from: the client makes the land it lies on from the same (atlasMap.ts). */
   seed: string;
   nodes: ChartNode[];
+  /** The sea passages on the routes out of the Harbor and out of everywhere the crew has cleared. */
+  passages: AtlasPassageView[];
 }
 
 const rowsOf = async (db: D1Database, crewId: string) =>
@@ -82,7 +84,18 @@ export async function chartFor(db: D1Database, crewId: string): Promise<Chart> {
     const stone = zone ? cleanStone(row?.stone) : null;
     nodes.push(zone ? { ...node, zone, here: places.filter((m) => m.zone?.code === zone).map((m) => m.name), ...(stone ? { stone } : {}) } : node);
   }
-  return { seed: atlasSeed(crewId), nodes };
+  return { seed: atlasSeed(crewId), nodes, passages: atlasPassages(atlasSeed(crewId), cleared) };
+}
+
+/**
+ * Why the ship cannot reach a node, or null if it can: no route runs there yet, or the only ways cross a sea
+ * passage the crew has not beaten and the charter in the slot has no pilot's soundings to slip past it.
+ */
+function wayProblem(seed: string, rows: readonly { node: string; status: string }[], node: AtlasNode, charter: readonly ZoneMod[] | null): string | null {
+  const way = atlasWay(seed, new Set(rows.filter((r) => r.status === "cleared").map((r) => r.node)), node.id, charter ?? []);
+  if (!way) return "No route runs there yet. Clear a landfall beside it first.";
+  if (way.way === "open" || !way.by || way.by.kind === "calm") return null;
+  return `${PASSAGES[way.by.kind].name} lie on the way to ${node.name}. Beat them first, or lay in a charter with a pilot's soundings on it.`;
 }
 
 /**
@@ -100,13 +113,12 @@ export async function openNode(db: D1Database, crewId: string, playerId: string,
   const rows = await rowsOf(db, crewId);
   const mine = rows.find((r) => r.node === node.id);
   if (mine?.status === "cleared") return { error: `${node.name} is cleared already.`, status: 409 };
-  if (!atlasOpen(seed, new Set(rows.filter((r) => r.status === "cleared").map((r) => r.node)), node.id)) {
-    return { error: "No route runs there yet. Clear a landfall beside it first.", status: 409 };
-  }
   const live = await liveZone(db, mine?.zone_code ?? null);
   if (live) return { code: live, fresh: false };
   const set = stone === undefined || stone === null ? null : cleanStone(stone);
   if (stone !== undefined && stone !== null && !set) return { error: "That is no charter.", status: 400 };
+  const barred = wayProblem(seed, rows, node, set);
+  if (barred) return { error: barred, status: 409 };
   if (!set && needsStone(node)) return { error: `${node.name} needs a charter in its slot before anyone can set out for it.`, status: 409 };
   // Out of the pack before the map is made: a stone is never used twice.
   if (set && !(await spendStone(db, playerId, set))) return { error: `You have no ${stoneName(set).toLowerCase()} like that in your pack.`, status: 409 };
@@ -139,13 +151,12 @@ export async function scoutNode(db: D1Database, crewId: string, nodeId: unknown,
   const rows = await rowsOf(db, crewId);
   const mine = rows.find((r) => r.node === node.id);
   if (mine?.status === "cleared") return { error: `${node.name} is cleared already.`, status: 409 };
-  if (!atlasOpen(seed, new Set(rows.filter((r) => r.status === "cleared").map((r) => r.node)), node.id)) {
-    return { error: "No route runs there yet. Clear a landfall beside it first.", status: 409 };
-  }
   const live = await liveZone(db, mine?.zone_code ?? null);
   if (live) return { live };
   const set = stone === undefined || stone === null ? null : cleanStone(stone);
   if (stone !== undefined && stone !== null && !set) return { error: "That is no charter.", status: 400 };
+  const barred = wayProblem(seed, rows, node, set);
+  if (barred) return { error: barred, status: 409 };
   if (!set && needsStone(node)) return { error: `${node.name} needs a charter in its slot before anyone can set out for it.`, status: 409 };
   return { node: node.id, place: node.name, site: nodePlace(seed, node), level: node.level };
 }
@@ -169,12 +180,18 @@ export function enterProblem(zone: Pick<ZoneRow, "kind" | "crew_id">, crewId: st
 
 // ---------- the dev toolbox ----------
 
-/** Clear a node without fighting for it, if it is one the crew could open (or has open). Dev deployments only. */
+/** Clear a node (or beat a sea passage) without fighting for it, if it is one the crew could open (or has open). Dev deployments only. */
 export async function devClearNode(db: D1Database, crewId: string, nodeId: unknown): Promise<string | null> {
   const seed = atlasSeed(crewId);
+  const cleared = new Set((await rowsOf(db, crewId)).filter((r) => r.status === "cleared").map((r) => r.node));
+  const passage = atlasPassageById(seed, nodeId);
+  if (passage) {
+    if (!passageOpen(seed, cleared, passage.id)) return "There is nothing to beat on that water, or no way to it yet.";
+    await clearNode(db, crewId, passage.id);
+    return null;
+  }
   const node = atlasNodeById(seed, nodeId);
   if (!node || node.kind === "harbor") return "There is no such landfall.";
-  const cleared = new Set((await rowsOf(db, crewId)).filter((r) => r.status === "cleared").map((r) => r.node));
   if (!atlasOpen(seed, cleared, node.id)) return cleared.has(node.id) ? `${node.name} is cleared already.` : "No route runs there yet.";
   await clearNode(db, crewId, node.id);
   return null;

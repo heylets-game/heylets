@@ -50,7 +50,7 @@ import { dragSource, useDropTarget } from "../dragDrop";
 import { joinOk } from "../joinWarning";
 import "./atlas.css";
 
-type Known = Extract<ChartNode, { state: "harbor" | "cleared" | "open" }>;
+type Known = Extract<ChartNode, { state: "harbor" | "cleared" | "open" | "beyond" }>;
 const known = (n: ChartNode | undefined): n is Known => !!n && n.state !== "fogged";
 /** The climate a place lies in, as the card says it. */
 const CLIME: Record<Known["clime"], string> = { greenwood: "the Greenwood", frost: "the Frost", dunes: "the Dunes", mire: "the Mire", ash: "the Ashlands" };

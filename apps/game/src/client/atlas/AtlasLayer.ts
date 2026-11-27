@@ -31,7 +31,8 @@ import * as THREE from "three";
 import type { HexPos } from "@gantt-quest/core";
 import { hexToWorld, type WorldRenderer } from "../render/WorldRenderer";
 
-export type AtlasLook = "harbor" | "open" | "cleared" | "fogged";
+/** `beyond`: known, and past a sea passage the crew has not beaten (an amber ring: not yet). */
+export type AtlasLook = "harbor" | "open" | "beyond" | "cleared" | "fogged";
 export interface AtlasMark {
   id: string;
   hex: HexPos;
@@ -59,6 +60,7 @@ export type Rise = (x: number, z: number) => { y: number; aloft: boolean };
 /** How each look is lit: the ring and pool's colour, the stone's (paler, so it glows), and how strong the pool and the halo are. */
 const LOOKS: Record<AtlasLook, { ring: string; stone: string; pool: number; halo: number; size: number }> = {
   open: { ring: "#3fa9ff", stone: "#c9ecff", pool: 0.62, halo: 0.46, size: 1 },
+  beyond: { ring: "#e0a84a", stone: "#ffe2ad", pool: 0.34, halo: 0.24, size: 0.9 },
   cleared: { ring: "#4fd47a", stone: "#b9f5c6", pool: 0.3, halo: 0.26, size: 1 },
   harbor: { ring: "#ffcf5a", stone: "#fff1c9", pool: 0.5, halo: 0, size: 1.95 },
   fogged: { ring: "#3a445e", stone: "#3a445e", pool: 0, halo: 0, size: 0.74 },
@@ -290,7 +292,7 @@ export class AtlasLayer {
     const count = { dais: 0, ring: 0, ringAloft: 0, pool: 0, stone: 0, halo: 0, beam: 0, mote: 0 };
     for (const mark of marks) {
       const { x, z } = hexToWorld(mark.hex);
-      const known = mark.look === "open" || mark.look === "cleared";
+      const known = mark.look === "open" || mark.look === "beyond" || mark.look === "cleared";
       const motes = mark.look === "open" ? (mark.motes?.length ?? 0) : 0;
       const { y, aloft } = rise(x, z);
       const p: Placed = {

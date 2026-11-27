@@ -6,7 +6,7 @@
 
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ATLAS_HOME, HARBOR_SPAWN, MUSTER_CHOOSE_MS, MUSTER_LINGER_MS, MUSTER_MS, MUSTER_PARTY, atlasNodeById, needsStone, stoneItem, type Muster, type MusterAnswer, type MusterMember, type ZoneMod, type ZoneOptions } from "@gantt-quest/world";
+import { ATLAS_HOME, HARBOR_SPAWN, MUSTER_CHOOSE_MS, MUSTER_LINGER_MS, MUSTER_MS, MUSTER_PARTY, atlasNodeById, atlasPassage, needsStone, stoneItem, type Muster, type MusterAnswer, type MusterMember, type ZoneMod, type ZoneOptions } from "@gantt-quest/world";
 import { atlasSeed, chartFor, clearNode, openNode, scoutNode } from "../src/server/atlas";
 import { lodestonesOf } from "../src/server/lodestones";
 import { CAVE_IDLE_MS, getZoneRow } from "../src/server/zones";
@@ -133,8 +133,8 @@ const seed = atlasSeed(CREW);
 const nodeOf = (id: string) => atlasNodeById(seed, id)!;
 /** A landfall beside the Harbor: it needs no lodestone. */
 const first = () => nodeOf(ATLAS_HOME).links[0];
-/** A place a ring out from `from`, which a route runs to once `from` is cleared: it needs a lodestone. */
-const beyond = (from: string) => nodeOf(from).links.find((id) => nodeOf(id).ring === 2)!;
+/** A place a ring out from `from`, which a route runs to over calm water once `from` is cleared: it needs a lodestone. */
+const beyond = (from: string) => nodeOf(from).links.find((id) => nodeOf(id).ring === 2 && atlasPassage(seed, from, id)!.kind === "calm")!;
 /** Clear the landfall beside the Harbor and give the place beyond it. */
 async function farPlace(): Promise<string> {
   const near = first();

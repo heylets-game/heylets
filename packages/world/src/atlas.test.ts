@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { hexDistance } from "@gantt-quest/core";
-import { ATLAS_HOME, ATLAS_LANDS, ATLAS_SPACING, LAND_GROUND, atlasCell, atlasClime, atlasLevel, atlasLie, atlasModCount, atlasNode, atlasNodeById, atlasOpen, atlasView, nodeOptions, nodePlace, nodeSite, type AtlasCell, type AtlasLand, type AtlasNode } from "./atlas";
+import { ATLAS_HOME, ATLAS_LANDS, ATLAS_SPACING, LAND_GROUND, atlasPassage, atlasPassageById, atlasPassages, atlasWay, passageId, passageOpen, atlasCell, atlasClime, atlasLevel, atlasLie, atlasModCount, atlasNode, atlasNodeById, atlasOpen, atlasView, nodeOptions, nodePlace, nodeSite, type AtlasCell, type AtlasLand, type AtlasNode } from "./atlas";
 import { atlasGround } from "./atlasMap";
 import { CLIMES, MOVE_COST, type Biome, type Clime } from "./map";
 import { ENEMIES } from "./content";
@@ -170,8 +170,11 @@ describe("what a crew sees of the chart", () => {
     const view = byId(atlasView(seed, cleared));
     expect(view.get(first.id)!.state).toBe("cleared");
     for (const id of beyond) {
-      expect(view.get(id)!.state).toBe("open");
-      expect(atlasOpen(seed, cleared, id)).toBe(true);
+      // Open to them, unless the water between is an encounter they have not beaten: then it is beyond it.
+      const calm = atlasPassage(seed, first.id, id)!.kind === "calm" || atlasNodeById(seed, id)!.links.includes(ATLAS_HOME);
+      if (calm) expect(view.get(id)!.state).toBe("open");
+      expect(atlasOpen(seed, cleared, id)).toBe(view.get(id)!.state === "open");
+      expect(["open", "beyond"]).toContain(view.get(id)!.state);
     }
     // Every route shown ends at something shown.
     for (const n of view.values()) for (const id of n.links) expect(view.has(id), `${n.id} -> ${id}`).toBe(true);
@@ -555,6 +558,95 @@ describe("lookouts and lairs", () => {
           expect(far(bosses[0]), lair.id).toBeGreaterThan(8);
         }
       }
+    }
+  });
+});
+
+describe("sea passages", () => {
+  const routes = (seed: string, radius: number) => nodes(seed, radius).flatMap((n) => n.links.filter((l) => l > n.id).map((l) => atlasPassage(seed, n.id, l)!));
+
+  it("lie on every route, the same whichever end is asked from, and on nothing that is not a route", () => {
+    for (const seed of SEEDS) {
+      for (const n of nodes(seed, 4)) {
+        for (const l of n.links) {
+          const p = atlasPassage(seed, n.id, l)!;
+          expect(p, `${seed} ${n.id} ${l}`).not.toBeNull();
+          expect(atlasPassage(seed, l, n.id)).toEqual(p);
+          expect(p.id).toBe(passageId(n.id, l));
+          expect(atlasPassageById(seed, p.id)).toEqual(p);
+          expect(p.ring).toBe(Math.max(n.ring, atlasNodeById(seed, l)!.ring));
+        }
+      }
+      expect(atlasPassage(seed, "0,0", "2,0")).toBeNull();
+      expect(atlasPassage(seed, "0,0", "0,0")).toBeNull();
+      expect(atlasPassageById(seed, "1,0|0,0")).toBeNull();
+      expect(atlasPassageById(seed, "nonsense")).toBeNull();
+    }
+  });
+
+  it("are calm off the Harbor, and an encounter on a fair share of the routes further out, more of them far out", () => {
+    for (const seed of SEEDS) {
+      const all = routes(seed, 12);
+      for (const p of all) if (p.ends.includes(ATLAS_HOME)) expect(p.kind, p.id).toBe("calm");
+      const share = (ps: typeof all) => ps.filter((p) => p.kind !== "calm").length / ps.length;
+      const near = all.filter((p) => !p.ends.includes(ATLAS_HOME) && p.ring <= 3);
+      const far = all.filter((p) => p.ring >= 9);
+      expect(share(near), seed).toBeGreaterThan(0.15);
+      expect(share(near), seed).toBeLessThan(0.5);
+      expect(share(far), seed).toBeGreaterThan(share(near));
+      expect(share(far), seed).toBeLessThan(0.7);
+    }
+  });
+
+  /** A place two rings out whose every way in from what is cleared crosses an encounter, with what was cleared to reach it. */
+  function barred(seed: string): { node: AtlasNode; cleared: Set<string>; by: string } {
+    for (const first of atlasNodeById(seed, ATLAS_HOME)!.links) {
+      const cleared = new Set([first]);
+      for (const id of atlasNodeById(seed, first)!.links) {
+        const node = atlasNodeById(seed, id)!;
+        if (node.ring !== 2) continue;
+        const way = atlasWay(seed, cleared, id);
+        if (way?.way === "beyond") return { node, cleared, by: way.by!.id };
+      }
+    }
+    throw new Error(`${seed}: no barred place two rings out`);
+  }
+
+  it("bar the way to what lies past them until they are beaten, and then no longer", () => {
+    for (const seed of SEEDS) {
+      const { node, cleared, by } = barred(seed);
+      expect(atlasOpen(seed, cleared, node.id)).toBe(false);
+      expect(passageOpen(seed, cleared, by)).toBe(true);
+      // The chart shows it, and says it is beyond; the passage is there to be fought.
+      expect(atlasView(seed, cleared).find((n) => n.id === node.id)!.state).toBe("beyond");
+      expect(atlasPassages(seed, cleared).find((p) => p.id === by)!.state).toBe("open");
+      const beaten = new Set([...cleared, by]);
+      expect(atlasOpen(seed, beaten, node.id)).toBe(true);
+      expect(passageOpen(seed, beaten, by)).toBe(false);
+      expect(atlasView(seed, beaten).find((n) => n.id === node.id)!.state).toBe("open");
+      expect(atlasPassages(seed, beaten).find((p) => p.id === by)!.state).toBe("cleared");
+    }
+  });
+
+  it("are slipped past by a charter with a pilot's soundings, and stay unbeaten", () => {
+    for (const seed of SEEDS) {
+      const { node, cleared, by } = barred(seed);
+      expect(atlasOpen(seed, cleared, node.id, ["hardy", "gilded"])).toBe(false);
+      expect(atlasOpen(seed, cleared, node.id, ["piloted"])).toBe(true);
+      expect(atlasWay(seed, cleared, node.id, ["hardy", "piloted2"])).toMatchObject({ way: "open", silent: true, by: { id: by } });
+      // Slipping past beats nothing: without the charter the way is as barred as it was.
+      expect(atlasOpen(seed, cleared, node.id)).toBe(false);
+      expect(passageOpen(seed, cleared, by)).toBe(true);
+    }
+  });
+
+  it("cannot be set out for from nowhere: one end must be the Harbor or cleared", () => {
+    for (const seed of SEEDS) {
+      const far = routes(seed, 6).find((p) => p.kind !== "calm" && p.ring >= 5)!;
+      expect(passageOpen(seed, new Set(), far.id)).toBe(false);
+      expect(passageOpen(seed, new Set([far.ends[0]]), far.id)).toBe(true);
+      const calm = routes(seed, 3).find((p) => p.kind === "calm")!;
+      expect(passageOpen(seed, new Set(calm.ends), calm.id)).toBe(false);
     }
   });
 });

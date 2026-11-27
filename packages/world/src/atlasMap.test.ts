@@ -22,7 +22,7 @@ const tileAtHex = (world: AtlasWorld, hex: HexPos): Tile | undefined => world.ma
 /** Whether the cloud is lifted from a hex, by the rule: near enough the Harbor or somewhere cleared, or right by somewhere open. */
 const seenBy = (nodes: AtlasNodeView[]) => {
   const reached = nodes.filter((n) => n.state === "harbor" || n.state === "cleared");
-  const open = nodes.filter((n) => n.state === "open");
+  const open = nodes.filter((n) => n.state === "open" || n.state === "beyond");
   return (hex: HexPos) => reached.some((n) => hexDistance(n.hex, hex) <= (n.state === "cleared" && n.kind === "lookout" ? ATLAS_FARSIGHT : ATLAS_SIGHT)) || open.some((n) => hexDistance(n.hex, hex) <= ATLAS_GLIMPSE);
 };
 
@@ -284,7 +284,7 @@ describe("the window a crew is shown", () => {
       expect(world.clear.map((c) => posKey(c.hex)).sort()).toEqual(told.map((n) => posKey(n.hex)).sort());
       for (const c of world.clear) {
         const n = told.find((n) => posKey(n.hex) === posKey(c.hex))!;
-        expect(c.reach).toBe(n.state === "open" ? ATLAS_GLIMPSE : n.kind === "lookout" ? ATLAS_FARSIGHT : ATLAS_SIGHT);
+        expect(c.reach).toBe(n.state === "open" || n.state === "beyond" ? ATLAS_GLIMPSE : n.kind === "lookout" ? ATLAS_FARSIGHT : ATLAS_SIGHT);
       }
       // And no fog is handed over as ground: under the cloud there is nothing, or (at its edge) the land itself.
       expect(world.map.tiles.some((t) => t.biome === "fog")).toBe(false);
