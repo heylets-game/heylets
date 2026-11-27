@@ -6,7 +6,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
 import { APOTHECARY_PROJECT, CARRY_BASE, GALLEY_PROJECT, SHELF_DAILY, SHELF_PRICES, SMITHY_PROJECT, gatherDay, shelfKey, workKey } from "@gantt-quest/world";
 import { consumablesOf } from "../src/server/consumables";
-import { carryState, orderAtPub } from "../src/server/db";
+import { carryState, heroInitFor, orderAtPub } from "../src/server/db";
 import { apothecaryView, brewFlask, buyFromKeeper, galleyView, haggle, smithItem, smithyView } from "../src/server/workshops";
 import { addHero, openDb } from "./d1";
 
@@ -166,25 +166,46 @@ describe("a meal at the pub", () => {
   const used = () => (sql.prepare("SELECT used FROM gathering WHERE player_id = 'ann'").get() as { used: number }).used;
   const out = (n: number) => sql.prepare("INSERT INTO gathering (player_id, day, used) VALUES ('ann', ?, ?)").run(gatherDay(Date.now()), n);
 
-  it("costs the menu's price and gives back one of today's outings, once a day", async () => {
+  it("costs the menu's price and gives back the meal's outings; a hero eats once a day", async () => {
     setGold(100);
     out(3);
-    expect(await orderAtPub(db, "ann", "stew")).toEqual({ rested: true });
-    expect(gold()).toBe(88);
-    expect(used()).toBe(2);
-    // A second meal the same day is paid for, and gives nothing back.
-    expect(await orderAtPub(db, "ann", "pie")).toEqual({ rested: false });
-    expect(gold()).toBe(70);
-    expect(used()).toBe(2);
+    expect(await orderAtPub(db, "ann", "pie")).toEqual({ outings: 2 });
+    expect(gold()).toBe(82);
+    expect(used()).toBe(1);
+    // A second meal the same day is refused, and costs nothing.
+    expect(await orderAtPub(db, "ann", "stew")).toMatch(/eaten today/);
+    expect(gold()).toBe(82);
+    expect(used()).toBe(1);
+  });
+
+  it("gives back no more outings than were used", async () => {
+    setGold(100);
+    out(1);
+    expect(await orderAtPub(db, "ann", "pie")).toEqual({ outings: 1 });
+    expect(used()).toBe(0);
+  });
+
+  it("adds its stat points to the hero for the rest of the day", async () => {
+    setGold(100);
+    const before = await heroInitFor(db, "ann");
+    expect(before?.fed).toBeUndefined();
+    expect(await orderAtPub(db, "ann", "stew")).toEqual({ outings: 0 });
+    const after = await heroInitFor(db, "ann");
+    expect(after?.fed).toBe("stew");
+    expect((after?.bonus.vit ?? 0) - (before?.bonus.vit ?? 0)).toBe(2);
+    // Yesterday's meal does nothing today.
+    sql.prepare("UPDATE characters SET meal_day = '2000-01-01' WHERE player_id = 'ann'").run();
+    expect((await heroInitFor(db, "ann"))?.bonus).toEqual(before?.bonus);
   });
 
   it("gives nothing back to someone who has not been out, takes nothing without the gold, and sells no drink", async () => {
     setGold(100);
     out(0);
-    expect(await orderAtPub(db, "ann", "stew")).toEqual({ rested: false });
+    expect(await orderAtPub(db, "ann", "stew")).toEqual({ outings: 0 });
     expect(gold()).toBe(88);
     expect(used()).toBe(0);
     sql.prepare("UPDATE gathering SET used = 2").run();
+    sql.prepare("UPDATE characters SET meal_day = NULL WHERE player_id = 'ann'").run();
     setGold(5);
     expect(await orderAtPub(db, "ann", "stew")).toMatch(/cannot afford/);
     expect(gold()).toBe(5);

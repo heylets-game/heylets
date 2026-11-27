@@ -251,7 +251,7 @@ export function GatherPanel({ spot, pier, at, hole, vessel = null, gilded = fals
         {status && !outing && (
           left > 0
             ? <button className="primary" disabled={busy} onClick={() => run(() => api.gatherStart(spot))}>{words.start} · uses 1 stamina</button>
-            : <p className="bad">You are worn out for today. A rest in your own shack gives all three outings back, and a meal at the pub gives back one a day.</p>
+            : <p className="bad">You are worn out for today. A rest in your own shack gives all three outings back, and a meal at the pub gives some back, once a day.</p>
         )}
 
         {outing && (

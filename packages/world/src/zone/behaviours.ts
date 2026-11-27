@@ -371,6 +371,35 @@ const mend: Behaviour = {
   },
 };
 
+/**
+ * The furthest from the enemy a hero could stand and still be of any worth to this ability, from wherever it uses it,
+ * and null where that does not depend on how near the heroes are (a call to its own side, a field, a mending). Always
+ * a little more than the truth, never less: the turn skips an ability when no hero is this near (ai.ts), so it must
+ * never be too short. (A big enemy's reach is measured from its nearest hex to the hero: geometry.ts `gap`.)
+ */
+export function maxReach(attack: EnemyStrike): number | null {
+  const SLACK = 1;
+  switch (attack.behaviour) {
+    case "burst":
+      return attack.range + SLACK;
+    case "shove":
+      return 1 + HIGH_REACH + SLACK;
+    case "strike": {
+      const { area, blast: wide, sweep, cone, line, dash } = attack.kit;
+      if (dash) return Math.max(attack.range, 1) + SLACK;
+      if (leaps(attack)) return attack.range + 1 + SLACK;
+      if (area) return attack.range + 1 + HIGH_REACH + SLACK;
+      if (wide) return attack.range + wide + HIGH_REACH + SLACK;
+      if (sweep) return sweep + 1 + SLACK;
+      if (cone) return cone + SLACK;
+      if (line) return line + SLACK;
+      return attack.range + HIGH_REACH + SLACK;
+    }
+    default:
+      return null;
+  }
+}
+
 export const BEHAVIOURS = { strike, burst, shove, rally, field, summon, mend } satisfies Record<string, Behaviour>;
 
 export type BehaviourId = keyof typeof BEHAVIOURS;

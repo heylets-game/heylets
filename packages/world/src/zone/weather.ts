@@ -131,16 +131,26 @@ export function weatherAtTurn(ctx: Ctx, unit: Unit): void {
   }
 }
 
-/** A unit has come onto a hex: weather there acts on it, if it is the unit's own turn (or no fight is on). */
-export function enterWeather(ctx: Ctx, unit: Unit): void {
+/**
+ * A unit has come onto a hex: weather there acts on it, if it is the unit's own turn (or no fight is on). `flush`
+ * (a walk's, as enterSurface takes it): says the steps walked so far, so what the weather does is told after the unit
+ * is seen to come in, not before it sets off. Called only if some weather acted, so a walk through none stays one.
+ */
+export function enterWeather(ctx: Ctx, unit: Unit, flush?: () => void): void {
   if (unit.down) return;
   const fighting = !!ctx.state.encounter && inFight(ctx.state, unit.id);
   if (fighting && !ownTurn(ctx.state, unit)) return;
+  const mark = ctx.events.length;
   for (const w of ctx.state.weather ?? []) {
     if (!inside(w, unit)) continue;
     // The winds do nothing out of a fight: there is no pace to change. Nor does coral: it is for a fight.
     if ((w.kind === "wind" || w.kind === "coral") && !fighting) continue;
     weatherOn(ctx, w, unit, turnOf(ctx.state, unit));
+  }
+  if (flush && ctx.events.length > mark) {
+    const said = ctx.events.splice(mark);
+    flush();
+    ctx.events.push(...said);
   }
 }
 

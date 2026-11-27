@@ -134,6 +134,46 @@ const MARCH_SPEED = 0.35;
 /** A signature no list of marks has: set after the map changes, so the next list is drawn whatever it is. */
 const STALE = "\u0000stale";
 const SQRT3 = Math.sqrt(3);
+/**
+ * The healing crosses that rise from the ground under a Soothing Rain (TacticsLayer rising): how many to a hex, how
+ * high they rise and how many seconds each takes to, how big, and their colour.
+ */
+const MENDING = { per: 3, rise: 1.3, period: 2.4, size: 0.34, color: "#7dff9a" };
+
+/** A soft cross with a glow round it, smooth and not in pixels, white at its heart and `color` at its edge: made once. */
+let crossMap: THREE.CanvasTexture | null = null;
+function crossTexture(): THREE.CanvasTexture {
+  if (crossMap) return crossMap;
+  const S = 64;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = S;
+  const ctx = canvas.getContext("2d")!;
+  const plus = (arm: number, long: number) => {
+    const path = new Path2D();
+    const r = arm / 2;
+    path.roundRect(S / 2 - r, S / 2 - long / 2, arm, long, r);
+    path.roundRect(S / 2 - long / 2, S / 2 - r, long, arm, r);
+    return path;
+  };
+  ctx.shadowColor = MENDING.color;
+  ctx.shadowBlur = 10;
+  ctx.fillStyle = MENDING.color;
+  ctx.fill(plus(14, 40));
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "#e8ffe9";
+  ctx.fill(plus(6, 30));
+  crossMap = new THREE.CanvasTexture(canvas);
+  crossMap.colorSpace = THREE.SRGBColorSpace;
+  return crossMap;
+}
+
+/** A rain's healing crosses (TacticsLayer rising): the points, each one's spot and point in its rise, and the ground under it. */
+interface Rising {
+  points: THREE.Points;
+  base: Float32Array;
+  floor: Float32Array;
+}
+
 /** What tickSky works in each frame, and how a streak of wind is tipped: made once, not every frame. */
 const SKY_M = new THREE.Matrix4();
 const SKY_AT = new THREE.Vector3();
@@ -181,7 +221,7 @@ export class TacticsLayer {
   /** Cracked ground (an Earthquake's), trembling until it heaves (see cracked). */
   private quakes: THREE.Group[] = [];
   /** Each rain cloud over the ground, its drops, and when it was first drawn (it grows in from nothing). */
-  private clouds: { cloud: THREE.Group; drops: THREE.InstancedMesh; base: Float32Array; floor: Float32Array; born: number; veil: { material: THREE.Material; full: number }[] }[] = [];
+  private clouds: { cloud: THREE.Group; drops: THREE.InstancedMesh; base: Float32Array; floor: Float32Array; born: number; veil: { material: THREE.Material; full: number }[]; rising: Rising }[] = [];
   /**
    * Materials kept from one drawing to the next, so their shaders are compiled once and not again each time the
    * ground or the marks change: the moving sheet of each kind of surface, and the marks' fills and outlines by
@@ -727,8 +767,58 @@ export class TacticsLayer {
     }
     drops.frustumCulled = false;
     this.sky.add(drops);
+    const rising = this.rising(hexes);
     // (How see-through each part is at its fullest: the combat view thins the cloud further, see tickSky.)
-    this.clouds.push({ cloud, drops, base, floor, born: -1, veil: [top, belly, ink, drops.material as THREE.Material].map((material) => ({ material, full: material.opacity })) });
+    this.clouds.push({ cloud, drops, base, floor, born: -1, veil: [top, belly, ink, drops.material as THREE.Material].map((material) => ({ material, full: material.opacity })), rising });
+  }
+
+  /**
+   * Healing crosses rising from the ground over `hexes` (a Soothing Rain's: it heals the caster's side), MENDING.per
+   * to a hex, each at its own spot and its own point in the rise: up from the ground, swaying a little, glowing in as
+   * it leaves the ground and fading as it goes (tickRising).
+   */
+  private rising(hexes: HexPos[]): Rising {
+    const n = hexes.length * MENDING.per;
+    const base = new Float32Array(n * 3);
+    const floor = new Float32Array(n);
+    let k = 0;
+    hexes.forEach((p, h) => {
+      const { x, z } = hexToWorld(p);
+      for (let i = 0; i < MENDING.per; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const d = 0.15 + Math.sqrt(Math.random()) * 0.6;
+        floor[h * MENDING.per + i] = this.top(p);
+        base[k++] = x + Math.cos(a) * d;
+        // Its own point in the rise, spread so they do not go up together.
+        base[k++] = (i + Math.random() * 0.8) / MENDING.per;
+        base[k++] = z + Math.sin(a) * d;
+      }
+    });
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(n * 3), 3));
+    geometry.setAttribute("color", new THREE.Float32BufferAttribute(new Float32Array(n * 3), 3));
+    // Added on, not laid over: a cross fades by darkening to nothing, so each can fade on its own.
+    const points = new THREE.Points(geometry, new THREE.PointsMaterial({ map: crossTexture(), size: MENDING.size, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    points.frustumCulled = false;
+    points.renderOrder = 4;
+    this.sky.add(points);
+    return { points, base, floor };
+  }
+
+  /** The healing crosses of a rain (rising) as they are at `clock`; `shown` (0 to 1) as much as the rain has grown in. */
+  private tickRising(r: Rising, clock: number, shown: number) {
+    const pos = r.points.geometry.getAttribute("position") as THREE.BufferAttribute;
+    const col = r.points.geometry.getAttribute("color") as THREE.BufferAttribute;
+    for (let i = 0; i < r.floor.length; i++) {
+      const t = (clock / MENDING.period + r.base[i * 3 + 1]) % 1;
+      const sway = Math.sin(clock * 2.1 + i * 1.7) * 0.05;
+      pos.setXYZ(i, r.base[i * 3] + sway, r.floor[i] + 0.1 + t * MENDING.rise, r.base[i * 3 + 2]);
+      // In quickly off the ground, out slowly as it rises.
+      const fade = shown * Math.min(1, t / 0.15) * (1 - t) ** 1.5;
+      col.setXYZ(i, fade, fade, fade);
+    }
+    pos.needsUpdate = true;
+    col.needsUpdate = true;
   }
 
   /**
@@ -870,6 +960,7 @@ export class TacticsLayer {
         c.drops.setMatrixAt(i, m);
       }
       c.drops.instanceMatrix.needsUpdate = true;
+      this.tickRising(c.rising, clock, grow);
     }
     // Each streak runs along the wind over its hex, swelling in and thinning away, and round again.
     const q = WIND_TILT;

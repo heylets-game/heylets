@@ -41,6 +41,8 @@ const zoneFromHash = () => /^#zone\/([A-Za-z]{4})$/.exec(location.hash)?.[1].toU
 const atlasFromHash = () => location.hash === "#atlas";
 const adminFromHash = () => location.hash === "#admin";
 const catchesFromHash = () => location.hash === "#catches";
+/** Which development lab the hash names (#lab/<name>), if any: kept as state, so going to one redraws the screen. */
+const labFromHash = () => /^#lab\/([a-z]+)$/.exec(location.hash)?.[1] ?? null;
 const hutFromHash = () => /^#hut\/([A-Za-z0-9-]{1,64})$/.exec(location.hash)?.[1] ?? null;
 const inviteFromHash = () => /^#crew\/([A-Za-z]{6})$/.exec(location.hash)?.[1].toUpperCase() ?? null;
 /** Never shown to an ordinary player (the admin page, the catch gallery, the dev toolbox), so fetched only when one is opened. */
@@ -66,6 +68,7 @@ export function App() {
   const [atlas, setAtlas] = useState(atlasFromHash);
   const [admin, setAdmin] = useState(adminFromHash);
   const [catches, setCatches] = useState(catchesFromHash);
+  const [lab, setLab] = useState(labFromHash);
 
   /** Only the answer to the newest question is kept: an older one that comes back late would show the pack as it was. */
   const meAsked = useRef(0);
@@ -94,6 +97,7 @@ export function App() {
       setAtlas(atlasFromHash());
       setAdmin(adminFromHash());
       setCatches(catchesFromHash());
+      setLab(labFromHash());
     });
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
@@ -109,20 +113,20 @@ export function App() {
   // On a development deployment (local and staging) the dev toolbox sits in the corner of every screen.
   return (
     <>
-      <Screen me={me} refresh={refresh} zone={zone} atlas={atlas} invite={invite} hut={hut} pub={pub} keeper={keeper} admin={admin} catches={catches} menu={menu} />
+      <Screen me={me} refresh={refresh} zone={zone} atlas={atlas} invite={invite} hut={hut} pub={pub} keeper={keeper} admin={admin} catches={catches} menu={menu} lab={lab} />
       {me.devTools && <Suspense fallback={null}><DevToolbox me={me} refresh={refresh} /></Suspense>}
       <AskHost />
     </>
   );
 }
 
-function Screen({ me, refresh, zone, atlas, invite, hut, pub, keeper, admin, catches, menu }: { me: Me; refresh(): Promise<void>; zone: string | null; atlas: boolean; invite: string | null; hut: string | null; pub: boolean; keeper: KeeperHouse | null; admin: boolean; catches: boolean; menu: boolean }) {
+function Screen({ me, refresh, zone, atlas, invite, hut, pub, keeper, admin, catches, menu, lab }: { me: Me; refresh(): Promise<void>; zone: string | null; atlas: boolean; invite: string | null; hut: string | null; pub: boolean; keeper: KeeperHouse | null; admin: boolean; catches: boolean; menu: boolean; lab: string | null }) {
   const ready = me.character?.status === "active";
   const leave = () => (location.hash = "");
   // Somewhere that is not the town: a lab, the admin page, a map, the atlas.
-  const elsewhere = FightUiLab && location.hash === "#lab/fightui" ? <Suspense fallback={null}><FightUiLab me={me} refresh={refresh} /></Suspense>
-    : SceneryLab && location.hash === "#lab/scenery" ? <Suspense fallback={null}><SceneryLab /></Suspense>
-    : WardrobeLab && location.hash === "#lab/wardrobe" ? <Suspense fallback={null}><WardrobeLab /></Suspense>
+  const elsewhere = FightUiLab && lab === "fightui" ? <Suspense fallback={null}><FightUiLab me={me} refresh={refresh} /></Suspense>
+    : SceneryLab && lab === "scenery" ? <Suspense fallback={null}><SceneryLab /></Suspense>
+    : WardrobeLab && lab === "wardrobe" ? <Suspense fallback={null}><WardrobeLab /></Suspense>
     : admin ? <Suspense fallback={null}><AdminView me={me} onLeave={leave} /></Suspense>
     // Every catch's sprite and model, side by side: for admins, and on a development deployment.
     : catches && (me.isAdmin || me.devTools || import.meta.env.DEV) ? <Suspense fallback={null}><CatchGallery onLeave={leave} /></Suspense>

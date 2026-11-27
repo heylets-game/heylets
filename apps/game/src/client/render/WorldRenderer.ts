@@ -65,7 +65,7 @@ import { SQRT3, UP, hexToWorld, placeOf, yawOf } from "./places/placing";
 import { nearWater, openEar, sounds } from "../audio/gameSounds";
 import type { AttackStyle, Fighter } from "../audio/names";
 import { PUFFS, footfalls, stepGround, worldToHex, type PuffLook } from "./footsteps";
-import { badgeTexture, badgesKey, bubbleTexture, fxTexture, labelTexture, lookFor, plateFontsReady, plateKey, sleepZTexture, spriteKey, textTexture, type Badge, type FxKind, type PlateStats, type PlateTone } from "./sprites";
+import { badgeTexture, badgesKey, bubbleTexture, markTexture, fxTexture, labelTexture, lookFor, plateFontsReady, plateKey, sleepZTexture, spriteKey, textTexture, type Badge, type FxKind, type PlateStats, type PlateTone } from "./sprites";
 
 /** What `setGlow` lights: a place by id, a waygate by its hex, or a prop by id. */
 type GlowTarget = string | HexPos | { prop: string | number } | null;
@@ -400,6 +400,10 @@ const LOOK_SEND_S = 0.15;
 const BODY_GLOW_GROW = 1.07;
 /** How long a figure lying down is, as a share of its size: its tag hangs over the middle of it. */
 const LYING = 0.45;
+/** The mark (Want.mark) over a hero who is down: out of the fight until helped up, not merely knocked flat (Prone). */
+const DOWN_MARK: Badge = { kind: "downed", color: "#ff7a68", rounds: 0 };
+/** How tall a mark is drawn, against a badge's 0.3; and how far it bobs, and how fast it bobs and pulses. */
+const MARK = { tall: 0.64, bob: 0.07, speed: 2.6 };
 /** How long a shove that knocks someone off their feet keeps them down, at least, before they get up (longer if Prone). */
 const FLOORED_S = 1.4;
 /** The turn, about y, from `from` to `to` by the shorter way round. */
@@ -689,6 +693,9 @@ interface Unit {
   /** Its status badges, and what they were last drawn for. */
   badges?: THREE.Sprite | null;
   badgesKey?: string;
+  /** Its mark (UnitWant.mark), and what it was last drawn for. */
+  mark?: THREE.Sprite | null;
+  markKey?: string;
   label: THREE.Sprite | null;
   labelText: string;
   goal: THREE.Vector3;
@@ -768,6 +775,11 @@ interface Want {
   pace?: number;
   /** The conditions on it, shown as a row of badges over its head until each wears off. */
   effects?: Badge[];
+  /**
+   * One badge held over it, larger, bobbing and pulsing, and shown whatever its plate and badges do (a fight hides
+   * those but for whoever is acting or pointed at): what must be seen from across the field. A hero down (DOWN_MARK).
+   */
+  mark?: Badge;
   /** Draw the unit wearing this instead of its kind's stock look. */
   outfit?: Outfit;
   pos: THREE.Vector3;
@@ -4843,7 +4855,7 @@ export class WorldRenderer {
       const label = plate && full ? firstName(full) : full;
       // A player's hero is named in their side's colour: yours gold, the rest sea-green. Townsfolk in plain parchment.
       const tone: PlateTone = !plate ? "plain" : h.id === state.you ? "you" : "ally";
-      want.set(h.id, { kind: h.classId, pace: h.pace, outfit: h.outfit, pos, hex: key(h.pos), size: 1.5, label, plate: label ? plate : undefined, tone, stack: i, ring: colorOf(h.id), through: colorOf(h.id), pulse: !!h.active, asleep: h.asleep, rod: h.rod, boat: h.boat, down: h.down, falls: true, prone: h.prone, effects: h.effects, seat: seat?.top, floorSit: h.floorSit, unseen: h.unseen });
+      want.set(h.id, { kind: h.classId, pace: h.pace, outfit: h.outfit, pos, hex: key(h.pos), size: 1.5, label, plate: label ? plate : undefined, tone, stack: i, ring: colorOf(h.id), through: colorOf(h.id), pulse: !!h.active, asleep: h.asleep, rod: h.rod, boat: h.boat, down: h.down, falls: true, prone: h.prone, effects: h.effects, mark: h.down ? DOWN_MARK : undefined, seat: seat?.top, floorSit: h.floorSit, unseen: h.unseen });
     }
     // A zone's enemies: beside whoever else is on their hex. The fallen lie in the middle of theirs.
     for (const u of state.units ?? []) {
@@ -4885,6 +4897,7 @@ export class WorldRenderer {
         unit.badges.material.map?.dispose();
         unit.badges.material.dispose();
       }
+      unit.mark = this.markSprite(unit.mark ?? null, undefined);
       this.clearArrows(unit);
       this.dropLabel(unit);
       this.units.delete(id);
@@ -4993,7 +5006,31 @@ export class WorldRenderer {
           this.unitGroup.add(sprite);
         }
       }
+      // Its mark, if it has one: redrawn only when it changes.
+      const marks = w.mark ? [w.mark] : [];
+      const markKey = badgesKey(marks);
+      if (markKey !== (unit.markKey ?? "")) {
+        unit.markKey = markKey;
+        unit.mark = this.markSprite(unit.mark ?? null, w.mark);
+      }
     }
+  }
+
+  /** Put away a mark's sprite (`old`), and make one for `mark` in its place (markTexture), over everything else: null for none. */
+  private markSprite(old: THREE.Sprite | null, mark: Badge | undefined): THREE.Sprite | null {
+    if (old) {
+      old.material.map?.dispose();
+      old.material.dispose();
+      this.unitGroup.remove(old);
+    }
+    if (!mark) return null;
+    const { texture, aspect } = markTexture(mark);
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true }));
+    sprite.renderOrder = 7;
+    sprite.layers.set(OVERLAY_LAYER);
+    sprite.userData.aspect = aspect;
+    this.unitGroup.add(sprite);
+    return sprite;
   }
 
   /** How much world height looks `px` screen pixels tall, straight up the screen at `at`. */
@@ -6283,6 +6320,16 @@ export class WorldRenderer {
         const tall = 0.3;
         unit.badges.position.set(p.x, over, p.z);
         unit.badges.scale.set(tall * (unit.badges.userData.aspect as number), tall, 1);
+      }
+      if (unit.mark) {
+        // Over its tag (a fallen hero keeps theirs), or its head; hidden only with the unit, or in a quiet moment.
+        unit.mark.visible = unit.root.visible && !this.quiet.has(id);
+        const tag = this.plateTop(unit);
+        const base = Math.max(ground + unit.head + 0.4, tag !== null ? tag + 0.2 : 0);
+        const beat = this.clock * MARK.speed;
+        unit.mark.position.set(p.x, base + MARK.bob * Math.sin(beat), p.z);
+        unit.mark.scale.set(MARK.tall * (unit.mark.userData.aspect as number), MARK.tall, 1);
+        unit.mark.material.opacity = 0.75 + 0.25 * Math.sin(beat * 1.5);
       }
     }
 

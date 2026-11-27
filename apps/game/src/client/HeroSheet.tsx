@@ -18,7 +18,10 @@ import {
   armorBlock,
   healthBand,
   maxHpFor,
+  mealStats,
   outfitOf,
+  pubItem,
+  statBonusText,
   statPct,
   xpToNext,
   type ItemDef,
@@ -147,6 +150,8 @@ export function HeroSheet({ id, you, onClose, logbook }: Props) {
 
   const worn = new Map<Slot, ItemDef>(hero.gear.map((g) => [g.slot, g]));
   const total = (k: StatKey) => hero.base[k] + (hero.bonus[k] ?? 0);
+  /** The pub meal they ate today: its stat points are already in `hero.bonus`. */
+  const fedOn = hero.fed ? pubItem(hero.fed) : undefined;
   const stats = { str: total("str"), int_stat: total("int_stat"), vit: total("vit"), agi: total("agi"), dex: total("dex") };
   // Seen in town, everyone is rested: full HP.
   const maxHp = maxHpFor(stats, hero.level);
@@ -273,6 +278,7 @@ export function HeroSheet({ id, you, onClose, logbook }: Props) {
           </div>
         ))}
       </div>
+      {fedOn && <p className="hs-fed" title="A meal at the pub: it lasts until the day turns">Well fed on {label("pub", fedOn.id)}: {statBonusText(mealStats(fedOn))} today</p>}
 
       {weapon && (
         <section>

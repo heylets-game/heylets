@@ -24,13 +24,14 @@ export function pubRoutes(app: GameApp): void {
     return typeof result === "string" ? c.json({ error: result }, 409) : c.json(result);
   });
 
-  // Order a meal off the menu. The price is the menu's. `rested` says whether it gave back a gathering outing.
+  // Eat a meal off the menu, one a day. The price is the menu's. `outings` is how many gathering outings it gave
+  // back; `rested`, whether any did, is for a page still open from before meals did more than that.
   app.post("/api/pub/order", async (c) => {
     const player = c.get("player");
     const body = await c.req.json<{ itemId?: unknown }>().catch(() => ({}) as { itemId?: unknown });
     const result = await orderAtPub(c.env.DB, player.id, String(body.itemId ?? ""));
     if (typeof result === "string") return c.json({ error: result }, 409);
-    return c.json({ rested: result.rested });
+    return c.json({ outings: result.outings, rested: result.outings > 0 });
   });
 
   // The traveling salesman in the pub, if one is in, and their stock as this player sees it; otherwise when the next is due.

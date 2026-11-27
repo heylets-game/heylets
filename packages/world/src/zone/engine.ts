@@ -12,7 +12,7 @@ import { AQUEOUS, AURAS, CONDITION_INFO, CORAL_ARMOR, ENEMY_KIT, FORTIFY, SHIELD
 import { inDark } from "./light";
 import { d20, heroDefence, mod, netAdvantage, rollShown, statOf } from "./rules";
 import { songDefence, songHit, windward } from "./song";
-import type { Condition, Roll, Rolled, Unit, UnitCondition, ZoneEffect, ZoneEvent, ZoneState } from "./types";
+import type { Condition, Roll, RollMod, Rolled, Unit, UnitCondition, ZoneEffect, ZoneEvent, ZoneState } from "./types";
 
 export interface Ctx {
   state: ZoneState;
@@ -211,10 +211,24 @@ export const wallDefence = (state: Pick<ZoneState, "weather">, unit: Unit): numb
 
 /** A unit's Defence. With the board (`state`), a Dour Shanty it stands in, and a wall of its side's it stands beside, count too. */
 export const defenceOf = (unit: Unit, state?: Pick<ZoneState, "units" | "weather">): number =>
-  (state ? songDefence(state, unit) + wallDefence(state, unit) : 0) +
-  (unit.side === "hero" && unit.stats ? heroDefence(unit.stats, unit.armor) - ((unit.torch ?? 0) > 0 && unit.torchHand !== "main" && unit.outfit?.off_hand ? SHIELD_SET_ASIDE : 0) : enemyDefence(unit.kind)) +
-  (has(unit, "coral_armor") ? CORAL_ARMOR.defence : 0) -
-  (has(unit, "sundered") ? SUNDERED_DEFENCE : 0);
+  (unit.side === "hero" && unit.stats ? heroDefence(unit.stats, unit.armor) : enemyDefence(unit.kind)) + defenceMods(unit, state).reduce((n, m) => n + m.n, 0);
+
+/**
+ * What of a unit's Defence comes from the moment rather than its armour and its stats, a short name each (for a roll
+ * against it, Roll `vsMods`): a Dour Shanty and a wall it stands by (with the board), a shield set aside for a torch,
+ * Coral Armor, Sundered.
+ */
+export function defenceMods(unit: Unit, state?: Pick<ZoneState, "units" | "weather">): RollMod[] {
+  const out: RollMod[] = [];
+  const song = state ? songDefence(state, unit) : 0;
+  if (song) out.push({ name: "Dour Shanty", n: song });
+  const wall = state ? wallDefence(state, unit) : 0;
+  if (wall) out.push({ name: "Wall", n: wall });
+  if (unit.side === "hero" && unit.stats && (unit.torch ?? 0) > 0 && unit.torchHand !== "main" && unit.outfit?.off_hand) out.push({ name: "Shield set aside", n: -SHIELD_SET_ASIDE });
+  if (has(unit, "coral_armor")) out.push({ name: "Coral Armor", n: CORAL_ARMOR.defence });
+  if (has(unit, "sundered")) out.push({ name: "Sundered", n: -SUNDERED_DEFENCE });
+  return out;
+}
 
 /** Whether a unit stands in water (Aqueous Regeneration heals more there). */
 export const inWater = (state: ZoneState, unit: Unit): boolean => span(unit).some((p) => state.surfaces[posKey(p)]?.kind === "water");
@@ -226,7 +240,8 @@ export const inWater = (state: ZoneState, unit: Unit): boolean => span(unit).som
 export function regrow(ctx: Ctx, unit: Unit): void {
   if (unit.down) return;
   if (has(unit, "regenerating") && unit.hp < unit.maxHp) {
-    const rolled = rollShown(ctx.rng, AQUEOUS.tick, inWater(ctx.state, unit) ? AQUEOUS.water : 0);
+    const water = inWater(ctx.state, unit) ? AQUEOUS.water : 0;
+    const rolled = rollShown(ctx.rng, AQUEOUS.tick, water, false, water ? [{ name: "In water", n: water }] : []);
     heal(ctx, unit, rolled.total, { actor: null, what: "aqueous_regeneration", dice: rolled });
   }
   const again = unit.conditions.find((c) => c.kind === "rejuvenating");
@@ -239,6 +254,12 @@ export function regrow(ctx: Ctx, unit: Unit): void {
 /** What a unit adds to a save with `stat`: its own bonus, less what Weakened takes off every save (its `amount`). */
 export const saveBonus = (unit: Unit, stat: StatKey): number =>
   (unit.side === "hero" ? mod(statOf(unit, stat)) : enemySave(unit.kind)) - weakenedBy(unit);
+
+/** What of a unit's save bonus (saveBonus) comes from the moment, a short name each (Roll `mods`): Weakened. */
+export const saveMods = (unit: Unit): RollMod[] => {
+  const weak = weakenedBy(unit);
+  return weak ? [{ name: "Weakened", n: -weak }] : [];
+};
 
 /** What Weakened takes off every save `unit` makes: its `amount` (WEAKENED_SAVES unless said), or 0 if it is not Weakened. */
 export const weakenedBy = (unit: Unit): number => {
@@ -319,14 +340,26 @@ const SHIELD_KEEPS = UNTIMED_KEEPS;
 /** A shield is a thing of fights: only one in a fight can be given one. */
 const shieldable = (ctx: Ctx, unit: Unit): boolean => inFight(ctx.state, unit.id);
 
-/** Put a shield of `amount` points on a unit in a fight (Bolstered), to last the fight. A bigger one replaces a smaller. */
-export function shieldUnit(ctx: Ctx, unit: Unit, amount: number): void {
-  if (amount > 0 && shieldable(ctx, unit)) addCondition(ctx, unit, "bolstered", SHIELD_KEEPS, amount);
+/**
+ * Put a shield of `amount` points on a unit in a fight (Bolstered), to last the fight. A bigger one replaces a smaller.
+ * `mods`: what of the moment is in `amount` (standing in water), told with it to be shown.
+ */
+export function shieldUnit(ctx: Ctx, unit: Unit, amount: number, mods: RollMod[] = []): void {
+  if (amount > 0 && shieldable(ctx, unit)) shielded(ctx, unit, () => addCondition(ctx, unit, "bolstered", SHIELD_KEEPS, amount), mods);
 }
 
-/** Add `amount` points to whatever shield a unit in a fight already has (Bulwark Strike), to last the fight. */
-export function addShield(ctx: Ctx, unit: Unit, amount: number): void {
-  if (amount > 0 && shieldable(ctx, unit)) addCondition(ctx, unit, "bolstered", SHIELD_KEEPS, shieldOf(unit) + amount);
+/** Add `amount` points to whatever shield a unit in a fight already has (Bulwark Strike), to last the fight. `mods` as shieldUnit's. */
+export function addShield(ctx: Ctx, unit: Unit, amount: number, mods: RollMod[] = []): void {
+  if (amount > 0 && shieldable(ctx, unit)) shielded(ctx, unit, () => addCondition(ctx, unit, "bolstered", SHIELD_KEEPS, shieldOf(unit) + amount), mods);
+}
+
+/** Give a shield (`give`), and put `mods` (those that add or take something) on the event that tells of it. */
+function shielded(ctx: Ctx, unit: Unit, give: () => void, mods: RollMod[]): void {
+  const mark = ctx.events.length;
+  give();
+  const shown = mods.filter((m) => m.n !== 0);
+  if (shown.length === 0) return;
+  for (const ev of ctx.events.slice(mark)) if (ev.t === "condition" && ev.kind === "bolstered" && ev.target === unit.id) ev.mods = shown;
 }
 
 /**
@@ -408,8 +441,14 @@ export function heal(ctx: Ctx, target: Unit, amount: number, opts: { actor: stri
 
 export interface AttackContext {
   adv: -1 | 0 | 1;
-  /** Added to the roll: high ground, cover. */
+  /** Added to the roll: high ground, cover. The sum of `parts`. */
   mods: number;
+  /** What makes up `mods`, a short name each, for the roll (Roll `mods`). */
+  parts: RollMod[];
+  /** Why it has advantage or disadvantage (`adv`), a short name each, for the roll (Roll `advWhy`). Empty when neither. */
+  advWhy: string[];
+  /** It has both, which cancel: why each (Roll `cancelled`). Absent otherwise. */
+  cancelled?: { adv: string[]; dis: string[] };
   /** Why, in a few words each, for the tooltip. */
   notes: string[];
 }
@@ -425,55 +464,72 @@ export interface AttackContext {
  */
 export function attackContext(state: ZoneState, attacker: Unit, target: Unit, opts: { melee: boolean }): AttackContext {
   const notes: string[] = [];
-  let advantage = false;
-  let disadvantage = false;
-  const adv = (why: string) => { advantage = true; notes.push(`Advantage: ${why}`); };
-  const dis = (why: string) => { disadvantage = true; notes.push(`Disadvantage: ${why}`); };
-  if (has(target, "exposed")) adv("the target is Exposed");
-  if (has(target, "stunned")) adv("the target is Stunned");
-  if (has(target, "prone") && opts.melee) adv("the target is Prone");
-  if (has(attacker, "invisible")) adv("you are Unseen");
-  if (has(attacker, "inspired")) adv("you are Inspired");
-  if (has(attacker, "lucky")) adv("you are Lucky");
-  for (const [kind, spur] of spursOn(attacker)) if (spur.advantage) adv(`you are ${CONDITION_INFO[kind].name}`);
-  if (has(target, "guiding_light") && target.side !== attacker.side) adv("the target is lit by Guiding Light");
-  if (attacker.side === "enemy" && ENEMY_KIT[attacker.kind]?.pack && state.units.some((u) => u.id !== attacker.id && u.side === "enemy" && !u.down && gap(u, target) <= 1)) adv("the pack is on the target");
-  if (has(attacker, "poisoned")) dis("Poisoned");
-  if (has(attacker, "fumbling")) dis("Fumbling");
-  if (has(attacker, "black_spot")) dis("the Black Spot is on you");
-  if (has(attacker, "red_sky")) dis("Red Sky at Morning");
+  // Each with its short name (for the roll) and why in a few words (for the tooltip).
+  const ups: string[] = [];
+  const downs: string[] = [];
+  const adv = (name: string, why: string) => { ups.push(name); notes.push(`Advantage: ${why}`); };
+  const dis = (name: string, why: string) => { downs.push(name); notes.push(`Disadvantage: ${why}`); };
+  if (has(target, "exposed")) adv("Exposed", "the target is Exposed");
+  if (has(target, "stunned")) adv("Stunned", "the target is Stunned");
+  if (has(target, "prone") && opts.melee) adv("Prone", "the target is Prone");
+  if (has(attacker, "invisible")) adv("Unseen", "you are Unseen");
+  if (has(attacker, "inspired")) adv("Inspired", "you are Inspired");
+  if (has(attacker, "lucky")) adv("Lucky", "you are Lucky");
+  for (const [kind, spur] of spursOn(attacker)) if (spur.advantage) adv(CONDITION_INFO[kind].name, `you are ${CONDITION_INFO[kind].name}`);
+  if (has(target, "guiding_light") && target.side !== attacker.side) adv("Guiding Light", "the target is lit by Guiding Light");
+  if (attacker.side === "enemy" && ENEMY_KIT[attacker.kind]?.pack && state.units.some((u) => u.id !== attacker.id && u.side === "enemy" && !u.down && gap(u, target) <= 1)) adv("Pack", "the pack is on the target");
+  if (has(attacker, "poisoned")) dis("Poisoned", "Poisoned");
+  if (has(attacker, "fumbling")) dis("Fumbling", "Fumbling");
+  if (has(attacker, "black_spot")) dis("Black Spot", "the Black Spot is on you");
+  if (has(attacker, "red_sky")) dis("Red Sky", "Red Sky at Morning");
   // The party strikes blind at what the light does not reach. The things of the caves see in the dark.
-  if (attacker.side === "hero" && span(target).every((p) => inDark(state, p))) dis("the target is in the dark");
+  if (attacker.side === "hero" && span(target).every((p) => inDark(state, p))) dis("Dark", "the target is in the dark");
   if (!opts.melee) {
-    if (state.units.some((u) => u.side !== attacker.side && !u.down && inFight(state, u.id) && gap(u, attacker) <= 1)) dis("an enemy is beside you");
-    if (has(target, "prone")) dis("the target is Prone");
+    if (state.units.some((u) => u.side !== attacker.side && !u.down && inFight(state, u.id) && gap(u, attacker) <= 1)) dis("Enemy beside", "an enemy is beside you");
+    if (has(target, "prone")) dis("Prone", "the target is Prone");
   }
-  let mods = 0;
+  const parts: RollMod[] = [];
+  const add = (name: string, n: number, why: string) => { parts.push({ name, n }); notes.push(`${n < 0 ? "-" : "+"}${Math.abs(n)} ${why}`); };
   // A Beacon on the attacker, or on an ally near enough (AURAS.range): a steady bonus to hit, however many are lit.
   if (state.units.some((u) => u.side === attacker.side && !u.down && has(u, "beacon") && gap(u, attacker) <= AURAS.range)) {
-    mods += AURAS.beaconHit;
-    notes.push(`+${AURAS.beaconHit} ${has(attacker, "beacon") ? "your Beacon" : "an ally's Beacon"}`);
+    add("Beacon", AURAS.beaconHit, has(attacker, "beacon") ? "your Beacon" : "an ally's Beacon");
   }
   const sung = songHit(state, attacker);
-  if (sung > 0) { mods += sung; notes.push(`+${sung} Lively Shanty`); }
+  if (sung > 0) add("Lively Shanty", sung, "Lively Shanty");
   const [from, to] = meet(attacker, target);
   const rise = elevOf(state.map, from) - elevOf(state.map, to);
   if (!opts.melee) {
-    if (rise > 0) { mods += 2; notes.push("+2 high ground"); }
-    if (rise < 0) { mods -= 2; notes.push("-2 shooting uphill"); }
-    if (tileAt(state.map, nearOf(target, attacker.pos))?.biome === "forest") { mods -= 2; notes.push("-2 the target is among trees"); }
+    if (rise > 0) add("High ground", 2, "high ground");
+    if (rise < 0) add("Uphill", -2, "shooting uphill");
+    if (tileAt(state.map, nearOf(target, attacker.pos))?.biome === "forest") add("Trees", -2, "the target is among trees");
   } else if (Math.abs(rise) >= 2) {
     // Only a ladder joins two that far apart: whoever holds the top of it has the better of it.
-    if (rise > 0) { mods += 2; notes.push("+2 striking down a ladder"); }
-    else { mods -= 2; notes.push("-2 striking up a ladder"); }
+    if (rise > 0) add("Ladder", 2, "striking down a ladder");
+    else add("Ladder", -2, "striking up a ladder");
   }
-  return { adv: netAdvantage(advantage, disadvantage), mods, notes };
+  const net = netAdvantage(ups.length > 0, downs.length > 0);
+  const cancelled = ups.length > 0 && downs.length > 0 ? { adv: ups, dis: downs } : undefined;
+  return { adv: net, mods: parts.reduce((n, p) => n + p.n, 0), parts, advWhy: net > 0 ? ups : net < 0 ? downs : [], ...(cancelled ? { cancelled } : {}), notes };
 }
+
+/**
+ * What of a roll of the moment goes on it (Roll `mods`, `vsMods`, `advWhy`, `cancelled`): only those there are, so a
+ * roll with none carries none of them.
+ */
+export const momentOf = (o: { mods?: RollMod[]; vsMods?: RollMod[]; advWhy?: string[]; cancelled?: Roll["cancelled"] }): Pick<Roll, "mods" | "vsMods" | "advWhy" | "cancelled"> => ({
+  ...(o.mods?.length ? { mods: o.mods } : {}),
+  ...(o.vsMods?.length ? { vsMods: o.vsMods } : {}),
+  ...(o.advWhy?.length ? { advWhy: o.advWhy } : {}),
+  ...(o.cancelled ? { cancelled: o.cancelled } : {}),
+});
 
 /** Roll an attack and say so. A stack each of Fumbling, Inspired and Lucky is spent on it (spendUse). */
 export function attackRoll(ctx: Ctx, attacker: Unit, target: Unit, opts: { label: string; bonus: number; melee: boolean }): Roll {
   const c = attackContext(ctx.state, attacker, target, opts);
-  const roll = d20(ctx.rng, { kind: "attack", id: attacker.id, target: target.id, label: opts.label, bonus: opts.bonus + c.mods, vs: defenceOf(target, ctx.state), adv: c.adv });
+  const roll = d20(ctx.rng, {
+    kind: "attack", id: attacker.id, target: target.id, label: opts.label, bonus: opts.bonus + c.mods, vs: defenceOf(target, ctx.state), adv: c.adv,
+    ...momentOf({ mods: c.parts, vsMods: defenceMods(target, ctx.state), advWhy: c.advWhy, cancelled: c.cancelled }),
+  });
   // A Ghostsail Cloak: the first attacks against its wearer each fight pass through them, whatever was rolled.
   const enc = ctx.state.encounter;
   const ghostly = perkOf(target, "ghostly");
@@ -541,11 +597,11 @@ export function spendLuck(ctx: Ctx, unit: Unit): void {
  */
 export const UNTIMED: ReadonlySet<string> = new Set(["lucky", "bolstered", "frenzied", "fumbling", "inspired"]);
 
-/** Roll a save against a difficulty and say so. */
-export function saveRoll(ctx: Ctx, unit: Unit, stat: StatKey, vs: number, label: string, disadvantage = false): Roll {
+/** Roll a save against a difficulty and say so. `disadvantage`: it is made with disadvantage, for this reason (a short name). */
+export function saveRoll(ctx: Ctx, unit: Unit, stat: StatKey, vs: number, label: string, disadvantage?: string): Roll {
   // Within a Terror Aura of the other side's, every save is made with disadvantage.
-  const worse = disadvantage || !!dreadOver(ctx.state, unit);
-  const roll = d20(ctx.rng, { kind: "save", id: unit.id, label, bonus: saveBonus(unit, stat), vs, adv: worse ? -1 : 0 });
+  const worse = [disadvantage, dreadOver(ctx.state, unit)].filter((w): w is string => !!w);
+  const roll = d20(ctx.rng, { kind: "save", id: unit.id, label, bonus: saveBonus(unit, stat), vs, adv: worse.length > 0 ? -1 : 0, ...momentOf({ mods: saveMods(unit), advWhy: worse }) });
   ctx.events.push({ t: "roll", roll });
   return roll;
 }

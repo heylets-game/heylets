@@ -41,7 +41,7 @@
 
 import { Children, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { dragSource, useDropTarget } from "../dragDrop";
-import { ITEM_AP, RARITY_COLOR, loadoutOf, maxHpFor, xpToNext } from "@gantt-quest/world";
+import { ITEM_AP, RARITY_COLOR, loadoutOf, maxHpFor, mealBonus, sumBonuses, xpToNext } from "@gantt-quest/world";
 import { api, type Me } from "../api";
 import { Icon, ItemDetail, toOwned } from "../items";
 import { PixelIcon } from "../PixelIcon";
@@ -314,7 +314,8 @@ export function HudBar({ me, place, children, hp, meter: given, pips = [], chips
   const shown = slots ?? [];
   rack.current = { shown, move: (from, to) => onSlotMove?.(from, to), light: torch?.light };
 
-  const bonus = loadoutOf(worn).bonus;
+  // Gear, and today's pub meal, as the maps count them.
+  const bonus = sumBonuses(loadoutOf(worn).bonus, mealBonus(c, Date.now()));
   const stats = { str: c.str + (bonus.str ?? 0), int_stat: c.int_stat + (bonus.int_stat ?? 0), vit: c.vit + (bonus.vit ?? 0), agi: c.agi + (bonus.agi ?? 0), dex: c.dex + (bonus.dex ?? 0) };
   const maxHp = hp?.max ?? maxHpFor(stats, c.level);
   const nowHp = hp?.now ?? maxHp;

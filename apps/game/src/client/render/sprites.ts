@@ -879,6 +879,73 @@ const GLYPHS: Record<string, string[]> = {
 export const badgesKey = (badges: readonly Badge[]): string => badges.map((b) => `${b.kind}:${b.rounds}:${b.stacks ?? ""}`).join(",");
 
 /**
+ * How each kind of mark (WorldRenderer Want.mark) draws its icon, smooth, not in pixels: on a canvas centred on 0,0,
+ * one unit to the disc's edge, in its colour. A new kind of mark is an entry here.
+ */
+const MARK_ICONS: Record<string, (ctx: CanvasRenderingContext2D, color: string) => void> = {
+  // A heart with a crack down it: a hero down, out of the fight until someone helps them up.
+  downed: (ctx, color) => {
+    const heart = new Path2D();
+    heart.moveTo(0, 0.5);
+    heart.bezierCurveTo(-0.72, 0.02, -0.62, -0.6, 0, -0.26);
+    heart.bezierCurveTo(0.62, -0.6, 0.72, 0.02, 0, 0.5);
+    const shade = ctx.createLinearGradient(0, -0.5, 0, 0.5);
+    shade.addColorStop(0, "#ffd2c6");
+    shade.addColorStop(0.35, color);
+    shade.addColorStop(1, "#a8392c");
+    ctx.fillStyle = shade;
+    ctx.fill(heart);
+    ctx.lineJoin = ctx.lineCap = "round";
+    ctx.strokeStyle = "#1c0d0e";
+    ctx.lineWidth = 0.06;
+    ctx.stroke(heart);
+    // The crack, zigzagging from the dip at the top to near the point.
+    ctx.beginPath();
+    ctx.moveTo(0.02, -0.24);
+    ctx.lineTo(-0.1, -0.04);
+    ctx.lineTo(0.08, 0.1);
+    ctx.lineTo(-0.03, 0.34);
+    ctx.lineWidth = 0.09;
+    ctx.stroke();
+  },
+};
+
+/**
+ * A mark's icon (Want.mark), drawn smooth: a round dark disc with a hard dark edge and a thin rim in the mark's colour
+ * (the fight UI's timber look, not the pixel badges'), its icon (MARK_ICONS) in the middle. Square.
+ */
+export function markTexture(badge: Badge): { texture: THREE.CanvasTexture; aspect: number } {
+  const SIZE = 128;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = SIZE;
+  const ctx = canvas.getContext("2d")!;
+  ctx.translate(SIZE / 2, SIZE / 2);
+  ctx.scale(SIZE / 2 - 4, SIZE / 2 - 4);
+  const disc = ctx.createRadialGradient(0, -0.3, 0.1, 0, 0, 1);
+  disc.addColorStop(0, "#4a2a22");
+  disc.addColorStop(1, "#1c0d0e");
+  ctx.beginPath();
+  ctx.arc(0, 0, 0.94, 0, Math.PI * 2);
+  ctx.fillStyle = disc;
+  ctx.fill();
+  ctx.lineWidth = 0.1;
+  ctx.strokeStyle = "#1c0d0e";
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(0, 0, 0.84, 0, Math.PI * 2);
+  ctx.lineWidth = 0.05;
+  ctx.strokeStyle = badge.color;
+  ctx.stroke();
+  ctx.save();
+  ctx.scale(0.62, 0.62);
+  (MARK_ICONS[badge.kind] ?? MARK_ICONS.downed)(ctx, badge.color);
+  ctx.restore();
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return { texture, aspect: 1 };
+}
+
+/**
  * A row of status badges: each a dark square edged and tinted in the condition's colour, its glyph in that
  * colour, the rounds it has left in the bottom right beside a tiny hourglass, and its stacks (for one that stacks) in
  * the top left. Drawn crisp, like the plates.

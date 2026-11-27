@@ -193,6 +193,11 @@ export function hexesBetween(from: HexPos, to: HexPos): HexPos[] {
   return out;
 }
 
+// What `sees` answered for each pair of hexes, kept with the tiles it was reckoned from (as the two above are): the
+// same answer comes up again and again as an enemy weighs where to stand. Past this many it starts afresh.
+const sightMemo = new WeakMap<Tile[], Map<string, boolean>>();
+const SIGHT_MEMO_MAX = 250_000;
+
 /**
  * Whether a line can be drawn from one hex to another without crossing rock or a wall, or ground that stands
  * higher than both ends of it (a ridge between). Units never block it.
@@ -201,6 +206,19 @@ export function sees(map: WorldMap, from: HexPos, to: HexPos): boolean {
   const blocked = sightBlockers(map);
   const hilly = hasRelief(map);
   if (blocked.size === 0 && !hilly) return true;
+  let memo = sightMemo.get(map.tiles);
+  if (!memo) sightMemo.set(map.tiles, (memo = new Map()));
+  // Ordered: from one end the line may fall a different way than from the other.
+  const key = `${from.q},${from.r}>${to.q},${to.r}`;
+  const known = memo.get(key);
+  if (known !== undefined) return known;
+  if (memo.size >= SIGHT_MEMO_MAX) memo.clear();
+  const seen = seeAlong(map, blocked, hilly, from, to);
+  memo.set(key, seen);
+  return seen;
+}
+
+function seeAlong(map: WorldMap, blocked: Set<string>, hilly: boolean, from: HexPos, to: HexPos): boolean {
   const between = hexesBetween(from, to);
   if (between.some((p) => blocked.has(posKey(p)))) return false;
   if (!hilly) return true;
@@ -214,6 +232,7 @@ export function sees(map: WorldMap, from: HexPos, to: HexPos): boolean {
  */
 export function seesFor(state: Pick<ZoneState, "map" | "weather">, side: Side, from: HexPos, to: HexPos): boolean {
   if (!sees(state.map, from, to)) return false;
+  if (!state.weather?.length) return true;
   const walls = (state.weather ?? []).filter((w) => w.kind === "wall" && w.side !== side);
   if (walls.length === 0) return true;
   const blocked = new Set(walls.flatMap((w) => w.hexes.map(posKey)));

@@ -8,13 +8,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode, type RefObject, useLayoutEffect } from "react";
 import { useAudioScene } from "./audio/useAudioScene";
 import { hexDistance, hexNeighbors, type HexPos } from "@gantt-quest/core";
-import { PUB_BARKEEP, PUB_BARKEEP_POS, PUB_COUNTER, PUB_DEALER, PUB_DEALER_POS, PUB_DEALER_STAND, PUB_FITTINGS, PUB_GRID, PUB_LEADERBOARD, PUB_MENU, PUB_SALESMAN_POS, PUB_SEATS, PUB_TRADER, dueIn, gatherDay, poiAt, pubMountSpots, pubPath, pubRoom, PUB_MOUNT_SLOTS, ROOM_WALL_HEIGHT, regularsOn, salesman, outfitOf, barkeepTalk, dealerTalk, regularTalk, salesmanTalk, type PubClientMessage, type RegularId, type XpMessage } from "@gantt-quest/world";
+import { PUB_BARKEEP, PUB_BARKEEP_POS, PUB_COUNTER, PUB_DEALER, PUB_DEALER_POS, PUB_DEALER_STAND, PUB_FITTINGS, PUB_GRID, PUB_LEADERBOARD, PUB_SALESMAN_POS, PUB_SEATS, PUB_TRADER, dueIn, gatherDay, poiAt, pubMountSpots, pubPath, pubRoom, PUB_MOUNT_SLOTS, ROOM_WALL_HEIGHT, regularsOn, salesman, outfitOf, barkeepTalk, dealerTalk, regularTalk, salesmanTalk, type PubClientMessage, type RegularId, type XpMessage } from "@gantt-quest/world";
 import { toOwned } from "./items";
 import { withLook } from "./render/sprites";
 import { CatchPanel } from "./CatchPanel";
 import { RecordBoard, WallFishCard } from "./CatchBook";
 import { ChatInput } from "./ChatInput";
 import { api, type Me, type PubWall, type RegularsView } from "./api";
+import { PubMenu } from "./PubMenu";
 import { RegularPanel } from "./RegularPanel";
 import { DealerPanel, type DealerTab } from "./board/DealerPanel";
 import { DiceTable } from "./DiceTable";
@@ -33,7 +34,6 @@ import { TopBar, type TopBarItem } from "./ui/TopBar";
 import { BOARD, DOOR as DOOR_ICON, LEAVE, TALK } from "./ui/menuIcons";
 import { InventoryScreen } from "./InventoryScreen";
 import { Logbook } from "./Logbook";
-import { ThingIcon, pubIcon } from "./thingIcons";
 import { TileAction } from "./TileAction";
 import { WorldRenderer, type RenderState } from "./render/WorldRenderer";
 import { fancy } from "./render/fancy";
@@ -41,7 +41,6 @@ import { harborOutlook, type Outlook } from "./render/harborOutlook";
 import { usePub, type PubConnection, type PubTables } from "./usePub";
 import type { SeatLook, StageHost } from "./useTableStage";
 import { HeroSheet, useHeroSheet } from "./HeroSheet";
-import { blurb, label } from "./labels";
 import { xpEvents } from "./xpEvents";
 import { useConversation } from "./useConversation";
 import { regularHero, regularOn, regularUnit, useRegularsAbout } from "./useRegularsAbout";
@@ -131,10 +130,6 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
   const renderer = useRef<WorldRenderer | null>(null);
   const [hover, setHover] = useState<HexPos | null>(null);
   const chatEnd = useRef<HTMLDivElement>(null);
-  const [busy, setBusy] = useState(false);
-  const [orderError, setOrderError] = useState<string | null>(null);
-  /** Whether the last meal ordered gave back a gathering outing. Null until one is ordered. */
-  const [rested, setRested] = useState<boolean | null>(null);
   /** The bar's panel (the board, Tam's fish and the crew's records) is open: asked for in a word with Tam. */
   const [barOpen, setBarOpen] = useState(false);
   /** The salesman's wares are open: asked for in a word with them. */
@@ -526,21 +521,6 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
     : hoverPoi.kind === "door" ? "The door back to the Harbor"
     : null;
 
-  const order = async (itemId: string) => {
-    setBusy(true);
-    setOrderError(null);
-    setRested(null);
-    try {
-      const next = await api.pubOrder(itemId);
-      setRested(!!next.rested);
-      await refresh();
-    } catch (e) {
-      setOrderError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
   /** What to do where you stand (a word with whoever is beside you, the board), for the top bar: the button over your head says the same. */
   const here: TopBarItem | null = holdingDice ? null
     : near ? { key: "here", label: `Talk to ${near.short}`, icon: TALK, primary: true, disabled: !!talking, run: () => chat(near.id) }
@@ -570,25 +550,7 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
 
       {you && atCounter && barOpen && (
         <DragPanel id="pub.bar" title="At the bar" className="story panel pub-bar">
-          <h3>The board</h3>
-          <p className="muted">A meal gives back one gathering outing, once a day. It gives nothing back if you have not been out gathering today, or have already eaten.</p>
-          <ul className="pub-menu">
-            {PUB_MENU.map((item) => (
-              <li key={item.id}>
-                <ThingIcon icon={pubIcon(item.id)} size={36} />
-                <div className="grow">
-                  <strong>{label("pub", item.id)}</strong>
-                  <div className="muted">{blurb("pub", item.id)}</div>
-                </div>
-                <button className="small primary" disabled={busy || gold < item.price} title={gold < item.price ? "You cannot afford it" : ""} onClick={() => void order(item.id)}>
-                  {item.price}g
-                </button>
-              </li>
-            ))}
-          </ul>
-          {orderError && <p className="bad">{orderError}</p>}
-          {rested === true && <p className="good">That set you up: one gathering outing is yours again today.</p>}
-          {rested === false && <p className="muted">You eat. No outing comes back: you have not been out gathering today, or have already eaten.</p>}
+          <PubMenu me={me} refresh={refresh} day={day} />
 
           <h3>{PUB_BARKEEP.name}</h3>
           <p className="row">

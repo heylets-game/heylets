@@ -44,6 +44,8 @@
 .hs-numbers span { color: var(--muted); font-size: 11px; }
 
 .hs-stats { margin-top: 8px; }
+/* Today's pub meal, under the stats it adds to. */
+.hs-fed { margin: 4px 0 0; font-size: 12px; color: var(--good); }
 .hs-stat { display: grid; grid-template-columns: 1fr 26px 58px 36px; gap: 4px; align-items: baseline; padding: 1px 0; }
 .hs-stat strong { text-align: right; }
 .hs-stat span:last-child { text-align: right; }

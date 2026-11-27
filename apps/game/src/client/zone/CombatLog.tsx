@@ -27,8 +27,8 @@
 // came out. It is the roll's card: it takes the same `Roll` the view already
 // shows as a blow lands (ZoneView's `roll`), so it stands in that card's place.
 
-import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import type { Roll, Rolled } from "@gantt-quest/world";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { swingsOf, type Roll, type RollMod, type Rolled, type Swing } from "@gantt-quest/world";
 import { ChatInput } from "../ChatInput";
 import "./fight.css";
 
@@ -40,7 +40,8 @@ export type LogEntry =
   /** Whose turn starts. */
   | { k: "turn"; id: number; name: string; side: LogSide }
   /** Anything else. */
-  | { k: "note"; id: number; text: string; tone?: "good" | "bad" | "dim" }
+  /** `mods`: what of the moment went into what it tells of (a shield and what it was given for), shown as chips. */
+  | { k: "note"; id: number; text: string; tone?: "good" | "bad" | "dim"; mods?: RollMod[] }
   /** A d20: an attack, a save, a shove, initiative. */
   | { k: "roll"; id: number; who: string; side: LogSide; roll: Roll; target?: string }
   | { k: "hit"; id: number; actor?: string; side: LogSide; target: string; what: string; amount: number; dice?: Rolled; crit?: boolean; blocked?: number }
@@ -73,6 +74,78 @@ const keptIndex = (roll: Roll) => Math.max(0, roll.d20.indexOf(roll.kept));
 const signed = (n: number) => `${n < 0 ? "−" : "+"} ${Math.abs(n)}`;
 const SHAPES = new Set([4, 6, 8, 10, 12, 20]);
 
+/** What a roll that went against its roller lost them, in a word: "cost the hit". */
+const LOST: Record<Roll["kind"], string> = { attack: "hit", save: "save", shove: "shove", initiative: "roll" };
+const listOf = (names: string[]) => (names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`);
+
+/**
+ * Everything that made the difference to a roll (swingsOf), as few clauses as it takes, each with whether it went the
+ * roller's way: "High ground and advantage (Inspired) both made the difference", "Trees cost the hit", "Advantage
+ * (Exposed) made it a critical hit". What turned the hit or the save shares one clause, and what turned a critical
+ * another, so a roll has two at most: a bonus that landed a blow, and disadvantage that cost it a critical.
+ */
+export function swingClauses(roll: Roll, swings: Swing[]): { text: string; good: boolean }[] {
+  const groups = new Map<string, Swing[]>();
+  for (const s of swings) {
+    const key = `${s.crit ? "crit" : "roll"}:${s.helped}`;
+    groups.set(key, [...(groups.get(key) ?? []), s]);
+  }
+  return [...groups.values()].map((group) => {
+    const { helped, crit } = group[0];
+    const did = crit ? (helped ? "made it a critical hit" : "cost the critical hit") : helped ? "made the difference" : `cost the ${LOST[roll.kind]}`;
+    const who = group.flatMap((s) => {
+      if (s.adv) {
+        const which = roll.adv > 0 ? "advantage" : "disadvantage";
+        return [s.names.length > 0 ? `${which} (${s.names.join(", ")})` : which];
+      }
+      return s.between ? [`${listOf(s.names)} between them`] : s.names;
+    });
+    const each = group.some((s) => s.between) ? "" : who.length === 2 ? "both " : who.length > 2 ? "all " : "";
+    const line = `${listOf(who)} ${each}${did}`;
+    return { text: line[0].toUpperCase() + line.slice(1), good: helped };
+  });
+}
+
+/** What made the difference to a roll as one line of plain words (swingClauses, joined), or null if nothing did. */
+export const swingText = (roll: Roll, swings: Swing[]): string | null => swingClauses(roll, swings).map((c) => c.text).join("; ") || null;
+
+/** What made the difference to a roll as it is shown under it: its clauses, each in its own colour. */
+function SwingLine({ roll, swings, className }: { roll: Roll; swings: Swing[]; className: string }) {
+  const clauses = swingClauses(roll, swings);
+  if (clauses.length === 0) return null;
+  return (
+    <div className={className}>
+      {clauses.map((c, i) => <span key={i} className={c.good ? "good" : "bad"}>{i > 0 && " · "}{c.text}</span>)}
+    </div>
+  );
+}
+
+/**
+ * A roll's parts of the moment (Roll `mods`, then `vsMods`), each as it is shown: what it added, whether it was on
+ * the roller's side (a bonus of theirs, or a lowering of what they had to reach), and whether it made the difference.
+ */
+function partsOf(roll: Roll, swings: Swing[]) {
+  const named = new Set(swings.filter((s) => !s.adv).flatMap((s) => s.names));
+  return [
+    ...(roll.mods ?? []).map((m) => ({ text: `${signed(m.n)} ${m.name}`, good: m.n > 0, swung: named.has(m.name) })),
+    ...(roll.vsMods ?? []).map((m) => ({ text: `vs ${signed(m.n)} ${m.name}`, good: m.n < 0, swung: named.has(m.name) })),
+  ];
+}
+
+/** Why a roll had advantage or disadvantage, as its badge shows it after the word: " · Dark", or nothing if not known. */
+const reasons = (roll: Roll) => (roll.advWhy?.length ? ` · ${roll.advWhy.join(", ")}` : "");
+
+const CANCEL_TIP = "Advantage and disadvantage cancel: one die, no better and no worse";
+
+/** Advantage and disadvantage that cancelled on a roll (Roll `cancelled`), as its badge reads: "cancelled · Exposed / Poisoned", for in green and against in red. */
+function Cancelled({ roll }: { roll: Roll }) {
+  if (!roll.cancelled) return null;
+  return <>cancelled · <span className="for">{roll.cancelled.adv.join(", ")}</span> / <span className="against">{roll.cancelled.dis.join(", ")}</span></>;
+}
+
+/** Whether advantage or disadvantage made the difference to a roll, for its badge. */
+const advSwung = (swings: Swing[]) => swings.some((s) => s.adv);
+
 /**
  * One die as a chip in its own shape, showing what it rolled. `dropped` strikes it through (the d20 that did not
  * count); the highest and lowest faces of a d20 are tinted, and a damage die that rolled its most is too.
@@ -97,23 +170,42 @@ export function DiceSum({ dice, blocked }: { dice: Rolled; blocked?: number }) {
       {dice.crit && <span className="fl-mod adv" title="A critical hit rolls twice the dice">crit</span>}
       {dice.halved && <span className="fl-mod half" title="The target saved, and took half">halved</span>}
       {!!blocked && <span className="fl-mod blk" title="Taken by a shield or a guard">({blocked} blocked)</span>}
+      {(dice.mods ?? []).map((m, i) => <span key={i} className={`fl-part ${m.n > 0 ? "good" : "bad"}`}>{signed(m.n)} {m.name}</span>)}
     </>
   );
+}
+
+/** What of the moment went into damage dice (Rolled `mods`), a chip each, as the roll card shows them under the dice. */
+function DiceParts({ dice }: { dice: Rolled }) {
+  if (!dice.mods?.length) return null;
+  return <div className="fr-parts dmg">{dice.mods.map((m, i) => <span key={i} className={`fr-part ${m.n > 0 ? "good" : "bad"}`}>{signed(m.n)} {m.name}</span>)}</div>;
 }
 
 /** A d20 roll written out: the dice, the bonus, the sum, what it had to reach, and how it came out. */
 function RollSum({ roll }: { roll: Roll }) {
   const kept = keptIndex(roll);
   const out = rollOutcome(roll);
+  const swings = swingsOf(roll);
+  const parts = partsOf(roll, swings);
+  const why = roll.advWhy?.length ? ` (${roll.advWhy.join(", ")})` : "";
   return (
-    <div className="fl-math">
-      {roll.d20.map((n, i) => <Die key={i} d={20} n={n} dropped={i !== kept} />)}
-      <span>{signed(roll.bonus)}</span>
-      <span>= <strong>{roll.total}</strong></span>
-      {roll.kind !== "initiative" && <i>vs {roll.vs}</i>}
-      {roll.adv !== 0 && <span className={`fl-mod ${roll.adv > 0 ? "adv" : "dis"}`} title={roll.adv > 0 ? "Advantage: two dice, the higher counts" : "Disadvantage: two dice, the lower counts"}>{roll.adv > 0 ? "adv" : "dis"}</span>}
-      {roll.kind !== "initiative" && <span className={`fl-tag ${out.tone}`}>{out.word}</span>}
-    </div>
+    <>
+      <div className="fl-math">
+        {roll.d20.map((n, i) => <Die key={i} d={20} n={n} dropped={i !== kept} />)}
+        <span>{signed(roll.bonus)}</span>
+        <span>= <strong>{roll.total}</strong></span>
+        {roll.kind !== "initiative" && <i>vs {roll.vs}</i>}
+        {roll.adv !== 0 && <span className={`fl-mod ${roll.adv > 0 ? "adv" : "dis"} ${advSwung(swings) ? "swung" : ""}`} title={roll.adv > 0 ? `Advantage${why}: two dice, the higher counts` : `Disadvantage${why}: two dice, the lower counts`}>{roll.adv > 0 ? "adv" : "dis"}{reasons(roll)}</span>}
+        {roll.cancelled && <span className="fl-mod even" title={CANCEL_TIP}><Cancelled roll={roll} /></span>}
+        {roll.kind !== "initiative" && <span className={`fl-tag ${out.tone}`}>{out.word}</span>}
+      </div>
+      {parts.length > 0 && (
+        <div className="fl-parts">
+          {parts.map((p, i) => <span key={i} className={`fl-part ${p.good ? "good" : "bad"} ${p.swung ? "swung" : ""}`}>{p.text}</span>)}
+        </div>
+      )}
+      <SwingLine roll={roll} swings={swings} className="fl-swing" />
+    </>
   );
 }
 
@@ -123,7 +215,7 @@ export function logLine(e: LogEntry): string {
     case "head": return e.text;
     case "turn": return `${e.name}'s turn`;
     case "note": return e.text;
-    case "roll": return e.roll.kind === "initiative" ? `${e.who} rolls ${e.roll.total} for initiative` : `${e.who}: ${e.roll.label} ${e.roll.total} vs ${e.roll.vs}, ${rollOutcome(e.roll).word.toLowerCase()}`;
+    case "roll": return e.roll.kind === "initiative" ? `${e.who} rolls ${e.roll.total} for initiative` : `${e.who}: ${e.roll.label} ${e.roll.total} vs ${e.roll.vs}, ${rollOutcome(e.roll).word.toLowerCase()}${((t) => (t ? ` (${t})` : ""))(swingText(e.roll, swingsOf(e.roll)))}`;
     case "hit": return e.actor ? `${e.actor} hits ${e.target} with ${e.what} for ${e.amount}${e.crit ? " (critical)" : ""}` : `${e.target} takes ${e.amount} from ${e.what}`;
     case "miss": return `${e.actor} misses ${e.target} with ${e.what}`;
     case "heal": return e.actor && e.actor !== e.target ? `${e.actor} heals ${e.target} for ${e.amount} with ${e.what}` : `${e.target} recovers ${e.amount} from ${e.what}`;
@@ -139,7 +231,12 @@ const Row = memo(function Row({ e, fresh }: { e: LogEntry; fresh: boolean }) {
     case "turn":
       return <div className={cls(e.side)}>{e.name}'s turn</div>;
     case "note":
-      return <div className={cls(e.tone ?? "")}>{e.text}</div>;
+      return (
+        <div className={cls(e.tone ?? "")}>
+          {e.text}
+          {!!e.mods?.length && <div className="fl-parts">{e.mods.map((m, i) => <span key={i} className={`fl-part ${m.n > 0 ? "good" : "bad"}`}>{signed(m.n)} {m.name}</span>)}</div>}
+        </div>
+      );
     case "roll":
       return (
         <div className={cls(e.side)}>
@@ -251,21 +348,21 @@ export const CombatLog = memo(function CombatLog({ entries, open, onToggle, clas
 // ---------- the roll, large ----------
 
 export interface RollToastProps {
-  /** The roll to show; null for none. A new roll (a new object) plays it again. */
+  /** A roll to show: a new one (a new object) plays, or waits its turn behind the one up. Null adds nothing. */
   roll: Roll | null;
   /** Who rolled. */
   who?: string;
   /** The damage or healing dice that followed it, shown under the outcome. */
   dice?: Rolled | null;
-  /**
-   * How long it stays before it fades by itself, in milliseconds (the view may take it away sooner by passing null).
-   * The default has it faded out just inside the 2.6 seconds the view keeps a roll's card up for.
-   */
+  /** How long a card stays before it fades by itself, in milliseconds, when nothing is waiting behind it. */
   hold?: number;
 }
 
 /** How long the die tumbles before it lands, in milliseconds (fr-tumble in fight.css). */
 const TUMBLE_MS = 700;
+
+/** How much longer the roll card stays when it says what made the difference. */
+const SWING_READ_MS = 900;
 
 function BigD20({ n, cls }: { n: number; cls: string }) {
   return (
@@ -280,20 +377,50 @@ function BigD20({ n, cls }: { n: number; cls: string }) {
   );
 }
 
+/**
+ * The least a card is up before a roll waiting behind it takes its place (RollToast), in milliseconds: the die lands,
+ * the outcome stamps down, and there is a moment to read it; longer with a line on what made the difference.
+ */
+const minShown = (roll: Roll) => TUMBLE_MS + (swingsOf(roll).length > 0 ? 1400 : 800);
+/** How many rolls may wait to be shown. More than that, and the oldest waiting is skipped (it is in the log). */
+const QUEUE_MAX = 2;
+
+interface Shown { roll: Roll; who?: string; dice?: Rolled | null }
+
+/**
+ * The roll, large, one at a time. A roll that comes while another is up waits its turn rather than cutting it off:
+ * the one up stays its least (minShown), then the next plays. With none waiting, each stays its full `hold`.
+ */
 export function RollToast({ roll, who, dice, hold = 2200 }: RollToastProps) {
-  /** The faces the dice show while they tumble, then what they rolled. */
-  const [faces, setFaces] = useState<number[]>(roll?.d20 ?? []);
-  const [phase, setPhase] = useState<"roll" | "landed" | "out" | "gone">("roll");
-  /** The roll being shown, and how many there have been: each new one plays from the start. */
-  const [play, setPlay] = useState({ roll, n: 0 });
-  if (play.roll !== roll) {
-    setPlay({ roll, n: play.n + 1 });
-    setPhase("roll");
-    setFaces(roll?.d20 ?? []);
+  const [s, setS] = useState<{ now: (Shown & { at: number }) | null; queue: Shown[]; n: number }>({ now: null, queue: [], n: 0 });
+  const [came, setCame] = useState<Roll | null>(null);
+  if (roll !== came) {
+    setCame(roll);
+    if (roll) {
+      const entry = { roll, who, dice };
+      setS((p) => (p.now ? { ...p, queue: [...p.queue, entry].slice(-QUEUE_MAX) } : { now: { ...entry, at: performance.now() }, queue: [], n: p.n + 1 }));
+    }
   }
+  const next = useCallback(() => setS((p) => (p.queue.length > 0 ? { now: { ...p.queue[0], at: performance.now() }, queue: p.queue.slice(1), n: p.n + 1 } : { ...p, now: null })), []);
+  // Something is waiting: the one up gives way once it has been up its least.
+  const waiting = s.queue.length > 0;
+  useEffect(() => {
+    if (!s.now || !waiting) return;
+    const t = setTimeout(next, Math.max(0, s.now.at + minShown(s.now.roll) - performance.now()));
+    return () => clearTimeout(t);
+  }, [s.now, waiting, next]);
+  if (!s.now) return null;
+  return <RollCard key={s.n} roll={s.now.roll} who={s.now.who} dice={s.now.dice} hold={hold} onGone={next} />;
+}
+
+/** One roll's card: the die tumbles and lands, then the sum, the outcome and the rest; it fades by itself, then says so (`onGone`). */
+function RollCard({ roll, who, dice, hold, onGone }: { roll: Roll; who?: string; dice?: Rolled | null; hold: number; onGone(): void }) {
+  /** The faces the dice show while they tumble, then what they rolled. */
+  // (Made afresh for each roll, keyed by RollToast: each plays from the start.)
+  const [faces, setFaces] = useState<number[]>(roll.d20);
+  const [phase, setPhase] = useState<"roll" | "landed" | "out" | "gone">("roll");
 
   useEffect(() => {
-    if (!roll) return;
     const still = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
     const timers: ReturnType<typeof setTimeout>[] = [];
     let spin: ReturnType<typeof setInterval> | undefined;
@@ -309,27 +436,32 @@ export function RollToast({ roll, who, dice, hold = 2200 }: RollToastProps) {
       spin = setInterval(() => setFaces(roll.d20.map(() => 1 + Math.floor(Math.random() * 20))), 60);
       timers.push(setTimeout(land, TUMBLE_MS));
     }
-    timers.push(setTimeout(() => setPhase("out"), hold), setTimeout(() => setPhase("gone"), hold + 360));
+    // A roll with something that made the difference stays a little longer: there is a line more to read.
+    const stay = hold + (swingsOf(roll).length > 0 ? SWING_READ_MS : 0);
+    timers.push(setTimeout(() => setPhase("out"), stay), setTimeout(() => (setPhase("gone"), onGone()), stay + 360));
     return () => {
       if (spin) clearInterval(spin);
       timers.forEach(clearTimeout);
     };
-  }, [roll, hold]);
+  }, [roll, hold, onGone]);
 
-  if (!roll || phase === "gone") return null;
+  if (phase === "gone") return null;
   const out = rollOutcome(roll);
   const kept = keptIndex(roll);
   const botch = roll.kind === "attack" && roll.kept === 1;
   const words: ReactNode = roll.kind === "initiative" ? "Initiative" : out.tone === "crit" ? "Critical hit!" : out.word;
+  const swings = swingsOf(roll);
+  const parts = partsOf(roll, swings);
   return (
-    <div key={play.n} className={`fight-ui fight-roll ${out.tone} ${botch ? "botch" : ""} ${phase === "roll" ? "" : "landed"} ${phase === "out" ? "out" : ""}`} role="status">
+    <div className={`fight-ui fight-roll ${out.tone} ${botch ? "botch" : ""} ${phase === "roll" ? "" : "landed"} ${phase === "out" ? "out" : ""}`} role="status">
       <div className="fr-dice">
         {roll.d20.map((_, i) => <BigD20 key={i} n={faces[i] ?? roll.d20[i]} cls={i === kept ? "kept" : "dropped"} />)}
       </div>
       <div className="fr-text">
         <div className="fr-who">
           {who && <><b>{who}</b> · </>}{roll.label}
-          {roll.adv !== 0 && <em className={roll.adv > 0 ? "adv" : "dis"}>{roll.adv > 0 ? "advantage" : "disadvantage"}</em>}
+          {roll.adv !== 0 && <em className={`${roll.adv > 0 ? "adv" : "dis"} ${advSwung(swings) ? "swung" : ""}`}>{roll.adv > 0 ? "advantage" : "disadvantage"}{reasons(roll)}</em>}
+          {roll.cancelled && <em className="even" title={CANCEL_TIP}><Cancelled roll={roll} /></em>}
         </div>
         <div className="fr-line">
           <span className="fr-sum">
@@ -338,6 +470,12 @@ export function RollToast({ roll, who, dice, hold = 2200 }: RollToastProps) {
           </span>
           <span className="fr-out">{words}</span>
         </div>
+        {parts.length > 0 && (
+          <div className="fr-parts">
+            {parts.map((p, i) => <span key={i} className={`fr-part ${p.good ? "good" : "bad"} ${p.swung ? "swung" : ""}`}>{p.text}</span>)}
+          </div>
+        )}
+        <SwingLine roll={roll} swings={swings} className="fr-swing" />
         {dice && (
           <div className="fr-dmg">
             <i>{dice.faces.length}d{dice.d}</i>
@@ -347,6 +485,7 @@ export function RollToast({ roll, who, dice, hold = 2200 }: RollToastProps) {
             {dice.halved && <i>halved</i>}
           </div>
         )}
+        {dice && <DiceParts dice={dice} />}
       </div>
     </div>
   );

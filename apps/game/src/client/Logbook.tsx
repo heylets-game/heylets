@@ -18,9 +18,12 @@ import {
   parseAbilityLoadout,
   poolFor,
   armorBlock,
+  fedBy,
   loadoutOf,
   maxHpFor,
+  mealBonus,
   outfitOf,
+  statBonusText,
   statPct,
   unlockedFor,
   xpToNext,
@@ -95,7 +98,10 @@ export function Logbook({ me, refresh, onClose, onIsland = false }: Props) {
   const worn = useMemo(() => me.inventory.map(toOwned).filter((i) => i.equipped), [me.inventory]);
   const loadout = loadoutOf(worn);
   const cls = HERO_CLASSES.find((k) => k.id === c.class_id);
-  const total = (k: StatKey) => c[k] + (loadout.bonus[k] ?? 0);
+  // Today's pub meal counts beside the gear, as it does on the maps.
+  const meal = mealBonus(c, Date.now());
+  const fed = fedBy(c, Date.now());
+  const total = (k: StatKey) => c[k] + (loadout.bonus[k] ?? 0) + (meal[k] ?? 0);
   const stats = { str: total("str"), int_stat: total("int_stat"), vit: total("vit"), agi: total("agi"), dex: total("dex") };
   const weapon = worn.find((i) => i.slot === "main_hand");
   const abilities = abilitiesFor(weapon?.ref);
@@ -146,10 +152,11 @@ export function Logbook({ me, refresh, onClose, onIsland = false }: Props) {
           {page === "stats" && (
             <>
               <h3>Stats {c.unspent_points > 0 && <span className="book-new">{c.unspent_points} point{c.unspent_points > 1 ? "s" : ""} to spend</span>}</h3>
+              {fed && <p className="book-note">Well fed on {label("pub", fed.id)}: {statBonusText(meal)} until the day turns.</p>}
               {STAT_KEYS.map((k) => (
                 <div key={k} className="book-stat">
                   <strong>{STAT_LABEL[k]}</strong>
-                  <span className="book-stat-n">{total(k)}{loadout.bonus[k] ? <small> (+{loadout.bonus[k]} gear)</small> : null}</span>
+                  <span className="book-stat-n">{total(k)}{loadout.bonus[k] ? <small> (+{loadout.bonus[k]} gear)</small> : null}{meal[k] ? <small> (+{meal[k]} meal)</small> : null}</span>
                   <span className="book-stat-pct">{statPct(total(k))}% a roll</span>
                   {c.unspent_points > 0 && <button className="book-plus" disabled={busy} title={`Spend a point on ${STAT_LABEL[k]}`} onClick={() => act(() => api.spend(k))}>+</button>}
                   <p>{STAT_BLURB[k]}</p>
