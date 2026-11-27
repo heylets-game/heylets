@@ -3,6 +3,7 @@ import { at, flatBoard, must, standEnemy as enemy, standHero, unit } from "../te
 import { makeRng } from "../rng";
 import { damage, type Ctx } from "./engine";
 import type { ZoneEvent } from "./types";
+import { zoneIdleTurn } from "./zone";
 
 // The Maps tab's dev switches: heroes who cannot go down, and clearing every enemy off the map.
 
@@ -68,13 +69,14 @@ describe("dev switches", () => {
     state = must(state, { type: "dev", by: "ann", dev: { op: "heroes_idle", on: true } }, events);
     expect(state.heroesIdle).toBe(true);
     const enc = state.encounter!;
-    // The wolf played: it bit her, and it is her turn again only in the next round, waiting as ever.
+    // The wolf played: it bit her, and it is her turn again only in the next round, waiting for the server to end it.
     expect(events.some((e) => e.t === "hit")).toBe(true);
     expect(enc.round).toBe(round + 1);
     expect(enc.acting).toEqual(["ann"]);
     expect(enc.done).toEqual([]);
-    // Ending it plays one round more.
-    const again = must(state, { type: "end_turn", by: "ann", unit: "ann" });
+    expect(zoneIdleTurn(state)).toBe(true);
+    // Ending it (the server's timeout) plays one round more.
+    const again = must(state, { type: "timeout" });
     expect(again.encounter!.round).toBe(round + 2);
     expect(again.encounter!.acting).toEqual(["ann"]);
     expect(must(state, { type: "dev", by: "ann", dev: { op: "heroes_idle", on: false } }).heroesIdle).toBeUndefined();
@@ -86,6 +88,7 @@ describe("dev switches", () => {
     if (enc.acting[0] !== "ann") state = must(state, { type: "dev", by: "ann", dev: { op: "next_turn" } });
     expect(state.encounter!.acting).toEqual(["ann"]);
     expect(state.encounter!.done).toEqual([]);
+    expect(zoneIdleTurn(state)).toBe(false);
   });
 
   it("takes every enemy off the map, ending the fight they were in, with no bodies", () => {
