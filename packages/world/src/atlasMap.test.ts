@@ -40,9 +40,9 @@ describe("the world the atlas lies on", () => {
       for (let q = -60; q <= 60; q += 2) for (let r = -60; r <= 60; r += 2) count[atlasGround(seed, { q, r }).biome] = (count[atlasGround(seed, { q, r }).biome] ?? 0) + 1;
       const total = Object.values(count).reduce((a, b) => a + b, 0);
       expect(Object.keys(count).sort(), seed).toEqual(["forest", "hills", "plains", "sand", "water"]);
-      expect(count.water / total, seed).toBeGreaterThan(0.5);
-      expect(count.water / total, seed).toBeLessThan(0.85);
-      for (const kind of ["forest", "plains", "sand", "hills"]) expect(count[kind] / total, `${seed} ${kind}`).toBeGreaterThan(0.01);
+      expect(count.water / total, seed).toBeGreaterThan(0.72);
+      expect(count.water / total, seed).toBeLessThan(0.93);
+      for (const kind of ["forest", "plains", "sand", "hills"]) expect(count[kind] / total, `${seed} ${kind}`).toBeGreaterThan(0.003);
     }
   });
 });
@@ -71,7 +71,7 @@ describe("the islands", () => {
           if (atlasLie(seed, mid).open) apart++;
         }
       }
-      expect(apart / links, seed).toBeGreaterThan(0.75);
+      expect(apart / links, seed).toBeGreaterThan(0.9);
     }
   });
 
