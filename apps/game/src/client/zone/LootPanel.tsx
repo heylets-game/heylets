@@ -162,7 +162,7 @@ function LootCard({ item, viewer, how }: { item: LootItem; viewer?: LootPanelPro
         <div className="mat-detail">
           <Head item={item} tag="for the atlas" />
           {item.stone.length === 0 ? (
-            <p className="muted">It carries nothing: it opens a place and changes nothing about it.</p>
+            <p className="muted">It says nothing: it opens a place and changes nothing about it.</p>
           ) : (
             <ul className="stone-carries">
               {item.stone.map((id) => (

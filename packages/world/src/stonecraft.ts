@@ -1,4 +1,5 @@
-// Working lodestones at the lapidary's bench, in her shop in town
+// Working lodestones (charters, as players see them: drawn up, bound, annotated,
+// sealed and redrawn) at the chartmaker's bench, in her shop in town
 // (lodestone.ts says what a lodestone is; lapidary.ts, what else she does):
 // four ways to turn the stones a hero has into the ones they want.
 //
@@ -65,9 +66,9 @@ const times = (resources: Resources, n: number): Resources => Object.fromEntries
 
 /** Why these stones cannot be fused, or null if they can: three of them, each carrying as much as the others, and less than a stone can. */
 export function fuseProblem(stones: readonly Lodestone[]): string | null {
-  if (stones.length !== FUSE_COUNT) return `It takes ${FUSE_COUNT} lodestones.`;
-  if (stones.some((s) => s.length !== stones[0].length)) return "The three must carry the same number of things.";
-  return stones[0].length >= STONE_MODS ? "A lodestone can carry no more than these do." : null;
+  if (stones.length !== FUSE_COUNT) return `It takes ${FUSE_COUNT} charters.`;
+  if (stones.some((s) => s.length !== stones[0].length)) return "The three must say the same number of things.";
+  return stones[0].length >= STONE_MODS ? "A charter can say no more than these do." : null;
 }
 
 /** The stone three fused stones make: one more thing than each carried, drawn from what they carried so far as that goes. */
@@ -101,10 +102,10 @@ export function fuse(rng: Rng, stones: readonly Lodestone[]): Lodestone {
 
 /** Why a modifier cannot be added to a stone, or null if it can. */
 export function attuneProblem(stone: Lodestone, mod: unknown): string | null {
-  if (typeof mod !== "string" || !(mod in ZONE_MODS)) return "There is no such thing to attune it to.";
-  if (idsOf(stone).includes(mod as ZoneModId)) return "It carries that already.";
-  if (stone.length >= STONE_MODS) return "It carries all a lodestone can.";
-  return fits(idsOf(stone), mod as ZoneModId) ? null : "It carries one kind of ground already: a second would not take.";
+  if (typeof mod !== "string" || !(mod in ZONE_MODS)) return "There is no such thing to write into it.";
+  if (idsOf(stone).includes(mod as ZoneModId)) return "It says that already.";
+  if (stone.length >= STONE_MODS) return "It says all a charter can.";
+  return fits(idsOf(stone), mod as ZoneModId) ? null : "It names one kind of ground already: a second would not take.";
 }
 
 /** What adding a modifier to a stone costs: the modifier's own material and gold (more for the rarer), times one more than the stone carries. */
@@ -121,7 +122,7 @@ export const attuned = (stone: Lodestone, mod: ZoneModId): Lodestone => ordered(
 /** Why a thing a stone carries cannot be raised a rank, or null if it can. */
 export function temperProblem(stone: Lodestone, mod: unknown): string | null {
   const one = modOf(mod);
-  if (!one || !stone.includes(mod as ZoneMod)) return "The stone does not carry that.";
+  if (!one || !stone.includes(mod as ZoneMod)) return "The charter does not say that.";
   return one.rank >= modRanks(one.id) ? "That is as much of it as there is." : null;
 }
 
@@ -139,7 +140,7 @@ export const tempered = (stone: Lodestone, mod: ZoneMod): Lodestone => stone.map
 // ---------- reroll ----------
 
 /** Why a stone cannot be rerolled, or null if it can. */
-export const rerollProblem = (stone: Lodestone): string | null => (stone.length === 0 ? "A plain lodestone carries nothing to change." : null);
+export const rerollProblem = (stone: Lodestone): string | null => (stone.length === 0 ? "A blank charter says nothing to change." : null);
 
 /** What rerolling a stone costs, in gold: more the more it carries, and the higher the ranks it carries it at. */
 export const rerollCost = (stone: Lodestone): number => REROLL_GOLD * stone.reduce((n, m) => n + modOf(m)!.rank, 0);

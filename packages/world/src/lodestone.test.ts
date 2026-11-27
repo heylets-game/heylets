@@ -36,10 +36,10 @@ describe("a lodestone", () => {
   });
 
   it("is named for how much it carries", () => {
-    expect(stoneName([])).toBe("Plain lodestone");
-    expect(stoneName(["hardy"])).toBe("Dull lodestone");
-    expect(stoneName(["tangled", "hardy"])).toBe("Bright lodestone");
-    expect(stoneName(["tangled", "hardy", "swift"])).toBe("Singing lodestone");
+    expect(stoneName([])).toBe("Blank charter");
+    expect(stoneName(["hardy"])).toBe("Faded charter");
+    expect(stoneName(["tangled", "hardy"])).toBe("Fine charter");
+    expect(stoneName(["tangled", "hardy", "swift"])).toBe("Sealed charter");
   });
 
   it("is found carrying one modifier near the Harbor and up to three far out, more often the further out", () => {
@@ -120,7 +120,7 @@ describe("a stone that carries ranks and boons", () => {
     const full: ZoneModId[] = ["tangled", "hardy", "savage", "swift"];
     expect(stoneOn(place(full), ["gilded", "storied2"]).added).toEqual(["gilded", "storied2"]);
     expect(stoneOn(place([], "seacave"), ["tangled", "gilded"]).added).toEqual(["gilded"]);
-    expect(stoneName(["gilded"])).toBe("Dull lodestone");
+    expect(stoneName(["gilded"])).toBe("Faded charter");
   });
 
   it("makes the bounty richer by its boons, and by more on a harder map", () => {

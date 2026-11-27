@@ -24,12 +24,12 @@
 //
 // Nothing is shown of a place until it is clicked: then a small panel
 // stands beside it, and goes with it as the map is moved. It holds the
-// place's one slot, for a lodestone (packages/world/src/lodestone.ts): a
+// place's one slot, for a charter (a lodestone, in the code: packages/world/src/lodestone.ts): a
 // stone out of the hero's own pack is put into it before setting out, and is
 // spent as the map is made, with what it carries added to the place's own.
 // Anywhere but beside the Harbor there must be one. What a stone carries is
-// told by pointing at it. Stones are cut and worked down in the Harbor, at
-// the Lapidary, before coming up here.
+// told by pointing at it. They are drawn up and worked down in the Harbor,
+// at the Chartmaker's, before coming up here.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { hexDistance, type HexPos } from "@gantt-quest/core";
@@ -487,8 +487,8 @@ export function AtlasView({ me, refresh, onLeave }: { me: Me; refresh(): Promise
         <button className="atlas-close" onClick={close} title="Back to the Harbor, at the waygate">Close atlas</button>
         <div className="atlas-corner">
           <button className="small" onClick={() => { const home = byId.get(ATLAS_HOME); if (home) show(home); }} title="Bring the Harbor back to the middle">Find the Harbor</button>
-          <button className="small" onClick={() => setBag((open) => !open)} title="Your sea bag (I): drag a lodestone from it into a place's slot">{bag ? "Close the bag" : "Sea bag"}</button>
-          {me.devTools && chart && <button className="small" disabled={busy} onClick={() => void dev("stone")}>Dev: find a lodestone</button>}
+          <button className="small" onClick={() => setBag((open) => !open)} title="Your sea bag (I): drag a charter from it into a place's slot">{bag ? "Close the bag" : "Sea bag"}</button>
+          {me.devTools && chart && <button className="small" disabled={busy} onClick={() => void dev("stone")}>Dev: find a charter</button>}
           {me.devTools && chart && <button className="small" disabled={busy} onClick={() => void dev("reset")}>Dev: wipe the atlas</button>}
         </div>
       </header>
@@ -501,7 +501,7 @@ export function AtlasView({ me, refresh, onLeave }: { me: Me; refresh(): Promise
           onClose={() => setBag(false)}
           stones={{
             put: (stone) => setSlotted(stone),
-            blocked: () => (!shown || shown.kind === "harbor" || shown.state !== "open" ? "Pick a place on the atlas that is open to you first: its slot takes the stone." : begun ? "The crew has set out for it already: its slot is shut." : undefined),
+            blocked: () => (!shown || shown.kind === "harbor" || shown.state !== "open" ? "Pick a place on the atlas that is open to you first: its slot takes the charter." : begun ? "The crew has set out for it already: its slot is shut." : undefined),
           }}
         />
       )}
@@ -547,7 +547,7 @@ export function AtlasView({ me, refresh, onLeave }: { me: Me; refresh(): Promise
                         data-stone-slot
                         className={`atlas-slot ${inSlot || (begun && shown.stone) ? "filled" : ""} ${needs && !inSlot && !begun ? "wanting" : ""}`}
                         aria-disabled={begun || !inSlot}
-                        aria-label={begun ? "The slot is shut: the map is made" : inSlot ? `${stoneName(inSlot)}: take it out again` : "An empty slot for a lodestone"}
+                        aria-label={begun ? "The slot is shut: the map is made" : inSlot ? `${stoneName(inSlot)}: take it out again` : "An empty slot for a charter"}
                         onClick={() => !begun && setSlotted(null)}
                         onMouseEnter={() => setOver(begun ? (shown.stone ?? null) : inSlot)}
                         onMouseLeave={() => setOver(null)}
@@ -583,10 +583,10 @@ export function AtlasView({ me, refresh, onLeave }: { me: Me; refresh(): Promise
                         </div>
                       )}
                     </div>
-                    {!begun && !inSlot && <p className="atlas-line muted">{!needs ? "No lodestone needed beside the Harbor." : held.length > 0 ? "Put a lodestone in the slot to set out." : "It takes a lodestone, and you carry none. One can be cut at the Lapidary in the Harbor."}</p>}
+                    {!begun && !inSlot && <p className="atlas-line muted">{!needs ? "No charter needed beside the Harbor." : held.length > 0 ? "Lay a charter in the slot to set out." : "It needs a charter, and you carry none. One can be drawn up at the Chartmaker's in the Harbor."}</p>}
                     {pay && (
-                      <p className="atlas-line atlas-bounty" title={`${pay.gear >= 1 ? "With a piece of gear" : `And a ${Math.round(pay.gear * 100)}% chance of a piece of gear`}. Its spoils always hold a lodestone as good as the one that opened it (one in four times, a little better), and ${1 + (inSlot?.length ?? 0)} more ${inSlot?.length ? "chances" : "chance"} of another (about ${Math.round(Math.min(0.95, SPOIL_STONES.chance + SPOIL_STONES.perThing * (inSlot?.length ?? 0) + sum.stones) * 100)}% each). The more a stone carries, the more stones its place gives back.`}>
-                        Spoils <strong>{pay.xp} XP</strong> · <strong>{pay.gold[0]}–{pay.gold[1]} gold</strong> · <strong>1 to {2 + (inSlot?.length ?? 0)} lodestones</strong>
+                      <p className="atlas-line atlas-bounty" title={`${pay.gear >= 1 ? "With a piece of gear" : `And a ${Math.round(pay.gear * 100)}% chance of a piece of gear`}. Its spoils always hold a charter as good as the one that opened it (one in four times, a little better), and ${1 + (inSlot?.length ?? 0)} more ${inSlot?.length ? "chances" : "chance"} of another (about ${Math.round(Math.min(0.95, SPOIL_STONES.chance + SPOIL_STONES.perThing * (inSlot?.length ?? 0) + sum.stones) * 100)}% each). The more a charter says, the more charters its place gives back.`}>
+                        Spoils <strong>{pay.xp} XP</strong> · <strong>{pay.gold[0]}–{pay.gold[1]} gold</strong> · <strong>1 to {2 + (inSlot?.length ?? 0)} charters</strong>
                       </p>
                     )}
                     {error && <p className="bad" role="alert">{error}</p>}
@@ -603,7 +603,7 @@ export function AtlasView({ me, refresh, onLeave }: { me: Me; refresh(): Promise
               <aside className="atlas-stone-card panel">
                 <strong>{stoneName(over)}</strong>
                 {over.length === 0 ? (
-                  <p className="muted">Carries nothing: it opens the place, and changes nothing about it.</p>
+                  <p className="muted">Says nothing: it opens the place, and changes nothing about it.</p>
                 ) : (
                   <ul>
                     {over.map((id) => {

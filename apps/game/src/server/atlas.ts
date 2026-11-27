@@ -106,8 +106,8 @@ export async function openNode(db: D1Database, crewId: string, playerId: string,
   const live = await liveZone(db, mine?.zone_code ?? null);
   if (live) return { code: live, fresh: false };
   const set = stone === undefined || stone === null ? null : cleanStone(stone);
-  if (stone !== undefined && stone !== null && !set) return { error: "That is no lodestone.", status: 400 };
-  if (!set && needsStone(node)) return { error: `${node.name} needs a lodestone in its slot before anyone can set out for it.`, status: 409 };
+  if (stone !== undefined && stone !== null && !set) return { error: "That is no charter.", status: 400 };
+  if (!set && needsStone(node)) return { error: `${node.name} needs a charter in its slot before anyone can set out for it.`, status: 409 };
   // Out of the pack before the map is made: a stone is never used twice.
   if (set && !(await spendStone(db, playerId, set))) return { error: `You have no ${stoneName(set).toLowerCase()} like that in your pack.`, status: 409 };
   // A fresh map, and a different one each time: the last was cleared out by time, not by the crew. Its seed is
@@ -145,8 +145,8 @@ export async function scoutNode(db: D1Database, crewId: string, nodeId: unknown,
   const live = await liveZone(db, mine?.zone_code ?? null);
   if (live) return { live };
   const set = stone === undefined || stone === null ? null : cleanStone(stone);
-  if (stone !== undefined && stone !== null && !set) return { error: "That is no lodestone.", status: 400 };
-  if (!set && needsStone(node)) return { error: `${node.name} needs a lodestone in its slot before anyone can set out for it.`, status: 409 };
+  if (stone !== undefined && stone !== null && !set) return { error: "That is no charter.", status: 400 };
+  if (!set && needsStone(node)) return { error: `${node.name} needs a charter in its slot before anyone can set out for it.`, status: 409 };
   return { node: node.id, place: node.name, site: nodePlace(seed, node), level: node.level };
 }
 

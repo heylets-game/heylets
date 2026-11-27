@@ -30,9 +30,9 @@ const REFRESH_MS = 6000;
 /** Where the tab last looked in is remembered, for as long as the browser tab is open. */
 const AT = "gq.chest.tab";
 const TAB_HINT: Record<TabKind, string> = {
-  general: "Gear, materials and lodestones, on squares like a chest at home",
+  general: "Gear, materials and charters, on squares like a chest at home",
   materials: "A place for every material, and no squares to run out of",
-  lodestones: "Lodestones, shelved by how much they carry",
+  lodestones: "Charters, shelved by how much they say",
 };
 /** What each colour a tab can be given looks like, and what to call it. */
 const TAB_HEX: Record<TabColor, string> = { brass: "#c9a25a", red: "#c8473c", orange: "#d98236", gold: "#e6c545", green: "#6fa84a", teal: "#3fa39a", blue: "#4f8fc4", violet: "#8a6cc9", rose: "#d0709a", slate: "#7d8794" };
