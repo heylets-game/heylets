@@ -1306,7 +1306,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           later(() => {
             logAdd(entry);
             if (many[i]) return;
-            sounds.zone(ev.roll.crit ? "roll.crit" : "roll");
+            sounds.zone("roll");
             setRoll(ev.roll);
           });
         }
@@ -1367,7 +1367,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
             marked();
             logged();
             if (card) {
-              sounds.zone(card.crit ? "roll.crit" : "roll");
+              sounds.zone("roll");
               setRoll(card);
             }
             release();

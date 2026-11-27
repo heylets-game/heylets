@@ -139,9 +139,9 @@ describe("file patterns", () => {
     expect(expandFiles("sfx/footsteps/stone_*", keys)).toEqual(["sfx/footsteps/stone_01", "sfx/footsteps/stone_02"]);
   });
   it("match a take number with #, and never another sound's takes that share the start of its name", () => {
-    const more = [...keys, "sfx/zone/dice_1", "sfx/zone/dice_02", "sfx/zone/dice_crit_1", "sfx/zone/dice_x"];
-    expect(expandFiles("sfx/zone/dice_#", more)).toEqual(["sfx/zone/dice_02", "sfx/zone/dice_1"]);
-    expect(expandFiles("sfx/zone/dice_crit_#", more)).toEqual(["sfx/zone/dice_crit_1"]);
+    const more = [...keys, "sfx/combat/heal_1", "sfx/combat/heal_02", "sfx/combat/heal_fail_1", "sfx/combat/heal_x"];
+    expect(expandFiles("sfx/combat/heal_#", more)).toEqual(["sfx/combat/heal_02", "sfx/combat/heal_1"]);
+    expect(expandFiles("sfx/combat/heal_fail_#", more)).toEqual(["sfx/combat/heal_fail_1"]);
   });
   it("take exact names, and skip ones that are missing", () => {
     expect(expandFiles(["sfx/ui/loot", "sfx/ui/gone", "sfx/ui/loot"], keys)).toEqual(["sfx/ui/loot"]);
@@ -249,7 +249,7 @@ describe("built-in sounds", () => {
   const index = synthIndex();
   const keys = Object.keys(index);
 
-  it("plays each event only its own built-in sound, never another whose name starts the same (dice and dice_crit)", () => {
+  it("plays each event only its own built-in sound, never another whose name starts the same (heal and heal_fail)", () => {
     for (const [name, ev] of Object.entries(AUDIO.events)) {
       if (!ev.fallback) continue;
       const sounds = new Set(expandFiles(ev.fallback, keys).map((k) => k.replace(/_\d+$/, "")));

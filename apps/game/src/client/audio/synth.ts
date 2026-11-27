@@ -23,7 +23,7 @@ export type SynthCombat =
   | "hero_down" | "enemy_down" | "boss_down"
   | "boss" | "victory" | "defeat" | "your_turn"
   // A fight on the tiles: the dice, the fight starting, whose turn it is, and what the tiles add.
-  | "dice" | "dice_crit" | "initiative" | "enemy_turn" | "opportunity"
+  | "dice" | "initiative" | "enemy_turn" | "opportunity"
   | "shove" | "fall" | "jump" | "throw" | "shatter"
   | "ignite" | "poison" | "splash" | "oil" | "ice"
   | "sick" | "soak"
@@ -78,7 +78,7 @@ const COMBAT_LENGTH: Record<SynthCombat, number> = {
   bleed: 0.15, burn: 0.35, stun: 0.35, buff: 0.3, debuff: 0.3,
   hero_down: 0.8, enemy_down: 0.5, boss_down: 1.0,
   boss: 2.0, victory: 1.1, defeat: 1.2, your_turn: 0.4,
-  dice: 0.55, dice_crit: 2.2, initiative: 1.5, enemy_turn: 0.3, opportunity: 0.4,
+  dice: 0.55, initiative: 1.5, enemy_turn: 0.3, opportunity: 0.4,
   shove: 0.35, fall: 0.45, jump: 0.5, throw: 0.35, shatter: 0.5,
   ignite: 0.7, poison: 0.7, splash: 0.5, oil: 0.45, ice: 0.6,
   sick: 0.4, soak: 0.35,
@@ -450,8 +450,7 @@ function combat(r: Render, sound: SynthCombat) {
       toneAt(r, t + 0.14, { type: "sine", freq: 1760 * p, decay: 0.2, gain: v * 0.24 });
       toneAt(r, t + 0.14, { type: "triangle", freq: 880 * p, decay: 0.2, gain: v * 0.1 });
       break;
-    case "dice":
-    case "dice_crit": {
+    case "dice": {
       // A die thrown down: it knocks a few times, each knock closer to the last, and comes to rest.
       let at = t;
       for (let i = 0; i < 5; i++) {
@@ -460,22 +459,6 @@ function combat(r: Render, sound: SynthCombat) {
         toneAt(r, at, { type: "sine", freq: (210 + r.rnd() * 90) * p, freqTo: 120, decay: 0.03, gain: v * 0.4 * k });
         at += 0.045 + (0.09 * k * k) * (0.7 + r.rnd() * 0.6);
       }
-      if (sound !== "dice_crit") break;
-      // A natural twenty, and everyone at the table should hear it: a bell struck as the die comes to rest, a
-      // boom under it, a run up two octaves of a major chord, a chord held shimmering, and a sparkle over the top.
-      toneAt(r, at, { type: "sine", freq: 2093 * p, decay: 0.9, gain: v * 0.3 });
-      toneAt(r, at, { type: "sine", freq: 2093 * 2.76 * p, decay: 0.35, gain: v * 0.1 });
-      toneAt(r, at, { type: "sine", freq: 110 * p, freqTo: 45, decay: 0.45, gain: v * 0.8 });
-      noiseAt(r, at, { filter: "highpass", freq: 4000, q: 1, decay: 0.05, gain: v * 0.5 });
-      const run = [1047, 1319, 1568, 2093, 2637, 3136];
-      run.forEach((f, i) => {
-        toneAt(r, at + 0.04 + i * 0.045, { type: "triangle", freq: f * p, attack: 0.004, decay: 0.22, gain: v * 0.2 });
-        toneAt(r, at + 0.04 + i * 0.045, { type: "sine", freq: f * 2 * p, decay: 0.12, gain: v * 0.06 });
-      });
-      const held = at + 0.04 + run.length * 0.045;
-      for (const f of [1047, 1319, 1568, 2093]) for (const detune of [1, 1.006]) toneAt(r, held, { type: "sine", freq: f * p * detune, attack: 0.03, decay: 0.95, gain: v * 0.09 });
-      noiseAt(r, held - 0.1, { filter: "highpass", freq: 6500, q: 0.7, attack: 0.12, decay: 0.55, gain: v * 0.12 });
-      for (let i = 0; i < 10; i++) toneAt(r, held + i * 0.06 + r.rnd() * 0.05, { type: "sine", freq: 3500 + r.rnd() * 4000, decay: 0.04, gain: v * (0.12 - i * 0.01) });
       break;
     }
     case "initiative":

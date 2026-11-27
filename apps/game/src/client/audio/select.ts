@@ -28,7 +28,7 @@ function patternRegex(pattern: string): RegExp {
 
 /**
  * The file keys matched by an event's `files`, in a stable order, each once. In a pattern `*` matches
- * anything but a slash, and `#` a take number: "dice_#" is dice_1 and dice_02, never dice_crit_1.
+ * anything but a slash, and `#` a take number: "heal_#" is heal_1 and heal_02, never heal_fail_1.
  */
 export function expandFiles(patterns: string | string[], keys: Iterable<string>): string[] {
   const list = Array.isArray(patterns) ? patterns : [patterns];

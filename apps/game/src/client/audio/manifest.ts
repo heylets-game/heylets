@@ -8,8 +8,8 @@
 // specific first). You only need the general ones to start: "impact" covers
 // every blow until you add "impact.melee" or "impact.shock".
 //
-// A pool of takes is named with `#`, a take number: "sfx/zone/dice_#" is dice_01, dice_02 and so on, and
-// never catches "sfx/zone/dice_crit_01", which belongs to another sound. `*` matches anything but a slash.
+// A pool of takes is named with `#`, a take number: "sfx/combat/heal_#" is heal_01, heal_02 and so on, and
+// never catches "sfx/combat/heal_fail_01", which belongs to another sound. `*` matches anything but a slash.
 
 import { ABILITIES, ENEMIES, ENEMY_ABILITIES, type EffectKind } from "@gantt-quest/world";
 import { slug } from "./select";
@@ -104,7 +104,6 @@ export const AUDIO: AudioManifest = {
     "impact.lightning_strike": { files: "sfx/combat/zap_#", fallback: built("zap"), pitch: [-3, -1], reverb: -4 },
     // A critical hit, laid over the blow: a hero's flares bright and sparkles; an enemy's is a heavy sword blow, the
     // blade's shwink and a hard, dark impact, so a crit against you is felt rather than cheered.
-    "impact.crit": { files: "sfx/combat/crit_#", fallback: built("crit"), gainDb: -3 },
     "impact.crit.hero": { files: "sfx/combat/crit_#", fallback: built("crit"), gainDb: -3 },
     "impact.crit.enemy": { files: "sfx/combat/crit_enemy_#", fallback: built("crit_blade"), gainDb: -2, pitch: [-1, 1], reverb: -8 },
     miss: { files: "sfx/combat/miss_#", fallback: built("whiff"), pitch: [-2, 2], gainDb: -4 },
@@ -123,7 +122,6 @@ export const AUDIO: AudioManifest = {
     // ----- a fight on the tiles (a zone) -----
     // Every one has a built-in sound, heard until a recording is bounced to the path in `files`.
     "zone.roll": { files: "sfx/zone/dice_#", fallback: built("dice"), gainDb: -5, pitch: [-1, 1], cooldown: 0.12 },
-    "zone.roll.crit": { files: "sfx/zone/dice_crit_#", fallback: built("dice_crit"), gainDb: -3 },
     // A fight breaking out, as everyone rolls initiative.
     "zone.initiative": { files: "sfx/combat/battle_initiated", fallback: built("initiative"), cooldown: 2 },
     // Your turn in a fight (the pub's dice tables have "turn.yours", below).
