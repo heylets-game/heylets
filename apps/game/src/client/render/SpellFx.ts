@@ -2210,7 +2210,7 @@ export class SpellFx {
       return feet.clone().add(new THREE.Vector3(Math.cos(b) * r, 0.15 + rise * k * k + Math.sin(k * 9 + a) * 0.06, Math.sin(b) * r));
     };
     // The head, and its tail: each a little further back along the way, smaller and fainter.
-    const parts = [0, 1, 2, 3, 4, 5].map((i) => ({ s: this.halo(new THREE.Vector3(), color, 0, 0), lag: i * 0.035, size: 0.55 * (1 - i * 0.14), bright: 0.9 * (1 - i * 0.16) }));
+    const parts = [0, 1, 2, 3, 4, 5].map((i) => ({ s: this.halo(new THREE.Vector3(), color, 0, 0), lag: i * 0.035, size: 0.3 * (1 - i * 0.14), bright: 0.85 * (1 - i * 0.16) }));
     this.run(parts.map((p) => p.s), (age) => {
       const feet = bind.follow();
       const u = Math.min(1, age / life);

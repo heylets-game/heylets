@@ -2190,11 +2190,11 @@ function graveGrasp(stage: MoveStage, { figure, hitAt, crit, onImpact }: MoveCtx
  * An Ice Spear: how far it flies (to the end of its line, EnemyAbilityDef `line`), how long it is, how high over its
  * user's head it forms, and the seconds it takes to fly.
  */
-export const ICE_SPEAR = { reach: HEX * (ENEMY_ABILITIES.ice_spear?.line ?? 5), length: 1.7, over: 0.5, fly: 0.3 };
+export const ICE_SPEAR = { reach: HEX * (ENEMY_ABILITIES.ice_spear?.line ?? 5), length: 2, over: 0.6, fly: 0.3 };
 
 /**
  * A Haunt's Ice Spear: it rises and leans back with its arms raised high and drawn together (figures.ts HURL), and a
- * long spear of ice grows between its hands over its head, turning slowly, as cold motes are drawn in to it. Then it
+ * long, solid spear of ice (a faceted shaft with shards off its back) grows between its hands over its head, turning slowly, as cold motes are drawn in to it. Then it
  * flings it: the spear shoots off straight and low down the whole line, a pale streak and frost motes trailing behind
  * it and a line of frost laid along the ground under it, and everyone on the line is told (and flinches) as it passes
  * the middle. At the end it shatters: a cold flash, shards and frost thrown every way, and a ring of frost.
@@ -2217,11 +2217,24 @@ function iceSpear(stage: MoveStage, { figure, hitAt, crit, onImpact }: MoveCtx) 
     }, s);
   }
   stage.lay((group) => {
-    const shapes = [new THREE.ConeGeometry(0.16, length, 6).rotateX(Math.PI / 2), new THREE.ConeGeometry(0.07, length * 0.85, 5).rotateX(Math.PI / 2)];
-    const outer = iceMaterial(cold, 0.8);
-    const inner = iceMaterial(crit ? GOLD : ICE_CORE, 0.95);
+    // A solid icicle, point first along its own +z: a long six-sided shaft of ice, a short point at its back end, and
+    // three small shards growing off it near the back, pointing back and out, each cut flat so its facets catch the light.
+    const shapes = [
+      new THREE.ConeGeometry(0.27, length, 6).rotateX(Math.PI / 2),
+      new THREE.ConeGeometry(0.27, 0.45, 6).rotateX(-Math.PI / 2).translate(0, 0, -length / 2 - 0.22),
+      new THREE.ConeGeometry(0.09, 0.55, 5).rotateX(-Math.PI / 2),
+    ];
+    const outer = new THREE.MeshLambertMaterial({ color: cold, emissive: ICE_DEEP, emissiveIntensity: 0.35, flatShading: true });
+    const inner = new THREE.MeshLambertMaterial({ color: crit ? GOLD : ICE_CORE, emissive: ICE, emissiveIntensity: 0.4, flatShading: true });
     const spear = new THREE.Group();
-    spear.add(new THREE.Mesh(shapes[0], outer), new THREE.Mesh(shapes[1], inner));
+    spear.add(new THREE.Mesh(shapes[0], outer), new THREE.Mesh(shapes[1], outer));
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2 + 0.4;
+      const shard = new THREE.Mesh(shapes[2], inner);
+      shard.position.set(Math.cos(a) * 0.2, Math.sin(a) * 0.2, -length * 0.22);
+      shard.lookAt(Math.cos(a) * 0.6, Math.sin(a) * 0.6, length * 0.4);
+      spear.add(shard);
+    }
     group.add(spear);
     // The frost laid along the ground under it, from where it set off to where it is.
     const frost = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: cold, transparent: true, opacity: 0, depthWrite: false }));
@@ -2255,10 +2268,11 @@ function iceSpear(stage: MoveStage, { figure, hitAt, crit, onImpact }: MoveCtx) 
         frost.lookAt(ground.x, frost.position.y, ground.z);
         frostMaterial.opacity = 0.45;
         if (age >= trail) {
-          trail = age + 0.02;
-          const back = at.clone().addScaledVector(ahead, -0.9);
-          stage.spawnFx("streak", cold, ahead.x < 0, { from: at, to: back, life: 0.18, size: [1.4, 0.6], spin: 0, fade: true });
-          stage.spawnFx("mote", ICE_CORE, ahead.x < 0, { from: at, to: offset(at, 0, -0.5, 0), life: 0.45, size: [0.3, 0.1], spin: 0, fade: true });
+          trail = age + 0.04;
+          // Behind it, not over it: the spear itself stays in plain sight.
+          const tail = at.clone().addScaledVector(ahead, -length * 0.75);
+          stage.spawnFx("streak", cold, ahead.x < 0, { from: tail, to: tail.clone().addScaledVector(ahead, -0.8), life: 0.16, size: [1, 0.4], spin: 0, fade: true });
+          stage.spawnFx("mote", ICE_CORE, ahead.x < 0, { from: tail, to: offset(tail, 0, -0.5, 0), life: 0.45, size: [0.3, 0.1], spin: 0, fade: true });
         }
       } else {
         spear.visible = false;
