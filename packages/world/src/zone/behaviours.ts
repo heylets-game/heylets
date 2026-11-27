@@ -71,6 +71,36 @@ function aimReachesFrom(state: ZoneState, enemy: Unit, pos: HexPos, attack: Enem
   return (far <= attack.range || far <= reachFrom(state.map, pos, at, attack.range)) && seesFor(state, enemy.side, pos, at);
 }
 
+/** One way of using an ability, before its fancy and any taunt are counted. */
+interface Candidate {
+  target: Unit | null;
+  /** Where it is aimed, for one that lands on more than one hex. */
+  at?: HexPos;
+  /** What it is worth to the enemy, before anything below. */
+  worth: number;
+  /** Whose fancy counts (default: the target's: null for one that catches everyone round). */
+  whimOf?: Unit | null;
+  /** A factor on the worth that comes after its fancy (what a leap risks). */
+  after?: number;
+  /** One it would catch has taunted it: three times as much. */
+  taunted?: boolean;
+}
+
+/**
+ * The best of `candidates` once each one's fancy (Look `whim`) and a taunt (three times) are counted, in that order after
+ * whatever `after` says: the first of equals. Null if there are none. A behaviour leaves out what is worth nothing.
+ */
+function bestOf(look: Look, attack: EnemyStrike, candidates: Iterable<Candidate>): Use | null {
+  let best: Use | null = null;
+  for (const c of candidates) {
+    let worth = c.worth * (look.whim?.(attack, c.whimOf !== undefined ? c.whimOf : c.target) ?? 1);
+    if (c.after !== undefined) worth *= c.after;
+    if (c.taunted) worth *= 3;
+    if (!best || worth > best.worth) best = { attack, target: c.target, ...(c.at ? { at: c.at } : {}), worth };
+  }
+  return best;
+}
+
 /** How far from the hex aimed at a clump or a blast covers: a clump (`cluster`) no further than one, a blast as far as it is wide. */
 const clumpRadius = (spread: EnemyStrike["kit"]["spread"]): number => (spread?.shape === "blast" ? spread.radius : spread?.shape === "cluster" ? 1 : 0);
 
@@ -195,39 +225,41 @@ const strike: Behaviour = {
   },
   value(look, from, attack, targets) {
     const average = diceAverage(attack.dice);
-    let best: Use | null = null;
     // One that lands on several hexes (thrown onto a clump, or swept through rows) is worth what a burst is to each
     // hero caught: about half save for half. It is weighed at every hex it could be aimed at, and its whim and any
     // taunt go by whoever is on that hex, or else the first caught. Its own side caught under ground that hurts counts
     // against it (FRIENDLY_FIRE).
     const aims = spreadAims(look, from, attack, targets);
     if (aims) {
-      for (const aim of aims) {
-        const { at, caught } = aim;
-        const hero = caught.find((h) => sameHex(h.pos, at)) ?? caught[0];
-        // One that does no harm (Spin Web) is worth what it leaves on the ground: CURSE_WORTH for each hero caught who is
-        // not standing in that ground already.
-        const ground = attack.kit.surface?.kind;
-        const fresh = attack.harmless ? caught.filter((h) => !ground || !span(h).some((p) => look.state.surfaces[posKey(p)]?.kind === ground)).length : 0;
-        const per = attack.harmless ? CURSE_WORTH : average * 0.75;
-        let worth = (per * (attack.harmless ? fresh : caught.length) - per * FRIENDLY_FIRE * burnsOwn(look, attack, aim)) * (look.whim?.(attack, hero) ?? 1);
-        if (worth <= 0) continue;
-        if (caught.some((h) => has(h, "taunting"))) worth *= 3;
-        if (!best || worth > best.worth) best = { attack, target: hero, at, worth };
+      return bestOf(look, attack, function* (): Generator<Candidate> {
+        for (const aim of aims) {
+          const { at, caught } = aim;
+          const hero = caught.find((h) => sameHex(h.pos, at)) ?? caught[0];
+          // One that does no harm (Spin Web) is worth what it leaves on the ground: CURSE_WORTH for each hero caught who is
+          // not standing in that ground already.
+          const ground = attack.kit.surface?.kind;
+          const fresh = attack.harmless ? caught.filter((h) => !ground || !span(h).some((p) => look.state.surfaces[posKey(p)]?.kind === ground)).length : 0;
+          const per = attack.harmless ? CURSE_WORTH : average * 0.75;
+          const worth = per * (attack.harmless ? fresh : caught.length) - per * FRIENDLY_FIRE * burnsOwn(look, attack, aim);
+          if (worth <= 0) continue;
+          yield { target: hero, at, worth, taunted: caught.some((h) => has(h, "taunting")) };
+        }
+      }());
+    }
+    return bestOf(look, attack, function* (): Generator<Candidate> {
+      for (const hero of targets) {
+        if (!strikeReaches(look.state, look.enemy, from, attack, hero)) continue;
+        // A blow that splashes is worth its share again for every other hero beside the one it is aimed at.
+        const beside = attack.kit.splash ? targets.filter((h) => h !== hero && hexDistance(h.pos, hero.pos) === 1).length : 0;
+        const share = 1 + beside * SPLASH_SHARE;
+        yield {
+          target: hero,
+          worth: average * share,
+          after: leaps(attack) ? leapRisk(look.state, look.enemy, from, lungeLanding(look.state, look.enemy, from, attack, hero)!) : undefined,
+          taunted: has(hero, "taunting"),
+        };
       }
-      return best;
-    }
-    for (const hero of targets) {
-      if (!strikeReaches(look.state, look.enemy, from, attack, hero)) continue;
-      // A blow that splashes is worth its share again for every other hero beside the one it is aimed at.
-      const beside = attack.kit.splash ? targets.filter((h) => h !== hero && hexDistance(h.pos, hero.pos) === 1).length : 0;
-      const share = 1 + beside * SPLASH_SHARE;
-      let worth = average * share * (look.whim?.(attack, hero) ?? 1);
-      if (leaps(attack)) worth *= leapRisk(look.state, look.enemy, from, lungeLanding(look.state, look.enemy, from, attack, hero)!);
-      if (has(hero, "taunting")) worth *= 3;
-      if (!best || worth > best.worth) best = { attack, target: hero, worth };
-    }
-    return best;
+    }());
   },
 };
 
@@ -241,12 +273,12 @@ const burst: Behaviour = {
     if (attack.harmless) {
       const effect = attack.saveOr?.effect;
       const fresh = caughtBy(look, from, attack, targets).filter((h) => !effect || !has(h, effect)).length;
-      return fresh > 0 ? { attack, target: null, worth: fresh * CURSE_WORTH * (look.whim?.(attack, null) ?? 1) } : null;
+      return fresh > 0 ? bestOf(look, attack, [{ target: null, worth: fresh * CURSE_WORTH }]) : null;
     }
     const caught = caughtBy(look, from, attack, targets);
     // An Earthquake's heave on its next turn counts for half: some will have got off the cracked ground by then.
     const heave = attack.kit.aftershock ? diceAverage(attack.kit.aftershock.dice) * 0.5 : 0;
-    return caught.length > 0 ? { attack, target: null, worth: caught.length * (diceAverage(attack.dice) + heave) * 0.75 * (look.whim?.(attack, null) ?? 1) } : null;
+    return caught.length > 0 ? bestOf(look, attack, [{ target: null, worth: caught.length * (diceAverage(attack.dice) + heave) * 0.75 }]) : null;
   },
 };
 
@@ -259,17 +291,15 @@ const burst: Behaviour = {
 const shove: Behaviour = {
   reaches: (look, from, _attack, targets) => targets.some((h) => reaches(look.state.map, look.enemy, h, from)),
   value(look, from, attack, targets) {
-    let best: Use | null = null;
-    for (const hero of targets) {
-      if (!reaches(look.state.map, look.enemy, hero, from) || has(hero, "prone")) continue;
-      // Shoved straight away from the hex of a big one nearest them.
-      const into = shiftInto(look.state, hero.pos, shoveDest(nearOf(look.enemy, hero.pos, from), hero.pos), hero);
-      if (!into || into.how === "open") continue;
-      let worth = (into.how === "pit" ? Math.max(8, hero.hp) : 2.5 * (into.levels - 1) + 2) * (look.whim?.(attack, hero) ?? 1);
-      if (has(hero, "taunting")) worth *= 3;
-      if (!best || worth > best.worth) best = { attack, target: hero, worth };
-    }
-    return best;
+    return bestOf(look, attack, function* (): Generator<Candidate> {
+      for (const hero of targets) {
+        if (!reaches(look.state.map, look.enemy, hero, from) || has(hero, "prone")) continue;
+        // Shoved straight away from the hex of a big one nearest them.
+        const into = shiftInto(look.state, hero.pos, shoveDest(nearOf(look.enemy, hero.pos, from), hero.pos), hero);
+        if (!into || into.how === "open") continue;
+        yield { target: hero, worth: into.how === "pit" ? Math.max(8, hero.hp) : 2.5 * (into.levels - 1) + 2, taunted: has(hero, "taunting") };
+      }
+    }());
   },
 };
 
@@ -292,7 +322,7 @@ const rally: Behaviour = {
   reaches: () => false,
   value(look, from, attack) {
     const allies = rallied(look.state, look.enemy, from, attack).length;
-    return allies > 0 ? { attack, target: null, worth: allies * RALLY_WORTH * (look.whim?.(attack, null) ?? 1) } : null;
+    return allies > 0 ? bestOf(look, attack, [{ target: null, worth: allies * RALLY_WORTH }]) : null;
   },
 };
 
@@ -315,7 +345,7 @@ const field: Behaviour = {
   reaches: (look, from, attack, targets) => fielded(look, from, attack, targets).length > 0,
   value(look, from, attack, targets) {
     const caught = fielded(look, from, attack, targets).length;
-    return caught > 0 ? { attack, target: null, worth: caught * FIELD_WORTH * (look.whim?.(attack, null) ?? 1) } : null;
+    return caught > 0 ? bestOf(look, attack, [{ target: null, worth: caught * FIELD_WORTH }]) : null;
   },
 };
 
@@ -335,7 +365,7 @@ const summon: Behaviour = {
     const call = attack.kit.summon;
     if (!call || targets.length === 0) return null;
     const room = kinSpots(look.state, look.enemy, call, from).length;
-    return room > 0 ? { attack, target: null, worth: room * KIN_WORTH * (look.whim?.(attack, null) ?? 1) } : null;
+    return room > 0 ? bestOf(look, attack, [{ target: null, worth: room * KIN_WORTH }]) : null;
   },
 };
 
@@ -365,13 +395,12 @@ const mend: Behaviour = {
     // Where it could land on one of them: their own hexes, and every hex as near to them as it spreads (a clump, `area`,
     // covers no hex further than one from the hex it is aimed at).
     const wide = clumpRadius(attack.kit.spread);
-    let best: Use | null = null;
-    for (const at of aimsNear(look, from, attack, hurt.flatMap((ally) => span(ally)), (spot) => blast(state.map, spot, wide))) {
-      const given = mendedBy(state, enemy, from, attack, at).reduce((sum, u) => sum + Math.min(average, u.maxHp - u.hp), 0);
-      const worth = given * HEAL_WORTH * (look.whim?.(attack, null) ?? 1);
-      if (worth > 0 && (!best || worth > best.worth)) best = { attack, target: null, at, worth };
-    }
-    return best;
+    return bestOf(look, attack, function* (): Generator<Candidate> {
+      for (const at of aimsNear(look, from, attack, hurt.flatMap((ally) => span(ally)), (spot) => blast(state.map, spot, wide))) {
+        const given = mendedBy(state, enemy, from, attack, at).reduce((sum, u) => sum + Math.min(average, u.maxHp - u.hp), 0);
+        if (given > 0) yield { target: null, at, worth: given * HEAL_WORTH };
+      }
+    }());
   },
 };
 
