@@ -2148,7 +2148,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       const fxs = spells.current;
       const shown = shownNow.current;
       if (!fxs || !shown) return;
-      const standing = (id: string) => shown.units.find((u) => u.id === id && u.hp > 0 && !u.down);
+      // Asked of the picture on screen when it is called, not this one: an effect started now asks it for as long as it
+      // lasts, and has to see its bearer fall.
+      const standing = (id: string) => shownNow.current?.units.find((u) => u.id === id && u.hp > 0 && !u.down);
       for (const u of shown.units) {
         if (u.down || u.hp <= 0) continue;
         const id = u.id;
