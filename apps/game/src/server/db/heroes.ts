@@ -2,7 +2,7 @@
 // need to know to draw and fight one (heroInitFor), and the sheet a crewmate
 // opens on a click (publicHero).
 
-import { gearSheet, parseAbilityLoadout, parseAppearance, type HeroInit, type PublicHero } from "@gantt-quest/world";
+import { fedBy, gearSheet, mealBonus, parseAbilityLoadout, parseAppearance, sumBonuses, type HeroInit, type PublicHero } from "@gantt-quest/world";
 import { getCharacter } from "./characters";
 import { getInventory } from "./inventory";
 import { rowToItem, statsOf } from "./rows";
@@ -15,6 +15,10 @@ export async function heroInitFor(db: D1Database, playerId: string): Promise<Her
   const worn = inventory.filter((i) => i.equipped).map(rowToItem);
   const gear = gearSheet(c.class_id, worn);
   const appearance = parseAppearance(c.appearance ?? null);
+  // Today's pub meal adds its stat points beside the gear's, so the maps, every check and the hero sheet count them.
+  const now = Date.now();
+  const meal = fedBy(c, now);
+  const bonus = meal ? sumBonuses(gear.bonus, mealBonus(c, now)) : gear.bonus;
   return {
     id: c.player_id,
     name: c.name,
@@ -25,6 +29,8 @@ export async function heroInitFor(db: D1Database, playerId: string): Promise<Her
     base: statsOf(c),
     abilityLoadout: parseAbilityLoadout(c.ability_loadout),
     ...gear,
+    bonus,
+    ...(meal ? { fed: meal.id } : {}),
     // Their chosen look travels with what they wear, so they are drawn as themselves wherever they are drawn.
     outfit: appearance ? { ...gear.outfit, appearance } : gear.outfit,
   };
@@ -57,5 +63,6 @@ export async function publicHero(db: D1Database, viewerId: string, heroId: strin
     armor: hero.armor,
     gear: inventory.filter((i) => i.equipped).map(rowToItem),
     appearance: hero.outfit?.appearance,
+    ...(hero.fed ? { fed: hero.fed } : {}),
   };
 }

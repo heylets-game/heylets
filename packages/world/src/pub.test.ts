@@ -24,6 +24,14 @@ import {
   pubMountSpots,
   pubPath,
   pubRoom,
+  fedBy,
+  mealBonus,
+  mealOutings,
+  mealPerkText,
+  mealStats,
+  pubItem,
+  statBonusText,
+  sumBonuses,
   tileAt,
   wallFaces,
 } from "./index";
@@ -80,6 +88,40 @@ describe("the pub", () => {
 
   it("sells two meals, at the prices they always had", () => {
     expect(PUB_MENU.map((i) => [i.id, i.price])).toEqual([["stew", 12], ["pie", 18]]);
+  });
+});
+
+describe("the pub's meals", () => {
+  const stew = pubItem("stew")!;
+  const pie = pubItem("pie")!;
+  const noon = Date.UTC(2026, 10, 27, 12);
+
+  it("each does something, and the dearer one does more", () => {
+    for (const item of PUB_MENU) expect(item.perks.length, item.id).toBeGreaterThan(0);
+    const points = (i: typeof stew) => Object.values(mealStats(i)).reduce((a, b) => a + (b ?? 0), 0);
+    expect(points(pie)).toBeGreaterThan(points(stew));
+    expect(mealOutings(pie)).toBeGreaterThan(mealOutings(stew));
+  });
+
+  it("says each perk in plain words", () => {
+    expect(stew.perks.map(mealPerkText)).toEqual(["+2 Vitality for the rest of the day", "1 used gathering outing back"]);
+    expect(pie.perks.map(mealPerkText)).toEqual(["+1 to every stat for the rest of the day", "2 used gathering outings back"]);
+    expect(statBonusText({ str: 1, agi: 2 })).toBe("+1 Strength, +2 Agility");
+  });
+
+  it("feeds a hero only on the day they ate", () => {
+    const ate = { meal: "stew", meal_day: "2026-11-27" };
+    expect(fedBy(ate, noon)?.id).toBe("stew");
+    expect(mealBonus(ate, noon)).toEqual({ vit: 2 });
+    expect(fedBy(ate, noon + 86_400_000)).toBeUndefined();
+    expect(mealBonus(ate, noon + 86_400_000)).toEqual({});
+    expect(mealBonus({ meal: "gruel", meal_day: "2026-11-27" }, noon)).toEqual({});
+    expect(mealBonus({}, noon)).toEqual({});
+  });
+
+  it("adds its points to the gear's", () => {
+    expect(sumBonuses({ vit: 1, str: 3 }, mealStats(stew))).toEqual({ vit: 3, str: 3 });
+    expect(sumBonuses({}, {})).toEqual({});
   });
 });
 

@@ -4,10 +4,53 @@
 .pub-bar h3 { margin: 12px 0 4px; }
 .pub-bar h3:first-of-type { margin-top: 0; }
 .pub-bar p { margin: 0 0 6px; }
-.pub-menu { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.pub-menu li { display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid var(--line); padding: 6px 8px; }
-.pub-menu li > .grow { flex: 1; min-width: 0; }
-.pub-menu button { flex: none; min-width: 64px; }
+/*
+ * The menu (PubMenu): a printed bill of fare on parchment, set on the bar's dark panel. Each dish is a line with a
+ * dotted leader to its price, its blurb in italics, and what it gives underneath: stat points in green ink, outings
+ * given back in blue.
+ */
+.menu-card {
+  --ink: var(--paper-ink); --ink-soft: #5a4a33; --ink-boost: #2f6b3a; --ink-back: #2c5266;
+  position: relative; margin: 4px 0 10px; padding: 12px 16px 10px; color: var(--ink); font-family: var(--font-book);
+  background: radial-gradient(ellipse at 30% 20%, rgba(255, 250, 230, 0.55), rgba(255, 250, 230, 0) 60%), radial-gradient(ellipse at 80% 90%, rgba(120, 90, 40, 0.18), rgba(120, 90, 40, 0) 55%), var(--paper);
+  border: 1px solid var(--paper-lo); border-radius: 2px;
+  box-shadow: inset 0 0 0 4px var(--paper), inset 0 0 0 5px rgba(44, 35, 24, 0.55), inset 0 0 24px rgba(110, 80, 30, 0.25), 0 3px 10px rgba(0, 0, 0, 0.45);
+  transform: rotate(-0.4deg);
+}
+.menu-card-head { text-align: center; margin-bottom: 6px; }
+.menu-card-house { display: block; font-family: var(--font-head); font-size: 11px; letter-spacing: 0.2em; color: var(--ink-soft); }
+.menu-card-title { margin: 0; font-family: var(--font-title); font-size: 26px; line-height: 1.1; letter-spacing: 0.04em; color: var(--ink); }
+.menu-card-sub { display: block; font-style: italic; font-size: 13px; color: var(--ink-soft); }
+.menu-card-sub::before, .menu-card-sub::after { content: "~"; margin: 0 6px; }
+.menu-card-list { list-style: none; margin: 0; padding: 0; }
+.menu-dish { padding: 8px 0; border-top: 1px dashed rgba(44, 35, 24, 0.35); }
+.menu-dish-line { display: flex; align-items: center; gap: 6px; }
+.menu-dish-name { font-family: var(--font-head); font-weight: normal; font-size: 17px; letter-spacing: 0.04em; white-space: nowrap; }
+.menu-dish-dots { flex: 1; min-width: 12px; align-self: flex-end; margin-bottom: 5px; border-bottom: 2px dotted rgba(44, 35, 24, 0.55); }
+.menu-dish-price { font-family: var(--font-head); font-size: 17px; }
+.menu-card .menu-dish-blurb { margin: 0 0 3px 34px; font-style: italic; color: var(--ink-soft); }
+.menu-dish-foot { display: flex; align-items: flex-end; gap: 8px; margin-left: 34px; }
+.menu-dish-perks { flex: 1; min-width: 0; list-style: none; margin: 0; padding: 0; font-size: 14px; }
+.menu-dish-perks li { position: relative; padding-left: 14px; }
+.menu-dish-perks li::before { position: absolute; left: 0; }
+.menu-dish-perks li.boost { color: var(--ink-boost); }
+.menu-dish-perks li.boost::before { content: "▲"; font-size: 0.75em; top: 0.2em; }
+.menu-dish-perks li.back { color: var(--ink-back); }
+.menu-dish-perks li.back::before { content: "↺"; }
+.menu-card button.menu-order {
+  flex: none; padding: 1px 10px; font-family: var(--font-head); font-size: 14px; color: var(--ink); text-shadow: none;
+  background: rgba(255, 250, 230, 0.35); border: 1px solid var(--ink); border-radius: 2px; box-shadow: none;
+}
+.menu-card button.menu-order:hover:not(:disabled) { background: var(--ink); color: var(--paper); }
+.menu-card button.menu-order:disabled { opacity: 0.45; cursor: default; }
+/* Today's meal, stamped across like a cook's mark. */
+.menu-stamp {
+  flex: none; padding: 0 6px; font-family: var(--font-head); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: #8a2a1e; border: 2px solid #8a2a1e; border-radius: 3px; transform: rotate(-6deg); opacity: 0.85;
+}
+.menu-card-foot { margin: 6px 0 0; padding-top: 6px; border-top: 1px dashed rgba(44, 35, 24, 0.35); text-align: center; font-style: italic; font-size: 13px; color: var(--ink-soft); }
+/* Well fed: the line under the card says so in green. */
+.menu-card:has(.menu-dish.eaten) .menu-card-foot { color: var(--ink-boost); }
 .pub-bar .row { display: flex; gap: 6px; }
 
 @media (max-width: 760px) {

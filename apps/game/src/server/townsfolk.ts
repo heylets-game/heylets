@@ -16,6 +16,7 @@ import {
   PUB_BARKEEP,
   PUB_DEALER,
   PUB_MENU,
+  mealPerkText,
   RESOURCE_LABEL,
   SHELF_PRICES,
   bestHole,
@@ -110,8 +111,8 @@ const BARKEEP: Townsfolk = {
   approach: "leans on the bar and says",
   mock: mockBarkeep,
   facts: ({ crewId, now }) => [
-    ...PUB_MENU.map((i) => `On the board: ${i.name}, ${i.price} gold. ${i.blurb}`),
-    "The board is meals only: no drink is sold. A meal gives a hero back one gathering outing, once a day.",
+    ...PUB_MENU.map((i) => `On the board: ${i.name}, ${i.price} gold. ${i.blurb} It gives whoever eats it: ${i.perks.map(mealPerkText).join("; ")}.`),
+    "The board is meals only: no drink is sold. A hero eats one meal a day, and what it gives lasts until the day turns at midnight.",
     "There is a dice table in the pub where crewmates bluff each other for a small stake.",
     salesmanFact(crewId, now),
     `${PUB_DEALER.name}, ${PUB_DEALER.trade}, leans on the pillar at the end of the bar: he buys wood, stone, iron and the rest, sells what people are short of at prices that move through the day, and offers supply contracts that run a few days. The regulars hand out their own small jobs; find them in here at night or about the Harbor by day. The Harbor's notice board outside is for news of the Harbor itself.`,

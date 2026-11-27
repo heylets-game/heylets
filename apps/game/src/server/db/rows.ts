@@ -62,6 +62,9 @@ export interface CharacterRow {
   ability_loadout_filled?: number;
   /** JSON Appearance (appearance.ts), or null if they never chose one. */
   appearance?: string | null;
+  /** The pub meal they last ate (PUB_MENU id), and the UTC day they ate it: its perks last that day (pub.ts fedBy). */
+  meal?: string | null;
+  meal_day?: string | null;
 }
 
 export interface InventoryRow {

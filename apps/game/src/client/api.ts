@@ -33,7 +33,9 @@ export type { CatchBook, FishStock, GatherStatus, PubGame, PubLeaderboard, PubSc
 
 /** What came of ordering a meal at the pub. */
 export interface PubOrdered {
-  /** The meal gave back one gathering outing. */
+  /** How many gathering outings the meal gave back (none if none had been used today). */
+  outings?: number;
+  /** Whether it gave any back. */
   rested?: boolean;
 }
 
@@ -65,6 +67,9 @@ export interface Character {
   ability_loadout?: string;
   /** JSON Appearance (parse with parseAppearance), or null if they never chose one. */
   appearance?: string | null;
+  /** The pub meal they last ate and the UTC day they ate it: its perks last that day (fedBy, mealBonus). */
+  meal?: string | null;
+  meal_day?: string | null;
 }
 
 export interface InventoryItem {

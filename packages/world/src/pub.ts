@@ -5,16 +5,19 @@
 // PubRoom Durable Object checks each request against what is here: the room,
 // the fittings that are walked around, and the menu.
 //
-// The menu is meals. A meal gives back one of the day's gathering outings,
-// once a day (the server's orderAtPub); nothing is carried away from the bar.
+// The menu is meals. A hero eats one a day (the server's orderAtPub), and
+// what it does (its perks: gathering outings back, a few stat points until
+// the day turns) is listed on the board; nothing is carried away from the bar.
 
-import type { HexGrid, HexPos } from "@gantt-quest/core";
+import type { HexGrid, HexPos, Stats } from "@gantt-quest/core";
 import type { CrewRequest, CrewView } from "./crew";
 import type { DiceRequest, DiceView } from "./dice";
 import type { ShoalsRequest, ShoalsView } from "./shoals";
 import type { TideRequest, TideView } from "./tide";
 import { harborPoi, type HarborPlayer, type EmoteMessage, type EmoteRequest, type LookMessage, type LookRequest, type XpMessage } from "./harbor";
 import { SEATS } from "./hut";
+import { gatherDay, gatherResetAt } from "./gather";
+import { STAT_KEYS, STAT_LABEL, sumBonuses } from "./progression";
 import { HEX_DIRS, buildRoom, hutPath, wallFaces } from "./hutroom";
 import type { WorldMap } from "./map";
 
@@ -128,20 +131,72 @@ export function pubPath(room: WorldMap, from: HexPos, to: HexPos, taken: HexPos[
 
 // ---------- the menu ----------
 
-/** A meal on the board. Every one does the same for whoever eats it; they differ in name and price. */
+/**
+ * What a meal does for whoever eats it. A meal has any number of these; the board lists each one, and a new kind is
+ * a case here, in mealPerkText, and wherever the server gives it (orderAtPub, heroInitFor).
+ */
+export type MealPerk =
+  /** Gathering outings used today, given back (no more than have been used). */
+  | { kind: "outings"; amount: number }
+  /** Added to the hero's stats until the UTC day turns over: on the maps, in every check, and on their sheet. */
+  | { kind: "stats"; stats: Partial<Stats> };
+
+/** A meal on the board. A hero eats one a day; they differ in what they do and what they cost. */
 export interface PubItem {
   id: string;
   name: string;
   price: number;
   blurb: string;
+  perks: MealPerk[];
 }
 
 export const PUB_MENU: PubItem[] = [
-  { id: "stew", name: "Fish Stew", price: 12, blurb: "Mostly fish." },
-  { id: "pie", name: "Sailor's Pie", price: 18, blurb: "Eaten slowly, with stories." },
+  { id: "stew", name: "Fish Stew", price: 12, blurb: "Mostly fish.", perks: [{ kind: "stats", stats: { vit: 2 } }, { kind: "outings", amount: 1 }] },
+  {
+    id: "pie",
+    name: "Sailor's Pie",
+    price: 18,
+    blurb: "Eaten slowly, with stories.",
+    perks: [{ kind: "stats", stats: { str: 1, int_stat: 1, vit: 1, agi: 1, dex: 1 } }, { kind: "outings", amount: 2 }],
+  },
 ];
 
 export const pubItem = (id: string): PubItem | undefined => PUB_MENU.find((i) => i.id === id);
+
+/** One perk in plain words, for the board: "+2 Vitality for the rest of the day", "2 used gathering outings back". */
+export function mealPerkText(perk: MealPerk): string {
+  if (perk.kind === "outings") return `${perk.amount} used gathering ${perk.amount === 1 ? "outing" : "outings"} back`;
+  return `${statBonusText(perk.stats)} for the rest of the day`;
+}
+
+/** Stat points in plain words: "+2 Vitality", "+1 Strength, +1 Agility", or "+1 to every stat" when all five are the same. */
+export function statBonusText(stats: Partial<Stats>): string {
+  const given = STAT_KEYS.filter((k) => (stats[k] ?? 0) !== 0);
+  const n = given.length ? stats[given[0]]! : 0;
+  const sign = (v: number) => (v > 0 ? `+${v}` : `${v}`);
+  if (given.length === STAT_KEYS.length && given.every((k) => stats[k] === n)) return `${sign(n)} to every stat`;
+  return given.map((k) => `${sign(stats[k]!)} ${STAT_LABEL[k]}`).join(", ");
+}
+
+/** How many gathering outings a meal gives back. */
+export const mealOutings = (item: PubItem): number => item.perks.reduce((n, p) => n + (p.kind === "outings" ? p.amount : 0), 0);
+
+/** What a meal adds to a hero's stats. */
+export const mealStats = (item: PubItem): Partial<Stats> => sumBonuses(...item.perks.flatMap((p) => (p.kind === "stats" ? [p.stats] : [])));
+
+/** The meal a hero is still fed by at `now`: the one they ate, if they ate it today (UTC), else undefined. */
+export function fedBy(meal: { meal?: string | null; meal_day?: string | null }, now: number): PubItem | undefined {
+  return meal.meal && meal.meal_day === gatherDay(now) ? pubItem(meal.meal) : undefined;
+}
+
+/** What today's meal adds to a hero's stats at `now`: nothing once the day has turned. Added beside the gear's bonus wherever stats are counted (not to what they can carry, which would leave a pack too full at midnight). */
+export function mealBonus(meal: { meal?: string | null; meal_day?: string | null }, now: number): Partial<Stats> {
+  const item = fedBy(meal, now);
+  return item ? mealStats(item) : {};
+}
+
+/** When a meal eaten at `now` wears off: the next UTC midnight, when the day's outings come back too. */
+export const mealEndsAt = gatherResetAt;
 
 /** Longest thing a customer may say to the barkeep. */
 export const PUB_MAX_TALK = 200;

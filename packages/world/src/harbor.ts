@@ -777,13 +777,15 @@ export interface PublicHero {
   level: number;
   /** XP into the current level. */
   xp: number;
-  /** Stats without gear, and what the worn gear adds. */
+  /** Stats without gear, and what the worn gear and today's meal add. */
   base: Stats;
   bonus: Partial<Stats>;
   weaponPower: number;
   armor: number;
   /** What they wear, one item per slot. */
   gear: ItemDef[];
+  /** The pub meal (PUB_MENU id) they ate today, if they did: its stat points are in `bonus`. */
+  fed?: string;
   /** How they chose to look, if they did. */
   appearance?: Appearance;
 }

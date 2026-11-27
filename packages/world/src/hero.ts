@@ -27,6 +27,8 @@ export interface HeroSheet {
   perks?: Perks;
   /** The class abilities chosen for the hero's slots (classabilities.ts). Fought with on top of the weapon's. They are changed only in the Harbor. */
   abilityLoadout?: (string | null)[];
+  /** The pub meal (PUB_MENU id) the hero ate today, if they did. Its stat points are already in `bonus`. */
+  fed?: string;
 }
 
 /** What the server knows about a character wherever they turn up: the Harbor, a hut, the pub or a map. */
