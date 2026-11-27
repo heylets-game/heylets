@@ -103,3 +103,49 @@ button.cm-main:hover:not(:disabled) { border-color: var(--line); background: rgb
 .cm-menu-name { padding: 2px 4px 4px; font-family: var(--font-head); letter-spacing: 0.04em; }
 .cm-menu-item { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 5px 8px; text-align: left; }
 .cm-menu-item .muted { font-size: 11px; }
+
+/* ---------- A phone: the party as round portraits (CrewRoster's `avatarsOnPhone`) ----------
+   Down the right-hand edge, each a portrait in a ring (gold for the one you play, brass for the rest of yours, blue
+   for the crew's), the level on a badge at its foot and health in a thin bar under it. A tap opens a card beside it. */
+.crew-roster.roster-avatars { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.roster-avatars .roster { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 0; padding: 3px; list-style: none; overflow-y: auto; scrollbar-width: none; }
+.roster-avatars .cm-av-li { position: relative; }
+.roster-avatars button.cm-av {
+  position: relative; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; overflow: visible;
+  border-radius: 50%; border: 2px solid #1c0d0e; background: radial-gradient(circle at 50% 35%, #4a2a22, #1b110f 75%);
+  box-shadow: 0 0 0 2px #4f7fc4, 0 3px 6px rgba(0, 0, 0, 0.6);
+}
+.roster-avatars button.cm-av:hover:not(:disabled) { border-color: #1c0d0e; background: radial-gradient(circle at 50% 35%, #5a3428, #1b110f 75%); }
+.roster-avatars button.cm-av img { width: 32px; height: 39px; margin-top: 2px; border-radius: 0 0 50% 50%; clip-path: circle(20px at 50% 18px); }
+.roster-avatars .yours button.cm-av { box-shadow: 0 0 0 2px #b08a2a, 0 3px 6px rgba(0, 0, 0, 0.6); }
+.roster-avatars .mine button.cm-av { box-shadow: 0 0 0 2px var(--gold), 0 0 10px rgba(255, 210, 63, 0.45), 0 3px 6px rgba(0, 0, 0, 0.6); }
+.roster-avatars .grouped button.cm-av { box-shadow: 0 0 0 2px #7dff9a, 0 0 8px rgba(125, 255, 154, 0.55), 0 3px 6px rgba(0, 0, 0, 0.6); }
+.roster-avatars .open button.cm-av { box-shadow: 0 0 0 2px #fbe08a, 0 0 12px rgba(251, 224, 138, 0.6), 0 3px 6px rgba(0, 0, 0, 0.6); }
+.roster-avatars .away button.cm-av img { filter: grayscale(1) brightness(0.7); }
+.roster-avatars .away button.cm-av { opacity: 0.8; }
+/* The level: a small brass badge over the foot of the ring. */
+.cm-av-lv {
+  position: absolute; right: -6px; bottom: -4px; min-width: 18px; height: 16px; padding: 0 3px; box-sizing: border-box;
+  display: grid; place-items: center; font: bold 10px/1 ui-monospace, Consolas, monospace; color: #2a1406; text-shadow: none;
+  background: linear-gradient(180deg, #fbe7a6, #e0b04a); border: 1px solid #6b4a12; border-radius: 8px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+/* Health, where it is known (on a map): a thin bar under the ring. */
+.cm-av-hp { position: absolute; left: 4px; right: 4px; bottom: -7px; height: 4px; background: #2a1620; border: 1px solid #1c0d0e; border-radius: 2px; overflow: hidden; }
+.cm-av-hp i { display: block; height: 100%; background: linear-gradient(#e0525b, #a4313c); }
+.roster-avatars .roster-add { margin: 2px 0 0; }
+
+/* The card a tap opens: beside the portrait, in the new UI's timber. */
+.cm-card { position: fixed; z-index: 60; width: min(230px, calc(100vw / var(--ui-z, 1) - 80px)); box-sizing: border-box; padding: 8px; display: flex; flex-direction: column; gap: 6px; animation: cm-card-in 0.1s ease-out; }
+@keyframes cm-card-in { from { opacity: 0; transform: translateX(6px); } }
+@media (prefers-reduced-motion: reduce) { .cm-card { animation: none; } }
+.cm-card-head { display: flex; align-items: center; gap: 8px; }
+.cm-card .cm-face { background: #1b110f; border: 1px solid #1c0d0e; box-shadow: 0 0 0 1px #6b3524; }
+.cm-card .cm-name { font-size: 14px; }
+.cm-card-tags { font-size: 11px; color: #c9ad8c; }
+.cm-card .cm-menu-item { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; min-height: 34px; padding: 5px 9px; text-align: left; }
+.cm-card .cm-menu-item .muted { font-size: 11px; }
+/* The phone's one-line rows (above) are not for the card: its words stack, the class and tags shown. */
+.cm-card .cm-text { flex-direction: column; align-items: flex-start; gap: 2px; }
+.cm-card .cm-class, .cm-card .cm-tag { display: inline; }
+.cm-card .cm-face { width: 40px; height: 48px; }
+.cm-card .cm-face img { width: 36px; height: 44px; }

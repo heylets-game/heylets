@@ -30,7 +30,7 @@ import { DragPanel } from "./DragPanel";
 import { OptionsMenu } from "./OptionsMenu";
 import { HudBar } from "./ui/Hud";
 import { TopBar, type TopBarItem } from "./ui/TopBar";
-import { BOARD, DOOR as DOOR_ICON, TALK } from "./ui/menuIcons";
+import { BOARD, DOOR as DOOR_ICON, LEAVE, TALK } from "./ui/menuIcons";
 import { InventoryScreen } from "./InventoryScreen";
 import { Logbook } from "./Logbook";
 import { ThingIcon, pubIcon } from "./thingIcons";
@@ -627,7 +627,7 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
         />
       </DragPanel>
 
-      <DragPanel id="pub.chat" title="Pub chat" foldOnPhone expandable className="chat panel harbor-chat">
+      <DragPanel id="pub.chat" title="Pub chat" foldOnPhone expandable className="chat panel harbor-chat timber">
         <div className="chat-lines">
           {pub.chat.length === 0 && <div className="muted">Only people inside the pub see what is said here.</div>}
           {pub.chat.map((l, i) => <div key={i} className="line hero"><strong>{l.name}: </strong>{l.text}</div>)}
@@ -663,7 +663,7 @@ export function PubView({ me, refresh, onLeave, resting = false }: { me: Me; ref
           <OptionsMenu
             title={"The pub"}
             subtitle={me.crew?.name}
-            actions={[{ label: "Leave", run: onLeave }]}
+            actions={[{ label: "Leave", icon: LEAVE, run: onLeave }]}
             reset={pub.status !== "open" ? undefined : {
               to: "the door",
               run: () => {

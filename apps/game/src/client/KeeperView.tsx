@@ -23,6 +23,7 @@ import { InventoryScreen } from "./InventoryScreen";
 import { toOwned } from "./items";
 import { Logbook } from "./Logbook";
 import { OptionsMenu } from "./OptionsMenu";
+import { LEAVE } from "./ui/menuIcons";
 import { audio } from "./audio/engine";
 import { SpellFx } from "./render/SpellFx";
 import { WorldRenderer, hexToWorld, type RenderState } from "./render/WorldRenderer";
@@ -285,7 +286,7 @@ export function KeeperView({ shop, me, refresh, onLeave, resting = false }: { sh
           <OptionsMenu
             title={place.title}
             subtitle={me.crew?.name}
-            actions={[{ label: "Leave", run: onLeave }]}
+            actions={[{ label: "Leave", icon: LEAVE, run: onLeave }]}
             reset={{
               to: "the door",
               run: () => {

@@ -13,7 +13,7 @@ import { makeRenderer } from "./graphics";
 import { apothecaryWallTexture, galleyWallTexture, lapidaryWallTexture, panelTexture, smithyWallTexture, wallpaperTexture } from "./groundArt";
 import { Ambience, type RoomLight, TILE_FILLET, TILE_RADIUS, TORCH_LIFT, dryPatch, hexTop, meadowAt, tallGrass, type BuildingGlow } from "./ambience";
 import "./camera.css";
-import { PINCH_PAN_SLACK, followIconSvg, readFollow, writeFollow } from "./cameraFollow";
+import { CAMERA_ICON, PINCH_PAN_SLACK, followIconSvg, pixelGlyphSvg, readFollow, writeFollow } from "./cameraFollow";
 import type { HexPos } from "@gantt-quest/core";
 import { hexDistance } from "@gantt-quest/core";
 import { lookStep, lookYaw, BASE_HEIGHT, HARBOR_HEART_AT, BIG_REACH, ENEMIES, HEX_DIRS, SEATS, spanAt, tileCost, WALL_FACE_HALF, WALL_ITEM_BOTTOM, WALL_ITEM_TOP, hexAt, reachable, tileAt, wallFace, wallFaces, type Biome, type Clime, type Emote, type Outfit, type Poi, type Tile, type WorldMap, type FloorLook, type WallLook } from "@gantt-quest/world";
@@ -1366,9 +1366,22 @@ export class WorldRenderer {
       addEventListener("blur", this.onBlur);
     }
 
-    // Two small buttons at the right edge, for those without a right mouse button or a keyboard.
+    // A touch screen's camera buttons at the right edge: follow your hero, and (on a battle map) the combat view, folded
+    // away behind a camera button that opens them under it. Two fingers turn and zoom the view, so there are no
+    // turning buttons; a computer has keys for all of it (Q E R F C V, listed in the menu's Keys) and shows none of
+    // this column (camera.css).
     this.rotateButtons = document.createElement("div");
     this.rotateButtons.className = "camera-rotate";
+    const fold = document.createElement("button");
+    fold.type = "button";
+    fold.className = "camera-fold";
+    fold.title = "Camera";
+    fold.setAttribute("aria-label", "Camera");
+    fold.setAttribute("aria-expanded", "false");
+    fold.appendChild(pixelGlyphSvg(CAMERA_ICON, 22));
+    fold.addEventListener("click", () => fold.setAttribute("aria-expanded", String(this.rotateButtons.classList.toggle("open"))));
+    this.rotateButtons.appendChild(fold);
+    this.turnButtons.push(fold);
     this.followButton = document.createElement("button");
     this.followButton.type = "button";
     this.followButton.className = "camera-follow";
@@ -1377,23 +1390,7 @@ export class WorldRenderer {
     this.rotateButtons.appendChild(this.followButton);
     this.turnButtons.push(this.followButton);
     this.showFollow();
-    const buttons: [string, string, () => void][] = [
-      ["⟲", "Turn the view left (Q)", () => this.rotateBy(-1)],
-      ["⟳", "Turn the view right (E)", () => this.rotateBy(1)],
-      ["▲", "Tip the view toward overhead (R)", () => this.tiltBy(0.18, true)],
-      ["▼", "Tip the view toward the horizon (F)", () => this.tiltBy(-0.18, true)],
-    ];
-    for (const [label, title, run] of buttons) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.textContent = label;
-      b.title = title;
-      b.setAttribute("aria-label", title);
-      b.addEventListener("click", run);
-      this.rotateButtons.appendChild(b);
-      this.turnButtons.push(b);
-    }
-    // And the combat view's, under them: there only on a battle map (see setCombat).
+    // And the combat view's, under Follow: there only on a battle map (see setCombat).
     this.rotateButtons.appendChild(cutawayButton(this.combat));
     container.appendChild(this.rotateButtons);
     this.holdRing = document.createElement("div");

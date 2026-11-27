@@ -176,8 +176,17 @@ input:focus, button:focus-visible, select:focus { outline: 2px solid var(--accen
 }
 
 /* ---------- Shared Harbor ---------- */
-.docks { width: min(340px, calc(40vw / var(--ui-z, 1))); max-height: calc(100vh / var(--ui-z, 1) - 270px); }
-.docks h3:first-child { margin-top: 0; }
+/* The Harbor's top bar (ui/TopBar.tsx): its guide to the docks, and the ways to be shown each place. */
+.harbor-guide-go { display: flex; flex-direction: column; gap: 5px; margin-top: 8px; }
+.timber .harbor-guide-go button { text-align: left; min-height: 30px; }
+/* A phone: one tab leaves room for words, so the bar keeps the Harbor's name and the tab's label, and is only as
+   wide as they are (clear of the party's portraits down the right). Its drop opens across the screen under it. */
+@media (max-width: 760px), (max-height: 520px) {
+  .top-bar.harbor-top { right: auto; max-width: calc(100% - 82px); align-items: flex-start; }
+  .harbor-top .top-name { display: flex; }
+  .harbor-top .top-tab .top-tab-label { display: inline; }
+  .harbor-top .top-drop { width: calc(100vw / var(--ui-z, 1) - 12px); }
+}
 .ships li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px dashed #37335a; }
 .ships { margin-bottom: 10px; }
 .crew .panel h3 { margin-top: 0; }
@@ -185,7 +194,6 @@ input:focus, button:focus-visible, select:focus { outline: 2px solid var(--accen
 .dot.on { background: var(--good); }
 .harbor-chat { left: 10px; right: auto; bottom: 12px; width: min(340px, calc(40vw / var(--ui-z, 1))); }
 .harbor-chat .chat-lines { height: 110px; }
-.harbor-view .docks { bottom: auto; }
 .sheet-wrap { width: 100%; max-width: 560px; max-height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
 .sheet-wrap .panel { max-width: none; }
 
@@ -457,7 +465,21 @@ body.drag-carrying, body.drag-carrying * { cursor: grabbing !important; }
 }
 
 /* ---------- Account and sign-in ---------- */
-.overlay .panel.account { max-width: 460px; display: flex; flex-direction: column; gap: 8px; }
+/* The account window (Account.tsx AccountPanel): a wood window (ui/WoodWindow.tsx). */
+.wood-window.account-window { width: min(460px, 100%); max-height: 100%; display: flex; flex-direction: column; }
+.account-foot { display: flex; justify-content: flex-end; }
+/* In the wood: the two ways in as one pair of tabs, the fields the window's width, the notes on a darker inset. */
+.timber .signin { align-items: stretch; gap: 10px; }
+.timber .signin .field { max-width: none; gap: 3px; }
+.timber .signin .field > span { font-size: 13px; color: #c9ad8c; }
+.timber .signin .field input { width: 100%; box-sizing: border-box; min-height: 34px; font-size: 15px; }
+.timber .signin-modes { display: flex; gap: 0; }
+.timber .signin-modes button { flex: 1; min-height: 34px; }
+.timber .signin-modes button:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.timber .signin-modes button:last-child { margin-left: -1px; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.timber .signin-returning, .timber .signin-reset-note { max-width: none; padding: 9px 11px; border: 1px solid #1c0d0e; border-radius: 3px; background: rgba(10, 5, 4, 0.42); box-shadow: 0 0 0 1px rgba(107, 53, 36, 0.5); }
+.timber .signin > .row:has(> button.primary) { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.timber .signin button.primary { min-height: 36px; padding: 4px 16px; }
 .signin { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .signin .field { width: 100%; max-width: 320px; margin: 0; }
 .signin .field small { display: block; margin-top: 2px; }
@@ -506,21 +528,7 @@ button.nudge { border-color: var(--gold); color: var(--gold); }
 .options { position: relative; display: inline-flex; flex: none; }
 .icon-btn { display: inline-grid; place-items: center; }
 .topbar .options-gear { padding: 2px 6px; min-height: 26px; }
-.options-row { display: flex; align-items: center; gap: 8px; }
-.options-label { flex: 1; }
-.options-value { min-width: 4ch; text-align: right; font-variant-numeric: tabular-nums; }
-.options-row input[type="range"] { flex: 1.4; min-width: 0; padding: 0; accent-color: var(--accent); }
-.options-sound { flex: 1; display: flex; align-items: center; gap: 8px; text-align: left; }
-.options-switch { min-width: 4ch; text-align: center; padding: 0 4px; border: 1px solid var(--line); color: var(--muted); font-size: 12px; }
-.options-switch.on { border-color: var(--good); color: var(--good); }
-.options-action { width: 100%; text-align: left; }
-.options-note { margin: -4px 0 0; font-size: 12px; }
 @media (pointer: coarse) {
   .topbar .options-gear { min-width: 36px; min-height: 32px; }
-  .options-row button.small { min-width: 40px; }
 }
-
-/* The engine's own sliders under the master volume, set in a little. */
-.options-sub { padding-left: 12px; font-size: 0.92em; }
-.options-check { flex: 1; display: flex; align-items: center; gap: 6px; }
 

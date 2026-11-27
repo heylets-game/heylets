@@ -13,6 +13,9 @@ line off once it is done.
 
 - The keepers' rooms (Talk on the strip over the bottom bar) could use the top bar the hut and the pub have,
   `apps/game/src/client/ui/TopBar.tsx`: the room's name, what to do here, and Leave.
+- Windows still in the old pixel frame and orange buttons: the party picker (`PartyPicker.tsx`), the hero sheet, the
+  sea bag's buttons. Move them to the new wood (`ui/WoodWindow.tsx`, theme.css `.timber`), as the menus, the account
+  window and the chat are.
 
 ## Release notes
 
