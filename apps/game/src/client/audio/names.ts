@@ -48,8 +48,8 @@ export const soundName = {
   attackVoice: (f: Fighter) => voice(f, "attack"),
   /** A blow landing. */
   impact: (ability: string, style: AttackStyle) => [`impact.${slug(ability)}`, `impact.${style}`, "impact"],
-  /** Laid over the impact of a critical hit. */
-  crit: () => ["impact.crit"],
+  /** Laid over the impact of a critical hit, by the side that landed it (a hero's crit and an enemy's sound apart). */
+  crit: (by?: Fighter["side"]) => [...(by ? [`impact.crit.${by}`] : []), "impact.crit"],
   /** The target's voice as it is hit. */
   hurt: (f: Fighter) => voice(f, "hurt"),
   miss: (ability: string, style: AttackStyle) => [`miss.${slug(ability)}`, `miss.${style}`, "miss"],
@@ -125,7 +125,7 @@ export function soundNames(): Set<string> {
   for (const s of SURFACE_SOUNDS) add(soundName.surface(s));
   for (const c of ZONE_CONDITION_SOUNDS) add(soundName.effect(c));
   for (const t of ["poison", "fire"]) add(soundName.tick(t));
-  [soundName.crit(), soundName.healFailed(), soundName.flee(true), soundName.flee(false), soundName.yourTurn(), soundName.blip(), soundName.levelUp(), soundName.thunder()].forEach(add);
+  [soundName.crit("hero"), soundName.crit("enemy"), soundName.healFailed(), soundName.flee(true), soundName.flee(false), soundName.yourTurn(), soundName.blip(), soundName.levelUp(), soundName.thunder()].forEach(add);
   add(["stinger.boss", "stinger.battle_start", "stinger.victory", "stinger.defeat"]);
   // On file, with nothing playing them yet: loot taken, gold paid and something picked up.
   add(["loot", ...RARITIES.map((r) => `loot.${r}`), "gold", "pickup", ...RESOURCE_KINDS.map((k) => `pickup.${k}`)]);

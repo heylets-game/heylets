@@ -16,7 +16,7 @@ export type SynthGround = "grass" | "stone" | "wood" | "floor" | "mud" | "water"
 
 /** Every built-in combat sound. */
 export type SynthCombat =
-  | "blade" | "blunt" | "swing" | "arrow_loose" | "arrow_hit" | "spell_cast" | "spell_hit" | "zap" | "crit" | "crack"
+  | "blade" | "blunt" | "swing" | "arrow_loose" | "arrow_hit" | "spell_cast" | "spell_hit" | "zap" | "crit" | "crit_blade" | "crack"
   | "whiff" | "fizzle"
   | "heal" | "heal_fail"
   | "bleed" | "burn" | "stun" | "buff" | "debuff"
@@ -72,7 +72,7 @@ const STEP: Record<SynthGround, { filter: BiquadFilterType; freq: number; q: num
 
 /** How long each sound runs, so the offline render is no longer than it needs to be. */
 const COMBAT_LENGTH: Record<SynthCombat, number> = {
-  blade: 0.45, blunt: 0.4, swing: 0.28, arrow_loose: 0.4, arrow_hit: 0.3, spell_cast: 0.5, spell_hit: 0.55, zap: 0.6, crit: 1.0, crack: 0.45,
+  blade: 0.45, blunt: 0.4, swing: 0.28, arrow_loose: 0.4, arrow_hit: 0.3, spell_cast: 0.5, spell_hit: 0.55, zap: 0.6, crit: 1.0, crit_blade: 0.75, crack: 0.45,
   whiff: 0.25, fizzle: 0.25,
   heal: 0.8, heal_fail: 0.3,
   bleed: 0.15, burn: 0.35, stun: 0.35, buff: 0.3, debuff: 0.3,
@@ -255,6 +255,18 @@ function combat(r: Render, sound: SynthCombat) {
       for (let i = 0; i < 12; i++) toneAt(r, t + 0.06 + i * 0.05 + r.rnd() * 0.04, { type: "sine", freq: 3000 + r.rnd() * 4500, decay: 0.03 + r.rnd() * 0.04, gain: v * (0.16 - i * 0.011) });
       break;
     }
+    case "crit_blade":
+      // An enemy's critical hit: a heavy sword blow. The blade's shwink as it bites (a bright scrape sweeping up
+      // and a short, hard ring of steel), a deep, heavy impact with a crunch in it, and a dark rumble after.
+      noiseAt(r, t, { filter: "bandpass", freq: 1400 * p, freqTo: 6500 * p, q: 4, decay: 0.13, gain: v * 0.75 });
+      toneAt(r, t, { type: "sawtooth", freq: 650 * p, freqTo: 2600 * p, attack: 0.002, decay: 0.08, gain: v * 0.2, cut: 6000 });
+      for (const [f, g, d] of [[1850, 0.12, 0.42], [2960, 0.08, 0.32], [4410, 0.05, 0.22]] as const) toneAt(r, t + 0.02, { type: "sine", freq: f * p, decay: d, gain: v * g });
+      toneAt(r, t + 0.015, { type: "sine", freq: 125 * p, freqTo: 36, decay: 0.36, gain: v * 1.25 });
+      noiseAt(r, t + 0.015, { filter: "lowpass", freq: 750 * p, q: 0.9, decay: 0.16, gain: v * 1.0 });
+      noiseAt(r, t + 0.02, { filter: "bandpass", freq: 1150 * p, q: 1.5, decay: 0.06, gain: v * 0.6 });
+      noiseAt(r, t + 0.045, { filter: "bandpass", freq: 850 * p, q: 1.8, decay: 0.05, gain: v * 0.45 });
+      toneAt(r, t + 0.03, { type: "triangle", freq: 58 * p, freqTo: 34, decay: 0.55, gain: v * 0.45 });
+      break;
     case "crack":
       // A sharp crack, a drop in the floor, and a little ring after (a heavy pick blow, a fishing line snapping).
       noiseAt(r, t, { filter: "highpass", freq: 3200 * p, q: 1.8, decay: 0.04, gain: v * 0.6 });

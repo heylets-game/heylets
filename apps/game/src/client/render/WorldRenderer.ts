@@ -2169,7 +2169,7 @@ export class WorldRenderer {
     const style = attackStyle(name);
     this.attack(actorId, targetId, name, !!opts.crit, () => {
       if (opts.landed) {
-        sounds.impact(name, style, !!opts.crit, this.fighter(targetId), this.spot(targetId));
+        sounds.impact(name, style, !!opts.crit, this.fighter(targetId), this.spot(targetId), this.fighter(actorId));
         this.recoil(targetId, actorId, opts.crit ? 0.6 : 0.38);
       } else sounds.miss(name, style, this.spot(targetId));
       opts.onImpact?.();
@@ -2369,7 +2369,7 @@ export class WorldRenderer {
   /** That shot or spell arriving: the sound of it landing on its target, or going wide. */
   landed(targetId: string, name: string, hit: boolean, crit = false, fromId: string | null = null) {
     if (hit) {
-      sounds.impact(name, attackStyle(name), crit, this.fighter(targetId), this.spot(targetId));
+      sounds.impact(name, attackStyle(name), crit, this.fighter(targetId), this.spot(targetId), fromId ? this.fighter(fromId) : undefined);
       this.recoil(targetId, fromId, crit ? 0.5 : 0.3);
     } else sounds.miss(name, attackStyle(name), this.spot(targetId));
   }

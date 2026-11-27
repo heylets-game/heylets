@@ -28,7 +28,7 @@ The game asks for sounds by name, most specific first, and plays the first one t
 |---|---|
 | `footstep.<ground>` → `footstep` | A foot lands. Ground is `plains`, `forest`, `hills`, `cobble`, `dock`, `mud`, `floor`, `rampart`. |
 | `attack.<ability>` → `attack.<melee\|ranged\|magic>` → `attack` | An attack sets off. |
-| `impact.<ability>` → `impact.<style>` → `impact` | A blow lands. `impact.crit` is laid over it on a critical hit. |
+| `impact.<ability>` → `impact.<style>` → `impact` | A blow lands. On a critical hit `impact.crit.<hero\|enemy>` → `impact.crit` is laid over it, by the side that landed it. |
 | `miss.<ability>` → `miss.<style>` → `miss` | An attack misses. |
 | `hero.<class>.<attack\|hurt\|down>` → `hero.<…>` | A hero's voice. |
 | `enemy.<kind>.<attack\|hurt\|down>` → `enemy.<…>` | An enemy's voice, such as `enemy.wolf.attack`. |
