@@ -193,7 +193,7 @@ describe("a turn is one fighter's alone", () => {
       const events: ZoneEvent[] = [];
       state = must(state, { type: "use", by: "ann", unit: "ann", ability: "summon_sea_turtle", at: at(4, 6) }, events);
       const turtle = state.units.find((u) => u.summon)!;
-      expect(events).toContainEqual({ t: "summoned", id: turtle.id, by: "ann" });
+      expect(events).toContainEqual({ t: "summoned", id: turtle.id, by: "ann", at: at(4, 6) });
       return { state, turtle: turtle.id };
     }
 

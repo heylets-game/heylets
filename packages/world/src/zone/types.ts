@@ -608,8 +608,11 @@ export type ZoneEvent =
   /** Gone from one hex and there on another, with nothing crossed between (Smuggler's Route, Tactical Retreat). */
   /** `phase`: through Phase Treads, in place of a Jump (drawn as its own shimmer). */
   | { t: "blinked"; id: string; from: HexPos; to: HexPos; phase?: true }
-  /** A creature is called into the fight (Summon Sea Turtle) by `by`; or one is gone (it fell, was replaced, or the fight is over). */
-  | { t: "summoned"; id: string; by: string }
+  /**
+   * A creature is called into the fight (Summon Sea Turtle, Brood Swarm) by `by`, standing `at` (it may have moved on by
+   * the end of the same step: it is drawn coming in here); or one is gone (it fell, was replaced, or the fight is over).
+   */
+  | { t: "summoned"; id: string; by: string; at: HexPos }
   | { t: "dismissed"; id: string }
   /** A hero gets away from the fight (Flee): out of the order, walking free. */
   | { t: "fled"; id: string }

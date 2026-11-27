@@ -1031,7 +1031,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
             timers.current.push(setTimeout(() => spells.current?.aura({ key: `field:${holder}`, follow: () => renderer.current?.unitFeet(holder) ?? null, holding }, CONDITION_INFO.slowing_field.color, SLOWING_FIELD.reach), 1150));
           }
           // A call for more of its side (a Brood Swarm): where each it calls will stand, for its move to bring them there.
-          const calls = events.flatMap((e) => (e.t === "summoned" && e.by === ev.id ? next.units.filter((u) => u.id === e.id).map((u) => point(u.pos)) : []));
+          // Where each was called, not where it is by the end of this: it may take its turn and walk off in it.
+          const calls = events.flatMap((e) => (e.t === "summoned" && e.by === ev.id ? [point(e.at)] : []));
           if (own === "burst" && view) return void view.burst(ev.id, ev.name, false, thenOn(() => {}), !!ev.again, centre, calls);
           // One thrown onto a clump of hexes (`area`: an Acid Splash, an Immolate) lands in the middle of the clump, not
           // on the hex it was aimed at, which is at one edge of it.
@@ -1842,9 +1843,10 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       } else if (ev.t === "joined") {
         say(`${name(ev.id)} arrives.`);
       } else if (ev.t === "summoned") {
-        // In the picture from now, as it is at the end of this (it is gone again by then if it fell in it).
+        // In the picture from now, on the hex it was called to (its walk from there, if it takes a turn in this, is told
+        // after), and otherwise as it is at the end of this (it is gone again by then if it fell in it).
         const called = next.units.find((u) => u.id === ev.id);
-        if (called && !find(ev.id)) draft.units.push(structuredClone(called));
+        if (called && !find(ev.id)) draft.units.push({ ...structuredClone(called), pos: { ...ev.at } });
         say(`${name(ev.by)} calls a ${name(ev.id)}.`);
       } else if (ev.t === "dismissed") {
         draft.units = draft.units.filter((u) => u.id !== ev.id);

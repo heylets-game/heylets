@@ -128,7 +128,7 @@ export function summonCall(ctx: Ctx, caller: Unit, call: SummonCall, at: HexPos)
       summon: { by: caller.id },
     };
     state.units.push(unit);
-    ctx.events.push({ t: "summoned", id: unit.id, by: caller.id });
+    ctx.events.push({ t: "summoned", id: unit.id, by: caller.id, at: { ...unit.pos } });
     joinBehind(ctx, caller, unit, called.length, def.move);
     called.push(unit);
   });
@@ -206,7 +206,7 @@ export function callKin(ctx: Ctx, caller: Unit, call: KinCall): Unit[] {
     const unit = enemyUnit(state, kind, { q: pos.q, r: pos.r }, caller.group ?? "", caller.level);
     unit.summon = { by: caller.id };
     state.units.push(unit);
-    ctx.events.push({ t: "summoned", id: unit.id, by: caller.id });
+    ctx.events.push({ t: "summoned", id: unit.id, by: caller.id, at: { ...unit.pos } });
     joinBehind(ctx, caller, unit, called.length, ENEMIES[kind].move);
     called.push(unit);
   }
