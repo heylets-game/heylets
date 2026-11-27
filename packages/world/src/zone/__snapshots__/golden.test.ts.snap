@@ -77226,6 +77226,1146 @@ exports[`golden D: terrain, pushes, falls, wet > a bellows blast knocks them bac
 ]
 `;
 
+exports[`golden D: terrain, pushes, falls, wet > a harpoon drags a far enemy over an edge, more dice 1`] = `
+[
+  {
+    "events": [
+      {
+        "at": undefined,
+        "id": "ann",
+        "name": "Harpoon",
+        "t": "used",
+        "target": "e101",
+        "what": "harpoon_shot",
+      },
+      {
+        "roll": {
+          "adv": 0,
+          "bonus": 1,
+          "crit": false,
+          "d20": [
+            13,
+          ],
+          "id": "ann",
+          "kept": 13,
+          "kind": "attack",
+          "label": "Harpoon",
+          "ok": true,
+          "target": "e101",
+          "total": 14,
+          "vs": 12,
+        },
+        "t": "roll",
+      },
+      {
+        "actor": "ann",
+        "amount": 4,
+        "crit": false,
+        "dice": {
+          "d": 8,
+          "faces": [
+            1,
+          ],
+          "plus": 3,
+          "total": 4,
+        },
+        "t": "hit",
+        "target": "e101",
+        "what": "harpoon_shot",
+      },
+      {
+        "from": {
+          "q": 5,
+          "r": 6,
+        },
+        "id": "ann",
+        "pulled": 1,
+        "t": "shoved",
+        "target": "e101",
+        "to": {
+          "q": 4,
+          "r": 6,
+        },
+      },
+      {
+        "roll": {
+          "adv": 0,
+          "bonus": 0,
+          "crit": false,
+          "d20": [
+            11,
+          ],
+          "id": "e101",
+          "kept": 11,
+          "kind": "save",
+          "label": "Catch the edge",
+          "ok": false,
+          "total": 11,
+          "vs": 13,
+        },
+        "t": "roll",
+      },
+      {
+        "from": {
+          "q": 4,
+          "r": 6,
+        },
+        "id": "ann",
+        "pulled": 2,
+        "t": "shoved",
+        "target": "e101",
+        "to": {
+          "q": 3,
+          "r": 6,
+        },
+      },
+      {
+        "id": "e101",
+        "levels": 2,
+        "t": "fell",
+      },
+      {
+        "actor": "ann",
+        "amount": 4,
+        "crit": false,
+        "dice": {
+          "d": 4,
+          "faces": [
+            4,
+          ],
+          "plus": 0,
+          "total": 4,
+        },
+        "t": "hit",
+        "target": "e101",
+        "what": "fall",
+      },
+      {
+        "kind": "prone",
+        "rounds": 1,
+        "t": "condition",
+        "target": "e101",
+      },
+    ],
+    "surfaces": [],
+    "units": [
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 900,
+        "id": "ann",
+        "pos": {
+          "q": 1,
+          "r": 6,
+        },
+      },
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 900,
+        "id": "bob",
+        "pos": {
+          "q": 0,
+          "r": 6,
+        },
+      },
+      {
+        "conditions": [
+          [
+            "prone",
+            1,
+            null,
+          ],
+        ],
+        "down": false,
+        "hp": 892,
+        "id": "e101",
+        "pos": {
+          "q": 3,
+          "r": 6,
+        },
+      },
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 900,
+        "id": "e102",
+        "pos": {
+          "q": 3,
+          "r": 7,
+        },
+      },
+    ],
+  },
+  {
+    "events": [
+      {
+        "at": undefined,
+        "id": "ann",
+        "name": "Harpoon",
+        "t": "used",
+        "target": "e101",
+        "what": "harpoon_shot",
+      },
+      {
+        "roll": {
+          "adv": 0,
+          "bonus": 1,
+          "crit": false,
+          "d20": [
+            15,
+          ],
+          "id": "ann",
+          "kept": 15,
+          "kind": "attack",
+          "label": "Harpoon",
+          "ok": true,
+          "target": "e101",
+          "total": 16,
+          "vs": 12,
+        },
+        "t": "roll",
+      },
+      {
+        "actor": "ann",
+        "amount": 6,
+        "crit": false,
+        "dice": {
+          "d": 8,
+          "faces": [
+            3,
+          ],
+          "plus": 3,
+          "total": 6,
+        },
+        "t": "hit",
+        "target": "e101",
+        "what": "harpoon_shot",
+      },
+      {
+        "from": {
+          "q": 5,
+          "r": 6,
+        },
+        "id": "ann",
+        "pulled": 1,
+        "t": "shoved",
+        "target": "e101",
+        "to": {
+          "q": 4,
+          "r": 6,
+        },
+      },
+      {
+        "roll": {
+          "adv": 0,
+          "bonus": 0,
+          "crit": false,
+          "d20": [
+            6,
+          ],
+          "id": "e101",
+          "kept": 6,
+          "kind": "save",
+          "label": "Catch the edge",
+          "ok": false,
+          "total": 6,
+          "vs": 13,
+        },
+        "t": "roll",
+      },
+      {
+        "from": {
+          "q": 4,
+          "r": 6,
+        },
+        "id": "ann",
+        "pulled": 2,
+        "t": "shoved",
+        "target": "e101",
+        "to": {
+          "q": 3,
+          "r": 6,
+        },
+      },
+      {
+        "id": "e101",
+        "levels": 2,
+        "t": "fell",
+      },
+      {
+        "actor": "ann",
+        "amount": 3,
+        "crit": false,
+        "dice": {
+          "d": 4,
+          "faces": [
+            3,
+          ],
+          "plus": 0,
+          "total": 3,
+        },
+        "t": "hit",
+        "target": "e101",
+        "what": "fall",
+      },
+      {
+        "kind": "prone",
+        "rounds": 1,
+        "t": "condition",
+        "target": "e101",
+      },
+    ],
+    "surfaces": [],
+    "units": [
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 900,
+        "id": "ann",
+        "pos": {
+          "q": 1,
+          "r": 6,
+        },
+      },
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 900,
+        "id": "bob",
+        "pos": {
+          "q": 0,
+          "r": 6,
+        },
+      },
+      {
+        "conditions": [
+          [
+            "prone",
+            1,
+            null,
+          ],
+        ],
+        "down": false,
+        "hp": 891,
+        "id": "e101",
+        "pos": {
+          "q": 3,
+          "r": 6,
+        },
+      },
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 900,
+        "id": "e102",
+        "pos": {
+          "q": 3,
+          "r": 7,
+        },
+      },
+    ],
+  },
+  {
+    "events": [
+      {
+        "at": undefined,
+        "id": "ann",
+        "name": "Harpoon",
+        "t": "used",
+        "target": "e101",
+        "what": "harpoon_shot",
+      },
+      {
+        "roll": {
+          "adv": 0,
+          "bonus": 1,
+          "crit": false,
+          "d20": [
+            15,
+          ],
+          "id": "ann",
+          "kept": 15,
+          "kind": "attack",
+          "label": "Harpoon",
+          "ok": true,
+          "target": "e101",
+          "total": 16,
+          "vs": 12,
+        },
+        "t": "roll",
+      },
+      {
+        "actor": "ann",
+        "amount": 4,
+        "crit": false,
+        "dice": {
+          "d": 8,
+          "faces": [
+            1,
+          ],
+          "plus": 3,
+          "total": 4,
+        },
+        "t": "hit",
+        "target": "e101",
+        "what": "harpoon_shot",
+      },
+      {
+        "from": {
+          "q": 5,
+          "r": 6,
+        },
+        "id": "ann",
+        "pulled": 1,
+        "t": "shoved",
+        "target": "e101",
+        "to": {
+          "q": 4,
+          "r": 6,
+        },
+      },
+      {
+        "roll": {
+          "adv": 0,
+          "bonus": 0,
+          "crit": false,
+          "d20": [
+            10,
+          ],
+          "id": "e101",
+          "kept": 10,
+          "kind": "save",
+          "label": "Catch the edge",
+          "ok": false,
+          "total": 10,
+          "vs": 13,
+        },
+        "t": "roll",
+      },
+      {
+        "from": {
+          "q": 4,
+          "r": 6,
+        },
+        "id": "ann",
+        "pulled": 2,
+        "t": "shoved",
+        "target": "e101",
+        "to": {
+          "q": 3,
+          "r": 6,
+        },
+      },
+      {
+        "id": "e101",
+        "levels": 2,
+        "t": "fell",
+      },
+      {
+        "actor": "ann",
+        "amount": 1,
+        "crit": false,
+        "dice": {
+          "d": 4,
+          "faces": [
+            1,
+          ],
+          "plus": 0,
+          "total": 1,
+        },
+        "t": "hit",
+        "target": "e101",
+        "what": "fall",
+      },
+      {
+        "kind": "prone",
+        "rounds": 1,
+        "t": "condition",
+        "target": "e101",
+      },
+    ],
+    "surfaces": [],
+    "units": [
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 900,
+        "id": "ann",
+        "pos": {
+          "q": 1,
+          "r": 6,
+        },
+      },
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 900,
+        "id": "bob",
+        "pos": {
+          "q": 0,
+          "r": 6,
+        },
+      },
+      {
+        "conditions": [
+          [
+            "prone",
+            1,
+            null,
+          ],
+        ],
+        "down": false,
+        "hp": 895,
+        "id": "e101",
+        "pos": {
+          "q": 3,
+          "r": 6,
+        },
+      },
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 900,
+        "id": "e102",
+        "pos": {
+          "q": 3,
+          "r": 7,
+        },
+      },
+    ],
+  },
+  {
+    "events": [
+      {
+        "at": undefined,
+        "id": "ann",
+        "name": "Harpoon",
+        "t": "used",
+        "target": "e101",
+        "what": "harpoon_shot",
+      },
+      {
+        "roll": {
+          "adv": 0,
+          "bonus": 1,
+          "crit": false,
+          "d20": [
+            19,
+          ],
+          "id": "ann",
+          "kept": 19,
+          "kind": "attack",
+          "label": "Harpoon",
+          "ok": true,
+          "target": "e101",
+          "total": 20,
+          "vs": 12,
+        },
+        "t": "roll",
+      },
+      {
+        "actor": "ann",
+        "amount": 6,
+        "crit": false,
+        "dice": {
+          "d": 8,
+          "faces": [
+            3,
+          ],
+          "plus": 3,
+          "total": 6,
+        },
+        "t": "hit",
+        "target": "e101",
+        "what": "harpoon_shot",
+      },
+      {
+        "from": {
+          "q": 5,
+          "r": 6,
+        },
+        "id": "ann",
+        "pulled": 1,
+        "t": "shoved",
+        "target": "e101",
+        "to": {
+          "q": 4,
+          "r": 6,
+        },
+      },
+      {
+        "roll": {
+          "adv": 0,
+          "bonus": 0,
+          "crit": false,
+          "d20": [
+            5,
+          ],
+          "id": "e101",
+          "kept": 5,
+          "kind": "save",
+          "label": "Catch the edge",
+          "ok": false,
+          "total": 5,
+          "vs": 13,
+        },
+        "t": "roll",
+      },
+      {
+        "from": {
+          "q": 4,
+          "r": 6,
+        },
+        "id": "ann",
+        "pulled": 2,
+        "t": "shoved",
+        "target": "e101",
+        "to": {
+          "q": 3,
+          "r": 6,
+        },
+      },
+      {
+        "id": "e101",
+        "levels": 2,
+        "t": "fell",
+      },
+      {
+        "actor": "ann",
+        "amount": 1,
+        "crit": false,
+        "dice": {
+          "d": 4,
+          "faces": [
+            1,
+          ],
+          "plus": 0,
+          "total": 1,
+        },
+        "t": "hit",
+        "target": "e101",
+        "what": "fall",
+      },
+      {
+        "kind": "prone",
+        "rounds": 1,
+        "t": "condition",
+        "target": "e101",
+      },
+    ],
+    "surfaces": [],
+    "units": [
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 900,
+        "id": "ann",
+        "pos": {
+          "q": 1,
+          "r": 6,
+        },
+      },
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 900,
+        "id": "bob",
+        "pos": {
+          "q": 0,
+          "r": 6,
+        },
+      },
+      {
+        "conditions": [
+          [
+            "prone",
+            1,
+            null,
+          ],
+        ],
+        "down": false,
+        "hp": 893,
+        "id": "e101",
+        "pos": {
+          "q": 3,
+          "r": 6,
+        },
+      },
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 900,
+        "id": "e102",
+        "pos": {
+          "q": 3,
+          "r": 7,
+        },
+      },
+    ],
+  },
+  {
+    "events": [
+      {
+        "at": undefined,
+        "id": "ann",
+        "name": "Harpoon",
+        "t": "used",
+        "target": "e101",
+        "what": "harpoon_shot",
+      },
+      {
+        "roll": {
+          "adv": 0,
+          "bonus": 1,
+          "crit": false,
+          "d20": [
+            14,
+          ],
+          "id": "ann",
+          "kept": 14,
+          "kind": "attack",
+          "label": "Harpoon",
+          "ok": true,
+          "target": "e101",
+          "total": 15,
+          "vs": 12,
+        },
+        "t": "roll",
+      },
+      {
+        "actor": "ann",
+        "amount": 10,
+        "crit": false,
+        "dice": {
+          "d": 8,
+          "faces": [
+            7,
+          ],
+          "plus": 3,
+          "total": 10,
+        },
+        "t": "hit",
+        "target": "e101",
+        "what": "harpoon_shot",
+      },
+      {
+        "from": {
+          "q": 5,
+          "r": 6,
+        },
+        "id": "ann",
+        "pulled": 1,
+        "t": "shoved",
+        "target": "e101",
+        "to": {
+          "q": 4,
+          "r": 6,
+        },
+      },
+      {
+        "roll": {
+          "adv": 0,
+          "bonus": 0,
+          "crit": false,
+          "d20": [
+            5,
+          ],
+          "id": "e101",
+          "kept": 5,
+          "kind": "save",
+          "label": "Catch the edge",
+          "ok": false,
+          "total": 5,
+          "vs": 13,
+        },
+        "t": "roll",
+      },
+      {
+        "from": {
+          "q": 4,
+          "r": 6,
+        },
+        "id": "ann",
+        "pulled": 2,
+        "t": "shoved",
+        "target": "e101",
+        "to": {
+          "q": 3,
+          "r": 6,
+        },
+      },
+      {
+        "id": "e101",
+        "levels": 2,
+        "t": "fell",
+      },
+      {
+        "actor": "ann",
+        "amount": 3,
+        "crit": false,
+        "dice": {
+          "d": 4,
+          "faces": [
+            3,
+          ],
+          "plus": 0,
+          "total": 3,
+        },
+        "t": "hit",
+        "target": "e101",
+        "what": "fall",
+      },
+      {
+        "kind": "prone",
+        "rounds": 1,
+        "t": "condition",
+        "target": "e101",
+      },
+    ],
+    "surfaces": [],
+    "units": [
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 900,
+        "id": "ann",
+        "pos": {
+          "q": 1,
+          "r": 6,
+        },
+      },
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 900,
+        "id": "bob",
+        "pos": {
+          "q": 0,
+          "r": 6,
+        },
+      },
+      {
+        "conditions": [
+          [
+            "prone",
+            1,
+            null,
+          ],
+        ],
+        "down": false,
+        "hp": 887,
+        "id": "e101",
+        "pos": {
+          "q": 3,
+          "r": 6,
+        },
+      },
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 900,
+        "id": "e102",
+        "pos": {
+          "q": 3,
+          "r": 7,
+        },
+      },
+    ],
+  },
+  {
+    "events": [
+      {
+        "at": undefined,
+        "id": "ann",
+        "name": "Harpoon",
+        "t": "used",
+        "target": "e101",
+        "what": "harpoon_shot",
+      },
+      {
+        "roll": {
+          "adv": 0,
+          "bonus": 1,
+          "crit": false,
+          "d20": [
+            11,
+          ],
+          "id": "ann",
+          "kept": 11,
+          "kind": "attack",
+          "label": "Harpoon",
+          "ok": true,
+          "target": "e101",
+          "total": 12,
+          "vs": 12,
+        },
+        "t": "roll",
+      },
+      {
+        "actor": "ann",
+        "amount": 4,
+        "crit": false,
+        "dice": {
+          "d": 8,
+          "faces": [
+            1,
+          ],
+          "plus": 3,
+          "total": 4,
+        },
+        "t": "hit",
+        "target": "e101",
+        "what": "harpoon_shot",
+      },
+      {
+        "from": {
+          "q": 5,
+          "r": 6,
+        },
+        "id": "ann",
+        "pulled": 1,
+        "t": "shoved",
+        "target": "e101",
+        "to": {
+          "q": 4,
+          "r": 6,
+        },
+      },
+      {
+        "roll": {
+          "adv": 0,
+          "bonus": 0,
+          "crit": false,
+          "d20": [
+            14,
+          ],
+          "id": "e101",
+          "kept": 14,
+          "kind": "save",
+          "label": "Catch the edge",
+          "ok": true,
+          "total": 14,
+          "vs": 13,
+        },
+        "t": "roll",
+      },
+      {
+        "at": {
+          "q": 3,
+          "r": 6,
+        },
+        "id": "e101",
+        "t": "held",
+      },
+    ],
+    "surfaces": [],
+    "units": [
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 900,
+        "id": "ann",
+        "pos": {
+          "q": 1,
+          "r": 6,
+        },
+      },
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 900,
+        "id": "bob",
+        "pos": {
+          "q": 0,
+          "r": 6,
+        },
+      },
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 896,
+        "id": "e101",
+        "pos": {
+          "q": 4,
+          "r": 6,
+        },
+      },
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 900,
+        "id": "e102",
+        "pos": {
+          "q": 3,
+          "r": 7,
+        },
+      },
+    ],
+  },
+  {
+    "events": [
+      {
+        "at": undefined,
+        "id": "ann",
+        "name": "Harpoon",
+        "t": "used",
+        "target": "e101",
+        "what": "harpoon_shot",
+      },
+      {
+        "roll": {
+          "adv": 0,
+          "bonus": 1,
+          "crit": false,
+          "d20": [
+            1,
+          ],
+          "id": "ann",
+          "kept": 1,
+          "kind": "attack",
+          "label": "Harpoon",
+          "ok": false,
+          "target": "e101",
+          "total": 2,
+          "vs": 12,
+        },
+        "t": "roll",
+      },
+      {
+        "actor": "ann",
+        "t": "miss",
+        "target": "e101",
+        "what": "harpoon_shot",
+      },
+    ],
+    "surfaces": [],
+    "units": [
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 900,
+        "id": "ann",
+        "pos": {
+          "q": 1,
+          "r": 6,
+        },
+      },
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 900,
+        "id": "bob",
+        "pos": {
+          "q": 0,
+          "r": 6,
+        },
+      },
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 900,
+        "id": "e101",
+        "pos": {
+          "q": 5,
+          "r": 6,
+        },
+      },
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 900,
+        "id": "e102",
+        "pos": {
+          "q": 3,
+          "r": 7,
+        },
+      },
+    ],
+  },
+  {
+    "events": [
+      {
+        "at": undefined,
+        "id": "ann",
+        "name": "Harpoon",
+        "t": "used",
+        "target": "e101",
+        "what": "harpoon_shot",
+      },
+      {
+        "roll": {
+          "adv": 0,
+          "bonus": 1,
+          "crit": false,
+          "d20": [
+            4,
+          ],
+          "id": "ann",
+          "kept": 4,
+          "kind": "attack",
+          "label": "Harpoon",
+          "ok": false,
+          "target": "e101",
+          "total": 5,
+          "vs": 12,
+        },
+        "t": "roll",
+      },
+      {
+        "actor": "ann",
+        "t": "miss",
+        "target": "e101",
+        "what": "harpoon_shot",
+      },
+    ],
+    "surfaces": [],
+    "units": [
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 900,
+        "id": "ann",
+        "pos": {
+          "q": 1,
+          "r": 6,
+        },
+      },
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 900,
+        "id": "bob",
+        "pos": {
+          "q": 0,
+          "r": 6,
+        },
+      },
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 900,
+        "id": "e101",
+        "pos": {
+          "q": 5,
+          "r": 6,
+        },
+      },
+      {
+        "conditions": [],
+        "down": false,
+        "hp": 900,
+        "id": "e102",
+        "pos": {
+          "q": 3,
+          "r": 7,
+        },
+      },
+    ],
+  },
+]
+`;
+
 exports[`golden D: terrain, pushes, falls, wet > a peal knocks an enemy back 1`] = `
 [
   {
@@ -77479,6 +78619,35 @@ exports[`golden D: terrain, pushes, falls, wet > a peal knocks an enemy back 1`]
         },
       },
     ],
+  },
+]
+`;
+
+exports[`golden D: terrain, pushes, falls, wet > a pike drags a far enemy in, more dice 1`] = `
+[
+  {
+    "bad": "Out of range.",
+  },
+  {
+    "bad": "Out of range.",
+  },
+  {
+    "bad": "Out of range.",
+  },
+  {
+    "bad": "Out of range.",
+  },
+  {
+    "bad": "Out of range.",
+  },
+  {
+    "bad": "Out of range.",
+  },
+  {
+    "bad": "Out of range.",
+  },
+  {
+    "bad": "Out of range.",
   },
 ]
 `;

@@ -8,7 +8,7 @@
 import { hexDistance, hexNeighbors, hexSegment, posKey, type HexPos } from "@gantt-quest/core";
 import { ABILITIES, BARD_AURA, ENEMIES, onlyInFights, type AbilityDef, type EffectKind } from "../content";
 import { tileAt, type Poi } from "../map";
-import { DEBUFFS, UNTIMED_KEEPS, attackMade, addCondition, addUses, addShield, addStacks, inflict, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, removeCondition, momentOf, saveBonus, saveMods, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
+import { DEBUFFS, advantageOf, UNTIMED_KEEPS, attackMade, addCondition, addUses, addShield, addStacks, inflict, attackContext, attackRoll, damage, defenceOf, giveAway, has, heal, inWater, removeCondition, liveBudget, momentOf, saveBonus, saveMods, saveRoll, shieldOf, shieldUnit, strikeDown, unseen, type Ctx } from "./engine";
 import { cratesOn, crateById, hurtCrate, isCrateId } from "./crates";
 import { ENEMY_ABILITIES } from "./enemyabilities";
 import { bearing, big, caught, close, blast, blockerAt, courseShare, covers, directionToward, gap, gapTo, meet, nearOf, reaches, ringToward, elevOf, fetterBars, flies, heldAgainst, inFight, lineFrom, pathIn, perkOf, pitAt, reachFrom, roomAt, roomFor, sameHex, sees, seesFor, solid, span, stepCost, strikes, unitById, zoneReach, type Course, type Lean, type Pit } from "./geometry";
@@ -243,7 +243,7 @@ export function shiftInto(state: ZoneState, from: HexPos, to: HexPos, who?: Unit
  * where it is. Failed, it goes over: down a drop it falls (tumble), and into a pit it is lost (sink). `by` is
  * whoever is doing it. Says what became of it; the caller says what a blocked way means.
  */
-export function shift(ctx: Ctx, target: Unit, dest: HexPos, by: string, dc?: number): Shift {
+export function shift(ctx: Ctx, target: Unit, dest: HexPos, by: string, dc?: number, told?: { pulled?: number }): Shift {
   const { state } = ctx;
   if (tooHeavy(ctx, target)) return "heavy";
   const into = shiftInto(state, target.pos, dest, target);
@@ -253,8 +253,8 @@ export function shift(ctx: Ctx, target: Unit, dest: HexPos, by: string, dc?: num
     const boss = target.side === "enemy" && !!ENEMIES[target.kind]?.boss;
     const vs = dc ?? edgeDc(unitById(state, by));
     const down = [has(target, "prone") && "Prone", has(target, "stunned") && "Stunned"].filter((w): w is string => !!w);
-    const adv = down.length > 0 ? (boss ? 0 : -1) : boss ? 1 : 0;
-    const roll = d20(ctx.rng, { kind: "save", id: target.id, label: "Catch the edge", bonus: saveBonus(target, "agi"), vs, adv, ...momentOf({ mods: saveMods(target), advWhy: adv > 0 ? ["Boss"] : adv < 0 ? down : [], cancelled: boss && down.length > 0 ? { adv: ["Boss"], dis: down } : undefined }) });
+    const { adv, advWhy, cancelled } = advantageOf(boss ? ["Boss"] : [], down);
+    const roll = d20(ctx.rng, { kind: "save", id: target.id, label: "Catch the edge", bonus: saveBonus(target, "agi"), vs, adv, ...momentOf({ mods: saveMods(target), advWhy, cancelled }) });
     ctx.events.push({ t: "roll", roll });
     if (roll.ok) {
       ctx.events.push({ t: "held", id: target.id, at: dest });
@@ -266,7 +266,7 @@ export function shift(ctx: Ctx, target: Unit, dest: HexPos, by: string, dc?: num
     return "lost";
   }
   target.pos = dest;
-  ctx.events.push({ t: "shoved", id: by, target: target.id, from: was, to: dest });
+  ctx.events.push({ t: "shoved", id: by, target: target.id, from: was, to: dest, ...(told?.pulled ? { pulled: told.pulled } : {}) });
   if (into.how === "drop") {
     tumble(ctx, target, was, by);
     return "fell";
@@ -357,10 +357,8 @@ function pull(ctx: Ctx, unit: Unit, target: Unit, hexes: number): void {
   for (let i = 0; i < hexes && !target.down; i++) {
     const dest = { q: target.pos.q + dir.q, r: target.pos.r + dir.r };
     if (sameHex(dest, unit.pos)) return;
-    const went = shift(ctx, target, dest, unit.id);
     // Each hex of a drag is told with how far along it is, so it is drawn as one haul.
-    const told = [...ctx.events].reverse().find((e) => e.t === "shoved" && e.target === target.id);
-    if (told && told.t === "shoved" && (went === "moved" || went === "fell")) told.pulled = i + 1;
+    const went = shift(ctx, target, dest, unit.id, undefined, { pulled: i + 1 });
     if (went !== "moved") return;
     // Ground that trips it (ice) ends the drag there.
     if (enterSurface(ctx, target) || target.down) return;
@@ -483,8 +481,7 @@ export function abilityArea(state: ZoneState, unit: Unit, ability: string, at?: 
 
 /** Adds `more` to each AP of a unit's movement for the rest of its turn, if it is in the middle of one in a fight. Says whether it was. */
 function moveMore(state: ZoneState, unit: Unit, more: number): boolean {
-  const enc = state.encounter;
-  const budget = enc && enc.acting.includes(unit.id) && !enc.done.includes(unit.id) ? enc.budgets[unit.id] : undefined;
+  const budget = liveBudget(state, unit);
   if (!budget) return false;
   if (budget.stride > 0) budget.stride += more;
   return true;
@@ -766,11 +763,7 @@ function strike(ctx: Ctx, unit: Unit, def: AbilityDef, tactic: Tactic, target: U
   if (tactic.guide && !target.down && (!tactic.guideSave || !saveRoll(ctx, target, SAVE_STAT.guiding_light, saveDc(unit, def), `Resist ${def.name}`).ok)) addCondition(ctx, target, "guiding_light", tactic.guide);
   if (tactic.drowns && !target.down && !saveRoll(ctx, target, SAVE_STAT.drowning, saveDc(unit, def), `Resist ${def.name}`).ok) drown(ctx, target, tactic.drowns);
   if (tactic.goad && !target.down && !saveRoll(ctx, target, SAVE_STAT.taunted, saveDc(unit, def), `Resist ${def.name}`).ok) {
-    // Taunted afresh, by whoever did it last.
-    removeCondition(target, "taunted");
-    addCondition(ctx, target, "taunted", tactic.goad);
-    const c = target.conditions.find((x) => x.kind === "taunted");
-    if (c) c.by = unit.id;
+    tauntBy(ctx, target, tactic.goad, unit.id);
   }
   if (tactic.kindleLit && !target.down && has(target, "guiding_light")) addStacks(ctx, target, "burning");
   // Water Burst: the drench reaches whoever stands beside the target, no roll to hit.
@@ -855,6 +848,27 @@ export function previewAttack(state: ZoneState, unit: Unit, ability: string, tar
   return { chance: hitChance(bonus, vs, c.adv), bonus, vs, adv: c.adv, notes: c.notes };
 }
 
+/** A hero's blow that sets a shield before it lands (a Bulwark Strike's, a Sturdy Blow's): each it has is the shield's size and the user's level. */
+function raiseShields(ctx: Ctx, unit: Unit, tactic: Tactic): void {
+  if (tactic.bulwark) addShield(ctx, unit, tactic.bulwark.shield + unit.level);
+  if (tactic.ward) addShield(ctx, unit, tactic.ward.shield + unit.level);
+}
+
+/** Taunted afresh, for `rounds`, by whoever did it last. */
+function tauntBy(ctx: Ctx, target: Unit, rounds: number, by: string): void {
+  removeCondition(target, "taunted");
+  addCondition(ctx, target, "taunted", rounds);
+  const c = target.conditions.find((x) => x.kind === "taunted");
+  if (c) c.by = by;
+}
+
+/** Away from a fight for the rest of the turn, drawing no blows: this fight's Disengage, which a unit has only once (noted so it is never added twice). */
+function markDisengaged(ctx: Ctx, unit: Unit, budget: Budget): void {
+  budget.disengaged = true;
+  const enc = ctx.state.encounter;
+  if (enc && !enc.disengaged?.includes(unit.id)) enc.disengaged = [...(enc.disengaged ?? []), unit.id];
+}
+
 /** Use an ability that has passed its check. Says what was used, then rolls and applies it. */
 export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim): void {
   const def = ABILITIES[ability];
@@ -869,8 +883,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
   let landed = false;
   const crate = tactic.shape === "single" || tactic.shape === "chain" ? crateById(state, aim.target) : undefined;
   if (crate) {
-    if (tactic.bulwark) addShield(ctx, unit, tactic.bulwark.shield + unit.level);
-    if (tactic.ward) addShield(ctx, unit, tactic.ward.shield + unit.level);
+    raiseShields(ctx, unit, tactic);
     // Aimed at a crate, a chain goes no further: there is nothing in a crate for it to jump from.
     smash(ctx, unit, def, tactic, crate);
     landed = true;
@@ -930,8 +943,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
   } else if (tactic.shape === "single") {
     const target = unitById(state, aim.target!)!;
     // The shield is set before the swing, and counts toward it.
-    if (tactic.bulwark) addShield(ctx, unit, tactic.bulwark.shield + unit.level);
-    if (tactic.ward) addShield(ctx, unit, tactic.ward.shield + unit.level);
+    raiseShields(ctx, unit, tactic);
     // A pocket picked unseen is no blow, just a quick hand.
     if (tactic.steal && wasUnseen) landed = true;
     else if (tactic.overwhelm) landed = overwhelm(ctx, unit, def, target, tactic.overwhelm);
@@ -1112,11 +1124,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
     }
     if (tactic.taunt) {
       for (const foe of foesWithin(state, unit, tactic.taunt.range)) {
-        // Taunted afresh, by whoever did it last.
-        removeCondition(foe, "taunted");
-        addCondition(ctx, foe, "taunted", tactic.taunt.rounds);
-        const c = foe.conditions.find((x) => x.kind === "taunted");
-        if (c) c.by = unit.id;
+        tauntBy(ctx, foe, tactic.taunt.rounds, unit.id);
       }
     }
     if (tactic.rally) {
@@ -1150,7 +1158,7 @@ export function chartCourse(ctx: Ctx, unit: Unit): void {
   const enc = ctx.state.encounter;
   if (!enc) return;
   for (const u of ctx.state.units) {
-    const budget = u.side === unit.side && !u.down && enc.acting.includes(u.id) && !enc.done.includes(u.id) ? enc.budgets[u.id] : undefined;
+    const budget = u.side === unit.side && !u.down ? liveBudget(ctx.state, u) : undefined;
     if (budget && budget.course === undefined) budget.course = 0;
   }
 }
@@ -1164,7 +1172,7 @@ export function retune(ctx: Ctx): void {
   for (const u of ctx.state.units) {
     if (u.down) continue;
     if (has(u, "slowed") && windward(ctx.state, u)) removeCondition(u, "slowed");
-    const budget = enc && enc.acting.includes(u.id) && !enc.done.includes(u.id) ? enc.budgets[u.id] : undefined;
+    const budget = liveBudget(ctx.state, u);
     if (!budget) continue;
     const owed = songMove(ctx.state, u) - (budget.song ?? 0);
     if (owed > 0 && budget.stride > 0) {
@@ -1565,9 +1573,7 @@ export function doCommon(ctx: Ctx, unit: Unit, what: CommonAction, aim: Aim, bud
   ctx.events.push({ t: "used", id: unit.id, what, name: COMMON_ACTIONS[what].name, target: aim.target, at: aim.at });
   if (what === "join") joinSong(ctx, unit, aim, budget);
   else if (what === "disengage" && budget) {
-    budget.disengaged = true;
-    const enc = ctx.state.encounter;
-    if (enc) enc.disengaged = [...(enc.disengaged ?? []), unit.id];
+    markDisengaged(ctx, unit, budget);
   }
   else if (what === "help") {
     const target = unitById(ctx.state, aim.target!)!;
@@ -1613,13 +1619,7 @@ function joinSong(ctx: Ctx, unit: Unit, aim: Aim, budget: Budget | null): void {
   if (song.kind === "lively_shanty") addUses(ctx, unit, "inspired", 1);
   else if (song.kind === "dour_shanty") addCondition(ctx, unit, "guarded", 1);
   // Wind-god's: away on the wind, drawing no blows for the rest of the turn. That is this fight's Disengage, and there is only one.
-  else if (budget) {
-    const enc = ctx.state.encounter;
-    if (!enc?.disengaged?.includes(unit.id)) {
-      budget.disengaged = true;
-      if (enc) enc.disengaged = [...(enc.disengaged ?? []), unit.id];
-    }
-  }
+  else if (budget) markDisengaged(ctx, unit, budget);
   retune(ctx);
 }
 
