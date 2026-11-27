@@ -8,3 +8,9 @@ line off once it is done.
 
 - Adjust scaling for enemy abilities: how each one's numbers grow with level (`scales` in
   `packages/world/src/zone/enemyabilities.ts`, rates in `rules.ts` SCALE_RATES).
+
+## Release notes
+
+- A `Release-note: skip` on any one commit in a PR hides the whole squash-merged PR from the notice board (Atlas #500,
+  class abilities #494, the enemy rework #650 all needed overrides). Make `skip` apply only to its own `* subject`
+  section of a squash message in `apps/game/scripts/release-notes.ts`, or have CI flag a PR whose branch has a `skip`.
