@@ -10,6 +10,7 @@ import { ENEMY_ABILITIES, type EnemyAbilityDef, type FieldKind } from "@gantt-qu
 import { BREATHE, ENGULF, FLARE, FLURRY_BLOWS, SLICES_APART, type Figure } from "./figures";
 import type { FxKind } from "./sprites";
 import { CRACK_DARK, CRACK_EDGE, crackGeometry, crackPaths, type CrackOpts } from "./cracks";
+import { AMBER, BLOOD_RED, FROST_WHITE, PALE_GOLD, PARCHMENT, SAND, WARM_WHITE, WHITE, YELLOW } from "./fxPalette";
 
 /** One effect sprite: flown from `from` to `to` over `life` seconds, growing from one size to the other. */
 export interface FxOpts {
@@ -184,7 +185,7 @@ export interface SignatureMove {
   again?: { blurb: string; play(stage: MoveStage, ctx: MoveCtx): void };
 }
 
-const CHEAP_SHOT_RED = "#e0313f";
+const CHEAP_SHOT_RED = BLOOD_RED;
 
 /**
  * Two flat side slashes, one each way: a forehand across the front from the right, carried straight on into a
@@ -197,7 +198,7 @@ function cheapShot(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Mov
     // The swipe is drawn as a quarter circle bowed up and to one side; turned an eighth, it lies flat, an arch.
     const flip = second ? dir > 0 : dir < 0;
     const at = hitAt.clone().setY(hitAt.y + (second ? -0.1 : 0.12));
-    stage.spawnFx("slash", crit ? "#ffd23f" : CHEAP_SHOT_RED, flip, { from: at, to: at, life: 0.24, size: [1.4, 2.3], turn: flip ? -Math.PI / 4 : Math.PI / 4, spin: (flip ? 1 : -1) * 0.5, fade: true });
+    stage.spawnFx("slash", crit ? YELLOW : CHEAP_SHOT_RED, flip, { from: at, to: at, life: 0.24, size: [1.4, 2.3], turn: flip ? -Math.PI / 4 : Math.PI / 4, spin: (flip ? 1 : -1) * 0.5, fade: true });
     stage.jolt();
   };
   const first = figure.strike("slices");
@@ -252,7 +253,7 @@ export function pounceAt(s: number, far: number, air: number = POUNCE.air): { ah
 }
 
 const TEETH = "#f4efe2";
-const GOLD = "#ffd23f";
+const GOLD = YELLOW;
 /** How long a lunge's jaws take to close: they meet as the wolf lands. A plain bite's are quicker. */
 const LUNGE_BITE = 0.1;
 const QUICK_BITE = 0.08;
@@ -347,7 +348,7 @@ function lunge(stage: MoveStage, ctx: MoveCtx, great: boolean) {
     stage.later(() => {
       const at = body();
       const feet = at.setY(at.y - 0.45);
-      for (const lift of [0.15, 0.35]) stage.spawnFx("dust", "#c9b994", !flip, { from: feet, to: feet.clone().addScaledVector(back, 0.7).setY(feet.y + lift), life: 0.4, size: [0.8, 1.4], spin: 0, fade: true });
+      for (const lift of [0.15, 0.35]) stage.spawnFx("dust", SAND, !flip, { from: feet, to: feet.clone().addScaledVector(back, 0.7).setY(feet.y + lift), life: 0.4, size: [0.8, 1.4], spin: 0, fade: true });
     }, POUNCE.crouch);
     // Through the air: speed lines streaming off behind it.
     for (let s = POUNCE.crouch; s < lands; s += STREAK_EVERY) {
@@ -368,14 +369,14 @@ function lunge(stage: MoveStage, ctx: MoveCtx, great: boolean) {
       // Lines bursting out from where the jaws met, either side.
       for (const side of [false, true]) for (const turn of [-0.55, -0.15, 0.25, 0.6]) stage.spawnFx("streak", color, side, { from: hitAt, to: hitAt, life: 0.2, size: [0.6, 1.9], turn: side ? -turn : turn, spin: 0, fade: true });
       const feet = hitAt.clone().setY(hitAt.y - 0.45);
-      for (const side of [-1, 1]) stage.spawnFx("dust", "#c9b994", side > 0, { from: feet, to: feet.clone().setX(feet.x + side * 0.55).setY(feet.y + 0.3), life: 0.4, size: [0.6, 1.1], spin: 0, fade: true });
+      for (const side of [-1, 1]) stage.spawnFx("dust", SAND, side > 0, { from: feet, to: feet.clone().setX(feet.x + side * 0.55).setY(feet.y + 0.3), life: 0.4, size: [0.6, 1.1], spin: 0, fade: true });
       stage.jolt();
       stage.later(() => stage.jolt(), 0.05);
       if (great) {
         // The ground shakes where it lands: a shock rolling out with dust after, dust and grit thrown up all round,
         // a second, bigger flash, and the target jolted again.
         const floor = feet.clone().setY(feet.y + 0.05);
-        stage.wave({ at: floor, radius: 2.2, life: 0.42, color: crit ? GOLD : "#f3e7c8", width: 0.1 });
+        stage.wave({ at: floor, radius: 2.2, life: 0.42, color: crit ? GOLD : PARCHMENT, width: 0.1 });
         stage.later(() => stage.wave({ at: floor, radius: 1.9, life: 0.5, color: DUST, width: 0.3 }), 0.05);
         for (let i = 0; i < 10; i++) {
           const a = (i / 10) * Math.PI * 2 + Math.random() * 0.3;
@@ -539,7 +540,7 @@ function rendingSwipe(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: 
   }, Math.max(0, wait));
 }
 
-const DUST = "#c9b994";
+const DUST = SAND;
 const ROCK = "#8a8070";
 const ROCK_PALE = "#a89f8c";
 /** A point so far off another. */
@@ -561,11 +562,11 @@ function clubSmash(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Mov
   if (wait <= 0) stage.lunge();
   stage.later(() => {
     const ground = hitAt.clone().setY(hitAt.y - 0.45);
-    const flash = crit ? GOLD : "#fff3d6";
+    const flash = crit ? GOLD : WARM_WHITE;
     stage.spawnFx("burst", flash, false, { from: ground, to: ground, life: 0.24, size: [1, 3], spin: 0.6, fade: true });
     // The shock pulsing out over the ground to the hexes all round, where any hero beside the target is caught by it.
     const floor = ground.clone().setY(ground.y + 0.05);
-    stage.wave({ at: floor, radius: SMASH_PULSE.radius, life: SMASH_PULSE.life, color: crit ? GOLD : "#f3e7c8", width: 0.1 });
+    stage.wave({ at: floor, radius: SMASH_PULSE.radius, life: SMASH_PULSE.life, color: crit ? GOLD : PARCHMENT, width: 0.1 });
     stage.later(() => stage.wave({ at: floor, radius: SMASH_PULSE.radius * 0.85, life: SMASH_PULSE.life * 1.15, color: DUST, width: 0.3 }), 0.05);
     // Shock lines bursting out from where it landed, all round.
     for (const side of [false, true]) for (const turn of [-0.7, -0.3, 0.1, 0.5]) stage.spawnFx("streak", flash, side, { from: ground, to: ground, life: 0.2, size: [0.7, 2.2], turn: side ? -turn : turn, spin: 0, fade: true });
@@ -616,9 +617,9 @@ function seatSlam(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alone
   // Only the first plays the drop: by the time the others are told, it has already landed.
   const lands = echo ? 0 : Math.max(0, figure.strike("drop"));
   if (!echo) stage.later(() => {
-    stage.wave({ at: ground, radius, life, color: crit ? GOLD : "#f3e7c8", width: 0.08 });
+    stage.wave({ at: ground, radius, life, color: crit ? GOLD : PARCHMENT, width: 0.08 });
     stage.later(() => stage.wave({ at: ground, radius: radius * 0.85, life: life * 1.15, color: DUST, width: 0.3 }), 0.06);
-    stage.spawnFx("burst", crit ? GOLD : "#fff3d6", false, { from: offset(ground, 0, 0.3, 0), to: offset(ground, 0, 0.3, 0), life: 0.24, size: [1, 3], spin: 0.6, fade: true });
+    stage.spawnFx("burst", crit ? GOLD : WARM_WHITE, false, { from: offset(ground, 0, 0.3, 0), to: offset(ground, 0, 0.3, 0), life: 0.24, size: [1, 3], spin: 0.6, fade: true });
     // Clouds of dust rolling out after the wave, all round, swelling as they go.
     for (let i = 0; i < 14; i++) {
       const a = (i / 14) * Math.PI * 2 + Math.random() * 0.25;
@@ -648,9 +649,9 @@ function seatSlam(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alone
 }
 
 const FIRE = "#ff7a2a";
-const FLAME = "#ffb347";
+const FLAME = AMBER;
 const FIRE_DEEP = "#d9381e";
-const FIRE_FLASH = "#fff1c9";
+const FIRE_FLASH = PALE_GOLD;
 const SMOKE = "#5a5048";
 /** An Immolate's fireball: how long it is in the air, how high it goes over the straight line, and how far its fire spreads. */
 export const IMMOLATE = { flight: 0.55, arc: 1.6, spread: 2.0 };
@@ -796,7 +797,7 @@ export const BATTERING_RAM = { gather: 0.18 };
  */
 function batteringRam(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
   const flip = dir < 0;
-  const color = crit ? GOLD : "#fff3d6";
+  const color = crit ? GOLD : WARM_WHITE;
   const feet = figure.root.getWorldPosition(new THREE.Vector3());
   // Toward the target and on past it, along the ground: the way it charges, and the way the target is driven.
   const on = hitAt.clone().sub(feet).setY(0).normalize();
@@ -819,7 +820,7 @@ function batteringRam(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: 
     stage.spawnFx("burst", color, false, { from: hitAt, to: hitAt, life: 0.26, size: [1.2, 3.4], spin: 0.6, fade: true });
     stage.later(() => stage.spawnFx("burst", crit ? GOLD : DUST, true, { from: hitAt, to: hitAt, life: 0.34, size: [1, 2.6], spin: -0.5, fade: true }), 0.05);
     const floor = hitAt.clone().setY(feet.y + 0.06);
-    stage.wave({ at: floor, radius: 1.6, life: 0.32, color: crit ? GOLD : "#f3e7c8", width: 0.12 });
+    stage.wave({ at: floor, radius: 1.6, life: 0.32, color: crit ? GOLD : PARCHMENT, width: 0.12 });
     // Shock lines bursting out ahead, the way they are going, and a few flung back the way it came.
     for (const turn of [-0.6, -0.3, 0, 0.3, 0.6]) stage.spawnFx("streak", color, flip, { from: hitAt, to: hitAt.clone().addScaledVector(on, 1.1), life: 0.24, size: [0.9, 2.4], turn, spin: 0, fade: true });
     for (const turn of [-0.4, 0.4]) stage.spawnFx("streak", color, !flip, { from: hitAt, to: hitAt.clone().addScaledVector(on, -0.5), life: 0.18, size: [0.6, 1.6], turn, spin: 0, fade: true });
@@ -886,7 +887,7 @@ function rainOfArrows(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: 
     }, start + (over * i) / down);
   }
   // As the first hit: a pale ring over the hexes it covers.
-  stage.later(() => stage.wave({ at: ground.clone().setY(ground.y + 0.05), radius: spread, life: 0.5, color: crit ? GOLD : "#f3e7c8", width: 0.1 }), start + fall);
+  stage.later(() => stage.wave({ at: ground.clone().setY(ground.y + 0.05), radius: spread, life: 0.5, color: crit ? GOLD : PARCHMENT, width: 0.1 }), start + fall);
   // The thick of it: everyone caught is told.
   stage.later(() => {
     stage.jolt();
@@ -955,7 +956,7 @@ export function groundSlash(o: SlashOpts): (group: THREE.Object3D) => (dt: numbe
   };
 }
 
-const BLOOD = "#e0313f";
+const BLOOD = BLOOD_RED;
 const BLOOD_DEEP = "#8c1420";
 /**
  * A Rending Cleave's slash on the ground: how far out it runs (through the middle of the hexes beside the bear), how
@@ -1002,7 +1003,7 @@ function rendingCleave(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }:
 
 /** A Thunderous Roar's waves: as far as they roll (past every hero two hexes off, ENEMY_BURST), how long each takes, and the seconds between them. */
 export const THUNDEROUS_ROAR = { radius: 3.9, life: 0.6, apart: 0.13 };
-const ROAR_PALE = "#f3e7c8";
+const ROAR_PALE = PARCHMENT;
 /** What Reeling looks like (content.ts EFFECT_INFO): the colour of the waves behind the first. */
 const REELING = "#c084fc";
 
@@ -1077,7 +1078,7 @@ function stoneFist(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: Mov
     stage.later(() => stage.spawnFx("burst", crit ? GOLD : ROCK_PALE, true, { from: hitAt, to: hitAt, life: 0.34, size: [0.9, 2.4], spin: -0.5, fade: true }), 0.05);
     stage.spawnFx("spark", GUARDIAN_GLOW, flip, { from: hitAt, to: offset(hitAt, 0, 0.35, 0), life: 0.3, size: [0.7, 0.2], spin: 2, fade: true });
     const floor = hitAt.clone().setY(feet.y + 0.06);
-    stage.wave({ at: floor, radius: 1.4, life: 0.3, color: crit ? GOLD : "#f3e7c8", width: 0.12 });
+    stage.wave({ at: floor, radius: 1.4, life: 0.3, color: crit ? GOLD : PARCHMENT, width: 0.12 });
     // Shock lines driven on the way it is struck, and chips of stone flung on past them.
     for (const turn of [-0.5, -0.2, 0.2, 0.5]) stage.spawnFx("streak", color, flip, { from: hitAt, to: hitAt.clone().addScaledVector(on, 1.0), life: 0.22, size: [0.8, 2.2], turn, spin: 0, fade: true });
     for (let i = 0; i < 7; i++) {
@@ -1165,7 +1166,7 @@ function earthquake(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alo
   const f = EARTHQUAKE.first;
   const lands = echo ? 0 : Math.max(0, figure.strike("pound"));
   if (!echo) stage.later(() => {
-    stage.spawnFx("burst", crit ? GOLD : "#f3e7c8", false, { from: offset(ground, 0, 0.2, 0), to: offset(ground, 0, 0.2, 0), life: 0.22, size: [0.8, 2.2], spin: 0.5, fade: true });
+    stage.spawnFx("burst", crit ? GOLD : PARCHMENT, false, { from: offset(ground, 0, 0.2, 0), to: offset(ground, 0, 0.2, 0), life: 0.22, size: [0.8, 2.2], spin: 0.5, fade: true });
     for (const side of [-1, 1]) stage.spawnFx("dust", DUST, side > 0, { from: ground, to: offset(ground, side * 0.7, 0.3, 0), life: 0.45, size: [0.7, 1.4], spin: 0, fade: true });
     stage.lay(groundCracks(ground, { count: f.cracks, reach, width: f.width, step: 0.2, wander: 0.5, fork: 0.1, grow: 0.5, hold: 1.1, fade: 0.6 }));
     stage.shake?.(f.shake, 1.0);
@@ -1207,9 +1208,9 @@ function earthquakeHeave(stage: MoveStage, { figure, hitAt, crit, onImpact, echo
   if (!echo) stage.later(() => {
     stage.shake?.(h.shake, 1.4);
     stage.later(() => stage.shake?.(h.shake * 0.6, 0.9), 0.55);
-    stage.spawnFx("burst", crit ? GOLD : "#fff3d6", false, { from: offset(ground, 0, 0.3, 0), to: offset(ground, 0, 0.3, 0), life: 0.28, size: [1.3, 3.8], spin: 0.6, fade: true });
+    stage.spawnFx("burst", crit ? GOLD : WARM_WHITE, false, { from: offset(ground, 0, 0.3, 0), to: offset(ground, 0, 0.3, 0), life: 0.28, size: [1.3, 3.8], spin: 0.6, fade: true });
     stage.lay(groundCracks(ground, { count: h.cracks, reach: reach * 1.05, width: h.width, step: 0.28, wander: 0.4, fork: 0.2, start: 0.15, grow: 0.22, hold: 1.0, fade: 0.7 }));
-    stage.wave({ at: ground, radius: reach * 1.1, life: 0.5, color: crit ? GOLD : "#f3e7c8", width: 0.1 });
+    stage.wave({ at: ground, radius: reach * 1.1, life: 0.5, color: crit ? GOLD : PARCHMENT, width: 0.1 });
     // Broad rolling waves of dust behind it: the ground rumbling on.
     for (let n = 0; n < h.ripples; n++) stage.later(() => stage.wave({ at: ground, radius: reach * (1.05 - n * 0.06), life: h.life, color: DUST, width: 0.3 - n * 0.04 }), 0.06 + n * h.apart);
     // Dust bursting up in columns all over it, and chunks of rock thrown up.
@@ -1324,7 +1325,7 @@ function slowingField(stage: MoveStage, { figure, crit, onImpact, alone, hitAt }
           const a = (i / rays) * Math.PI * 2 + Math.random() * 0.6;
           const reach = (0.35 + 0.65 * k) * long;
           const to = offset(at, Math.cos(a) * reach, Math.sin(a) * reach, 0.05);
-          stage.spawnFx("streak", i % 2 ? "#f4feff" : color, false, { from: at, to, life: 0.22, size: [0.35 * long, (0.6 + 0.9 * k) * long], turn: a, spin: 0, fade: true });
+          stage.spawnFx("streak", i % 2 ? FROST_WHITE : color, false, { from: at, to, life: 0.22, size: [0.35 * long, (0.6 + 0.9 * k) * long], turn: a, spin: 0, fade: true });
         }
       }
     }, s);
@@ -1334,13 +1335,13 @@ function slowingField(stage: MoveStage, { figure, crit, onImpact, alone, hitAt }
     for (const [at, long] of [[chest(), 1.4]] as const) {
       for (let i = 0; i < rays + 2; i++) {
         const a = (i / (rays + 2)) * Math.PI * 2;
-        stage.spawnFx("streak", "#f4feff", false, { from: at, to: offset(at, Math.cos(a) * long, Math.sin(a) * long, 0.05), life: 0.3, size: [0.4 * long, 1.6 * long], turn: a, spin: 0, fade: true });
+        stage.spawnFx("streak", FROST_WHITE, false, { from: at, to: offset(at, Math.cos(a) * long, Math.sin(a) * long, 0.05), life: 0.3, size: [0.4 * long, 1.6 * long], turn: a, spin: 0, fade: true });
       }
     }
     for (let s = 0; s <= fade; s += 0.03) stage.later(() => figure.setGlow(1 + (flash - 1) * (1 - s / fade) ** 2), s);
     stage.later(() => figure.setGlow(1), fade + 0.05);
     const heart = chest();
-    stage.spawnFx("burst", "#f4feff", false, { from: heart, to: heart, life: 0.3, size: [0.8, 2.6], spin: 0.3, fade: true });
+    stage.spawnFx("burst", FROST_WHITE, false, { from: heart, to: heart, life: 0.3, size: [0.8, 2.6], spin: 0.3, fade: true });
     stage.spawnFx("burst", color, false, { from: heart, to: heart, life: 0.45, size: [1.2, 3.6], spin: -0.3, fade: true });
 
     for (let n = 0; n < rings; n++) stage.later(() => stage.wave({ at: ground, radius: reach * (1 - n * 0.04), life, color, width: n ? 0.06 : 0.1 }), n * apart);
@@ -1525,7 +1526,7 @@ function shadeWail(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alon
 const BAT_VIOLET = "#9a6bd6";
 const BAT_DUSK = "#4a3b52";
 const BAT_FANG = "#f4efe2";
-const SWOOP_RED = "#e0313f";
+const SWOOP_RED = BLOOD_RED;
 
 /**
  * A Cave Bat's Bite: it flicks up and back a little, then darts in, and its needle fangs snap shut on the target once,
@@ -1967,7 +1968,7 @@ function impalingFang(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: 
     for (let i = 0; i < 10; i++) {
       const a = (i / 10) * Math.PI * 2 + Math.random() * 0.4;
       const to = offset(hitAt, Math.cos(a) * (0.4 + Math.random() * 0.4), Math.sin(a) * 0.35 - 0.2, 0.1);
-      stage.spawnFx(i % 3 ? "spark" : "fleck", i % 2 ? iron : "#ffffff", Math.cos(a) < 0, { from: offset(hitAt, 0, 0, 0.1), to, life: 0.35 + Math.random() * 0.2, size: [0.3, 0.14], spin: 3, fade: true, arc: i % 3 ? 0 : 0.25 });
+      stage.spawnFx(i % 3 ? "spark" : "fleck", i % 2 ? iron : WHITE, Math.cos(a) < 0, { from: offset(hitAt, 0, 0, 0.1), to, life: 0.35 + Math.random() * 0.2, size: [0.3, 0.14], spin: 3, fade: true, arc: i % 3 ? 0 : 0.25 });
     }
     // A ring crumpling in over them: wide and grey, then tighter and red.
     stage.wave({ at: hitAt, radius: 0.9, life: 0.3, color: iron, width: 0.08 });

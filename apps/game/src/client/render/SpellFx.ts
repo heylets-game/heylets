@@ -25,6 +25,7 @@ import { OUTLINE } from "./figures";
 import { fxTexture, type FxKind } from "./sprites";
 import { flickerFlame, torchFlame } from "./torchFlame";
 import type { WorldRenderer } from "./WorldRenderer";
+import { AMBER, BARK_BROWN, BONE_WHITE, CREAM_GLOW, DUST_BROWN, FROST_PALE, GOLD, ICE_WHITE, MUD_BROWN, PALE_GOLD, SAND, YELLOW } from "./fxPalette";
 
 /** Something that flies from one point to another. */
 export type Missile = "arrow" | "bolt" | "flask" | "meteor" | "water";
@@ -661,7 +662,7 @@ export class SpellFx {
             shed = 0.03;
           } else if (kind === "meteor") {
             this.smoke(at, "#5f5852", 0.7);
-            this.fling(at, "#ffb347", 1, { out: 0.7, up: 0.8, fall: 2, life: 0.5 });
+            this.fling(at, AMBER, 1, { out: 0.7, up: 0.8, fall: 2, life: 0.5 });
             shed = 0.035;
           } else if (kind === "flask" || kind === "water") {
             this.fling(at, color, 1, { out: 0.2, up: 0, fall: 5, life: 0.35, size: 0.34 , kind: "drop" });
@@ -672,7 +673,7 @@ export class SpellFx {
         this.drop(body, tail?.mesh ?? null, flame);
         carried?.(at, 0);
         if (kind === "arrow") {
-          this.flash(to, "#fff1c9", 0.55);
+          this.flash(to, PALE_GOLD, 0.55);
           this.fling(to, color, 5, { out: 1.4, up: 1.6 });
         } else if (kind === "bolt") this.burst(to, color, 10);
         else if (kind === "flask") this.shatter(to, color);
@@ -705,7 +706,7 @@ export class SpellFx {
     this.renderer.shake(0.3, 0.5);
     const feet = from.clone().setY(from.y - 0.85);
     this.ring(feet, 3.2, paler(color, 0.3), 0.6);
-    this.ring(feet, 2.2, "#c9b994", 0.5);
+    this.ring(feet, 2.2, SAND, 0.5);
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2;
       this.smoke(feet.clone().add(new THREE.Vector3(Math.cos(a) * 0.6, 0.15, Math.sin(a) * 0.6)), "#c9bfa8", 0.9, 0.6);
@@ -784,7 +785,7 @@ export class SpellFx {
     // The gust that carries its sender.
     const feet = from.clone().setY(from.y - 0.85);
     this.ring(feet, 1.1, color, 0.4);
-    for (let i = 0; i < 4; i++) this.smoke(feet.clone().add(new THREE.Vector3(rand(-0.35, 0.35), 0.15, rand(-0.35, 0.35))), "#eef7ff", 0.7, 0.55);
+    for (let i = 0; i < 4; i++) this.smoke(feet.clone().add(new THREE.Vector3(rand(-0.35, 0.35), 0.15, rand(-0.35, 0.35))), ICE_WHITE, 0.7, 0.55);
     const N = 14;
     const edge = new Ribbon(N, tinted(OUTLINE, 0.35, streakTex()));
     const body = new Ribbon(N, tinted(color, 0.95, streakTex()));
@@ -830,7 +831,7 @@ export class SpellFx {
         this.flash(to, color, 1.1);
         this.fling(to, color, 9, { out: 2.4, up: 1.6, fall: 4 });
         this.fling(to, "#ffffff", 4, { out: 1.8, up: 1.2, fall: 4, size: 0.4, life: 0.4 });
-        for (let i = 0; i < 2; i++) this.smoke(to.clone().add(new THREE.Vector3(rand(-0.2, 0.2), 0, rand(-0.2, 0.2))), "#eef7ff", 0.8, 0.6);
+        for (let i = 0; i < 2; i++) this.smoke(to.clone().add(new THREE.Vector3(rand(-0.2, 0.2), 0, rand(-0.2, 0.2))), ICE_WHITE, 0.8, 0.6);
         onLand?.();
         return false;
       },
@@ -841,7 +842,7 @@ export class SpellFx {
   /** An arrow: a wooden shaft, a steel head and fletching in its colour, pointing along +z (as lookAt aims it). */
   private arrow(color: string): THREE.Group {
     const g = this.add(new THREE.Group());
-    const stick = new THREE.Mesh(shaft, flat("#8a6238"));
+    const stick = new THREE.Mesh(shaft, flat(BARK_BROWN));
     stick.scale.set(0.035, 0.035, 0.6);
     const head = new THREE.Mesh(arrowhead, flat("#dfe5ec"));
     head.scale.set(0.055, 0.16, 0.055);
@@ -1016,12 +1017,12 @@ export class SpellFx {
   /** A meteor striking: a blast of light, rock and embers thrown out of the crater, and smoke left hanging. */
   private crash(at: THREE.Vector3) {
     this.lightUp(at, "#ffa040", 40, 9, 0.9);
-    this.flash(at.clone().setY(at.y + 0.35), "#ffb347", 2.6);
+    this.flash(at.clone().setY(at.y + 0.35), AMBER, 2.6);
     this.fling(at, "#f08a24", 14, { out: 3, up: 3.5 });
-    this.fling(at, "#ffd23f", 8, { out: 1.2, up: 4, fall: 5, life: 0.85 });
+    this.fling(at, YELLOW, 8, { out: 1.2, up: 4, fall: 5, life: 0.85 });
     this.chips(at, "#4a443d", 7, 0.13);
     for (let i = 0; i < 5; i++) this.smoke(at.clone().add(new THREE.Vector3(rand(-0.5, 0.5), 0.2, rand(-0.5, 0.5))), "#7a6f63", 1);
-    this.ring(at, 1.4, "#ffb347", 0.35);
+    this.ring(at, 1.4, AMBER, 0.35);
   }
 
   /**
@@ -1209,7 +1210,7 @@ export class SpellFx {
           return age < 0.9;
         });
         if (style === "coral" || style === "stone") {
-          this.chips(at, style === "stone" ? "#7d756a" : "#6b5a45", 3, 0.08);
+          this.chips(at, style === "stone" ? "#7d756a" : MUD_BROWN, 3, 0.08);
           this.smoke(at.clone().setY(at.y + 0.1), "#a89a84", 0.8);
         }
         if (style === "water") {
@@ -1320,7 +1321,7 @@ export class SpellFx {
     this.fling(base, "#ffffff", Math.round(7 * size), { out: 0.7 * size, up: 4.4 + size, fall: 11, life: 0.7, kind: "drop" });
     this.fling(base, color, Math.round(14 * size), { out: 2.8 * size, up: 2.2, fall: 9, life: 0.6, kind: "drop" });
     this.ring(at, 1.2 * size, color, 0.45);
-    for (let i = 0; i < Math.round(3 * size); i++) this.smoke(base.clone().add(new THREE.Vector3(rand(-0.5, 0.5) * size, 0.1, rand(-0.5, 0.5) * size)), "#e8f6ff", 0.9 * size, 0.5);
+    for (let i = 0; i < Math.round(3 * size); i++) this.smoke(base.clone().add(new THREE.Vector3(rand(-0.5, 0.5) * size, 0.1, rand(-0.5, 0.5) * size)), FROST_PALE, 0.9 * size, 0.5);
   }
 
   /**
@@ -1391,7 +1392,7 @@ export class SpellFx {
         const side = new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(rand(-0.8, 0.8));
         const off = crest.clone().add(side);
         this.fling(off, Math.random() < 0.5 ? "#ffffff" : paler(color, 0.5), 2, { out: 0.9, up: 2.6, fall: 8, life: 0.5 , kind: "drop" });
-        if (Math.random() < 0.4) this.smoke(off, "#e8f6ff", 0.7, 0.5);
+        if (Math.random() < 0.4) this.smoke(off, FROST_PALE, 0.7, 0.5);
       }
       // A splash on each hex as the wave front reaches it.
       points.forEach((p, i) => {
@@ -1407,7 +1408,7 @@ export class SpellFx {
       this.fling(end.clone().setY(ground + 0.4), color, 18, { out: 2.6, up: 4.2, fall: 9, life: 0.75 , kind: "drop" });
       this.fling(end.clone().setY(ground + 0.4), "#ffffff", 8, { out: 2, up: 3.4, fall: 9, life: 0.55 , kind: "drop" });
       this.ring(end, 1.8, color, 0.55);
-      for (let i = 0; i < 4; i++) this.smoke(end.clone().add(new THREE.Vector3(rand(-0.5, 0.5), 0.3, rand(-0.5, 0.5))), "#e8f6ff", 1.1, 0.6);
+      for (let i = 0; i < 4; i++) this.smoke(end.clone().add(new THREE.Vector3(rand(-0.5, 0.5), 0.3, rand(-0.5, 0.5))), FROST_PALE, 1.1, 0.6);
       return false;
     });
   }
@@ -1537,7 +1538,7 @@ export class SpellFx {
         if (t > 0 && !vine.broke) {
           vine.broke = true;
           const root = vine.root.clone().add(anchor.position);
-          this.chips(root, kelp ? "#3d6b4f" : "#6b5a45", 2, 0.06);
+          this.chips(root, kelp ? "#3d6b4f" : MUD_BROWN, 2, 0.06);
           this.smoke(root.clone().setY(root.y + 0.1), kelp ? "#cfeee0" : "#a89a84", 0.5, 0.5);
           if (kelp) this.fling(root.clone().setY(root.y + 0.1), paler(color, 0.4), 3, { out: 0.6, up: 1.8, fall: 8, life: 0.4 , kind: "drop" });
         }
@@ -1548,7 +1549,7 @@ export class SpellFx {
         if (loose > 0.05 && !vine.tore) {
           vine.tore = true;
           const root = vine.root.clone().add(soil.position).sub(middle).setY(soil.position.y);
-          this.chips(root, kelp ? "#3d6b4f" : "#6b5a45", 2, 0.05);
+          this.chips(root, kelp ? "#3d6b4f" : MUD_BROWN, 2, 0.05);
         }
         const from = Math.floor(loose * SEG) * RAD * 6;
         for (const geometry of [vine.g, vine.line]) geometry.setDrawRange(from, Math.max(0, Math.floor(tip * SEG) * RAD * 6 - from));
@@ -2022,7 +2023,7 @@ export class SpellFx {
       g.add(m);
       return m;
     };
-    piece(shaft, "#8a6238", [0.08, 0.08, 1.5], [0, 0, 0]);
+    piece(shaft, BARK_BROWN, [0.08, 0.08, 1.5], [0, 0, 0]);
     piece(arrowhead, "#e6ebf1", [0.13, 0.38, 0.13], [0, 0, 0.92], Math.PI / 2);
     piece(shaft, "#c9d0d8", [0.05, 0.2, 0.05], [0, 0.09, 0.66]);
     const height = SpellFx.arcHeight("arrow", from.distanceTo(to)) * 0.5;
@@ -2037,7 +2038,7 @@ export class SpellFx {
         onLand?.();
         if (stuck) {
           // Standing in the ground where it came down, head buried, quivering, then gone.
-          this.chips(to, "#8f7a62", 3, 0.06);
+          this.chips(to, DUST_BROWN, 3, 0.06);
           const lean = g.quaternion.clone();
           this.run([g], (age) => {
             g.quaternion.copy(lean).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.sin(age * 40) * 0.08 * Math.max(0, 1 - age / 0.5)));
@@ -2051,8 +2052,8 @@ export class SpellFx {
           return false;
         }
         this.drop(g);
-        this.flash(to, "#fff1c9", 0.9);
-        this.fling(to, "#e8e4da", 6, { out: 1.4, up: 1.4 });
+        this.flash(to, PALE_GOLD, 0.9);
+        this.fling(to, BONE_WHITE, 6, { out: 1.4, up: 1.4 });
         if (drag) this.tether(drag.hand, drag.caught);
         return false;
       },
@@ -2133,8 +2134,8 @@ export class SpellFx {
   slam(at: THREE.Vector3, color: string) {
     const feet = at.clone().setY(at.y - 0.75);
     this.flash(at, paler(color, 0.4), 1.4);
-    this.ring(feet, 1.8, "#c9b994", 0.4);
-    this.chips(feet, "#8f7a62", 6, 0.08);
+    this.ring(feet, 1.8, SAND, 0.4);
+    this.chips(feet, DUST_BROWN, 6, 0.08);
     for (let i = 0; i < 4; i++) this.smoke(feet.clone().add(new THREE.Vector3(rand(-0.4, 0.4), 0.1, rand(-0.4, 0.4))), "#c9bfa8", 0.9, 0.6);
     this.renderer.shake(0.12, 0.3);
   }
@@ -2146,7 +2147,7 @@ export class SpellFx {
     this.fling(hit, color, 16, { out: 1.6, up: 3.4, fall: 9, life: 0.7, kind: "drop" });
     this.fling(hit, "#ffffff", 8, { out: 1.2, up: 3, fall: 9, life: 0.55, kind: "drop" });
     this.ring(at.clone().setY(at.y - 0.2), 1.6, color, 0.5);
-    for (let i = 0; i < 3; i++) this.smoke(hit.clone().add(new THREE.Vector3(rand(-0.2, 0.2), rand(0, 0.4), rand(-0.2, 0.2))), "#e8f6ff", 0.8, 0.55);
+    for (let i = 0; i < 3; i++) this.smoke(hit.clone().add(new THREE.Vector3(rand(-0.2, 0.2), rand(0, 0.4), rand(-0.2, 0.2))), FROST_PALE, 0.8, 0.55);
   }
 
   /**
@@ -2504,7 +2505,7 @@ export class SpellFx {
       });
       return { flame, a: (i / count) * Math.PI * 2 + rand(-0.3, 0.3), late: rand(0, 0.08) };
     });
-    this.fling(at.clone().setY(at.y + 0.3), "#ffb347", count * 2, { out: 1.2 + to * 0.5, up: 2.6, fall: 3, life: 0.9 });
+    this.fling(at.clone().setY(at.y + 0.3), AMBER, count * 2, { out: 1.2 + to * 0.5, up: 2.6, fall: 3, life: 0.9 });
     this.run(
       tongues.map((t) => t.flame),
       (age) => {
@@ -2636,7 +2637,7 @@ export class SpellFx {
     // The two barbs, laid back from the head either side.
     for (const side of [-1, 1]) part(shaft, "#d6dde4", [0.035, 0.035, 0.24], [side * 0.09, 0, 0.42], [0, side * 0.6, 0]);
     // The eye at its tail, that the line is tied to.
-    part(shaft, "#8a6238", [0.09, 0.09, 0.06], [0, 0, -0.5]);
+    part(shaft, BARK_BROWN, [0.09, 0.09, 0.06], [0, 0, -0.5]);
     const N = 14;
     const edge = new Ribbon(N, tinted(OUTLINE, 0.8, streakTex()));
     const line = new Ribbon(N, tinted("#d8c39a", 1, streakTex()));
@@ -2661,9 +2662,9 @@ export class SpellFx {
       } else {
         if (!struck) {
           struck = true;
-          this.flash(to, "#fff1c9", 0.8);
-          this.fling(to, "#e8e4da", 5, { out: 1.4, up: 1.4 });
-          if (after === "stuck") this.chips(to, "#8f7a62", 3, 0.06);
+          this.flash(to, PALE_GOLD, 0.8);
+          this.fling(to, BONE_WHITE, 5, { out: 1.4, up: 1.4 });
+          if (after === "stuck") this.chips(to, DUST_BROWN, 3, 0.06);
           onLand?.();
         }
         const since = age - time;
@@ -2743,7 +2744,7 @@ export class SpellFx {
       } else {
         if (!bit) {
           bit = true;
-          this.fling(to, "#e8e4da", 4, { out: 1.2, up: 1.2 });
+          this.fling(to, BONE_WHITE, 4, { out: 1.2, up: 1.2 });
           onLand?.();
         }
         // Held a beat as it bites, then yanked home along the line.
@@ -2767,7 +2768,7 @@ export class SpellFx {
   /** Gold lifted off someone (Pickpocket): a few coins flicked up off them, glinting, arcing over to the one who took them. */
   coins(from: THREE.Vector3, to: () => THREE.Vector3 | null) {
     for (let i = 0; i < 5; i++) {
-      const coin = this.add(new THREE.Mesh(diamond, glow(i % 2 ? "#ffd45e" : "#fff3c4", 1)));
+      const coin = this.add(new THREE.Mesh(diamond, glow(i % 2 ? GOLD : CREAM_GLOW, 1)));
       coin.scale.setScalar(0.07);
       const late = i * 0.06;
       const start = from.clone().add(new THREE.Vector3(rand(-0.15, 0.15), rand(0, 0.2), rand(-0.15, 0.15)));
@@ -2778,7 +2779,7 @@ export class SpellFx {
         coin.position.copy(SpellFx.arcPoint(start, end, height, t));
         coin.rotation.y = age * 14;
         coin.visible = age >= late;
-        if (t >= 1) this.flash(end, "#ffd45e", 0.4);
+        if (t >= 1) this.flash(end, GOLD, 0.4);
         return t < 1;
       });
     }
@@ -2799,7 +2800,7 @@ export class SpellFx {
     const fuse = new THREE.Mesh(shaft, flat("#c9a46a"));
     fuse.scale.set(0.03, 0.12, 0.03);
     fuse.position.y = 0.2;
-    const spark = new THREE.Sprite(new THREE.SpriteMaterial({ map: softTex(), color: "#ffb347", transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    const spark = new THREE.Sprite(new THREE.SpriteMaterial({ map: softTex(), color: AMBER, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
     spark.position.y = 0.28;
     spark.scale.setScalar(0.3);
     g.add(ball, fuse, spark);
@@ -2814,11 +2815,11 @@ export class SpellFx {
       shed -= dt;
       if (shed <= 0) {
         shed = 0.05;
-        this.fling(g.position.clone().add(new THREE.Vector3(0, 0.28, 0)), "#ffb347", 1, { out: 0.4, up: 0.6, fall: 3, life: 0.3, size: 0.32 });
+        this.fling(g.position.clone().add(new THREE.Vector3(0, 0.28, 0)), AMBER, 1, { out: 0.4, up: 0.6, fall: 3, life: 0.3, size: 0.32 });
       }
       if (t < 1) return true;
-      this.flash(to, "#ffb347", 0.8);
-      this.fling(to, "#ffd23f", 6, { out: 1.2, up: 1.4, life: 0.4, size: 0.36 });
+      this.flash(to, AMBER, 0.8);
+      this.fling(to, YELLOW, 6, { out: 1.2, up: 1.4, life: 0.4, size: 0.36 });
       return false;
     });
   }
@@ -2879,7 +2880,7 @@ export class SpellFx {
    */
   snuff(at: THREE.Vector3, color: string) {
     const head = at.clone().setY(at.y + 1.3);
-    const halo = this.halo(head, "#fff3c4", 1.4, 0.9);
+    const halo = this.halo(head, CREAM_GLOW, 1.4, 0.9);
     const moon = this.add(new THREE.Sprite(new THREE.SpriteMaterial({ map: moonTex(), color, transparent: true, opacity: 0, depthTest: false })));
     moon.renderOrder = 8;
     moon.position.copy(head);
@@ -3001,7 +3002,7 @@ export class SpellFx {
       },
     );
     for (const p of points) {
-      this.smoke(p.clone().setY(p.y + 0.1), "#eef7ff", 0.7, 0.45);
+      this.smoke(p.clone().setY(p.y + 0.1), ICE_WHITE, 0.7, 0.45);
       this.fling(p.clone().setY(p.y + 0.4), paler(color, 0.4), 2, { out: 0.4, up: 0.8, fall: 1, life: 0.8, kind: "spark", size: 0.45 });
     }
   }
@@ -3019,7 +3020,7 @@ export class SpellFx {
       const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
       const to = chest.clone().add(new THREE.Vector3(Math.cos(a) * 2, -0.25, Math.sin(a) * 2));
       this.crescents(chest, to, color, { count: 2, stagger: 0.07, time: 0.3, size: 0.8, notes: true });
-      this.smoke(chest.clone().add(new THREE.Vector3(Math.cos(a) * 0.5, -0.4, Math.sin(a) * 0.5)), "#eef7ff", 0.8, 0.5);
+      this.smoke(chest.clone().add(new THREE.Vector3(Math.cos(a) * 0.5, -0.4, Math.sin(a) * 0.5)), ICE_WHITE, 0.8, 0.5);
     }
   }
 
@@ -3263,7 +3264,7 @@ export class SpellFx {
   spill(at: THREE.Vector3, rich = false) {
     const flash = this.add(new THREE.Mesh(sphere, glow("#ffe6a0", 0.3)));
     flash.position.copy(at);
-    const colors = rich ? ["#ffd45e", "#fff3c4", "#ffb347", "#7fe0ff", "#ff6fb5"] : ["#ffd45e", "#fff3c4", "#ffe08a"];
+    const colors = rich ? [GOLD, CREAM_GLOW, AMBER, "#7fe0ff", "#ff6fb5"] : [GOLD, CREAM_GLOW, "#ffe08a"];
     const thrown = Array.from({ length: rich ? 38 : 22 }, () => {
       const bit = this.add(new THREE.Mesh(diamond, glow(colors[Math.floor(Math.random() * colors.length)], 1)));
       const size = 0.035 + Math.random() * 0.04;
@@ -3275,7 +3276,7 @@ export class SpellFx {
       return { bit, v, size, life: 0.8 + Math.random() * 0.5, floor: at.y - 0.3, spin: Math.random() * 12 };
     });
     const hanging = Array.from({ length: rich ? 12 : 7 }, (_, i) => {
-      const bit = this.add(new THREE.Mesh(diamond, glow(i % 3 ? "#fff3c4" : "#ffd45e", 0)));
+      const bit = this.add(new THREE.Mesh(diamond, glow(i % 3 ? CREAM_GLOW : GOLD, 0)));
       const size = 0.03 + Math.random() * 0.03;
       const a = Math.random() * Math.PI * 2;
       const r = 0.1 + Math.random() * 0.45;
@@ -3330,7 +3331,7 @@ export class SpellFx {
    * adds a puff of dust and a ring across the floor.
    */
   splinters(at: THREE.Vector3, count: number, burst = false) {
-    const woods = ["#a87b4a", "#8a6238", "#6b4a2a", "#c29464"];
+    const woods = ["#a87b4a", BARK_BROWN, "#6b4a2a", "#c29464"];
     const floor = at.y - (burst ? 0.38 : 0.3);
     const bits = Array.from({ length: count }, (_, i) => {
       const bit = this.add(new THREE.Mesh(shaft, flat(woods[i % woods.length])));
@@ -3345,7 +3346,7 @@ export class SpellFx {
     });
     const dust = burst
       ? Array.from({ length: 7 }, (_, i) => {
-          const puff = this.add(new THREE.Mesh(sphere, new THREE.MeshLambertMaterial({ color: "#8f7a62", transparent: true, opacity: 0.5, depthWrite: false })));
+          const puff = this.add(new THREE.Mesh(sphere, new THREE.MeshLambertMaterial({ color: DUST_BROWN, transparent: true, opacity: 0.5, depthWrite: false })));
           const a = (i / 7) * Math.PI * 2;
           puff.position.copy(at).add(new THREE.Vector3(Math.cos(a) * 0.15, -0.15, Math.sin(a) * 0.15));
           return { puff, dir: new THREE.Vector3(Math.cos(a), 0.35, Math.sin(a)).multiplyScalar(0.7 + Math.random() * 0.4) };
