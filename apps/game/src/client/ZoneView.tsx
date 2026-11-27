@@ -548,6 +548,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
    */
   const [pointerSpot, setPointerSpot] = useState<Lean | null>(null);
   const spotSeen = useRef<(at: Lean | null) => void>(() => {});
+  /** What the spot taken last covers, for spotSeen: kept while nothing it depends on changes. */
+  const lastCover = useRef<{ key: string; z: unknown; cover: string } | null>(null);
   /** Where in the hex `at` the pointer is, for a shape that turns with it. */
   const leanIn = (at: HexPos | undefined): Lean | undefined => (at && pointerSpot ? { q: pointerSpot.q - at.q, r: pointerSpot.r - at.r } : undefined);
   // Alt (Option) held: the card for whoever is under the pointer says what each effect on them does, in full.
@@ -2448,7 +2450,14 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     const over = hoverNow.current;
     if (!at || !over || !z || !act || pick?.kind !== "ability") return;
     const cover = (s: Lean | null) => (s ? abilityArea(z, act, pick.id, over, undefined, { q: s.q - over.q, r: s.r - over.r }) : []).map(posKey).sort().join(" ");
-    if (cover(at) !== cover(pointerSpot)) setPointerSpot(at);
+    // What the spot taken now covers is the same until the hex, the ability, the lean or the zone changes: kept, so each move of the pointer works out only its own.
+    const key = `${over.q},${over.r}|${pick.id}|${act.id}|${pointerSpot ? `${pointerSpot.q},${pointerSpot.r}` : ""}`;
+    let was = lastCover.current;
+    if (!was || was.key !== key || was.z !== z) was = lastCover.current = { key, z, cover: cover(pointerSpot) };
+    if (cover(at) !== was.cover) {
+      lastCover.current = null;
+      setPointerSpot(at);
+    }
   };
   useEffect(() => layer.current?.setOverlays(overlays), [overlays]);
 

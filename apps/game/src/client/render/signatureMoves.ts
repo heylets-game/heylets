@@ -46,13 +46,22 @@ export function waveReaches(far: number, radius: number, life: number): number {
   return (1 - Math.sqrt(1 - out)) * life;
 }
 
+// One ring for every wave of a width (a Howl lays five at once): each wave scales it and fades its own material, and
+// none disposes of it, as the next would be using it.
+const waveRings = new Map<number, THREE.RingGeometry>();
+const ringOf = (width: number): THREE.RingGeometry => {
+  let ring = waveRings.get(width);
+  if (!ring) waveRings.set(width, (ring = new THREE.RingGeometry(1 - width, 1, 48)));
+  return ring;
+};
+
 /**
  * Lay a wave on the ground in `group` (see WaveOpts). Returns its step: run it every frame with the seconds gone by,
  * and it says whether it is still going; once it is over it has taken itself away.
  */
 export function groundWave(group: THREE.Object3D, o: WaveOpts): (dt: number) => boolean {
   const material = new THREE.MeshBasicMaterial({ color: o.color, transparent: true, side: THREE.DoubleSide, depthWrite: false });
-  const mesh = new THREE.Mesh(new THREE.RingGeometry(1 - o.width, 1, 48), material);
+  const mesh = new THREE.Mesh(ringOf(o.width), material);
   mesh.rotation.x = -Math.PI / 2;
   mesh.position.copy(o.at);
   mesh.renderOrder = 8;
@@ -66,7 +75,6 @@ export function groundWave(group: THREE.Object3D, o: WaveOpts): (dt: number) => 
     material.opacity = 0.85 * (1 - k) * (1 - k * 0.3);
     if (k < 1) return true;
     group.remove(mesh);
-    mesh.geometry.dispose();
     material.dispose();
     return false;
   };
