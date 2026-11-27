@@ -403,7 +403,7 @@ const LYING = 0.45;
 /** The mark (Want.mark) over a hero who is down: out of the fight until helped up, not merely knocked flat (Prone). */
 const DOWN_MARK: Badge = { kind: "downed", color: "#ff7a68", rounds: 0 };
 /** How tall a mark is drawn, against a badge's 0.3; and how far it bobs, and how fast it bobs and pulses. */
-const MARK = { tall: 0.46, bob: 0.06, speed: 2.6 };
+const MARK = { tall: 0.64, bob: 0.07, speed: 2.6 };
 /** How long a shove that knocks someone off their feet keeps them down, at least, before they get up (longer if Prone). */
 const FLOORED_S = 1.4;
 /** The turn, about y, from `from` to `to` by the shorter way round. */
