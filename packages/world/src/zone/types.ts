@@ -578,6 +578,8 @@ export interface Rolled {
   crit?: boolean;
   /** The target saved, and took half. */
   halved?: boolean;
+  /** What of `plus` came from the moment (a Bard's tune, Rallied, a Wet target), as Roll `mods`. The rest is the roller's own. */
+  mods?: RollMod[];
 }
 
 /**

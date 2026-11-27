@@ -253,7 +253,7 @@ export default function FightUiLab({ me, refresh }: { me?: Me; refresh?: () => P
   /** A blow that lands, and the save it forces coming in behind it as soon as a fight would send it: the card's queue. */
   const hitThenSave = () => {
     const blow = roll({ kind: "attack", label: "Shock · attack", d20: [14], bonus: 5, vs: 13, adv: 0, target: "e1", mods: [HIGH] });
-    const dmg = rolled(8, 1, 3);
+    const dmg = rolled(8, 1, 5, { mods: [{ name: "Rallied", n: 2 }] });
     add({ k: "roll", id: nid(), who: "Mira Tidewright", side: "hero", roll: blow, target: "Dire Wolf" }, { k: "hit", id: nid(), actor: "Mira Tidewright", side: "hero", target: "Dire Wolf", what: "Shock", amount: dmg.total, dice: dmg });
     setToast({ roll: blow, dice: dmg });
     setTimeout(() => {

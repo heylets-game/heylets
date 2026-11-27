@@ -5,7 +5,7 @@
 
 import type { StatKey, Stats } from "@gantt-quest/core";
 import type { Rng } from "../rng";
-import type { Roll, Rolled, Unit } from "./types";
+import type { Roll, RollMod, Rolled, Unit } from "./types";
 
 export interface Dice {
   n: number;
@@ -68,13 +68,15 @@ export function rollDice(rng: Rng, dice: Dice, crit = false): number {
 
 /**
  * Roll damage or healing and keep what each die showed, for the log: the dice, `more` added to their flat
- * part (a hero's stat, weapon and level; whatever else the blow adds), and what it all came to.
+ * part (a hero's stat, weapon and level; whatever else the blow adds), and what it all came to. `mods`: what of
+ * `more` came from the moment (Rolled `mods`), kept to be shown; those that add nothing are left out.
  */
-export function rollShown(rng: Rng, dice: Dice, more = 0, crit = false): Rolled {
+export function rollShown(rng: Rng, dice: Dice, more = 0, crit = false, mods: RollMod[] = []): Rolled {
   const faces: number[] = [];
   for (let i = 0; i < dice.n * (crit ? 2 : 1); i++) faces.push(rng.int(1, dice.d));
   const plus = dice.plus + more;
-  return { d: dice.d, faces, plus, total: Math.max(0, faces.reduce((n, f) => n + f, 0) + plus), ...(crit ? { crit: true } : {}) };
+  const shown = mods.filter((m) => m.n !== 0);
+  return { d: dice.d, faces, plus, total: Math.max(0, faces.reduce((n, f) => n + f, 0) + plus), ...(crit ? { crit: true } : {}), ...(shown.length > 0 ? { mods: shown } : {}) };
 }
 
 /** Advantage and disadvantage cancel: any of each leaves a plain roll. */

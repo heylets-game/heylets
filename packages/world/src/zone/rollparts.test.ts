@@ -3,7 +3,7 @@ import { at, flatBoard, inAFight, standEnemy, standHero } from "../test/zoneBoar
 import { posKey } from "@gantt-quest/core";
 import { makeRng } from "../rng";
 import { attackRoll, defenceMods, defenceOf, saveRoll, type Ctx } from "./engine";
-import { swingsOf } from "./rules";
+import { rollShown, swingsOf } from "./rules";
 import type { ZoneEvent, ZoneState } from "./types";
 
 // What of the moment a roll carries (Roll mods, vsMods, advWhy), as the rolls of a real fight make them.
@@ -26,6 +26,18 @@ function setUp(o: { wolfIn?: "forest" } = {}) {
   inAFight(state, ann.id, wolf.id);
   return { state, ann, wolf };
 }
+
+describe("what of the moment damage dice carry", () => {
+  it("keeps the parts it is given, and leaves out any that add nothing", () => {
+    const rolled = rollShown(makeRng(3), { n: 1, d: 8, plus: 0 }, 5, false, [{ name: "Rallied", n: 2 }, { name: "Chorus", n: 0 }]);
+    expect(rolled.mods).toEqual([{ name: "Rallied", n: 2 }]);
+    expect(rolled.plus).toBe(5);
+  });
+
+  it("carries none when there are none", () => {
+    expect(rollShown(makeRng(3), { n: 1, d: 8, plus: 0 }, 3)).not.toHaveProperty("mods");
+  });
+});
 
 describe("what of the moment a roll carries", () => {
   it("a shot carries its bonuses and penalties, the target's Defence of the moment, and why it had advantage", () => {

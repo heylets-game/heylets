@@ -689,6 +689,8 @@
 .fr-who em.swung { background: color-mix(in srgb, currentColor 22%, transparent); box-shadow: 0 0 10px color-mix(in srgb, currentColor 55%, transparent); }
 .fr-parts, .fr-swing { opacity: 0; }
 .fight-roll.landed .fr-parts { animation: fr-rise 0.25s ease-out 0.45s both; }
+/* The damage dice's parts come up with the dice, after the roll's own. */
+.fight-roll.landed .fr-parts.dmg { animation-delay: 0.65s; }
 .fight-roll.landed .fr-part.swung { animation: fr-lit 0.5s ease-out 0.75s both; }
 .fight-roll.landed .fr-swing { animation: fr-rise 0.3s ease-out 0.8s both; }
 @keyframes fr-lit { from { box-shadow: none; background: transparent; scale: 1; } 40% { scale: 1.12; } to { scale: 1; } }

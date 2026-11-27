@@ -161,8 +161,15 @@ export function DiceSum({ dice, blocked }: { dice: Rolled; blocked?: number }) {
       {dice.crit && <span className="fl-mod adv" title="A critical hit rolls twice the dice">crit</span>}
       {dice.halved && <span className="fl-mod half" title="The target saved, and took half">halved</span>}
       {!!blocked && <span className="fl-mod blk" title="Taken by a shield or a guard">({blocked} blocked)</span>}
+      {(dice.mods ?? []).map((m, i) => <span key={i} className={`fl-part ${m.n > 0 ? "good" : "bad"}`}>{signed(m.n)} {m.name}</span>)}
     </>
   );
+}
+
+/** What of the moment went into damage dice (Rolled `mods`), a chip each, as the roll card shows them under the dice. */
+function DiceParts({ dice }: { dice: Rolled }) {
+  if (!dice.mods?.length) return null;
+  return <div className="fr-parts dmg">{dice.mods.map((m, i) => <span key={i} className={`fr-part ${m.n > 0 ? "good" : "bad"}`}>{signed(m.n)} {m.name}</span>)}</div>;
 }
 
 /** A d20 roll written out: the dice, the bonus, the sum, what it had to reach, and how it came out. */
@@ -462,6 +469,7 @@ function RollCard({ roll, who, dice, hold, onGone }: { roll: Roll; who?: string;
             {dice.halved && <i>halved</i>}
           </div>
         )}
+        {dice && <DiceParts dice={dice} />}
       </div>
     </div>
   );
