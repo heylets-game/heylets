@@ -28,7 +28,7 @@
 // shows as a blow lands (ZoneView's `roll`), so it stands in that card's place.
 
 import { memo, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import type { Roll, Rolled } from "@gantt-quest/world";
+import { swingsOf, type Roll, type Rolled, type Swing } from "@gantt-quest/world";
 import { ChatInput } from "../ChatInput";
 import "./fight.css";
 
@@ -73,6 +73,36 @@ const keptIndex = (roll: Roll) => Math.max(0, roll.d20.indexOf(roll.kept));
 const signed = (n: number) => `${n < 0 ? "−" : "+"} ${Math.abs(n)}`;
 const SHAPES = new Set([4, 6, 8, 10, 12, 20]);
 
+/** What a roll that went against its roller lost them, in a word: "cost the hit". */
+const LOST: Record<Roll["kind"], string> = { attack: "hit", save: "save", shove: "shove", initiative: "roll" };
+const listOf = (names: string[]) => (names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`);
+
+/** What made the difference to a roll (swingsOf), as a sentence: "High ground made the difference", "Trees cost the hit". */
+export function swingText(roll: Roll, s: Swing): string {
+  const did = s.helped ? "made the difference" : `cost the ${LOST[roll.kind]}`;
+  if (s.adv) {
+    const which = roll.adv > 0 ? "Advantage" : "Disadvantage";
+    return `${s.names.length > 0 ? `${which} (${s.names.join(", ")})` : which} ${did}`;
+  }
+  if (s.between) return `Between them, ${listOf(s.names)} ${did}`;
+  return `${listOf(s.names)} ${s.names.length === 2 ? "both " : s.names.length > 2 ? "all " : ""}${did}`;
+}
+
+/**
+ * A roll's parts of the moment (Roll `mods`, then `vsMods`), each as it is shown: what it added, whether it was on
+ * the roller's side (a bonus of theirs, or a lowering of what they had to reach), and whether it made the difference.
+ */
+function partsOf(roll: Roll, swings: Swing[]) {
+  const named = new Set(swings.filter((s) => !s.adv).flatMap((s) => s.names));
+  return [
+    ...(roll.mods ?? []).map((m) => ({ text: `${signed(m.n)} ${m.name}`, good: m.n > 0, swung: named.has(m.name) })),
+    ...(roll.vsMods ?? []).map((m) => ({ text: `vs ${signed(m.n)} ${m.name}`, good: m.n < 0, swung: named.has(m.name) })),
+  ];
+}
+
+/** Whether advantage or disadvantage made the difference to a roll, for its badge. */
+const advSwung = (swings: Swing[]) => swings.some((s) => s.adv);
+
 /**
  * One die as a chip in its own shape, showing what it rolled. `dropped` strikes it through (the d20 that did not
  * count); the highest and lowest faces of a d20 are tinted, and a damage die that rolled its most is too.
@@ -105,15 +135,26 @@ export function DiceSum({ dice, blocked }: { dice: Rolled; blocked?: number }) {
 function RollSum({ roll }: { roll: Roll }) {
   const kept = keptIndex(roll);
   const out = rollOutcome(roll);
+  const swings = swingsOf(roll);
+  const parts = partsOf(roll, swings);
+  const why = roll.advWhy?.length ? ` (${roll.advWhy.join(", ")})` : "";
   return (
-    <div className="fl-math">
-      {roll.d20.map((n, i) => <Die key={i} d={20} n={n} dropped={i !== kept} />)}
-      <span>{signed(roll.bonus)}</span>
-      <span>= <strong>{roll.total}</strong></span>
-      {roll.kind !== "initiative" && <i>vs {roll.vs}</i>}
-      {roll.adv !== 0 && <span className={`fl-mod ${roll.adv > 0 ? "adv" : "dis"}`} title={roll.adv > 0 ? "Advantage: two dice, the higher counts" : "Disadvantage: two dice, the lower counts"}>{roll.adv > 0 ? "adv" : "dis"}</span>}
-      {roll.kind !== "initiative" && <span className={`fl-tag ${out.tone}`}>{out.word}</span>}
-    </div>
+    <>
+      <div className="fl-math">
+        {roll.d20.map((n, i) => <Die key={i} d={20} n={n} dropped={i !== kept} />)}
+        <span>{signed(roll.bonus)}</span>
+        <span>= <strong>{roll.total}</strong></span>
+        {roll.kind !== "initiative" && <i>vs {roll.vs}</i>}
+        {roll.adv !== 0 && <span className={`fl-mod ${roll.adv > 0 ? "adv" : "dis"} ${advSwung(swings) ? "swung" : ""}`} title={roll.adv > 0 ? `Advantage${why}: two dice, the higher counts` : `Disadvantage${why}: two dice, the lower counts`}>{roll.adv > 0 ? "adv" : "dis"}</span>}
+        {roll.kind !== "initiative" && <span className={`fl-tag ${out.tone}`}>{out.word}</span>}
+      </div>
+      {parts.length > 0 && (
+        <div className="fl-parts">
+          {parts.map((p, i) => <span key={i} className={`fl-part ${p.good ? "good" : "bad"} ${p.swung ? "swung" : ""}`}>{p.text}</span>)}
+        </div>
+      )}
+      {swings.map((s, i) => <div key={i} className={`fl-swing ${s.helped ? "good" : "bad"}`}>{swingText(roll, s)}</div>)}
+    </>
   );
 }
 
@@ -123,7 +164,7 @@ export function logLine(e: LogEntry): string {
     case "head": return e.text;
     case "turn": return `${e.name}'s turn`;
     case "note": return e.text;
-    case "roll": return e.roll.kind === "initiative" ? `${e.who} rolls ${e.roll.total} for initiative` : `${e.who}: ${e.roll.label} ${e.roll.total} vs ${e.roll.vs}, ${rollOutcome(e.roll).word.toLowerCase()}`;
+    case "roll": return e.roll.kind === "initiative" ? `${e.who} rolls ${e.roll.total} for initiative` : `${e.who}: ${e.roll.label} ${e.roll.total} vs ${e.roll.vs}, ${rollOutcome(e.roll).word.toLowerCase()}${swingsOf(e.roll).map((s) => ` (${swingText(e.roll, s)})`).join("")}`;
     case "hit": return e.actor ? `${e.actor} hits ${e.target} with ${e.what} for ${e.amount}${e.crit ? " (critical)" : ""}` : `${e.target} takes ${e.amount} from ${e.what}`;
     case "miss": return `${e.actor} misses ${e.target} with ${e.what}`;
     case "heal": return e.actor && e.actor !== e.target ? `${e.actor} heals ${e.target} for ${e.amount} with ${e.what}` : `${e.target} recovers ${e.amount} from ${e.what}`;
@@ -267,6 +308,9 @@ export interface RollToastProps {
 /** How long the die tumbles before it lands, in milliseconds (fr-tumble in fight.css). */
 const TUMBLE_MS = 700;
 
+/** How much longer the roll card stays when it says what made the difference. */
+const SWING_READ_MS = 900;
+
 function BigD20({ n, cls }: { n: number; cls: string }) {
   return (
     <span className={`fr-d20 ${cls}`}>
@@ -309,7 +353,9 @@ export function RollToast({ roll, who, dice, hold = 2200 }: RollToastProps) {
       spin = setInterval(() => setFaces(roll.d20.map(() => 1 + Math.floor(Math.random() * 20))), 60);
       timers.push(setTimeout(land, TUMBLE_MS));
     }
-    timers.push(setTimeout(() => setPhase("out"), hold), setTimeout(() => setPhase("gone"), hold + 360));
+    // A roll with something that made the difference stays a little longer: there is a line more to read.
+    const stay = hold + (swingsOf(roll).length > 0 ? SWING_READ_MS : 0);
+    timers.push(setTimeout(() => setPhase("out"), stay), setTimeout(() => setPhase("gone"), stay + 360));
     return () => {
       if (spin) clearInterval(spin);
       timers.forEach(clearTimeout);
@@ -321,6 +367,8 @@ export function RollToast({ roll, who, dice, hold = 2200 }: RollToastProps) {
   const kept = keptIndex(roll);
   const botch = roll.kind === "attack" && roll.kept === 1;
   const words: ReactNode = roll.kind === "initiative" ? "Initiative" : out.tone === "crit" ? "Critical hit!" : out.word;
+  const swings = swingsOf(roll);
+  const parts = partsOf(roll, swings);
   return (
     <div key={play.n} className={`fight-ui fight-roll ${out.tone} ${botch ? "botch" : ""} ${phase === "roll" ? "" : "landed"} ${phase === "out" ? "out" : ""}`} role="status">
       <div className="fr-dice">
@@ -329,7 +377,7 @@ export function RollToast({ roll, who, dice, hold = 2200 }: RollToastProps) {
       <div className="fr-text">
         <div className="fr-who">
           {who && <><b>{who}</b> · </>}{roll.label}
-          {roll.adv !== 0 && <em className={roll.adv > 0 ? "adv" : "dis"}>{roll.adv > 0 ? "advantage" : "disadvantage"}</em>}
+          {roll.adv !== 0 && <em className={`${roll.adv > 0 ? "adv" : "dis"} ${advSwung(swings) ? "swung" : ""}`} title={roll.advWhy?.join(", ")}>{roll.adv > 0 ? "advantage" : "disadvantage"}</em>}
         </div>
         <div className="fr-line">
           <span className="fr-sum">
@@ -338,6 +386,12 @@ export function RollToast({ roll, who, dice, hold = 2200 }: RollToastProps) {
           </span>
           <span className="fr-out">{words}</span>
         </div>
+        {parts.length > 0 && (
+          <div className="fr-parts">
+            {parts.map((p, i) => <span key={i} className={`fr-part ${p.good ? "good" : "bad"} ${p.swung ? "swung" : ""}`}>{p.text}</span>)}
+          </div>
+        )}
+        {swings.map((s, i) => <div key={i} className={`fr-swing ${s.helped ? "good" : "bad"}`}>{swingText(roll, s)}</div>)}
         {dice && (
           <div className="fr-dmg">
             <i>{dice.faces.length}d{dice.d}</i>

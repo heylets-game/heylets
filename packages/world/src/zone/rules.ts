@@ -88,10 +88,57 @@ export function d20(rng: Rng, opts: Pick<Roll, "kind" | "id" | "target" | "label
   const dice = opts.adv === 0 ? [rng.int(1, 20)] : [rng.int(1, 20), rng.int(1, 20)];
   const kept = opts.adv === 1 ? Math.max(...dice) : opts.adv === -1 ? Math.min(...dice) : dice[0];
   const total = kept + opts.bonus;
-  const attack = opts.kind === "attack";
-  const crit = attack && kept === 20;
-  const ok = crit || (!(attack && kept === 1) && total >= opts.vs);
-  return { ...opts, d20: dice, kept, total, ok, crit };
+  const crit = opts.kind === "attack" && kept === 20;
+  return { ...opts, d20: dice, kept, total, ok: reaches(opts.kind, kept, total, opts.vs), crit };
+}
+
+/** Whether a d20 that showed `kept` and came to `total` makes it against `vs`: on an attack a 20 always does and a 1 never. */
+const reaches = (kind: Roll["kind"], kept: number, total: number, vs: number): boolean =>
+  kind === "attack" && kept === 20 ? true : kind === "attack" && kept === 1 ? false : total >= vs;
+
+/** Something that made the difference to a roll (swingsOf). */
+export interface Swing {
+  /** Short names of what did it: the RollMods' names, or for advantage its reasons (Roll `advWhy`, maybe none). */
+  names: string[];
+  /** It went the roller's way: what did it helped them make the roll. False: it cost them the roll. */
+  helped: boolean;
+  /** No one of `names` would have turned it alone, but all of them together did. */
+  between?: boolean;
+  /** It was advantage or disadvantage: the die it dropped would have turned it. */
+  adv?: boolean;
+}
+
+/**
+ * What made the difference to a roll: what of the moment (Roll `mods`, `vsMods`, `adv`) the roll would have come out
+ * the other way without.
+ *
+ * Only what pushed the way it came out counts: on a roll made, what helped (its bonuses, and what lowered the number to
+ * reach); on one missed, what hurt. Each is first taken away alone, and any that turns it on its own is named. Should
+ * none, they are taken away all at once, and if that turns it they are named together (`between`): a 10 + 2 + 1
+ * against 11 was made by the two between them, neither alone. Advantage or disadvantage made the difference if the die
+ * it dropped would have. Nothing for initiative, nor for a roll whose outcome was not its sum's (a Ghostsail Cloak's).
+ */
+export function swingsOf(roll: Roll): Swing[] {
+  if (roll.kind === "initiative" || reaches(roll.kind, roll.kept, roll.total, roll.vs) !== roll.ok) return [];
+  const turns = (kept: number, total: number, vs: number) => reaches(roll.kind, kept, total, vs) !== roll.ok;
+  const out: Swing[] = [];
+  // The numbers: each that pushed the way it went, as what taking it away would do to the total and to what was reached for.
+  const way = roll.ok ? 1 : -1;
+  const parts = [
+    ...(roll.mods ?? []).filter((m) => m.n * way > 0).map((m) => ({ name: m.name, total: -m.n, vs: 0 })),
+    ...(roll.vsMods ?? []).filter((m) => m.n * way < 0).map((m) => ({ name: m.name, total: 0, vs: -m.n })),
+  ];
+  const alone = parts.filter((p) => turns(roll.kept, roll.total + p.total, roll.vs + p.vs));
+  if (alone.length > 0) out.push({ names: alone.map((p) => p.name), helped: roll.ok });
+  else if (parts.length > 1 && turns(roll.kept, roll.total + parts.reduce((n, p) => n + p.total, 0), roll.vs + parts.reduce((n, p) => n + p.vs, 0))) {
+    out.push({ names: parts.map((p) => p.name), helped: roll.ok, between: true });
+  }
+  // Advantage or disadvantage: the other die, had it been the one kept.
+  if (roll.adv !== 0 && roll.d20.length === 2) {
+    const other = roll.adv === 1 ? Math.min(...roll.d20) : Math.max(...roll.d20);
+    if (turns(other, roll.total - roll.kept + other, roll.vs)) out.push({ names: roll.advWhy ?? [], helped: roll.ok, adv: true });
+  }
+  return out;
 }
 
 /** The chance, 0 to 1, that an attack with this bonus reaches this Defence. For the tooltip, and for the enemy weighing its moves. */

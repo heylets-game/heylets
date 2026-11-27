@@ -100,7 +100,7 @@ export {
   type ThrowableDef,
   type EnemyStrike,
 } from "./kit";
-export { mod as statMod, proficiency, heroMove, heroDefence, diceFor, diceText, diceAverage, hitChance, rollShown, scaled, SCALE_RATES, DEFAULT_SCALE, type Dice, type ScaleRate } from "./rules";
+export { mod as statMod, proficiency, heroMove, heroDefence, diceFor, diceText, diceAverage, hitChance, rollShown, swingsOf, scaled, SCALE_RATES, DEFAULT_SCALE, type Dice, type ScaleRate, type Swing } from "./rules";
 export { SPURS, UNTIMED, attackContext, defenceOf, has as hasCondition, shieldOf, unseen, usesLeft, type AttackContext } from "./engine";
 export { FIGHTS_ONLY, abilityArea, damageRoll, healRoll, carrySpot, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, crateBlow, isBlink, moveLeft, walkAp, apForMove, payMove, previewAttack, leavesReach, shiftInto, shoveDest, edgeDc, EDGE_DC, BARD_AURA_RANGE, type Aim, type Shift } from "./combat";
 export { chartOf, constellationHexes, constellationLinks, courseMarks, litFoes } from "./stars";

@@ -9,7 +9,7 @@
 // onto it), and a block the same size and place where they have none.
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { ACTION_AP, AP_MAX, AP_TURN, BONUS_AP, FURNISHINGS, HERO_CLASSES, apForMove, moveLeft, weaponItem, type Budget, type LootItem, type Roll, type Rolled } from "@gantt-quest/world";
+import { ACTION_AP, AP_MAX, AP_TURN, BONUS_AP, FURNISHINGS, HERO_CLASSES, apForMove, moveLeft, weaponItem, type Budget, type LootItem, type Roll, type RollMod, type Rolled } from "@gantt-quest/world";
 import type { Me } from "../api";
 import { InventoryScreen } from "../InventoryScreen";
 import { useDropTarget } from "../dragDrop";
@@ -48,6 +48,35 @@ const roll = (over: Partial<Roll> & Pick<Roll, "kind" | "label" | "d20" | "bonus
   const crit = over.kind === "attack" && kept === 20;
   return { id: "h1", kept, total, ok: crit || (kept !== 1 && total >= over.vs), crit, ...over };
 };
+/**
+ * Rolls with parts of the moment in them (Roll `mods`, `vsMods`, `advWhy`), each set up to show one way of what made
+ * the difference, or of nothing doing. `own` is the roller's own bonus and `vs` the number to reach before `vsMods`.
+ * Mira (h1) attacks the Dire Wolf (e1); the wolf (e1) bites Mira; the Bandit Cutter (e2) saves.
+ */
+interface SwingCase { name: string; by: "h1" | "e1" | "e2"; kind?: Roll["kind"]; label: string; d20: number[]; adv?: -1 | 0 | 1; own: number; mods?: RollMod[]; vs: number; vsMods?: RollMod[]; advWhy?: string[] }
+const HIGH: RollMod = { name: "High ground", n: 2 };
+const BEACON: RollMod = { name: "Beacon", n: 1 };
+const SWING_CASES: SwingCase[] = [
+  { name: "Both needed", by: "h1", label: "Cleave · attack", d20: [10], own: 3, mods: [HIGH, BEACON], vs: 16 },
+  { name: "One decided", by: "h1", label: "Cleave · attack", d20: [10], own: 3, mods: [HIGH, BEACON], vs: 15 },
+  { name: "Between them", by: "h1", label: "Cleave · attack", d20: [10], own: 3, mods: [HIGH, BEACON], vs: 14 },
+  { name: "None decided", by: "h1", label: "Cleave · attack", d20: [10], own: 3, mods: [HIGH, BEACON], vs: 13 },
+  { name: "Trees cost it", by: "h1", label: "Longshot · attack", d20: [11], own: 3, mods: [BEACON, { name: "Trees", n: -2 }], vs: 14 },
+  { name: "Coral Armor", by: "h1", label: "Cleave · attack", d20: [12], own: 3, vs: 14, vsMods: [{ name: "Coral Armor", n: 2 }] },
+  { name: "Sundered", by: "h1", label: "Cleave · attack", d20: [11], own: 3, vs: 16, vsMods: [{ name: "Sundered", n: -2 }] },
+  { name: "Advantage", by: "h1", label: "Cleave · attack", d20: [15, 4], adv: 1, own: 3, vs: 14, advWhy: ["Exposed"] },
+  { name: "Disadvantage", by: "h1", label: "Longshot · attack", d20: [15, 4], adv: -1, own: 3, vs: 14, advWhy: ["Poisoned"] },
+  { name: "Bonus + adv.", by: "h1", label: "Cleave · attack", d20: [12, 3], adv: 1, own: 1, mods: [HIGH], vs: 15, advWhy: ["Inspired"] },
+  { name: "Weakened save", by: "e2", kind: "save", label: "Agility save", d20: [12], own: 2, mods: [{ name: "Weakened", n: -2 }], vs: 13 },
+  { name: "Enemy vs Coral", by: "e1", label: "Bite · attack", d20: [13], own: 4, vs: 16, vsMods: [{ name: "Coral Armor", n: 2 }] },
+];
+const swingRoll = (c: SwingCase): Roll => roll({
+  kind: c.kind ?? "attack", id: c.by, label: c.label, d20: c.d20, adv: c.adv ?? 0,
+  bonus: c.own + (c.mods ?? []).reduce((n, m) => n + m.n, 0), vs: c.vs + (c.vsMods ?? []).reduce((n, m) => n + m.n, 0),
+  ...(c.kind === "save" ? {} : { target: c.by === "e1" ? "h1" : "e1" }), mods: c.mods, vsMods: c.vsMods, advWhy: c.advWhy,
+});
+const LAB_NAMES: Record<string, string> = { h1: "Mira Tidewright", e1: "Dire Wolf", e2: "Bandit Cutter" };
+
 const rolled = (d: number, n: number, plus: number, more: Partial<Rolled> = {}): Rolled => {
   const faces = Array.from({ length: n }, () => 1 + Math.floor(Math.random() * d));
   return { d, faces, plus, total: faces.reduce((a, b) => a + b, 0) + plus, ...more };
@@ -202,6 +231,21 @@ export default function FightUiLab({ me, refresh }: { me?: Me; refresh?: () => P
       { k: "roll", id: nid(), who: "Bandit Cutter", side: "enemy", roll: r },
       { k: "hit", id: nid(), actor: "Brann", side: "hero", target: "Bandit Cutter", what: "Fire bomb", amount: ok ? Math.floor(dmg.total / 2) : dmg.total, dice: dmg },
     );
+    setToast({ roll: r, dice: dmg });
+  };
+  /** One of SWING_CASES: its roll on the card and in the log, with the blow that follows a hit. */
+  const swing = (c: SwingCase) => {
+    const r = swingRoll(c);
+    const who = LAB_NAMES[c.by];
+    const target = r.target ? LAB_NAMES[r.target] : undefined;
+    const side = c.by === "h1" ? "hero" : "enemy";
+    const out: LogEntry[] = [{ k: "roll", id: nid(), who, side, roll: r, target }];
+    let dmg: Rolled | undefined;
+    if (r.kind === "attack" && r.ok) {
+      dmg = rolled(8, 1, 3);
+      out.push({ k: "hit", id: nid(), actor: who, side, target: target!, what: c.label.split(" · ")[0], amount: dmg.total, dice: dmg });
+    } else if (r.kind === "attack") out.push({ k: "miss", id: nid(), actor: who, side, target: target!, what: c.label.split(" · ")[0] });
+    add(...out);
     setToast({ roll: r, dice: dmg });
   };
   const shove = () => {
@@ -408,6 +452,8 @@ export default function FightUiLab({ me, refresh }: { me?: Me; refresh?: () => P
             <B press={() => setEntries([])}>Clear</B>
             <B on={logAbove} press={() => setLogAbove((a) => !a)}>Log above the bar</B>
           </div>
+          <div style={lab.head}>Made the difference</div>
+          <div style={lab.row}>{SWING_CASES.map((c) => <B key={c.name} press={() => swing(c)}>{c.name}</B>)}</div>
           <div style={lab.head}>Loot</div>
           <div style={lab.row}>
             <B press={() => setLoot({ kind: "body", items: LOOT.slice(0, 4) })}>Body</B>

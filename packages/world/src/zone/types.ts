@@ -546,6 +546,23 @@ export interface Roll {
   adv: -1 | 0 | 1;
   ok: boolean;
   crit: boolean;
+  /**
+   * What of `bonus` came from the moment rather than the roller's own skill (high ground, a Beacon, Weakened), each
+   * with what it added. The rest of `bonus` is their own. Absent: nothing of the moment, or a roll from before these
+   * were kept.
+   */
+  mods?: RollMod[];
+  /** The same for `vs`: what of the number to reach came from the moment (Coral Armor, Sundered, a Dour Shanty). */
+  vsMods?: RollMod[];
+  /** Why it was rolled with advantage or disadvantage (`adv`), a short name each: "Exposed", "Terror Aura". */
+  advWhy?: string[];
+}
+
+/** One thing of the moment that moved a roll or the number it had to reach: its short name, and by how much. */
+export interface RollMod {
+  /** Short enough to sit in a sentence: "High ground", "Trees", "Coral Armor". */
+  name: string;
+  n: number;
 }
 
 /** Damage or healing dice as they fell, as shown in the log: "1d8 (6) + 3 = 9". */
