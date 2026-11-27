@@ -65,7 +65,7 @@ import { SQRT3, UP, hexToWorld, placeOf, yawOf } from "./places/placing";
 import { nearWater, openEar, sounds } from "../audio/gameSounds";
 import type { AttackStyle, Fighter } from "../audio/names";
 import { PUFFS, footfalls, stepGround, worldToHex, type PuffLook } from "./footsteps";
-import { badgeTexture, badgesKey, bubbleTexture, fxTexture, labelTexture, lookFor, plateFontsReady, plateKey, sleepZTexture, spriteKey, textTexture, type Badge, type FxKind, type PlateStats, type PlateTone } from "./sprites";
+import { badgeTexture, badgesKey, bubbleTexture, markTexture, fxTexture, labelTexture, lookFor, plateFontsReady, plateKey, sleepZTexture, spriteKey, textTexture, type Badge, type FxKind, type PlateStats, type PlateTone } from "./sprites";
 
 /** What `setGlow` lights: a place by id, a waygate by its hex, or a prop by id. */
 type GlowTarget = string | HexPos | { prop: string | number } | null;
@@ -4897,7 +4897,7 @@ export class WorldRenderer {
         unit.badges.material.map?.dispose();
         unit.badges.material.dispose();
       }
-      unit.mark = this.badgeSprite(unit.mark ?? null, []);
+      unit.mark = this.markSprite(unit.mark ?? null, undefined);
       this.clearArrows(unit);
       this.dropLabel(unit);
       this.units.delete(id);
@@ -5011,20 +5011,20 @@ export class WorldRenderer {
       const markKey = badgesKey(marks);
       if (markKey !== (unit.markKey ?? "")) {
         unit.markKey = markKey;
-        unit.mark = this.badgeSprite(unit.mark ?? null, marks);
+        unit.mark = this.markSprite(unit.mark ?? null, w.mark);
       }
     }
   }
 
-  /** Put away a badge sprite (`old`), and make one for `badges` in its place, over everything else: null for none. */
-  private badgeSprite(old: THREE.Sprite | null, badges: readonly Badge[]): THREE.Sprite | null {
+  /** Put away a mark's sprite (`old`), and make one for `mark` in its place (markTexture), over everything else: null for none. */
+  private markSprite(old: THREE.Sprite | null, mark: Badge | undefined): THREE.Sprite | null {
     if (old) {
       old.material.map?.dispose();
       old.material.dispose();
       this.unitGroup.remove(old);
     }
-    if (badges.length === 0) return null;
-    const { texture, aspect } = badgeTexture(badges);
+    if (!mark) return null;
+    const { texture, aspect } = markTexture(mark);
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, transparent: true }));
     sprite.renderOrder = 7;
     sprite.layers.set(OVERLAY_LAYER);
