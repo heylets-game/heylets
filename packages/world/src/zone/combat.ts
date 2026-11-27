@@ -17,7 +17,7 @@ import { modsOf } from "./mods";
 import { d20, diceFor, hitChance, mod, proficiency, rollDice, rollShown, statOf, type Dice } from "./rules";
 import { seenByHeroes } from "./light";
 import { HINDERING, harms, chill, clearSurfaces, dropTorch, enterSurface, ignite, letGoTorch, placeSurface } from "./surfaces";
-import { FIELD_KINDS, type Budget, type CommonAction, type FieldKind, type RollMod, type Rolled, type Throwable, type Unit, type ZoneState } from "./types";
+import { FIELD_KINDS, type Budget, type CommonAction, type FieldKind, type RollMod, type Side, type Rolled, type Throwable, type Unit, type ZoneState } from "./types";
 import { clusterHexes, enterWeather, makeQuake, makeWeather, quakeHexes, rainHexes, wallHexes } from "./weather";
 import { callKin, summonCall, summonSpots } from "./summon";
 import { layCurse, drown } from "./drowning";
@@ -293,6 +293,14 @@ export function shoveDest(from: HexPos, at: HexPos): HexPos {
   const dir = directionToward(from, at);
   return { q: at.q + dir.q, r: at.r + dir.r };
 }
+
+/**
+ * Who an area attack of `side`'s hits: whoever of the other side stands on what `on` says, standing, whether they are in
+ * the fight or not, and whether or not they can be seen. A hero whose player has left (`away`) is spared, as they are
+ * from every blow, until the player comes back. (What an enemy weighs when it picks an attack leaves the hidden and those
+ * outside the fight out, as it does not know they are there: ai.ts. This is only who is really struck.)
+ */
+const struckBy = (state: ZoneState, side: Side, on: (u: Unit) => boolean): Unit[] => state.units.filter((u) => u.side !== side && !u.down && !u.away && on(u));
 
 /** One attack that everyone it catches saves against for half (see saveForHalf). */
 interface HalfSave {
@@ -1436,8 +1444,8 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
     return;
   }
   if (attack.burst) {
-    // A fight's blows are for those in it: a hero standing near who is not (their player away) is passed over.
-    const caught = state.units.filter((u) => u.side !== enemy.side && !u.down && !unseen(u) && inFight(state, u.id) && gap(enemy, u) <= attack.range && seesFor(state, enemy.side, ...meet(enemy, u)));
+    // Whoever of the other side is within its reach and in its sight: hidden or out of the fight, they are there all the same.
+    const caught = struckBy(state, enemy.side, (u) => gap(enemy, u) <= attack.range && seesFor(state, enemy.side, ...meet(enemy, u)));
     // One that does no harm (Memento Mori) is only what it leaves: each saves against that, not for half.
     if (attack.harmless) {
       for (const victim of caught) leave(victim, true);
@@ -1456,7 +1464,7 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
   const spread = aim && spreadHexes(state, attack.kit, enemy.pos, aim);
   if (spread) {
     const dice = attack.harmless ? null : rollShown(ctx.rng, attack.dice);
-    const victims = state.units.filter((u) => u.side !== enemy.side && !u.down && !unseen(u) && inFight(state, u.id) && spread.some((p) => covers(u, p)));
+    const victims = struckBy(state, enemy.side, (u) => spread.some((p) => covers(u, p)));
     if (!dice) for (const victim of victims) leave(victim, true);
     else saveForHalf(ctx, victims, { stat: "agi", dc, label: attack.name, amount: () => dice.total, hurt: { actor: enemy.id, what: attack.name, dice }, onFail: (victim) => leave(victim, false) });
     if (attack.kit.surface) placeSurface(ctx, spread, attack.kit.surface.kind, attack.kit.surface.rounds, enemy.id);
@@ -1472,7 +1480,7 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
     enemy.pos = way.land;
     ctx.events.push({ t: "jumped", id: enemy.id, from, to: way.land, dash: { name: attack.name, through: way.through } });
     const dice = rollShown(ctx.rng, attack.dice);
-    const through = state.units.filter((u) => u.side !== enemy.side && !u.down && !unseen(u) && inFight(state, u.id) && way.through.some((p) => covers(u, p)));
+    const through = struckBy(state, enemy.side, (u) => way.through.some((p) => covers(u, p)));
     saveForHalf(ctx, through, { stat: "agi", dc, label: attack.name, amount: () => dice.total, hurt: { actor: enemy.id, what: attack.name, dice }, onFail: (victim) => leave(victim, false) });
     tumble(ctx, enemy, from, null, JUMP_DOWN);
     arrive(ctx, enemy);
@@ -1510,7 +1518,7 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
     // a share of it, or by half that if they get clear (an Agility save).
     if (attack.kit.splash) {
       const share = Math.floor(rolled.total * SPLASH_SHARE);
-      const beside = state.units.filter((u) => u.side !== enemy.side && u.id !== target.id && !u.down && inFight(state, u.id) && gap(u, target) === 1);
+      const beside = struckBy(state, enemy.side, (u) => u.id !== target.id && gap(u, target) === 1);
       saveForHalf(ctx, beside, { stat: "agi", dc, label: attack.name, amount: () => share, hurt: { actor: enemy.id, what: attack.name, splash: true } });
     }
   }

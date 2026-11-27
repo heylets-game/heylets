@@ -11,7 +11,7 @@
 import { hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/core";
 import { tileAt } from "../map";
 import { alliesReached, dashWay, leaps, leavesReach, lungeLanding, mendedBy, shiftInto, shoveDest, spreadHexes } from "./combat";
-import { has } from "./engine";
+import { has, unseen } from "./engine";
 import { HIGH_REACH, blast, covers, gap, inFight, meet, nearOf, reachFrom, reaches, sameHex, seesFor, span, strikes } from "./geometry";
 import { SPLASH_SHARE, type EnemyStrike, type Mind } from "./kit";
 import { diceAverage } from "./rules";
@@ -153,7 +153,7 @@ export function leapRisk(state: ZoneState, enemy: Unit, from: HexPos, land: HexP
   if (from.q === land.q && from.r === land.r) return 1;
   const reacted = state.encounter?.reacted ?? [];
   const strikers = state.units.filter(
-    (u) => u.side !== enemy.side && !u.down && inFight(state, u.id) && !reacted.includes(u.id) && !has(u, "stunned") && !has(u, "prone") && leavesReach(state, u, enemy, from, land),
+    (u) => u.side !== enemy.side && !u.down && !unseen(u) && inFight(state, u.id) && !reacted.includes(u.id) && !has(u, "stunned") && !has(u, "prone") && leavesReach(state, u, enemy, from, land),
   ).length;
   const kind = state.surfaces[posKey(land)]?.kind;
   return 0.5 ** strikers * (harms(enemy, kind) ? 0.5 : 1);
