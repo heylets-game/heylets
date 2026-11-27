@@ -90,6 +90,26 @@ describe("the bestiary", () => {
     expect(bestiaryMarks(after, over, down)).toHaveLength(2);
   });
 
+  it("counts nothing again for one who fled the fight and is back in it, and nothing already down for one who comes late", () => {
+    const { after } = fight(board());
+    // Ann has fled: out of the order, and on the list of those who did.
+    const fled = structuredClone(after);
+    fled.encounter!.order = fled.encounter!.order.filter((id) => id !== "ann");
+    fled.encounter!.fled = ["ann"];
+    expect(bestiaryMarks(fled, after, [])).toEqual([]);
+    // Cal walks into it after one wolf has gone down: he faces the other wolf and the bandit.
+    const wolf = after.units.find((u) => u.kind === "wolf")!;
+    const before = structuredClone(after);
+    before.units.find((u) => u.id === wolf.id)!.down = true;
+    const late = structuredClone(before);
+    standHero(late, "cal", at(2, 5), hero);
+    late.encounter!.order.push("cal");
+    expect(sorted(bestiaryMarks(before, late, []))).toEqual([
+      { hero: "cal", kind: "bandit", level: 4, faced: 1, kills: 0 },
+      { hero: "cal", kind: "wolf", level: 1, faced: 1, kills: 0 },
+    ]);
+  });
+
   it("keeps one book for a party, none for a stand-in, and nothing in the combat sandbox", () => {
     const before = board((state) => {
       // Ann's party: two of one account's heroes. And a stand-in Bo plays.

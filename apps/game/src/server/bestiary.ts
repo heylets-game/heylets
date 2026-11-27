@@ -1,31 +1,34 @@
-// The bestiary in D1: what a map's fights add to a player's book, and the book as the log book reads it. The rules
-// (what a step of a map adds, and to whom) are in packages/world/src/bestiary.ts.
+// The bestiary in D1: what a map's fights add to a book, and the book as the log book reads it. The rules (what a
+// step of a map adds, and to whom) are in packages/world/src/bestiary.ts.
 //
-// A book is its owner's: the account (players.user_id), so every hero of one account fills and reads the same book,
-// or the hero's own id where there is no account.
+// A row is one hero's record of one kind. The book a player reads is every hero of their account added together
+// (players.user_id; a hero with no account is a book of their own), so every hero of an account reads the same book,
+// and it goes with the heroes when a guest's are moved into an account (auth.ts onLinkAccount).
 
 import { ENEMIES, type BestiaryMark, type BestiaryRecord } from "@gantt-quest/world";
 
-/** SQL for whose book a hero writes in and reads: `id` is the SQL for that hero's id. */
-const ownerOf = (id: string) => `(SELECT COALESCE(user_id, id) FROM players WHERE id = ${id})`;
-
-/** The statements that write a step's marks into their books: one a mark. A hero the players table does not have writes nothing. */
+/** The statements that write a step's marks down: one a mark, under the hero it names. A hero the players table does not have writes nothing. */
 export function bestiaryStatements(db: D1Database, marks: readonly BestiaryMark[], now = Date.now()): D1PreparedStatement[] {
   return marks.map((m) =>
     db
       .prepare(
-        `INSERT INTO bestiary (owner, kind, faced, kills, top_level, first_at)
-         SELECT COALESCE(user_id, id), ?2, ?3, ?4, ?5, ?6 FROM players WHERE id = ?1
-         ON CONFLICT(owner, kind) DO UPDATE SET faced = faced + excluded.faced, kills = kills + excluded.kills, top_level = MAX(top_level, excluded.top_level)`,
+        `INSERT INTO bestiary (player_id, kind, faced, kills, top_level, first_at)
+         SELECT id, ?2, ?3, ?4, ?5, ?6 FROM players WHERE id = ?1
+         ON CONFLICT(player_id, kind) DO UPDATE SET faced = faced + excluded.faced, kills = kills + excluded.kills, top_level = MAX(top_level, excluded.top_level)`,
       )
       .bind(m.hero, m.kind, m.faced, m.kills, m.level, now),
   );
 }
 
-/** A player's book: a record for each kind they have met that the game still has. */
+/** A player's book: for each kind any hero of their account has met (and the game still has), all of those heroes' records added together. */
 export async function bestiaryOf(db: D1Database, playerId: string): Promise<{ records: BestiaryRecord[] }> {
   const rows = await db
-    .prepare(`SELECT kind, faced, kills, top_level AS topLevel, first_at AS firstAt FROM bestiary WHERE owner = ${ownerOf("?")} ORDER BY first_at`)
+    .prepare(
+      `SELECT b.kind, SUM(b.faced) AS faced, SUM(b.kills) AS kills, MAX(b.top_level) AS topLevel, MIN(b.first_at) AS firstAt
+       FROM bestiary b JOIN players p ON p.id = b.player_id
+       WHERE COALESCE(p.user_id, p.id) = (SELECT COALESCE(user_id, id) FROM players WHERE id = ?)
+       GROUP BY b.kind ORDER BY firstAt, b.kind`,
+    )
     .bind(playerId)
     .all<BestiaryRecord>();
   return { records: rows.results.filter((r) => ENEMIES[r.kind]) };

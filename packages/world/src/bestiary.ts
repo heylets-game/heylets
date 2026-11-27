@@ -179,7 +179,7 @@ const foes = (state: ZoneState, order: readonly string[]): Unit[] => order.flatM
 
 /**
  * What one step of a map (zone.ts stepZone: the state before, the state after and what happened) adds to the books
- * of the players in its fight: each enemy newly in a fight with them is one more faced, and each enemy that went down
+ * of the players in its fight: each enemy on its feet newly in a fight with them is one more faced, and each enemy that went down
  * while they were in the fight is one more killed. Everyone in the fight has the kill, whoever landed the blow.
  * Nothing in the dev's combat sandbox counts, where enemies are set up and knocked down by hand.
  */
@@ -197,9 +197,11 @@ export function bestiaryMarks(prev: ZoneState, next: ZoneState, events: readonly
     m.level = Math.max(m.level, foe.level);
     marks.set(key, m);
   };
-  // Faced: every pairing of a book and an enemy the fight has now and did not have before.
-  const had = new Set([...books(prev, before).keys()].flatMap((book) => foes(prev, before).map((foe) => `${book}|${foe.id}`)));
-  for (const [book, hero] of books(next, after)) for (const foe of foes(next, after)) if (!had.has(`${book}|${foe.id}`)) mark(hero, book, foe, "faced");
+  // Faced: every pairing of a book and an enemy still standing that the fight has now and did not have before. One
+  // who fled the fight is out of its order but has faced what is in it already: coming back, they face none of it anew.
+  const hadBooks = books(prev, [...before, ...(prev.encounter?.fled ?? [])]);
+  const had = new Set([...hadBooks.keys()].flatMap((book) => foes(prev, before).map((foe) => `${book}|${foe.id}`)));
+  for (const [book, hero] of books(next, after)) for (const foe of foes(next, after)) if (!foe.down && !had.has(`${book}|${foe.id}`)) mark(hero, book, foe, "faced");
   // Killed: an enemy that went down, for everyone who was in the fight as it did.
   const fight = prev.encounter ? { state: prev, order: before } : { state: next, order: after };
   const there = books(fight.state, fight.order);

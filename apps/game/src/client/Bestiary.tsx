@@ -10,20 +10,24 @@ import { useEffect, useMemo, useState } from "react";
 import { BESTIARY_ALWAYS, BESTIARY_KINDS, bestiaryEntry, bestiaryMet, bestiaryProgress, type BestiaryRecord } from "@gantt-quest/world";
 import { spriteDataUrl } from "./render/sprites";
 
-const SEEN_KEY = "gq.bestiary.seen";
+/** Kept for each player, so one browser shared by two of them does not take one's book for the other's. */
+const seenKey = (who: string) => `gq.bestiary.seen.${who}`;
 
-/** How many kinds were written up when this browser last had the page open: what the ribbon's mark is counted from. */
-export function bestiarySeen(): number {
+/**
+ * How many kinds were written up when this player last had the page open in this browser: what the ribbon's mark is
+ * counted from. Never fewer than the kinds every book starts with, which are news to nobody.
+ */
+export function bestiarySeen(who: string): number {
   try {
-    return Number(localStorage.getItem(SEEN_KEY)) || 0;
+    return Math.max(BESTIARY_ALWAYS.length, Number(localStorage.getItem(seenKey(who))) || 0);
   } catch {
-    return 0;
+    return BESTIARY_ALWAYS.length;
   }
 }
 
-function markSeen(met: number) {
+function markSeen(who: string, met: number) {
   try {
-    localStorage.setItem(SEEN_KEY, String(met));
+    localStorage.setItem(seenKey(who), String(met));
   } catch {
     // No storage (a private window): the mark just comes back next time.
   }
@@ -33,7 +37,7 @@ function markSeen(met: number) {
 export const bestiaryBook = (records: readonly BestiaryRecord[]) => new Map(records.map((r) => [r.kind, r]));
 
 /** Whether a kind has been written up since the page was last open here. */
-export const bestiaryNews = (records: readonly BestiaryRecord[] | null): boolean => !!records && bestiaryProgress(bestiaryBook(records)).met > bestiarySeen();
+export const bestiaryNews = (records: readonly BestiaryRecord[] | null, who: string): boolean => !!records && bestiaryProgress(bestiaryBook(records)).met > bestiarySeen(who);
 
 const day = (at: number | null) => (at ? new Date(at).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "");
 const signed = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
@@ -41,6 +45,8 @@ const signed = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
 interface Props {
   /** Null while it is being fetched. */
   records: readonly BestiaryRecord[] | null;
+  /** Whose book it is (their player id): given, opening the page clears the mark `bestiaryNews` puts on its ribbon. */
+  who?: string;
   error?: string | null;
   /** The level every kind is written up at: its base numbers (1) when not said. */
   level?: number;
@@ -48,14 +54,14 @@ interface Props {
   pick?: { label: string; run(kind: string): void };
 }
 
-export function BestiaryPage({ records, error, level = 1, pick }: Props) {
+export function BestiaryPage({ records, who, error, level = 1, pick }: Props) {
   const book = useMemo(() => bestiaryBook(records ?? []), [records]);
   const progress = useMemo(() => bestiaryProgress(book), [book]);
   const [open, setOpen] = useState<string | null>(null);
   // Opening the page is having seen what is new on it.
   useEffect(() => {
-    if (records) markSeen(progress.met);
-  }, [records, progress.met]);
+    if (records && who) markSeen(who, progress.met);
+  }, [records, who, progress.met]);
   const entry = open ? bestiaryEntry(open, level) : undefined;
 
   if (entry) {
@@ -77,7 +83,8 @@ export function BestiaryPage({ records, error, level = 1, pick }: Props) {
         <p className="book-note">{level > 1 ? `As it is at level ${level}.` : "As it is at level 1. Its hit points and its damage grow with its level."}</p>
         {entry.moves.map((m, i) => (
           <div key={m.id} className="book-skill">
-            <span className="book-skill-n">{m.passive ? "✦" : i + 1}</span>
+            {/* Numbered among what it uses: what it only has (a passive) takes no number, wherever it comes in the list. */}
+            <span className="book-skill-n">{m.passive ? "✦" : entry.moves.slice(0, i + 1).filter((x) => !x.passive).length}</span>
             <div>
               <strong>{m.name}</strong>{m.passive && <small> always on</small>}
               <p>{m.text}</p>

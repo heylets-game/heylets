@@ -87,7 +87,7 @@ export function Logbook({ me, refresh, onClose, onIsland = false }: Props) {
     api.bestiary().then((b) => setBeasts(b.records), (e: Error) => setBeastsError(e.message));
   }, []);
   // Read as the ribbon is drawn: opening the page marks it seen, and the next draw finds it so.
-  const beastNews = page !== "bestiary" && bestiaryNews(beasts);
+  const beastNews = page !== "bestiary" && bestiaryNews(beasts, me.player.id);
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => e.key === "Escape" && !catches && onClose();
@@ -164,7 +164,7 @@ export function Logbook({ me, refresh, onClose, onIsland = false }: Props) {
               ))}
             </>
           )}
-          {page === "bestiary" && <BestiaryPage records={beasts} error={beastsError} />}
+          {page === "bestiary" && <BestiaryPage records={beasts} who={me.player.id} error={beastsError} />}
           {page === "skills" && (
             <>
               <h3>Skills</h3>

@@ -1,4 +1,4 @@
-// The bestiary in D1 (src/server/bestiary.ts): a step's marks added to a book, and one book for all of an account's heroes.
+// The bestiary in D1 (src/server/bestiary.ts): a step's marks added to a hero's record, and one book for all of an account's heroes.
 
 import type { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -38,5 +38,15 @@ describe("the bestiary's records", () => {
     await db.batch(bestiaryStatements(db, [{ hero: "nobody", kind: "wolf", level: 1, faced: 1, kills: 0 }, { hero: "bo", kind: "gone_kind", level: 1, faced: 1, kills: 0 }]));
     expect(sql.prepare("SELECT COUNT(*) AS n FROM bestiary").get()).toEqual({ n: 1 });
     expect((await bestiaryOf(db, "bo")).records).toEqual([]);
+  });
+
+  it("goes with a guest's heroes into the account they sign up for", async () => {
+    await db.batch(bestiaryStatements(db, [{ hero: "bo", kind: "bear", level: 2, faced: 1, kills: 1 }], 500));
+    await db.batch(bestiaryStatements(db, [{ hero: "ann", kind: "bear", level: 1, faced: 2, kills: 0 }], 900));
+    // As auth.ts onLinkAccount moves them.
+    sql.prepare("UPDATE players SET user_id = 'acct-a' WHERE id = 'bo'").run();
+    const book = [{ kind: "bear", faced: 3, kills: 1, topLevel: 2, firstAt: 500 }];
+    expect((await bestiaryOf(db, "bo")).records).toEqual(book);
+    expect((await bestiaryOf(db, "ann")).records).toEqual(book);
   });
 });
