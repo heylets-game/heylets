@@ -9,6 +9,11 @@ line off once it is done.
 - Adjust scaling for enemy abilities: how each one's numbers grow with level (`scales` in
   `packages/world/src/zone/enemyabilities.ts`, rates in `rules.ts` SCALE_RATES).
 
+## UI
+
+- The pub (its "At the bar" panel) and the keepers' rooms (Talk on the strip over the bottom bar) could use the hut's
+  top bar, `apps/game/src/client/ui/TopBar.tsx`, with their panels as its drops.
+
 ## Release notes
 
 - A `Release-note: skip` on any one commit in a PR hides the whole squash-merged PR from the notice board (Atlas #500,

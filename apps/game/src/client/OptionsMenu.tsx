@@ -53,7 +53,8 @@ export function OptionsMenu({ reset, resetBlocked, mainMenuBlocked, title = "The
   const first = useRef<HTMLButtonElement>(null);
   const menuId = useId();
 
-  // Escape opens the menu when nothing else is open over the view, and closes it again.
+  // Escape opens the menu when nothing else is open over the view, and closes it again. Anything that shuts on
+  // Escape itself (a drop of the top bar, a piece being carried) says so with `data-closes-on-escape`, and has it first.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
@@ -61,7 +62,7 @@ export function OptionsMenu({ reset, resetBlocked, mainMenuBlocked, title = "The
         e.stopPropagation();
         setOpen(false);
         gear.current?.focus();
-      } else if (!document.querySelector(".overlay, .look-dialog-backdrop, .emote-veil") && !(e.target as HTMLElement | null)?.closest?.("input, textarea, select")) {
+      } else if (!document.querySelector(".overlay, .look-dialog-backdrop, .emote-veil, [data-closes-on-escape]") && !(e.target as HTMLElement | null)?.closest?.("input, textarea, select")) {
         setOpen(true);
       }
     };

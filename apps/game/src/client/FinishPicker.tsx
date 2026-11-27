@@ -1,11 +1,10 @@
 // A hut's walls, floor and roof, chosen in edit mode from the finishes its owner has bought from Nell (beside the
 // market stall). Any of them, as often as they like: the room is papered and laid again for everyone inside at once,
-// and a new roof is seen from the Harbor.
+// and a new roof is seen from the Harbor. Only the choices: the hut puts them in a drop of its top bar.
 
 import { useEffect, useState } from "react";
 import { finishById, type FinishKind, type HutFinish } from "@gantt-quest/world";
 import { api } from "./api";
-import { DragPanel } from "./DragPanel";
 import { FINISH_TABS } from "./FinishesPanel";
 import { FinishSwatch } from "./FinishSwatch";
 import "./finishes.css";
@@ -32,7 +31,7 @@ export function FinishPicker({ finish }: { finish: HutFinish }) {
   };
 
   return (
-    <DragPanel id="hut.finish" title="Walls, floor and roof" foldOnPhone startFolded className="panel hut-finish">
+    <div className="hut-finish">
       {!owned ? <p className="muted">{error ?? "Looking through your samples…"}</p> : <>
         {FINISH_TABS.map(({ kind, label }) => {
           const mine = owned.filter((id) => finishById(id)?.kind === kind);
@@ -60,6 +59,6 @@ export function FinishPicker({ finish }: { finish: HutFinish }) {
         {owned.length > 0 && <p className="muted small-note">More at Nell's stall, beside the market stall.</p>}
         {error && <p className="bad">{error}</p>}
       </>}
-    </DragPanel>
+    </div>
   );
 }
