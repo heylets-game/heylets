@@ -7,7 +7,7 @@
 
 import * as THREE from "three";
 import { ENEMY_ABILITIES } from "@gantt-quest/world";
-import { BREATHE, ENGULF, FLURRY_BLOWS, SLICES_APART, type Figure } from "./figures";
+import { BREATHE, ENGULF, FLARE, FLURRY_BLOWS, SLICES_APART, type Figure } from "./figures";
 import type { FxKind } from "./sprites";
 import { CRACK_DARK, CRACK_EDGE, crackGeometry, crackPaths, type CrackOpts } from "./cracks";
 
@@ -2539,6 +2539,149 @@ function rimeBite(stage: MoveStage, ctx: MoveCtx) {
   }, ICE);
 }
 
+/**
+ * An Ember Burst: how far its fire rolls out (just past every hero its reach away: EnemyAbilityDef `range`, ENEMY_BURST
+ * when not said), how long each ring takes, the seconds between them, and how bright its eyes and coat flare as it
+ * gathers itself (`held`) and as it lets go (`flash`), back to their own over `fade` seconds (Figure.setGlow).
+ */
+export const EMBER_BURST = { radius: HEX * (ENEMY_ABILITIES.ember_burst?.range ?? 2) + 0.5, life: 0.55, apart: 0.1, held: 2.4, flash: 4, fade: 0.7 };
+/** The scorched glow left on the ground round it. */
+const EMBER_SCORCH = "#3a1a10";
+
+/**
+ * An Ember Hound's Ember Burst: it hunkers down, legs splayed and head low, trembling harder and harder (figures.ts
+ * FLARE), as embers are drawn in to it off the ground all round, the glow in it burning brighter, and smoke curling
+ * off its back. Then it springs up stiff-legged and the fire in it bursts out: a white-hot flash on it, three rings of
+ * flame rolling out over the ground one after another, flame tongues licking up off the ground as the first passes,
+ * embers flung out every way in arcs, a glowing scorch spread out under it and left to fade, and smoke rising after.
+ * Each hero caught is jolted, with flame bursting up at their feet, as the first ring reaches them.
+ */
+function emberBurst(stage: MoveStage, { figure, hitAt, crit, onImpact, echo, alone }: MoveCtx) {
+  const feet = figure.root.getWorldPosition(new THREE.Vector3());
+  const ground = feet.clone().setY(feet.y + 0.07);
+  const { radius, life, apart, held, flash, fade } = EMBER_BURST;
+  const flame = crit ? GOLD : FLAME;
+  const fire = crit ? GOLD : FIRE;
+  const deep = crit ? GOLD : FIRE_DEEP;
+  // Only the first plays the burst: by the time the others are told, it has already gone out.
+  const wait = echo ? 0 : Math.max(0, figure.strike("flare"));
+  if (!echo) {
+    // Gathering itself: embers drawn in off the ground to it, the glow in it building, smoke curling off its back.
+    for (let s = 0; s < wait; s += 0.03) {
+      const k = s / wait;
+      stage.later(() => {
+        figure.setGlow(1 + (held - 1) * k * k);
+        const a = Math.random() * Math.PI * 2;
+        const far = 0.9 + Math.random() * 1.4;
+        const from = offset(ground, Math.cos(a) * far, 0.05, Math.sin(a) * far * 0.7);
+        stage.spawnFx("mote", Math.random() < 0.5 ? flame : fire, Math.cos(a) < 0, { from, to: offset(feet, Math.cos(a) * 0.2, 0.7, Math.sin(a) * 0.15), life: 0.3, size: [0.3, 0.12], spin: 0, fade: true });
+        if (Math.random() < 0.25) {
+          const back = offset(feet, (Math.random() - 0.5) * 0.6, 1, 0);
+          stage.spawnFx("dust", SMOKE, Math.random() < 0.5, { from: back, to: offset(back, 0, 0.6, 0), life: 0.6, size: [0.4, 1], spin: 0, fade: true });
+        }
+      }, s);
+    }
+    stage.later(() => {
+      const heart = offset(feet, 0, 0.8, 0);
+      stage.spawnFx("burst", crit ? GOLD : FIRE_FLASH, false, { from: heart, to: heart, life: 0.2, size: [1, 3], spin: 0.6, fade: true });
+      stage.spawnFx("burst", fire, true, { from: heart, to: heart, life: 0.36, size: [1, 3.2], spin: -0.5, fade: true });
+      for (let s = 0; s <= fade; s += 0.03) stage.later(() => figure.setGlow(1 + (flash - 1) * (1 - s / fade) ** 2), s);
+      stage.later(() => figure.setGlow(1), fade + 0.05);
+      // Three rings of flame rolling out over the ground, and the scorch spread out under them (a fan all the way round).
+      [flame, fire, deep].forEach((color, n) => stage.later(() => stage.wave({ at: ground, radius: radius * (1 - n * 0.07), life, color, width: n ? 0.2 : 0.12 }), n * apart));
+      const round = new THREE.Vector3(1, 0, 0);
+      stage.lay(frostFan(ground.clone().setY(ground.y - 0.01), round, { reach: radius * 0.92, spread: Math.PI * 2, grow: life * 0.8, hold: 0.5, fade: 0.9, color: crit ? GOLD : EMBER_SCORCH, opacity: 0.45 }));
+      stage.lay(frostFan(ground, round, { reach: radius * 0.85, spread: Math.PI * 2, grow: life * 0.8, hold: 0.15, fade: 0.6, color: deep, opacity: 0.3 }));
+      // Flame tongues licking up off the ground as the first ring passes over it.
+      for (let i = 0; i < 26; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const far = 0.5 + Math.sqrt(Math.random()) * (radius - 0.7);
+        stage.later(() => {
+          const at = offset(ground, Math.cos(a) * far, 0, Math.sin(a) * far);
+          stage.spawnFx("streak", Math.random() < 0.5 ? fire : flame, Math.random() < 0.5, { from: at, to: offset(at, 0, 0.55 + Math.random() * 0.45, 0), life: 0.3 + Math.random() * 0.15, size: [0.8, 0.45], turn: Math.PI / 2, spin: 0, fade: true });
+          if (Math.random() < 0.5) stage.spawnFx("burst", fire, Math.random() < 0.5, { from: at, to: offset(at, 0, 0.3, 0), life: 0.28, size: [0.3, 0.8], spin: 0.5, fade: true });
+        }, waveReaches(far, radius, life));
+      }
+      // Embers flung out every way in arcs, and heat lines bursting off it.
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2 + Math.random() * 0.3;
+        const far = radius * (0.45 + Math.random() * 0.4);
+        stage.spawnFx("fleck", i % 2 ? fire : flame, Math.cos(a) < 0, { from: offset(feet, 0, 0.7, 0), to: offset(ground, Math.cos(a) * far, 0, Math.sin(a) * far), life: 0.5 + Math.random() * 0.25, size: [0.4, 0.25], spin: 0, fade: true, arc: 0.6 + Math.random() * 0.5 });
+      }
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2;
+        stage.spawnFx("streak", i % 2 ? flame : FIRE_FLASH, Math.cos(a) < 0, { from: offset(feet, 0, 0.8, 0), to: offset(feet, Math.cos(a) * 1.3, 0.8 + Math.sin(a) * 0.8, 0), life: 0.26, size: [0.7, 1.6], turn: a, spin: 0, fade: true });
+      }
+      // Smoke rising after, slow.
+      stage.later(() => {
+        for (let i = 0; i < 8; i++) {
+          const a = (i / 8) * Math.PI * 2 + Math.random() * 0.5;
+          const at = offset(ground, Math.cos(a) * radius * 0.4, 0.2, Math.sin(a) * radius * 0.3);
+          stage.spawnFx("dust", SMOKE, Math.cos(a) < 0, { from: at, to: offset(at, Math.cos(a) * 0.3, 1.1, 0), life: 1.1, size: [1, 2.4], spin: 0, fade: true });
+        }
+      }, 0.2);
+    }, wait);
+  }
+  if (alone) return stage.later(onImpact, wait);
+  // Whoever it reaches is caught as the first ring passes under them.
+  const far = Math.hypot(hitAt.x - feet.x, hitAt.z - feet.z);
+  stage.later(() => {
+    const at = hitAt.clone().setY(hitAt.y - 0.45);
+    stage.spawnFx("burst", fire, false, { from: at, to: offset(at, 0, 0.5, 0), life: 0.32, size: [0.6, 1.6], spin: 0.5, fade: true });
+    for (const side of [-1, 1]) stage.spawnFx("streak", flame, side > 0, { from: at, to: offset(at, side * 0.2, 0.7, 0), life: 0.3, size: [0.8, 0.5], turn: Math.PI / 2, spin: 0, fade: true });
+    stage.jolt();
+    onImpact();
+  }, wait + waveReaches(far, radius, life));
+}
+
+/**
+ * An Ember Hound's Searing Bite: a snap forward, smoke and embers trailing from its jaws, jaws of glowing embers
+ * closing on the target as two orange arches. As they meet, a white-hot flash with a burst of fire swelling after it,
+ * heat streaks either side, flame tongues licking up off the target, embers flung off in arcs, smoke curling up, a ring
+ * of fire at their feet, and the target jolted.
+ */
+function searingBite(stage: MoveStage, ctx: MoveCtx) {
+  const { figure, hitAt, dir, crit, onImpact } = ctx;
+  const flame = crit ? GOLD : FLAME;
+  const fire = crit ? GOLD : FIRE;
+  stage.lunge();
+  for (let s = 0; s < 0.12; s += 0.03) {
+    stage.later(() => {
+      const from = hitAt.clone().setY(hitAt.y + (Math.random() - 0.5) * 0.4);
+      const smoke = Math.random() < 0.4;
+      stage.spawnFx(smoke ? "dust" : "mote", smoke ? SMOKE : fire, dir < 0, { from, to: offset(from, -dir * 0.5, 0.2, 0), life: 0.25, size: [0.3, 0.2], spin: 0, fade: true });
+    }, s);
+  }
+  jaws(stage, ctx, QUICK_BITE, 0.34, () => {
+    stage.spawnFx("burst", crit ? GOLD : FIRE_FLASH, false, { from: hitAt, to: hitAt, life: 0.18, size: [0.6, 1.6], spin: 0.5, fade: true });
+    stage.later(() => stage.spawnFx("burst", fire, true, { from: hitAt, to: hitAt, life: 0.34, size: [0.8, 2.2], spin: -0.4, fade: true }), 0.05);
+    for (const side of [false, true]) for (const [n, turn] of [-0.45, 0, 0.45].entries()) stage.spawnFx("streak", n === 1 ? FIRE_FLASH : flame, side, { from: hitAt, to: hitAt, life: 0.2, size: [0.5, 1.6], turn: side ? -turn : turn, spin: 0, fade: true });
+    // Flame tongues licking up off them, one after another.
+    for (let i = 0; i < 5; i++) {
+      stage.later(() => {
+        const at = offset(hitAt, (Math.random() - 0.5) * 0.5, -0.2 + Math.random() * 0.3, 0.05);
+        stage.spawnFx("streak", Math.random() < 0.5 ? fire : flame, Math.random() < 0.5, { from: at, to: offset(at, 0, 0.5 + Math.random() * 0.3, 0), life: 0.3, size: [0.7, 0.35], turn: Math.PI / 2, spin: 0, fade: true });
+      }, 0.04 + i * 0.05);
+    }
+    // Embers flung off in arcs, and smoke curling up after.
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + Math.random() * 0.4;
+      const to = offset(hitAt, Math.cos(a) * (0.4 + Math.random() * 0.35), Math.sin(a) * 0.35 - 0.25, 0.05);
+      stage.spawnFx("fleck", i % 2 ? flame : fire, Math.cos(a) < 0, { from: hitAt, to, life: 0.45 + Math.random() * 0.25, size: [0.35, 0.2], spin: 0, fade: true, arc: 0.3 });
+    }
+    stage.later(() => {
+      for (let i = 0; i < 3; i++) {
+        const at = offset(hitAt, (i - 1) * 0.25, 0.1, 0);
+        stage.spawnFx("dust", SMOKE, i % 2 === 0, { from: at, to: offset(at, (i - 1) * 0.15, 0.8, 0), life: 0.8, size: [0.5, 1.3], spin: 0, fade: true });
+      }
+    }, 0.15);
+    const feet = figure.root.getWorldPosition(new THREE.Vector3());
+    stage.wave({ at: hitAt.clone().setY(feet.y + 0.06), radius: 1.2, life: 0.45, color: fire, width: 0.16 });
+    stage.jolt();
+    onImpact();
+  }, FLAME);
+}
+
 /** A Ghastly Fetter: the seconds its chain takes to fly, the stake to come down, and the thrown chain to fade after. */
 export const GHASTLY_FETTER = { fly: 0.28, drop: 0.12, fade: 0.45, links: 14 };
 
@@ -2792,6 +2935,8 @@ export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
   "Grave Grasp": { who: "haunt", blurb: "Draws up and back and surges in with its arms out, and a great hand of ice reaches out low over the ground: it slams down on the far row with a cold flash and a ring of frost, closes into a fist and drags back to the Haunt over the ground, frost and wisps pulled along behind it.", play: graveGrasp },
   "Ice Spear": { who: "haunt", blurb: "Rises with its arms raised high and a spear of ice grows over its head, cold motes drawn in to it; then it flings it straight and low down the whole line, a pale streak and frost trailing it and frost laid on the ground under it, and it shatters at the end in a cold flash and a spray of shards.", play: iceSpear },
   "Frost Breath": { who: "frost_wolf", blurb: "Draws breath with its front lifted and head thrown back, cold motes pulled in to its jaws, then thrusts its head out low and breathes: a pale flash at its mouth, freezing mist billowing out over the whole cone with frost motes, glints and shards of ice streaming through it, frost running out over the ground to the far row and lying there glinting, and a ring of frost where it ends.", play: frostBreath },
+  "Ember Burst": { who: "ember_hound", blurb: "Hunkers down, legs splayed and head low, trembling harder and harder as embers are drawn in to it and the glow in it burns brighter, then springs up stiff-legged and the fire in it bursts out: a white-hot flash, three rings of flame rolling out over the ground, flames licking up as they pass, embers flung every way, a glowing scorch left under it and smoke rising after; each hero is jolted, flame bursting up at their feet, as the first ring reaches them.", play: emberBurst },
+  "Searing Bite": { who: "ember_hound", blurb: "A snap forward, smoke and embers trailing from its jaws, jaws of glowing embers closing on the target as two orange arches: a white-hot flash and a burst of fire, heat streaks either side, flames licking up off the target, embers flung off, smoke curling up and a ring of fire at their feet.", play: searingBite },
   "Rime Bite": { who: "frost_wolf", blurb: "A snap forward, cold breath trailing from its jaws, jaws of ice closing on the target as two pale blue arches: a cold flash and a deeper blue one, frost streaks either side, shards of ice flung off, frost drifting down and a ring of frost at their feet.", play: rimeBite },
   "Ghastly Fetter": { who: "haunt", blurb: "Rises with its arms raised overhead as violet motes gather to its hands, then flings a chain of grave-iron at the target, link after link: a stake comes down into the ground at their feet with a violet flash and a ring, a loop of chain pulls tight round them, and the thrown chain fades from the Haunt's end.", play: ghastlyFetter },
   "Venomous Bite": { who: "spider", blurb: "Rears up, front legs thrown up wide and fangs spread, venom dripping off them, then plunges and drives its fangs in: two pale fang streaks stab down, a green flash, venom splashes out either side, green bubbles rise off the target and drops run down to a green ring at their feet.", play: venomousBite },

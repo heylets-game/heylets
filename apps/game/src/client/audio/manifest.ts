@@ -84,6 +84,8 @@ export const AUDIO: AudioManifest = {
     "attack.ice_spear": { files: "sfx/combat/ice_spear_*", fallback: built("ice"), pitch: [-1, 1], reverb: -8 },
     // A Frost Wolf's Frost Breath: a long, deep cold breath let out.
     "attack.frost_breath": { files: "sfx/combat/frost_breath_*", fallback: built("chill"), pitch: [-4, -3], reverb: -6 },
+    // An Ember Hound's Ember Burst: fire catching all at once, low and wide.
+    "attack.ember_burst": { files: "sfx/combat/ember_burst_*", fallback: built("ignite"), pitch: [-4, -2], reverb: -6 },
     "attack.ghastly_fetter": { files: "sfx/combat/ghastly_fetter_*", fallback: built("chains"), pitch: [-1, 1], reverb: -6 },
     // A blow landing: a blunt thump by hand, unless it cuts or bites (blade abilities, below).
     impact: { files: "sfx/combat/hit_*", fallback: built("blunt"), pitch: [-2, 2], volume: [-2, 0], reverb: -8 },
