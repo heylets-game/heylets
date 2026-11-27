@@ -1,5 +1,6 @@
-// The pub's menu board, at the bar: each meal with what it does for whoever eats it (pub.ts MealPerk), what today's
-// meal is still doing for you, and the button to eat. A hero eats one meal a day.
+// The pub's menu, at the bar, drawn as a printed bill of fare: each meal with its price on a dotted line, what it
+// does for whoever eats it (pub.ts MealPerk) and a button to order; then what today's meal is still doing for you.
+// A hero eats one meal a day.
 
 import { useState } from "react";
 import { PUB_MENU, dueIn, fedBy, mealEndsAt, mealPerkText, mealStats, statBonusText, type MealPerk } from "@gantt-quest/world";
@@ -42,29 +43,45 @@ export function PubMenu({ me, refresh }: { me: Me; refresh(): Promise<unknown>; 
 
   return (
     <>
-      <h3>The board</h3>
-      <p className="muted">One meal a day. What it gives you lasts until the day turns, {wearsOff}.</p>
-      <ul className="pub-menu">
-        {PUB_MENU.map((item) => {
-          const eaten = fed?.id === item.id;
-          const why = fed ? "You have eaten today. Come back tomorrow." : gold < item.price ? "You cannot afford it" : "";
-          return (
-            <li key={item.id} className={eaten ? "eaten" : ""}>
-              <ThingIcon icon={pubIcon(item.id)} size={36} />
-              <div className="grow">
-                <strong>{label("pub", item.id)}</strong>
-                <div className="muted">{blurb("pub", item.id)}</div>
-                <ul className="pub-perks">
-                  {item.perks.map((p, i) => <PerkLine key={i} perk={p} />)}
-                </ul>
-              </div>
-              <button className="small primary" disabled={busy || !!fed || gold < item.price} title={why} onClick={() => void order(item.id)}>
-                {eaten ? "Eaten" : `${item.price}g`}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+      <div className="menu-card" role="region" aria-label="The pub's menu">
+        <header className="menu-card-head">
+          <span className="menu-card-house">The Crew's Pub</span>
+          <h3 className="menu-card-title">Bill of Fare</h3>
+          <span className="menu-card-sub">One meal a day</span>
+        </header>
+        <ul className="menu-card-list">
+          {PUB_MENU.map((item) => {
+            const eaten = fed?.id === item.id;
+            const why = fed ? "You have eaten today. Come back tomorrow." : gold < item.price ? "You cannot afford it" : "";
+            return (
+              <li key={item.id} className={`menu-dish${eaten ? " eaten" : ""}`}>
+                <div className="menu-dish-line">
+                  <ThingIcon icon={pubIcon(item.id)} size={28} />
+                  <strong className="menu-dish-name">{label("pub", item.id)}</strong>
+                  <span className="menu-dish-dots" aria-hidden="true" />
+                  <span className="menu-dish-price">{item.price}g</span>
+                </div>
+                <p className="menu-dish-blurb">{blurb("pub", item.id)}</p>
+                <div className="menu-dish-foot">
+                  <ul className="menu-dish-perks">
+                    {item.perks.map((p, i) => <PerkLine key={i} perk={p} />)}
+                  </ul>
+                  {eaten ? (
+                    <span className="menu-stamp">Eaten today</span>
+                  ) : (
+                    <button className="small menu-order" disabled={busy || !!fed || gold < item.price} title={why} onClick={() => void order(item.id)}>
+                      Order
+                    </button>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        <p className="menu-card-foot">
+          {fed ? <>Well fed on {label("pub", fed.id)}: {statBonusText(mealStats(fed))} until the day turns, {wearsOff}.</> : <>What a meal gives lasts until the day turns, {wearsOff}.</>}
+        </p>
+      </div>
       {error && <p className="bad">{error}</p>}
       {ate && (
         <p className="good">
@@ -73,7 +90,6 @@ export function PubMenu({ me, refresh }: { me: Me; refresh(): Promise<unknown>; 
             : "You eat. No outings come back: you have not used any today."}
         </p>
       )}
-      {fed && <p className="pub-fed">Well fed on {label("pub", fed.id)}: {statBonusText(mealStats(fed))} until the day turns, {wearsOff}.</p>}
     </>
   );
 }
