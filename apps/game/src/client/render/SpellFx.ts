@@ -196,7 +196,7 @@ const flakeTex = painted(32, 32, (ctx) => {
 });
 
 /** A storm whirling round its bearer (SpellFx.storm): how many flakes, how far out (shares of its radius), how much wider each drifts over its life, how big, how fast round, how high, and its haze. */
-export const STORM = { flakes: 70, spread: [0.15, 0.6], widen: 0.06, fine: 0.5, big: 0.22, small: 0.09, turn: [1.6, 3.2], top: 2.4, haze: 0.18, gusts: 5 };
+export const STORM = { flakes: 70, spread: [0.2, 0.75], widen: 0.08, fine: 0.5, big: 0.22, small: 0.09, turn: [1.6, 3.2], top: 2.4, haze: 0.18, gusts: 5 };
 
 /** What a flung speck is: one of the pixel effects (sprites.ts), or a drop of water. */
 type Speck = FxKind | "drop";
