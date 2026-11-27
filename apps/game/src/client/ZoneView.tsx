@@ -393,6 +393,11 @@ const TORCH_IN_HAND = { icon: "torch", ref: "torch", rarity: "common" as const }
 /** The breath after several have been struck at once, before the next thing is shown. */
 const AFTER_MANY = 340;
 /**
+ * The time between one leap of a chain of lightning and the next. Longer than what the clock waits between the
+ * blows of one use (a hit, a fall and a condition at the most: see dwell), so every leap comes the same time apart.
+ */
+const CHAIN_HOP_MS = 360;
+/**
  * The pace of turns. A beat as a turn begins, before whoever has it does anything, so it is seen whose it is; and
  * a beat after the last thing done in a turn, before the next begins, so its end is seen too.
  */
@@ -696,7 +701,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
 
     const draft: Picture = structuredClone(from);
     /** The thing last used, whose blows the hits and misses after it are. */
-    let use: { id: string; what: string; look: ReturnType<typeof fxFor>; last: THREE.Vector3 | null; wave?: Wave } | null = null;
+    /** `hopAt`: when the last bolt of a chain landed (performance.now), for the next to leap on from it. */
+    let use: { id: string; what: string; look: ReturnType<typeof fxFor>; last: THREE.Vector3 | null; wave?: Wave; hopAt?: number } | null = null;
     /** Run `go` when a wave rolling from `wave.from` reaches `to` (at once if there is no wave). */
     const whenReached = (wave: Wave | undefined, to: THREE.Vector3, go: () => void) => {
       if (!wave) return go();
@@ -1516,14 +1522,19 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
             return;
           }
           if (fxs && chained && to && target && kind === "spark") {
-            cast(ev.actor!, what, to.x, to.z, () => {
+            const bolt = () => {
               // Lightning comes down out of the sky onto each one struck (wide of it on a miss), and arcs on from the last.
               const ground = point(target.pos, 0.05);
               fxs.strike(hit ? ground : ground.clone().add(new THREE.Vector3(0.6, 0, 0.5)), color);
               if (chained !== from) fxs.spark([chained, to], color);
+              if (mine) mine.hopAt = performance.now();
               view?.landed(ev.target, what, hit, hit && ev.crit, ev.actor);
               mark();
-            });
+            };
+            // Only the first is cast. The lightning leaps on from it by itself, each leap CHAIN_HOP_MS after the one
+            // before (any chain-shaped spark: Chain Lightning, or whatever else leaps from foe to foe).
+            if (chained === from || mine?.hopAt === undefined) cast(ev.actor!, what, to.x, to.z, bolt);
+            else timers.current.push(setTimeout(bolt, Math.max(0, mine.hopAt + CHAIN_HOP_MS - performance.now())));
             return;
           }
           whenReached(kind === "wave" && to ? mine?.wave : undefined, to ?? new THREE.Vector3(), () => {
