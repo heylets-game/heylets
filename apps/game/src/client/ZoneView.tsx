@@ -1028,7 +1028,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
             const holding = () => !!shownNow.current?.units.find((u) => u.id === holder && u.hp > 0)?.conditions.some((c) => c.kind === "slowing_field");
             timers.current.push(setTimeout(() => spells.current?.aura({ key: `field:${holder}`, follow: () => renderer.current?.unitFeet(holder) ?? null, holding }, CONDITION_INFO.slowing_field.color, SLOWING_FIELD.reach), 1150));
           }
-          if (own === "burst" && view) return void view.burst(ev.id, ev.name, false, thenOn(() => {}), !!ev.again, centre);
+          // A call for more of its side (a Brood Swarm): where each it calls will stand, for its move to bring them there.
+          const calls = events.flatMap((e) => (e.t === "summoned" && e.by === ev.id ? next.units.filter((u) => u.id === e.id).map((u) => point(u.pos)) : []));
+          if (own === "burst" && view) return void view.burst(ev.id, ev.name, false, thenOn(() => {}), !!ev.again, centre, calls);
           // One thrown onto a clump of hexes (`area`: an Acid Splash, an Immolate) lands in the middle of the clump, not
           // on the hex it was aimed at, which is at one edge of it.
           const area = enemyAbilityNamed(ev.name, user?.kind)?.area;

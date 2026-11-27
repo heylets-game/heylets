@@ -140,6 +140,11 @@ export interface MoveCtx {
    * cracked ground, from the middle of it, wherever the Guardian stands now.
    */
   ground?: THREE.Vector3;
+  /**
+   * Where those it calls into the fight will stand (a Broodmother's Brood Swarm), on the ground, so its move can bring
+   * them there: they appear as it lands. None in the lab, or if nobody came.
+   */
+  calls?: THREE.Vector3[];
 }
 
 /**
@@ -1900,17 +1905,81 @@ function venomousBite(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: 
   }, lands);
 }
 
+/** An Impaling Fang: the Broodmother's red and the dark violet of her shell, the grey of dented armour, and how far its point goes through. */
+export const IMPALING_FANG = { red: "#e23a30", dark: "#3d2857", iron: "#b8bcc4", through: 0.75 };
+
+/**
+ * A Broodmother's Impaling Fang: one great stab, not a bite. She rears up high, front legs thrown up wide and fangs
+ * spread (figures.ts FANG), a red glint running down each fang as she holds there; then she plunges and both fangs
+ * drive down into the target together as two long red-and-violet streaks, and straight through: a dark violet flash,
+ * the points shown coming out behind them as two short streaks. Their armour is dented: grey chips and sparks burst off
+ * the front of them and fall, a ring of grey and then red crumples in over them, and a cracked red ring lies on the ground.
+ */
+function impalingFang(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const { red, dark, iron, through } = IMPALING_FANG;
+  const wait = figure.strike("fang");
+  if (wait <= 0) stage.lunge();
+  const lands = Math.max(0.12, wait);
+  const fang = crit ? GOLD : red;
+  // Held high a moment: red glints running down the fangs.
+  for (let s = 0.04; s < lands - 0.08; s += 0.07) {
+    stage.later(() => {
+      const from = fangsOf(figure, hitAt);
+      stage.spawnFx("spark", fang, Math.random() < 0.5, { from: offset(from, (Math.random() - 0.5) * 0.3, 0.2, 0.05), to: offset(from, 0, -0.3, 0.05), life: 0.18, size: [0.22, 0.1], spin: 0, fade: true });
+    }, s);
+  }
+  // Both fangs, long and together, from high over the target down into it.
+  const stab = 0.1;
+  stage.later(() => {
+    for (const side of [-1, 1]) {
+      const from = offset(hitAt, side * 0.3 * dir, 1.1, 0.06);
+      stage.spawnFx("streak", fang, dir < 0, { from, to: offset(hitAt, side * 0.08 * dir, -0.05, 0.06), life: stab, size: [0.7, 1.4], turn: Math.PI / 2 - side * 0.25, spin: 0, fade: false });
+      stage.spawnFx("streak", dark, dir < 0, { from: offset(from, 0, 0.15, -0.02), to: offset(hitAt, side * 0.1 * dir, 0.1, 0.04), life: stab * 1.3, size: [1, 1.8], turn: Math.PI / 2 - side * 0.25, spin: 0, fade: true });
+    }
+  }, lands - stab);
+  stage.later(() => {
+    const feet = figure.root.getWorldPosition(new THREE.Vector3());
+    const floor = hitAt.clone().setY(feet.y + 0.06);
+    stage.spawnFx("burst", crit ? GOLD : dark, false, { from: hitAt, to: hitAt, life: 0.3, size: [0.8, 2.4], spin: 0.5, fade: true });
+    stage.spawnFx("burst", fang, true, { from: hitAt, to: hitAt, life: 0.2, size: [0.5, 1.5], spin: -0.5, fade: true });
+    // Straight through: the points coming out behind them.
+    for (const side of [-1, 1]) {
+      const out = offset(hitAt, side * 0.08 * dir + dir * 0.1, -0.15, -0.1);
+      stage.spawnFx("streak", fang, dir < 0, { from: out, to: offset(out, dir * through * 0.4, -through, -0.05), life: 0.14, size: [0.5, 0.9], turn: Math.PI / 2 - side * 0.25, spin: 0, fade: true });
+    }
+    // Their armour dented: grey chips and sparks off the front of them, falling.
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2 + Math.random() * 0.4;
+      const to = offset(hitAt, Math.cos(a) * (0.4 + Math.random() * 0.4), Math.sin(a) * 0.35 - 0.2, 0.1);
+      stage.spawnFx(i % 3 ? "spark" : "fleck", i % 2 ? iron : "#ffffff", Math.cos(a) < 0, { from: offset(hitAt, 0, 0, 0.1), to, life: 0.35 + Math.random() * 0.2, size: [0.3, 0.14], spin: 3, fade: true, arc: i % 3 ? 0 : 0.25 });
+    }
+    // A ring crumpling in over them: wide and grey, then tighter and red.
+    stage.wave({ at: hitAt, radius: 0.9, life: 0.3, color: iron, width: 0.08 });
+    stage.later(() => stage.wave({ at: hitAt, radius: 0.6, life: 0.3, color: fang, width: 0.06 }), 0.07);
+    stage.jolt();
+    stage.later(() => stage.jolt(), 0.08);
+    onImpact();
+    stage.later(() => {
+      stage.wave({ at: floor, radius: 1.2, life: 0.55, color: fang, width: 0.18 });
+      stage.later(() => stage.wave({ at: floor, radius: 0.85, life: 0.6, color: dark, width: 0.32 }), 0.08);
+    }, 0.12);
+  }, lands);
+}
+
 /** A thrown web, laid flat on the ground (groundWeb): how many spokes and rings, how thick its threads, and its seconds. */
 export const WEB_LAID = { spokes: 9, rings: 4, thread: 0.05, grow: 0.2, hold: 0.7, fade: 0.55 };
 
 /**
  * A web laid flat on the ground at `at`, `radius` out (see WEB_LAID): spokes out from the middle and rings of thread
  * across them, each sagging in a little between spokes, thrown out from small to full size and then fading. Always on
- * the plane of the ground. Lay it with MoveStage.lay.
+ * the plane of the ground. `drop`: it starts that far above `at` and comes down onto it as it opens out (a net cast
+ * over the ground), and `hold`, if said, is how long it lies there before fading. Lay it with MoveStage.lay.
  */
-export function groundWeb(at: THREE.Vector3, radius: number, color: string): (group: THREE.Object3D) => (dt: number) => boolean {
+export function groundWeb(at: THREE.Vector3, radius: number, color: string, drop = 0, lies?: number): (group: THREE.Object3D) => (dt: number) => boolean {
   return (group) => {
-    const { spokes, rings, thread, grow, hold, fade } = WEB_LAID;
+    const { spokes, rings, thread, grow: opens, hold: held, fade } = WEB_LAID;
+    const grow = drop > 0 ? opens * 2 : opens;
+    const hold = lies ?? held;
     const positions: number[] = [];
     const index: number[] = [];
     /** One thread from a to b (x, z on the ground), as a thin flat strip. */
@@ -1953,6 +2022,8 @@ export function groundWeb(at: THREE.Vector3, radius: number, color: string): (gr
       const g = Math.min(1, age / grow);
       const size = 0.25 + 0.75 * (1 - (1 - g) * (1 - g));
       mesh.scale.set(size, 1, size);
+      // Coming down: slow at first, then quicker as it settles.
+      mesh.position.y = at.y + drop * (1 - g * g);
       const k = Math.max(0, (age - grow - hold) / fade);
       material.opacity = 0.95 * (1 - k * k);
       if (k < 1) return true;
@@ -1974,11 +2045,9 @@ interface WebThrow {
 /** A Giant Spider's Web Spit, over a clump of three hexes. */
 export const WEB_SPIT: WebThrow = { flight: 0.42, arc: 1.5, spread: 1.6 };
 
-/** A Broodmother's Spin Web, over every hex within two of where it lands: thrown higher, and spreading far wider. */
-export const SPIN_WEB: WebThrow = { flight: 0.55, arc: 2.3, spread: 4.1 };
 
 /**
- * A spider throwing silk (a Giant Spider's Web Spit, a Broodmother's Spin Web): it sinks on braced legs and arches its
+ * A spider throwing silk (a Giant Spider's Web Spit): it sinks on braced legs and arches its
  * abdomen up over its back (figures.ts WEB), silk drawn in to its spinnerets, then throws a spinning ball of silk in a
  * high arc, a thread trailing behind it; it bursts where it lands into a web thrown out flat over the hexes it covers
  * (`spread` out), a pale ring rolling out under it, threads flung out round the edge, and wisps of silk drifting down
@@ -2399,54 +2468,141 @@ function ghastlyFetter(stage: MoveStage, { figure, hitAt, crit, onImpact }: Move
   }, wait + fly + drop);
 }
 
-/** A Brood Swarm: seconds it heaves before they come, how far they scatter, how many run out, and the dark of them. */
-export const BROOD_SWARM = { heave: 0.55, scatter: 2.2, young: 14, black: "#141416", eye: "#c8463a" };
+/**
+ * A Spin Web: how far out the web reaches (every hex within two of where it lands), how many lines it shoots out to its
+ * edge, the seconds they take to get there, how high the web is held over the ground before it comes down (it takes
+ * twice WEB_LAID.grow to come down), and how long it then lies before the web on the ground takes over.
+ */
+export const SPIN_WEB = { spread: HEX * 2.45, lines: 7, shoot: 0.32, over: 2.6, lies: 1.1 };
+
+/** A thread of silk drawn from `from` to `to` in a shallow arc, as a run of motes laid along it over `over` seconds, each hanging a moment. */
+function silkLine(stage: MoveStage, from: THREE.Vector3, to: THREE.Vector3, over: number, arc: number, silk: string) {
+  for (let s = 0; s <= over; s += 0.02) {
+    stage.later(() => {
+      const k = s / over;
+      const at = from.clone().lerp(to, k);
+      at.y += arc * 4 * k * (1 - k);
+      stage.spawnFx("mote", Math.random() < 0.7 ? silk : SILK_DIM, false, { from: at, to: offset(at, 0, -0.05, 0), life: 0.4, size: [0.18, 0.1], spin: 0, fade: true });
+    }, s);
+  }
+}
 
 /**
- * A Broodmother's Brood Swarm, calling her young: she sinks and arches her abdomen up and shudders (figures.ts WEB),
- * silk drawn in under her; then a ring of silk rolls out over the ground from under her, a puff of pale silk bursts at
- * her feet, and a swarm of tiny black young runs out every way from under her along the ground, each a dark speck with
- * a red glint, while wisps of silk drift down. Her Spiderlings appear beside her as they are told.
+ * A Broodmother's Spin Web, not thrown but spun out over the ground: she rears and arches her abdomen high over her back
+ * (figures.ts WEB), silk gathering to her spinnerets, then shoots a fan of lines out over where it is aimed, each landing
+ * at the far edge of it with a small puff and staying strung there. Between them a great web, spokes and rings, opens
+ * out high over the middle and comes down flat over all of it, a ring of silk and dust rolling out from under it as it
+ * settles, the lines going slack, and wisps drifting down after.
  */
-function broodSwarm(stage: MoveStage, { figure, crit, onImpact }: MoveCtx) {
-  const feet = figure.root.getWorldPosition(new THREE.Vector3());
-  const ground = feet.clone().setY(feet.y + 0.06);
-  const { heave, scatter, young, black, eye } = BROOD_SWARM;
+function spinWeb(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
+  const { spread, lines, shoot, over, lies } = SPIN_WEB;
+  const ground = hitAt.clone().setY(hitAt.y - 0.45);
+  const floor = ground.clone().setY(ground.y + 0.05);
+  const wait = Math.max(0, figure.strike("web") || figure.cast());
   const silk = crit ? GOLD : SILK;
-  const wait = Math.max(heave, figure.strike("web") || figure.cast());
-  // Silk drawn in under her as she heaves.
-  for (let s = 0; s < wait; s += 0.05) {
+  // Silk gathering at her spinnerets, high over her back, quicker as she rears.
+  for (let s = 0; s < wait; s += 0.04) {
     stage.later(() => {
+      const tip = upFigure(figure, 0.95);
       const a = Math.random() * Math.PI * 2;
-      stage.spawnFx("mote", Math.random() < 0.6 ? SILK : SILK_DIM, Math.cos(a) < 0, { from: offset(ground, Math.cos(a) * 1.4, 0.3, Math.sin(a) * 1.4), to: ground, life: 0.25, size: [0.25, 0.12], spin: 0, fade: true });
+      stage.spawnFx("mote", Math.random() < 0.6 ? SILK : SILK_DIM, Math.cos(a) < 0, { from: offset(tip, Math.cos(a) * 0.6, -0.4, Math.sin(a) * 0.4), to: tip, life: 0.2, size: [0.25, 0.12], spin: 0, fade: true });
     }, s);
   }
   stage.later(() => {
     stage.sound();
-    stage.spawnFx("burst", silk, false, { from: ground, to: offset(ground, 0, 0.3, 0), life: 0.3, size: [0.8, 2.2], spin: 0.4, fade: true });
-    stage.wave({ at: ground, radius: scatter * 1.2, life: 0.5, color: SILK, width: 0.12 });
-    stage.later(() => stage.wave({ at: ground, radius: scatter, life: 0.45, color: black, width: 0.18 }), 0.08);
-    // The young running out every way, low over the ground, a red glint on each.
-    for (let i = 0; i < young; i++) {
-      const a = (i / young) * Math.PI * 2 + Math.random() * 0.4;
-      const far = scatter * (0.55 + Math.random() * 0.45);
-      const from = offset(ground, Math.cos(a) * 0.4, 0.04, Math.sin(a) * 0.4);
-      const to = offset(ground, Math.cos(a) * far, 0.04, Math.sin(a) * far);
-      const life = 0.35 + Math.random() * 0.2;
+    const tip = upFigure(figure, 0.95);
+    stage.spawnFx("burst", SILK, dir < 0, { from: tip, to: offset(tip, 0, 0.25, 0), life: 0.18, size: [0.6, 1.4], spin: 0.4, fade: true });
+    // The fan of lines, out to the far edge of where the web will lie, the near side first.
+    const turn = Math.random() * Math.PI * 2;
+    for (let i = 0; i < lines; i++) {
+      const a = turn + (i / lines) * Math.PI * 2;
+      const end = offset(floor, Math.cos(a) * spread, 0, Math.sin(a) * spread * 0.8);
+      const late = i * 0.03;
+      stage.later(() => silkLine(stage, tip, end, shoot, 1.6, silk), late);
       stage.later(() => {
-        stage.spawnFx("mote", black, Math.cos(a) < 0, { from, to, life, size: [0.32, 0.26], spin: 0, fade: false });
-        stage.spawnFx("spark", eye, false, { from: offset(from, 0, 0.06, 0), to: offset(to, 0, 0.06, 0), life, size: [0.12, 0.08], spin: 0, fade: true });
-      }, Math.random() * 0.15);
+        stage.spawnFx("burst", SILK_DIM, Math.cos(a) < 0, { from: end, to: offset(end, 0, 0.15, 0), life: 0.22, size: [0.3, 0.8], spin: 0.3, fade: true });
+        // Strung from the edge up toward where the web is held, till it comes down.
+        silkLine(stage, end, offset(floor, Math.cos(a) * spread * 0.55, over, Math.sin(a) * spread * 0.45), 0.12, 0, SILK_DIM);
+      }, late + shoot);
     }
-    // Wisps of silk drifting down after.
-    for (let i = 0; i < 8; i++) {
+    // The web itself: opened out high over the middle, then brought down over all of it.
+    const held = shoot + lines * 0.03;
+    stage.later(() => stage.lay(groundWeb(floor, spread, silk, over, lies)), held - 0.1);
+    stage.later(() => {
+      stage.wave({ at: floor, radius: spread * 1.05, life: 0.5, color: SILK, width: 0.14 });
+      stage.later(() => stage.wave({ at: floor, radius: spread * 0.7, life: 0.4, color: SILK_DIM, width: 0.08 }), 0.08);
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2 + Math.random() * 0.3;
+        const at = offset(floor, Math.cos(a) * spread * 0.9, 0, Math.sin(a) * spread * 0.75);
+        stage.spawnFx("dust", DUST, Math.cos(a) < 0, { from: at, to: offset(at, Math.cos(a) * 0.4, 0.3, 0), life: 0.45, size: [0.4, 0.9], spin: 0, fade: true });
+      }
+      for (let i = 0; i < 14; i++) {
+        stage.later(() => {
+          const a = Math.random() * Math.PI * 2;
+          const far = Math.sqrt(Math.random()) * spread * 0.85;
+          const to = offset(floor, Math.cos(a) * far, 0.02, Math.sin(a) * far * 0.8);
+          stage.spawnFx("mote", Math.random() < 0.5 ? SILK : SILK_DIM, Math.random() < 0.5, { from: offset(to, 0, 0.9, 0), to, life: 0.6, size: [0.22, 0.14], spin: 1, fade: true });
+        }, 0.05 + i * 0.04);
+      }
+      stage.jolt();
+      onImpact();
+    }, held - 0.1 + WEB_LAID.grow * 2);
+  }, wait);
+}
+
+/**
+ * A Brood Swarm: seconds she heaves before they come, how many young pour out to each place one of her Spiderlings will
+ * stand, the seconds each takes to get there, and the dark of them and their eyes.
+ */
+export const BROOD_SWARM = { heave: 0.6, young: 9, run: 0.45, black: "#141416", eye: "#c8463a" };
+
+/**
+ * A Broodmother's Brood Swarm, calling her young out of her: she rears and arches her abdomen high (figures.ts WEB) and
+ * it shudders, a dark pulse going over it; then her young pour out of the end of it in streams, tiny black specks with
+ * a red glint, tumbling down in short arcs to where each of her Spiderlings will stand (MoveCtx `calls`; in the lab,
+ * two places either side of her), a silk thread let down with each stream. Where each stream lands they bunch up into a
+ * dark knot with a puff of silk and a small ring, and there the Spiderling is.
+ */
+function broodSwarm(stage: MoveStage, { figure, hitAt, crit, onImpact, calls }: MoveCtx) {
+  const { heave, young, run, black, eye } = BROOD_SWARM;
+  const { feet, ahead } = aheadOf(figure, hitAt);
+  // Where they go: where the fight says they will stand, or either side of her.
+  const side = new THREE.Vector3(-ahead.z, 0, ahead.x);
+  const spots = calls?.length ? calls.map((p) => p.clone().setY(p.y + 0.05)) : [1, -1].map((s) => feet.clone().addScaledVector(side, s * HEX).setY(feet.y + 0.05));
+  const silk = crit ? GOLD : SILK;
+  const wait = Math.max(heave, figure.strike("web") || figure.cast());
+  const rear = () => upFigure(figure, 0.85);
+  // The shudder: dark pulses going out over her abdomen as she heaves.
+  for (let s = 0.1; s < wait; s += 0.16) {
+    stage.later(() => {
+      const at = rear();
+      stage.spawnFx("burst", black, false, { from: at, to: at, life: 0.18, size: [0.5, 1.4], spin: 0.3, fade: true });
+    }, s);
+  }
+  stage.later(() => {
+    stage.sound();
+    const from = rear();
+    stage.spawnFx("burst", silk, false, { from, to: offset(from, 0, 0.2, 0), life: 0.22, size: [0.5, 1.3], spin: 0.4, fade: true });
+    spots.forEach((spot, n) => {
+      const late = n * 0.08;
+      // A thread let down to where they go, and the young pouring down it, one after another.
+      stage.later(() => silkLine(stage, from, spot, run, 0.8, SILK_DIM), late);
+      for (let i = 0; i < young; i++) {
+        stage.later(() => {
+          const land = offset(spot, (Math.random() - 0.5) * 0.5, 0, (Math.random() - 0.5) * 0.4);
+          const up = 0.5 + Math.random() * 0.5;
+          stage.spawnFx("mote", black, land.x < from.x, { from: offset(from, 0, -0.1, 0), to: land, life: run, size: [0.3, 0.24], spin: 0, fade: false, arc: up });
+          stage.spawnFx("spark", eye, false, { from: offset(from, 0, -0.05, 0), to: offset(land, 0, 0.05, 0), life: run, size: [0.1, 0.07], spin: 0, fade: true, arc: up });
+        }, late + i * 0.04);
+      }
+      // Bunched up where they land, and there it is.
       stage.later(() => {
-        const a = Math.random() * Math.PI * 2;
-        const to = offset(ground, Math.cos(a) * scatter * 0.6, 0.02, Math.sin(a) * scatter * 0.6);
-        stage.spawnFx("mote", Math.random() < 0.5 ? SILK : SILK_DIM, Math.random() < 0.5, { from: offset(to, 0, 0.8, 0), to, life: 0.6, size: [0.22, 0.14], spin: 1, fade: true });
-      }, 0.1 + i * 0.05);
-    }
-    stage.later(onImpact, 0.3);
+        stage.spawnFx("burst", black, false, { from: spot, to: offset(spot, 0, 0.25, 0), life: 0.35, size: [0.6, 1.5], spin: 0.2, fade: true });
+        stage.spawnFx("burst", silk, true, { from: spot, to: offset(spot, 0, 0.3, 0), life: 0.25, size: [0.4, 1.1], spin: -0.3, fade: true });
+        stage.wave({ at: spot, radius: HEX * 0.55, life: 0.35, color: SILK, width: 0.08 });
+      }, late + young * 0.04 + run);
+    });
+    stage.later(onImpact, (spots.length - 1) * 0.08 + young * 0.04 + run + 0.1);
   }, wait);
 }
 
@@ -2456,8 +2612,9 @@ export const SIGNATURE_MOVES: Record<string, SignatureMove> = {
   "Ghastly Fetter": { who: "haunt", blurb: "Rises with its arms raised overhead as violet motes gather to its hands, then flings a chain of grave-iron at the target, link after link: a stake comes down into the ground at their feet with a violet flash and a ring, a loop of chain pulls tight round them, and the thrown chain fades from the Haunt's end.", play: ghastlyFetter },
   "Venomous Bite": { who: "spider", blurb: "Rears up, front legs thrown up wide and fangs spread, venom dripping off them, then plunges and drives its fangs in: two pale fang streaks stab down, a green flash, venom splashes out either side, green bubbles rise off the target and drops run down to a green ring at their feet.", play: venomousBite },
   "Web Spit@spider": { who: "spider", blurb: "Sinks on braced legs and arches its abdomen up over its back, then throws a spinning ball of silk in a high arc, a thread trailing behind it: it bursts where it lands into a web thrown out flat over the hexes, a pale ring rolling out under it, threads flung out round the edge and wisps of silk drifting down.", play: throwWeb(WEB_SPIT) },
-  "Spin Web": { who: "broodmother", blurb: "Sinks on braced legs and arches its great abdomen up over its back, then throws a ball of silk high over the fight: it bursts where it lands into a web thrown out flat and wide over every hex round it, a pale ring rolling out under it, threads flung out all round the edge and wisps of silk drifting down.", play: throwWeb(SPIN_WEB) },
-  "Brood Swarm": { who: "broodmother", blurb: "Sinks and arches its abdomen up and shudders, silk drawn in under it; then a ring of silk rolls out from under it and a swarm of tiny black young runs out every way along the ground, red eyes glinting, as wisps of silk drift down.", play: broodSwarm },
+  "Impaling Fang": { who: "broodmother", blurb: "Rears up high, front legs thrown wide and fangs spread, red glints running down them, then plunges and drives both fangs down into the target and through: long red and violet streaks, a dark flash, the points coming out behind them, grey chips and sparks off their dented armour and a ring crumpling in over them.", play: impalingFang },
+  "Spin Web": { who: "broodmother", blurb: "Rears and arches its abdomen high, silk gathering at its tip, then shoots a fan of lines out to the far edge of where it is aimed; between them a great web opens out high over the middle and comes down flat over all of it, a ring of silk and dust rolling out as it settles and wisps drifting down.", play: spinWeb },
+  "Brood Swarm": { who: "broodmother", blurb: "Rears and arches its abdomen high, dark pulses shuddering over it, then its young pour out of it in streams, tiny black specks with red eyes tumbling down silk threads to where each Spiderling will stand, bunching up there into a dark knot with a puff of silk.", play: broodSwarm },
   Engulf: { who: "slime", blurb: "Draws itself up tall and thin, ooze running off it, then pours itself forward over the target, flattened and spread wide: a green flash, a ring of slime spreading at their feet, bubbles rising through it as it churns them about; then it lets go with a wet splat, gobs flung off every way, and slime dripping off them.", play: engulf },
   "Acid Splash": { who: "slime", blurb: "Squashes down low and springs up tall, tipping forward to spit a gob of acid in an arc from its crown, dripping as it flies: it bursts on the hexes where it lands, green rings rolling out, acid splashed up and flung out every way, and the ground left hissing and steaming.", play: acidSplash },
   "Acid Armor": { who: "slime", blurb: "Biting back at whoever struck it by hand: acid spurts off its body at them, splashing on them in green, and they are left hissing with steam rising off them.", play: acidArmor },
