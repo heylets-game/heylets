@@ -169,7 +169,7 @@ export const AUDIO: AudioManifest = {
     "gather.timber": { files: "sfx/gather/timber_*", fallback: built("enemy_down"), pitch: [-9, -6], reverb: -4 },
     // ----- the quarry's rock face -----
     "gather.pick": { files: "sfx/gather/pick_*", fallback: built("blunt"), pitch: [3, 5], gainDb: -4, volume: [-2, 0], reverb: -10 },
-    "gather.pick.heavy": { files: "sfx/gather/pick_heavy_*", fallback: built("crit"), pitch: [-4, -2], gainDb: -2, reverb: -8 },
+    "gather.pick.heavy": { files: "sfx/gather/pick_heavy_*", fallback: built("crack"), pitch: [-4, -2], gainDb: -2, reverb: -8 },
     "gather.rock": { files: "sfx/gather/rock_*", fallback: built("enemy_down"), pitch: [-7, -4], gainDb: -3, reverb: -8 },
     "gather.ore": { files: "sfx/gather/ore_*", fallback: built("heal"), pitch: [2, 4], gainDb: -4 },
     "gather.gem": { files: "sfx/gather/gem_*", fallback: built("heal"), pitch: [7, 9], gainDb: -1, reverb: -6 },
@@ -180,7 +180,7 @@ export const AUDIO: AudioManifest = {
     "gather.fish.plunge": { files: "sfx/fishing/plunge_*", fallback: built("spell_hit"), pitch: [-2, 0], gainDb: -4 },
     "gather.fish.bite": { files: "sfx/fishing/bite_*", fallback: built("blunt"), pitch: [-1, 1], gainDb: -3 },
     "gather.fish.splash": { files: "sfx/fishing/splash_*", fallback: built("spell_hit"), pitch: [-5, -3], gainDb: -3 },
-    "gather.fish.snap": { files: "sfx/fishing/snap_*", fallback: built("crit"), pitch: [6, 9], gainDb: -3 },
+    "gather.fish.snap": { files: "sfx/fishing/snap_*", fallback: built("crack"), pitch: [6, 9], gainDb: -3 },
     "gather.fish.reel": { files: "sfx/fishing/reel_*", fallback: built("swing"), pitch: [-6, -4], gainDb: -6 },
     "gather.fish.land": { files: "sfx/fishing/land_*", fallback: built("heal"), pitch: [0, 2], gainDb: -3 },
 
