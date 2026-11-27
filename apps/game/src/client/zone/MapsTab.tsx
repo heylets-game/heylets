@@ -1,7 +1,7 @@
 // The dev toolbox's Maps tab: make a zone to try fights in and walk into
 // it, and, while one is on screen, set up whatever is being tested: put an
 // enemy group down, paint the ground, add a stand-in crewmate, heal up,
-// end the fight, take every enemy off the map, stop the enemy (or the heroes) taking turns,
+// end the fight, take every enemy off the map, stop the enemy taking turns, end every hero's turn after a second,
 // keep heroes from going down, take the time limit off turns, keep the camera
 // still (this viewer's alone), play a fight
 // by hand (the combat sandbox: any hero or enemy in it, at any time),
@@ -182,7 +182,7 @@ export function MapsTab() {
           </div>
           <div className="dev-row">
             <label><input type="checkbox" checked={dev.flags.aiOff} onChange={(e) => send({ op: "ai", off: e.target.checked })} /> Enemy takes no turns</label>
-            <label title="Only while the enemy takes its turns. Every hero turn is skipped, with a 1s pause between rounds."><input type="checkbox" checked={dev.flags.heroesIdle} onChange={(e) => send({ op: "heroes_idle", on: e.target.checked })} /> Heroes take no turns</label>
+            <label title="Every hero turn ends by itself after 1s."><input type="checkbox" checked={dev.flags.heroesIdle} onChange={(e) => send({ op: "heroes_idle", on: e.target.checked })} /> Heroes take no turns</label>
             <label><input type="checkbox" checked={dev.flags.undying} onChange={(e) => send({ op: "undying", on: e.target.checked })} /> Heroes cannot die</label>
             <label><input type="checkbox" checked={dev.flags.timerOff} onChange={(e) => send({ op: "timer", off: e.target.checked })} /> No turn timer</label>
             <label title="Nobody is followed and no shot is framed: the camera goes only where you pan it. Yours alone, remembered on this device."><input type="checkbox" checked={dev.cameraStill} onChange={(e) => setCameraStill(e.target.checked)} /> No camera follow</label>
