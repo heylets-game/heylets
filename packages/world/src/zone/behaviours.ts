@@ -71,10 +71,24 @@ function aimReachesFrom(state: ZoneState, enemy: Unit, pos: HexPos, attack: Enem
   return (far <= attack.range || far <= reachFrom(state.map, pos, at, attack.range)) && seesFor(state, enemy.side, pos, at);
 }
 
-/** Where an ability that lands on more than one hex is aimed, and the heroes caught there. */
+/** Where an ability that lands on more than one hex is aimed, the heroes caught there, and every hex it lands on. */
 interface Aim {
   at: HexPos;
   caught: Unit[];
+  hexes: HexPos[];
+}
+
+/**
+ * What an ally caught under ground that hurts (an Immolate's fire, `surface` in HARMFUL) costs an aim, in heroes caught:
+ * more than one, so it is laid on its own side only for a clear gain (three heroes and one ally, not two and one).
+ */
+export const FRIENDLY_FIRE = 1.75;
+
+/** Those of its own side (itself too) that what it leaves on the ground would hurt, aimed as `aim` is. */
+function burnsOwn(look: Look, attack: EnemyStrike, aim: Aim): number {
+  const ground = attack.kit.surface?.kind;
+  if (!ground || !HARMFUL.has(ground)) return 0;
+  return look.state.units.filter((u) => u.side === look.enemy.side && !u.down && aim.hexes.some((p) => covers(u, p))).length;
 }
 
 /**
@@ -94,7 +108,7 @@ function spreadAims(look: Look, from: HexPos, attack: EnemyStrike, targets: read
       if (hexDistance(from, at) !== attack.range) continue;
       const way = dashWay(state, enemy, from, at, attack.range);
       const caught = way ? targets.filter((h) => way.through.some((p) => covers(h, p))) : [];
-      if (caught.length > 0) out.push({ at, caught });
+      if (caught.length > 0) out.push({ at, caught, hexes: way?.through ?? [] });
     }
     return out;
   }
@@ -125,7 +139,7 @@ function spreadAims(look: Look, from: HexPos, attack: EnemyStrike, targets: read
   for (const at of aims) {
     const hexes = spreadHexes(state, attack.kit, from, at) ?? [];
     const caught = targets.filter((h) => hexes.some((p) => covers(h, p)));
-    if (caught.length > 0) out.push({ at, caught });
+    if (caught.length > 0) out.push({ at, caught, hexes });
   }
   return out;
 }
@@ -171,16 +185,19 @@ const strike: Behaviour = {
     let best: Use | null = null;
     // One that lands on several hexes (thrown onto a clump, or swept through rows) is worth what a burst is to each
     // hero caught: about half save for half. It is weighed at every hex it could be aimed at, and its whim and any
-    // taunt go by whoever is on that hex, or else the first caught.
+    // taunt go by whoever is on that hex, or else the first caught. Its own side caught under ground that hurts counts
+    // against it (FRIENDLY_FIRE).
     const aims = spreadAims(look, from, attack, targets);
     if (aims) {
-      for (const { at, caught } of aims) {
+      for (const aim of aims) {
+        const { at, caught } = aim;
         const hero = caught.find((h) => sameHex(h.pos, at)) ?? caught[0];
         // One that does no harm (Spin Web) is worth what it leaves on the ground: CURSE_WORTH for each hero caught who is
         // not standing in that ground already.
         const ground = attack.kit.surface?.kind;
         const fresh = attack.harmless ? caught.filter((h) => !ground || !span(h).some((p) => look.state.surfaces[posKey(p)]?.kind === ground)).length : 0;
-        let worth = (attack.harmless ? fresh * CURSE_WORTH : average * 0.75 * caught.length) * (look.whim?.(attack, hero) ?? 1);
+        const per = attack.harmless ? CURSE_WORTH : average * 0.75;
+        let worth = (per * (attack.harmless ? fresh : caught.length) - per * FRIENDLY_FIRE * burnsOwn(look, attack, aim)) * (look.whim?.(attack, hero) ?? 1);
         if (worth <= 0) continue;
         if (caught.some((h) => has(h, "taunting"))) worth *= 3;
         if (!best || worth > best.worth) best = { attack, target: hero, at, worth };
