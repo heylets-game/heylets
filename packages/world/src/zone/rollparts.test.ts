@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { at, flatBoard, inAFight, standEnemy, standHero } from "../test/zoneBoard";
 import { posKey } from "@gantt-quest/core";
 import { makeRng } from "../rng";
-import { attackRoll, defenceMods, defenceOf, regrow, saveRoll, type Ctx } from "./engine";
+import { addShield, attackRoll, defenceMods, defenceOf, regrow, saveRoll, shieldUnit, type Ctx } from "./engine";
 import { AQUEOUS } from "./kit";
 import { rollShown, swingsOf } from "./rules";
 import type { ZoneEvent, ZoneState } from "./types";
@@ -44,6 +44,15 @@ describe("what of the moment damage dice carry", () => {
     regrow(ctx, ann);
     const tick = ctx.events.find((e) => e.t === "heal" && e.what === "aqueous_regeneration");
     expect(tick?.t === "heal" && tick.dice?.mods).toEqual([{ name: "In water", n: AQUEOUS.water }]);
+  });
+
+  it("a shield's event carries what of the moment is in it, and none when nothing is", () => {
+    const { state, ann } = setUp();
+    const ctx = ctxOf(state);
+    shieldUnit(ctx, ann, 7, [{ name: "In water", n: 2 }, { name: "Foes beside", n: 0 }]);
+    addShield(ctx, ann, 3);
+    const told = ctx.events.filter((e) => e.t === "condition" && e.kind === "bolstered");
+    expect(told.map((e) => e.t === "condition" && e.mods)).toEqual([[{ name: "In water", n: 2 }], undefined]);
   });
 
   it("carries none when there are none", () => {

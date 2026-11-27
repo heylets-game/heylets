@@ -28,7 +28,7 @@
 // shows as a blow lands (ZoneView's `roll`), so it stands in that card's place.
 
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { swingsOf, type Roll, type Rolled, type Swing } from "@gantt-quest/world";
+import { swingsOf, type Roll, type RollMod, type Rolled, type Swing } from "@gantt-quest/world";
 import { ChatInput } from "../ChatInput";
 import "./fight.css";
 
@@ -40,7 +40,8 @@ export type LogEntry =
   /** Whose turn starts. */
   | { k: "turn"; id: number; name: string; side: LogSide }
   /** Anything else. */
-  | { k: "note"; id: number; text: string; tone?: "good" | "bad" | "dim" }
+  /** `mods`: what of the moment went into what it tells of (a shield and what it was given for), shown as chips. */
+  | { k: "note"; id: number; text: string; tone?: "good" | "bad" | "dim"; mods?: RollMod[] }
   /** A d20: an attack, a save, a shove, initiative. */
   | { k: "roll"; id: number; who: string; side: LogSide; roll: Roll; target?: string }
   | { k: "hit"; id: number; actor?: string; side: LogSide; target: string; what: string; amount: number; dice?: Rolled; crit?: boolean; blocked?: number }
@@ -230,7 +231,12 @@ const Row = memo(function Row({ e, fresh }: { e: LogEntry; fresh: boolean }) {
     case "turn":
       return <div className={cls(e.side)}>{e.name}'s turn</div>;
     case "note":
-      return <div className={cls(e.tone ?? "")}>{e.text}</div>;
+      return (
+        <div className={cls(e.tone ?? "")}>
+          {e.text}
+          {!!e.mods?.length && <div className="fl-parts">{e.mods.map((m, i) => <span key={i} className={`fl-part ${m.n > 0 ? "good" : "bad"}`}>{signed(m.n)} {m.name}</span>)}</div>}
+        </div>
+      );
     case "roll":
       return (
         <div className={cls(e.side)}>

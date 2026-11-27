@@ -1076,7 +1076,8 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
     if (tactic.sicken) addCondition(ctx, unit, "poisoned", tactic.sicken);
     if (tactic.standStrong) {
       const { shield, perFoe } = tactic.standStrong;
-      addShield(ctx, unit, shield + unit.level + perFoe * foes().filter((u) => gap(u, unit) <= 1).length);
+      const beside = perFoe * foes().filter((u) => gap(u, unit) <= 1).length;
+      addShield(ctx, unit, shield + unit.level + beside, [{ name: "Foes beside", n: beside }]);
     }
     if (tactic.armor) addCondition(ctx, target, "coral_armor", tactic.armor.rounds);
     if (tactic.shanty) {
@@ -1098,7 +1099,11 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
     }
     if (tactic.shield) {
       const { range, shield, water } = tactic.shield;
-      for (const u of state.units) if (u.side === unit.side && !u.down && gap(u, unit) <= range) shieldUnit(ctx, u, shield + unit.level + (water && inWater(state, u) ? water : 0));
+      for (const u of state.units) {
+        if (u.side !== unit.side || u.down || gap(u, unit) > range) continue;
+        const soaked = water && inWater(state, u) ? water : 0;
+        shieldUnit(ctx, u, shield + unit.level + soaked, [{ name: "In water", n: soaked }]);
+      }
     }
     if (tactic.cleanse) for (const kind of DEBUFFS) removeCondition(target, kind);
     if (tactic.clearWay) {

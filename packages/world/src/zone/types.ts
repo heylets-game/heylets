@@ -635,7 +635,7 @@ export type ZoneEvent =
   /** Someone goes into a pit: deep water, lava, or over the edge of the land. An enemy is gone; a hero is hauled back to the brink, down. */
   | { t: "sunk"; id: string; by: string | null; from: HexPos; into: HexPos; pit: "water" | "lava" | "void" }
   /** A condition put on, or lengthened; `spent`: one use of an untimed one spent, `amount` what is left (0: it is gone). */
-  | { t: "condition"; target: string; kind: Condition; rounds: number; amount?: number; spent?: boolean; /** Fettered: the hex it is chained to. */ at?: HexPos }
+  | { t: "condition"; target: string; kind: Condition; rounds: number; amount?: number; spent?: boolean; /** Fettered: the hex it is chained to. */ at?: HexPos; /** What of the moment went into its `amount` (a shield's: standing in water), as Roll `mods`. */ mods?: RollMod[] }
   | { t: "tick"; target: string; kind: Condition | SurfaceKind; amount: number }
   /** Weather made over some hexes, or (`kind` null) cleared from them. */
   | { t: "weather"; kind: WeatherKind | null; hexes: HexPos[]; by: string }

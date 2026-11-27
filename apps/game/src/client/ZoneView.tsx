@@ -135,6 +135,7 @@ import {
   type GroundSurface,
   type Poi,
   type Roll,
+  type RollMod,
   type Throwable,
   type Budget,
   type Unit,
@@ -813,7 +814,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       let afterShown: (() => void) | null = null;
       /** A shot of this event's that the view has drawn back to frame (shotFrom): let go once it is all seen. */
       let framed: (() => void) | undefined;
-      const say = (line: string, tone?: "good" | "bad" | "dim") => later(() => logAdd({ k: "note", text: line, ...(tone ? { tone } : {}) }));
+      const say = (line: string, tone?: "good" | "bad" | "dim", mods?: RollMod[]) => later(() => logAdd({ k: "note", text: line, ...(tone ? { tone } : {}), ...(mods?.length ? { mods } : {}) }));
       const sideOf = (id: string | null | undefined): "hero" | "enemy" | "none" => (id ? (find(id)?.side ?? next.units.find((u) => u.id === id)?.side ?? "none") : "none");
       const view = renderer.current;
       /** The unit makes its gesture (a cast, or a bow drawn), and `go`, what leaves its hand, runs as the gesture ends: at once with no view to draw it. */
@@ -1640,7 +1641,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         // A shield is no condition to be named: it goes up on the HP bars (and the ward's own effect plays), and the log says how big.
         if (ev.kind === "bolstered") {
           later(() => sounds.effect(ev.kind, view?.whereIs(ev.target)));
-          say(`${name(ev.target)} has a shield of ${ev.amount ?? 0}.`);
+          say(`${name(ev.target)} has a shield of ${ev.amount ?? 0}.`, undefined, ev.mods);
         } else {
           const count = stacksOf({ kind: ev.kind, rounds: ev.rounds, amount: ev.amount });
           const stacks = count > 1 ? ` ×${count}` : "";

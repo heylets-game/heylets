@@ -340,14 +340,26 @@ const SHIELD_KEEPS = UNTIMED_KEEPS;
 /** A shield is a thing of fights: only one in a fight can be given one. */
 const shieldable = (ctx: Ctx, unit: Unit): boolean => inFight(ctx.state, unit.id);
 
-/** Put a shield of `amount` points on a unit in a fight (Bolstered), to last the fight. A bigger one replaces a smaller. */
-export function shieldUnit(ctx: Ctx, unit: Unit, amount: number): void {
-  if (amount > 0 && shieldable(ctx, unit)) addCondition(ctx, unit, "bolstered", SHIELD_KEEPS, amount);
+/**
+ * Put a shield of `amount` points on a unit in a fight (Bolstered), to last the fight. A bigger one replaces a smaller.
+ * `mods`: what of the moment is in `amount` (standing in water), told with it to be shown.
+ */
+export function shieldUnit(ctx: Ctx, unit: Unit, amount: number, mods: RollMod[] = []): void {
+  if (amount > 0 && shieldable(ctx, unit)) shielded(ctx, unit, () => addCondition(ctx, unit, "bolstered", SHIELD_KEEPS, amount), mods);
 }
 
-/** Add `amount` points to whatever shield a unit in a fight already has (Bulwark Strike), to last the fight. */
-export function addShield(ctx: Ctx, unit: Unit, amount: number): void {
-  if (amount > 0 && shieldable(ctx, unit)) addCondition(ctx, unit, "bolstered", SHIELD_KEEPS, shieldOf(unit) + amount);
+/** Add `amount` points to whatever shield a unit in a fight already has (Bulwark Strike), to last the fight. `mods` as shieldUnit's. */
+export function addShield(ctx: Ctx, unit: Unit, amount: number, mods: RollMod[] = []): void {
+  if (amount > 0 && shieldable(ctx, unit)) shielded(ctx, unit, () => addCondition(ctx, unit, "bolstered", SHIELD_KEEPS, shieldOf(unit) + amount), mods);
+}
+
+/** Give a shield (`give`), and put `mods` (those that add or take something) on the event that tells of it. */
+function shielded(ctx: Ctx, unit: Unit, give: () => void, mods: RollMod[]): void {
+  const mark = ctx.events.length;
+  give();
+  const shown = mods.filter((m) => m.n !== 0);
+  if (shown.length === 0) return;
+  for (const ev of ctx.events.slice(mark)) if (ev.t === "condition" && ev.kind === "bolstered" && ev.target === unit.id) ev.mods = shown;
 }
 
 /**
