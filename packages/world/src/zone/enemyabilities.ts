@@ -97,8 +97,8 @@ export interface EnemyAbilityDef {
   /**
    * A mending for its own side, not an attack (a Hedge Witch's Witches' Brew): HP at level 1 (grown by `scales.heal`,
    * then turned into dice), healed to every one of its side in the fight, itself as well, standing on the hexes it
-   * lands on. Thrown at a hex up to `range` off, it lands on that hex and every hex within `blast` of it (none: that
-   * hex alone). It needs a clear line, as a shot does, and does no harm (`damage` 0). Weighed up by behaviour `mend`.
+   * lands on. Thrown at a hex up to `range` off, it lands on the hexes its `area` or `blast` covers round it (neither:
+   * that hex alone). It needs a clear line, as a shot does, and does no harm (`damage` 0). Weighed up by behaviour `mend`.
    */
   heal?: number;
   /** Left under the target when it lands. */
@@ -287,9 +287,9 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   // A Hedge Witch's everyday hex, from across the clearing: whoever it lands on is the worse at shaking off whatever
   // comes next (2 less on every save) until their next turn is over, unless they shake this off first.
   weakening_hex: { id: "weakening_hex", name: "Weakening Hex", damage: 6, potency: 4, range: 5, saveOr: { effect: "weakened", turns: 1, amount: 2 }, weight: 2 },
-  // A Hedge Witch's brew, flung over its own up to 5 hexes off: it splashes over that hex and the ring round it, and
-  // every one of its side there (itself too) is mended. It has to brew another before it can throw again.
-  witches_brew: { id: "witches_brew", name: "Witches' Brew", damage: 0, potency: 0, range: 5, blast: 1, heal: 6, cooldown: 3, behaviour: "mend", weight: 2 },
+  // A Hedge Witch's brew, flung over its own up to 5 hexes off: it splashes over a clump of 3 hexes there, and every
+  // one of its side on them (itself too) is mended. It has to brew another before it can throw again.
+  witches_brew: { id: "witches_brew", name: "Witches' Brew", damage: 0, potency: 0, range: 5, area: 3, heal: 6, cooldown: 3, behaviour: "mend", weight: 2 },
   crushing_strike: { id: "crushing_strike", name: "Crushing Strike", damage: 9, potency: 5, saveOr: { effect: "stunned", turns: 1 }, weight: 2 },
   sweeping_ruin: { id: "sweeping_ruin", name: "Sweeping Ruin", damage: 6, potency: 3, shape: "burst", weight: 2 },
 };

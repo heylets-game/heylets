@@ -332,8 +332,9 @@ const mend: Behaviour = {
     const average = diceAverage(dice);
     const hurt = state.units.filter((u) => u.side === enemy.side && !u.down && u.hp < u.maxHp && inFight(state, u.id));
     if (hurt.length === 0) return null;
-    // Where it could land on one of them: their own hexes, and every hex as near to them as it spreads.
-    const wide = attack.kit.blast ?? 0;
+    // Where it could land on one of them: their own hexes, and every hex as near to them as it spreads (a clump, `area`,
+    // covers no hex further than one from the hex it is aimed at).
+    const wide = attack.kit.blast ?? (attack.kit.area ? 1 : 0);
     const seen = new Set<string>();
     let best: Use | null = null;
     for (const ally of hurt) {
