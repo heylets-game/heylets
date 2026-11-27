@@ -207,6 +207,15 @@ export function zoneView(state: ZoneState, you: string, hidden: readonly string[
 /** Whether a fight's turns go untimed: the dev switch for it, or the combat sandbox. */
 export const zoneUntimed = (state: Pick<ZoneState, "timerOff" | "sandbox">): boolean => !!state.timerOff || !!state.sandbox;
 
+/**
+ * Whether the turn waited on is one the dev switch ZoneState.heroesIdle passes over, held back only so the round ends
+ * (advance): the server ends it after a moment, timer or no timer.
+ */
+export function zoneIdleTurn(state: ZoneState): boolean {
+  const enc = state.encounter;
+  return !!enc && heroesIdle(state) && enc.acting.length > 0 && enc.acting.every((id) => unitById(state, id)?.side === "hero");
+}
+
 /** Whose turn the server is waiting on, as a key that changes when the wait does. Null out of a fight. */
 export function zoneAwaiting(state: ZoneState): string | null {
   return state.encounter && state.encounter.acting.length > 0 ? `t:${state.encounter.turnNo}` : null;
@@ -750,8 +759,9 @@ const heroesIdle = (state: ZoneState): boolean => !!state.heroesIdle && !state.a
 /** Move the fight on to whoever is next, playing enemy turns as they come, until a hero's turn or the end. */
 function advance(ctx: Ctx): void {
   const { state } = ctx;
-  // With heroes taking no turns, theirs are passed over to the end of the round: the first hero's in the next waits as ever,
-  // so a fight the enemy cannot end (heroes who cannot die, a Training Dummy) does not run on of itself.
+  // With heroes taking no turns, theirs are passed over to the end of the round. The first hero's in the next waits, for
+  // the server to end after a moment (zoneIdleTurn), so a fight the enemy cannot end (heroes who cannot die, a Training
+  // Dummy) goes a round at a time and does not run hundreds of turns in one go.
   const startRound = state.encounter?.round;
   for (let guard = 0; guard < 400; guard++) {
     const enc = state.encounter;

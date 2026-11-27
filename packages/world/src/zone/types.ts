@@ -385,7 +385,7 @@ export interface ZoneState {
    * Dev switch: heroes take no turns. A hero's turn starts as ever (what is on them acts) and is passed over at once, so
    * the enemy plays turn after turn. Only while the enemy plays its own (not with `aiOff` or in the sandbox, which would
    * leave nobody to play at all): then a hero's turn waits as ever. They are passed over to the end of the round, and the
-   * first hero's in the next waits, so a fight the enemy cannot end does not run on.
+   * first hero's in the next waits a moment (zoneIdleTurn: the server ends it), so the fight goes a round at a time.
    */
   heroesIdle?: boolean;
   /**
