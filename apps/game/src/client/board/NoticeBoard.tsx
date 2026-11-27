@@ -12,7 +12,7 @@ import { api, type PubWall } from "../api";
 import { catchIcon } from "../render/catchArt";
 import { units } from "../units";
 import { DragPanel } from "../DragPanel";
-import { ReleaseLines } from "../ReleaseLines";
+import { ReleaseRollup } from "../ReleaseLines";
 import "./board.css";
 
 /** Releases shown before "Older notices". */
@@ -69,7 +69,7 @@ function ReleaseNotes({ release, fresh }: { release: Release; fresh: boolean }) 
       ) : release.notes.length === 0 ? (
         <p className="muted">Fixes and small changes behind the scenes.</p>
       ) : (
-        <ReleaseLines notes={release.notes} className="release-notes" />
+        <ReleaseRollup notes={release.notes} summary={release.summary} className="release-notes" />
       )}
     </li>
   );

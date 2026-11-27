@@ -23,6 +23,15 @@
 .release-new { font-size: 11px; padding: 1px 6px; color: #1a1424; background: var(--gold); text-transform: uppercase; letter-spacing: 0.05em; }
 .release-notes { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; font-size: 14px; white-space: normal; }
 .release-older { align-self: flex-start; }
+.release-rollup { display: flex; flex-direction: column; gap: 6px; }
+.release-summary-text { margin: 0; font-size: 14px; line-height: 1.45; font-style: italic; }
+.release-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 14px; }
+.release-count { color: var(--muted); }
+.release-areas { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.release-areas li { display: inline-flex; align-items: center; gap: 5px; padding: 1px 7px; font-size: 13px; border: 1px solid var(--line); background: rgba(0, 0, 0, 0.25); }
+.release-area-count { font-size: 11px; color: var(--gold); }
+.release-areas li.release-areas-more { border-style: dashed; background: none; color: var(--muted); }
+.release-details { margin-left: auto; font-size: 13px; }
 
 /* The dealer's panel in the pub: trading materials, and his supply contracts. */
 .story.pub-bar.dealer-panel { width: min(540px, calc(100% - 24px)); }
