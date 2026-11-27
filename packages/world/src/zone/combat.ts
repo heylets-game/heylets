@@ -14,7 +14,7 @@ import { ENEMY_ABILITIES } from "./enemyabilities";
 import { bearing, big, caught, close, blast, blockerAt, courseShare, covers, directionToward, gap, gapTo, meet, nearOf, reaches, ringToward, elevOf, fetterBars, flies, heldAgainst, inFight, lineFrom, pathIn, perkOf, pitAt, reachFrom, roomAt, roomFor, sameHex, sees, seesFor, solid, span, stepCost, strikes, unitById, zoneReach, type Course, type Lean, type Pit } from "./geometry";
 import { ACTION_AP, CHART, COMMON_ACTIONS, CORAL_ARMOR, ENEMY_EDGE, RALLY, SHANTY, SUMMON_CALLS, ENEMY_BURST, FLEE_RANGE, JUMP_DOWN, JUMP_UP, blinkRange, jumpRange, POTION_EDGE, SAVE_STAT, SMUGGLED, SPLASH_SHARE, THROWABLES, TORCH_GROUND_ROUNDS, abilityDice, abilityStrikes, enemySave, retortDice, unitStrike, unitStrikes, healDice, reactionStrike, tacticOf, throwRange, type EnemyAttackKit, type EnemyStrike, type Tactic } from "./kit";
 import { modsOf } from "./mods";
-import { d20, diceFor, hitChance, mod, proficiency, rollDice, rollShown, statOf } from "./rules";
+import { d20, diceFor, hitChance, mod, proficiency, rollDice, rollShown, statOf, type Dice } from "./rules";
 import { seenByHeroes } from "./light";
 import { HARMFUL, HINDERING, chill, clearSurfaces, dropTorch, enterSurface, ignite, letGoTorch, placeSurface } from "./surfaces";
 import { FIELD_KINDS, type Budget, type CommonAction, type FieldKind, type Throwable, type Unit, type ZoneState } from "./types";
@@ -670,6 +670,21 @@ function damageBonus(state: ZoneState, unit: Unit, def: AbilityDef): number {
   return mod(statOf(unit, def.stat)) + (def.id === "torch_swing" ? 0 : unit.power) + Math.floor(unit.level / 2) + tune + songDamage(state, unit) + (has(unit, "rallied") ? RALLY.damage : 0);
 }
 
+/** What a heal adds on top of its dice: the user's stat (never less than nothing) and half their level. */
+const healBonus = (unit: Unit, def: AbilityDef): number => Math.max(0, mod(statOf(unit, def.stat))) + Math.floor(unit.level / 2);
+
+/** An ability's damage as `unit` would roll it now: its dice, and all it adds on top (damageBonus) in `plus`. What its tooltip shows. */
+export const damageRoll = (state: ZoneState, unit: Unit, def: AbilityDef): Dice => {
+  const dice = abilityDice(def);
+  return { ...dice, plus: dice.plus + damageBonus(state, unit, def) };
+};
+
+/** An ability's healing as `unit` would roll it now: its dice, and all it adds on top (healBonus) in `plus`. */
+export const healRoll = (unit: Unit, def: AbilityDef): Dice => {
+  const dice = healDice(def);
+  return { ...dice, plus: dice.plus + healBonus(unit, def) };
+};
+
 const saveDc = (unit: Unit, def: AbilityDef): number => 8 + proficiency(unit.level) + mod(statOf(unit, def.stat));
 
 /** Why an ability for fights alone (onlyInFights) cannot be used out of one. */
@@ -829,7 +844,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
     // Healing for the caster's side alone, the fallen got up with it; then the water, which soaks whoever is there.
     const area = abilityArea(state, unit, ability, aim.at, undefined, aim.lean);
     const keys = new Set(area.map(posKey));
-    const amount = rollDice(ctx.rng, healDice(def)) + Math.max(0, mod(statOf(unit, def.stat))) + Math.floor(unit.level / 2);
+    const amount = rollDice(ctx.rng, healDice(def)) + healBonus(unit, def);
     for (const u of state.units.filter((x) => x.side === unit.side && caught(x, keys))) heal(ctx, u, amount, { actor: unit.id, what: def.id });
     placeSurface(ctx, area, "water", tactic.splash.water, unit.id);
     landed = true;
@@ -997,7 +1012,7 @@ export function resolveAbility(ctx: Ctx, unit: Unit, ability: string, aim: Aim):
     const target = tactic.shape === "ally" && aim.target ? unitById(state, aim.target)! : unit;
     const soaked = tactic.regen && inWater(state, target) ? tactic.regen.water : 0;
     if (def.heal && !tactic.soothe) {
-      const bonus = Math.max(0, mod(statOf(unit, def.stat))) + Math.floor(unit.level / 2);
+      const bonus = healBonus(unit, def);
       const mended = rollShown(ctx.rng, healDice(def), bonus + soaked);
       heal(ctx, target, mended.total, { actor: unit.id, what: def.id, dice: mended });
       // The same heal again as their next turn starts (Rejuvenate): the bonus kept on the condition, the dice rolled then.

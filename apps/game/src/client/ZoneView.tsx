@@ -62,7 +62,8 @@ import {
   THROWABLES,
   SMUGGLED,
   abilityArea,
-  abilityDice,
+  damageRoll,
+  healRoll,
   carrySpot,
   joinable,
   shantyOf,
@@ -93,7 +94,6 @@ import {
   defenceOf,
   shieldOf,
   diceText,
-  healDice,
   isCrateId,
   jumpRange,
   previewAttack,
@@ -2959,7 +2959,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     const tactic = tacticOf(id);
     const wait = act.cooldowns[id] ?? 0;
     const reachText = reachLabel(tactic);
-    const dice = def.damage ? `${diceText(abilityDice(def))} damage` : def.heal ? `heals ${diceText(healDice(def))}` : "";
+    // As this hero would roll it now: their stat, weapon and level on top of the ability's own dice.
+    const dice = def.damage ? `${diceText(damageRoll(asState(state), act, def))} damage` : def.heal ? `heals ${diceText(healRoll(act, def))}` : "";
     entries[`ab:${id}`] = {
       id: `ab:${id}`,
       icon: { ...abilityIcon(id), flat: true },
