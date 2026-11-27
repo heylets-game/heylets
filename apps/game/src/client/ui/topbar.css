@@ -1,0 +1,68 @@
+/* The bar across the top of a walk-in place, and the panels that drop from it (ui/TopBar.tsx). All in the new
+   UI's timber (theme.css `.timber`): a dark board, a hard dark edge with a thin copper rim, soft controls. */
+.top-bar {
+  position: absolute; top: 12px; left: 12px; z-index: 18; max-width: calc(100% - 270px);
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px; pointer-events: none;
+  /* The timber dims a little with the hour, as the bottom bar does (ui/env.ts). */
+  filter: brightness(calc(0.82 + 0.18 * var(--env-level, 1)));
+}
+.top-bar > * { pointer-events: auto; }
+
+.top-bar .top-row {
+  display: flex; align-items: center; gap: 10px; padding: 4px 5px 4px 12px; max-width: 100%; box-sizing: border-box;
+  background: linear-gradient(180deg, rgba(255, 214, 170, 0.08), rgba(0, 0, 0, 0.3)), linear-gradient(rgba(18, 7, 6, 0.55), rgba(18, 7, 6, 0.55)), var(--tex-wood, none) 0 0 / 128px 128px, #2a1614;
+  box-shadow: inset 0 1px 0 rgba(214, 150, 96, 0.25), 0 0 0 1px var(--t-rim), 0 6px 16px rgba(0, 0, 0, 0.5);
+}
+.top-name { display: flex; flex-direction: column; line-height: 1.05; min-width: 0; white-space: nowrap; padding-right: 4px; }
+.top-name strong { font-family: var(--font-head); font-weight: normal; font-size: 16px; letter-spacing: 0.04em; color: var(--t-brass-hi); text-shadow: 0 1px 0 #000; }
+.top-name small { font-size: 12px; color: #c9ad8c; }
+.top-tabs { display: flex; align-items: center; gap: 5px; }
+.top-tabs.end { padding-left: 10px; margin-left: auto; border-left: 1px solid rgba(0, 0, 0, 0.55); box-shadow: -1px 0 0 rgba(214, 150, 96, 0.15); }
+.top-tabs:empty { display: none; }
+
+.timber button.top-tab { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; white-space: nowrap; font-size: 14px; }
+.top-tab .pixel-glyph { flex: none; }
+/* A drop's tab ends in a small notch pointing down; turned up while it is open. */
+.top-tab.drops::after { content: ""; width: 0; height: 0; margin-left: 1px; border: 4px solid transparent; border-bottom-width: 0; border-top-color: currentColor; opacity: 0.75; }
+.top-tab.drops.selected::after { border-top-width: 0; border-bottom-width: 4px; border-top-color: transparent; border-bottom-color: currentColor; }
+
+/* The drop: under its tab on a computer (--drop-x, measured in TopBar.tsx), as tall as leaves the bottom bar clear. */
+.top-drop {
+  position: relative; left: var(--drop-x, 0); width: min(var(--drop-w, 340px), calc(100vw / var(--ui-z, 1) - 16px)); box-sizing: border-box;
+  display: flex; flex-direction: column; max-height: calc((100dvh - var(--hud-all-h, 190px)) / var(--ui-z, 1) - 90px); min-height: 0;
+  animation: top-drop-in 0.12s ease-out;
+}
+@keyframes top-drop-in { from { opacity: 0; transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) { .top-drop { animation: none; } }
+.top-drop-head { display: flex; align-items: center; gap: 7px; padding: 5px 6px 5px 10px; color: var(--t-brass-hi); }
+.top-drop-head strong { font-family: var(--font-head); font-weight: normal; font-size: 15px; letter-spacing: 0.04em; text-shadow: 0 1px 0 #000; }
+.timber button.top-drop-close { width: 26px; height: 26px; padding: 0; font-size: 17px; line-height: 1; }
+.top-drop-body { overflow-y: auto; min-height: 0; padding: 8px 10px 10px; overscroll-behavior: contain; }
+.top-drop-body h4 { margin: 10px 0 4px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted, #d2a585); }
+.top-drop-body h4:first-child { margin-top: 0; }
+.top-drop-body p { margin: 0 0 6px; }
+
+/* A line under the bar for what is happening now (what is being carried). */
+.top-strip { display: flex; align-items: center; gap: 8px; padding: 5px 6px 5px 10px; max-width: 100%; box-sizing: border-box; font-size: 13px; }
+.top-strip > .grow { min-width: 0; }
+
+/* A phone, held either way: the bar runs the width of the screen, the tabs are their icons, and a drop opens
+   across the whole width under it. */
+@media (max-width: 760px), (max-height: 520px) {
+  .top-bar { top: 6px; left: 6px; right: 6px; max-width: none; align-items: stretch; }
+  .top-row { padding: 3px 4px 3px 8px; gap: 6px; }
+  .top-name strong { font-size: 13px; }
+  .top-name small { font-size: 10px; }
+  .top-tabs { gap: 4px; }
+  .top-tabs.end { padding-left: 6px; }
+  .timber button.top-tab { height: 34px; min-width: 34px; padding: 0 8px; justify-content: center; }
+  .top-tab .top-tab-label { display: none; }
+  .top-tab.drops::after { display: none; }
+  .top-drop { left: 0; width: auto; max-height: calc((100dvh - var(--hud-all-h, 150px)) / var(--ui-z, 1) - 60px); font-size: 13px; }
+  .top-strip { flex-wrap: wrap; justify-content: flex-end; font-size: 12px; }
+  .top-strip > .grow { flex: 1 1 100%; }
+}
+@media (max-width: 420px) {
+  /* Too narrow for the place's name beside eight tabs: the tabs say where you are well enough. */
+  .top-name { display: none; }
+}
