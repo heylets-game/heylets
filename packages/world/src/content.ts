@@ -446,7 +446,7 @@ export const ENEMIES: Record<string, EnemyDef> = {
   },
   // A beast boss: it howls its pack into a frenzy, tears deep with its bite, and leaps on whoever stands apart.
   alpha: {
-    kind: "alpha", name: "Pack Leader", hp: 39, defence: 13, move: 3, save: 3, init: 2, xp: 40, boss: true,
+    kind: "alpha", name: "Pack Leader", hp: 66, defence: 13, move: 3, save: 3, init: 2, xp: 40, boss: true,
     abilities: ["howl", "savage_bite", "great_lunge"],
   },
   // A beast boss that comes alone: slow, huge, and it tears through everyone in front of it; its roar leaves the whole crew reeling.
