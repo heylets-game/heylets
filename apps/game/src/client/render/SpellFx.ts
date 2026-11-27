@@ -2141,7 +2141,7 @@ export class SpellFx {
    * The dread round one with a Terror Aura (a Haunt), for as long as `bind.holding()` says it stands, following it:
    * a dark ring on the ground at the edge of its reach (`radius`), breathing; a dark haze over the ground inside it;
    * rings drawn in from the edge to its feet one after another, as if the dread were pulling everything in to it; and
-   * dark wisps rising off the ground all over it and drifting in toward it. Unlike a spell's aura it has no end of its
+   * pale wisps, lost souls, rising off the ground all over it and spiralling in toward it (dreadWisp). Unlike a spell's aura it has no end of its
    * own: it is what the bearer is.
    */
   dread(bind: Binding, color: string, deep: string, radius: number) {
@@ -2182,26 +2182,46 @@ export class SpellFx {
           opacity(m, 0.45 * k * Math.sin(Math.PI * t));
         });
         if (gone < 0 && age >= next) {
-          next = age + rand(0.12, 0.26);
-          // A wisp rising off the ground somewhere in it and drifting in toward it.
-          const a = Math.random() * Math.PI * 2;
-          const d = radius * (0.35 + 0.6 * Math.sqrt(Math.random()));
-          const from = feet.clone().add(new THREE.Vector3(Math.cos(a) * d, 0.1, Math.sin(a) * d));
-          const to = feet.clone().add(new THREE.Vector3(Math.cos(a) * d * 0.45, 0.9 + Math.random() * 0.6, Math.sin(a) * d * 0.45));
-          const mote = this.speck("mote", Math.random() < 0.65 ? deep : color, from, 0.5);
-          mote.material.opacity = 0;
-          const life = rand(1.1, 1.6);
-          this.run([mote], (m) => {
-            const u = Math.min(1, m / life);
-            mote.position.lerpVectors(from, to, u * (2 - u));
-            mote.scale.setScalar(0.5 * (1 - u * 0.5));
-            mote.material.opacity = Math.sin(Math.PI * u) * 0.85;
-            return u < 1;
-          });
+          next = age + rand(0.22, 0.42);
+          this.dreadWisp(bind, paler(color, 0.45), radius);
         }
       }
       if (k <= 0 && gone >= 0 && this.bound.get(bind.key) === release) this.bound.delete(bind.key);
       return gone < 0 || k > 0;
+    });
+  }
+
+  /**
+   * One of a Terror Aura's wisps (SpellFx.dread): a lost soul, a soft glow with a tail of fainter ones behind it, rising
+   * off the ground somewhere in the aura and spiralling in and up toward its bearer, following them as they go, and
+   * fading out as it reaches them. Which way round it spirals is up to chance.
+   */
+  private dreadWisp(bind: Binding, color: string, radius: number) {
+    const a = Math.random() * Math.PI * 2;
+    const d = radius * (0.45 + 0.5 * Math.sqrt(Math.random()));
+    const turn = (Math.random() < 0.5 ? -1 : 1) * rand(1, 1.6);
+    const rise = rand(1.1, 1.7);
+    const life = rand(1.6, 2.2);
+    // Where it is `u` of the way through its life, about its bearer's feet: round and in, and up.
+    const at = (u: number, feet: THREE.Vector3) => {
+      const k = Math.max(0, u);
+      const r = d * (1 - 0.8 * k * (2 - k));
+      const b = a + turn * k;
+      return feet.clone().add(new THREE.Vector3(Math.cos(b) * r, 0.15 + rise * k * k + Math.sin(k * 9 + a) * 0.06, Math.sin(b) * r));
+    };
+    // The head, and its tail: each a little further back along the way, smaller and fainter.
+    const parts = [0, 1, 2, 3, 4, 5].map((i) => ({ s: this.halo(new THREE.Vector3(), color, 0, 0), lag: i * 0.035, size: 0.55 * (1 - i * 0.14), bright: 0.9 * (1 - i * 0.16) }));
+    this.run(parts.map((p) => p.s), (age) => {
+      const feet = bind.follow();
+      const u = Math.min(1, age / life);
+      if (!feet) return false;
+      const fade = Math.min(1, u / 0.15) * Math.min(1, (1 - u) / 0.25);
+      for (const p of parts) {
+        p.s.position.copy(at(u - p.lag, feet));
+        p.s.scale.setScalar(p.size);
+        p.s.material.opacity = p.bright * fade * (u - p.lag > 0 ? 1 : 0);
+      }
+      return u < 1;
     });
   }
 
