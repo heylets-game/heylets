@@ -267,9 +267,9 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   // no roll to hit: everyone in it makes an Agility save, taking half and no Slowing on a success. It needs a few turns
   // to draw the cold back up.
   frost_breath: { id: "frost_breath", name: "Frost Breath", damage: 7, potency: 4, cone: 3, saveOr: { effect: "slowed", turns: 2 }, cooldown: 3, weight: 2.5 },
-  // An Ember Hound's pulse of fire round it: every hero within reach (ENEMY_BURST) makes an Agility save, and whoever
+  // An Ember Hound's pulse of fire round it: every hero beside it makes an Agility save, and whoever
   // fails takes the lot and catches fire; whoever saves gets clear of it.
-  ember_burst: { id: "ember_burst", name: "Ember Burst", damage: 7, potency: 4, shape: "burst", saveOr: { effect: "burning" }, dodge: true, cooldown: 3, weight: 2 },
+  ember_burst: { id: "ember_burst", name: "Ember Burst", damage: 7, potency: 4, shape: "burst", range: 1, saveOr: { effect: "burning" }, dodge: true, cooldown: 3, weight: 2 },
   searing_bite: { id: "searing_bite", name: "Searing Bite", damage: 5, potency: 5, saveOr: { effect: "burning" }, weight: 1 },
   frost_lance: { id: "frost_lance", name: "Frost Lance", damage: 6, potency: 4, range: 5, saveOr: { effect: "slowed", turns: 2 }, chills: true, weight: 2 },
   thorn_hex: { id: "thorn_hex", name: "Thorn Hex", damage: 6, potency: 4, range: 5, saveOr: { effect: "bleeding" }, weight: 2 },
