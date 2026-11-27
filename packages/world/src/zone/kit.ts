@@ -880,32 +880,50 @@ export const ENEMY_EDGE = 0;
  * have is passed over, and so is a passive one (an `aura`): it is never used, only had (engine.ts saveRoll).
  */
 export function abilityStrikes(ids: readonly string[], level: number, more = 0): EnemyStrike[] {
-  const edge = ENEMY_EDGE + more;
   return ids.flatMap((id) => {
-    const a = ENEMY_ABILITIES[id];
-    if (!a || a.aura) return [];
-    const burst = a.shape === "burst";
-    return [
-      {
-        id,
-        name: a.name,
-        range: burst ? (a.range ?? ENEMY_BURST) : (a.range ?? 1),
-        burst,
-        dice: diceFor(scaled(a.damage, a.scales?.damage ?? DEFAULT_SCALE, level) + edge),
-        harmless: a.damage <= 0,
-        potency: a.potency + Math.floor((Math.max(1, level) - 1) / 4) + edge,
-        saveOr: a.saveOr,
-        weight: a.weight,
-        behaviour: (a.behaviour ?? (a.summon ? "summon" : burst ? "burst" : "strike")) as BehaviourId,
-        cost: a.cost ?? ACTION_AP,
-        cooldown: a.cooldown ?? 0,
-        kit: {
-          surface: a.surface, push: a.push, chills: a.chills, splash: a.splash, drain: a.drain, area: a.area, blast: a.blast, sweep: a.sweep, cone: a.cone, line: a.line, dash: a.dash, onSave: a.onSave, rally: a.rally, field: a.field, summon: a.summon, tether: a.tether, saves: a.saves,
-          ...(a.heal ? { heal: diceFor(scaled(a.heal, a.scales?.heal ?? DEFAULT_SCALE, level)) } : {}),
-          ...(a.aftershock ? { aftershock: { dice: diceFor(scaled(a.aftershock.damage, a.scales?.damage ?? DEFAULT_SCALE, level) + edge), saveOr: a.aftershock.saveOr } } : {}),
-        },
-      },
-    ];
+    const key = `${id}|${level}|${more}`;
+    const def = ENEMY_ABILITIES[id];
+    let kept = strikeMemo.get(key);
+    // An ability's entry replaced since (a test puts its own in the pool) is worked out afresh.
+    if (!kept || kept.def !== def) {
+      const strike = buildStrike(id, level, more);
+      kept = strike ? { def, strike } : undefined;
+      if (kept) strikeMemo.set(key, kept);
+      else strikeMemo.delete(key);
+    }
+    return kept ? [kept.strike] : [];
+  });
+}
+
+// Each ability's numbers at a level, worked out once and kept: they are asked for on every step an enemy takes, and
+// by every enemy weighing what to do. Frozen, as they are shared: nobody may change one.
+const strikeMemo = new Map<string, { def: EnemyAbilityDef; strike: EnemyStrike }>();
+
+function buildStrike(id: string, level: number, more: number): EnemyStrike | undefined {
+  const edge = ENEMY_EDGE + more;
+  const a = ENEMY_ABILITIES[id];
+  if (!a || a.aura) return undefined;
+  const burst = a.shape === "burst";
+  const heal = a.heal ? Object.freeze(diceFor(scaled(a.heal, a.scales?.heal ?? DEFAULT_SCALE, level))) : undefined;
+  const aftershock = a.aftershock ? Object.freeze({ dice: Object.freeze(diceFor(scaled(a.aftershock.damage, a.scales?.damage ?? DEFAULT_SCALE, level) + edge)), saveOr: a.aftershock.saveOr }) : undefined;
+  return Object.freeze({
+    id,
+    name: a.name,
+    range: burst ? (a.range ?? ENEMY_BURST) : (a.range ?? 1),
+    burst,
+    dice: Object.freeze(diceFor(scaled(a.damage, a.scales?.damage ?? DEFAULT_SCALE, level) + edge)),
+    harmless: a.damage <= 0,
+    potency: a.potency + Math.floor((Math.max(1, level) - 1) / 4) + edge,
+    saveOr: a.saveOr,
+    weight: a.weight,
+    behaviour: (a.behaviour ?? (a.summon ? "summon" : burst ? "burst" : "strike")) as BehaviourId,
+    cost: a.cost ?? ACTION_AP,
+    cooldown: a.cooldown ?? 0,
+    kit: Object.freeze({
+      surface: a.surface, push: a.push, chills: a.chills, splash: a.splash, drain: a.drain, area: a.area, blast: a.blast, sweep: a.sweep, cone: a.cone, line: a.line, dash: a.dash, onSave: a.onSave, rally: a.rally, field: a.field, summon: a.summon, tether: a.tether, saves: a.saves,
+      ...(heal ? { heal } : {}),
+      ...(aftershock ? { aftershock } : {}),
+    }),
   });
 }
 
