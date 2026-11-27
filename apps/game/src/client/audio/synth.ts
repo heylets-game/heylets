@@ -259,7 +259,7 @@ function combat(r: Render, sound: SynthCombat) {
       // An enemy's critical hit: a classic fantasy-game slash, an executioner's blow. A quick whoosh rushes in
       // (kept short, as the blow has already landed), and at contact: a sharp crack, the blade's shing ringing with
       // two notes beating against each other, the slash tearing on through, and under it all a heavy chunk with a
-      // drop into the floor: a thud, short and dead. Over it the blade goes on ringing a long while, in a minor chord: the shing's two
+      // drop into the floor: a thud, short and dead. Over it the blade goes on ringing a long while, in a diminished chord: the shing's two
       // notes, and a lower pair that beats slower and lasts the longest, so the tail sinks as it fades.
       const h = t + 0.05;
       noiseAt(r, t, { filter: "bandpass", freq: 500 * p, freqTo: 2600 * p, q: 1.2, attack: 0.045, decay: 0.03, gain: v * 0.55 });
@@ -269,16 +269,17 @@ function combat(r: Render, sound: SynthCombat) {
       toneAt(r, h + 0.01, { type: "sine", freq: 3541 * p, decay: 1.8, gain: v * 0.12 });
       toneAt(r, h + 0.02, { type: "sine", freq: 1760 * p, decay: 2.3, gain: v * 0.08 });
       toneAt(r, h + 0.02, { type: "sine", freq: 1766 * p, decay: 2.3, gain: v * 0.08 });
-      // Over each ring a full minor chord: its minor third (6:5, A to C) and its fifth (3:2, A to E), each a touch
-      // quieter than the root and beating as it does, the root ringing last so the tail ends on it.
+      // Over each ring a diminished chord: its minor third (6:5, A to C) and its flattened fifth (a tritone, the square
+      // root of 2, A to E flat), each a touch quieter than the root and beating as it does, the root ringing last so
+      // the tail ends on it.
       toneAt(r, h + 0.015, { type: "sine", freq: 4224 * p, decay: 1.6, gain: v * 0.08 });
       toneAt(r, h + 0.015, { type: "sine", freq: 4249 * p, decay: 1.6, gain: v * 0.08 });
-      toneAt(r, h + 0.01, { type: "sine", freq: 5280 * p, decay: 1.5, gain: v * 0.06 });
-      toneAt(r, h + 0.01, { type: "sine", freq: 5311 * p, decay: 1.5, gain: v * 0.06 });
+      toneAt(r, h + 0.01, { type: "sine", freq: 4978 * p, decay: 1.5, gain: v * 0.06 });
+      toneAt(r, h + 0.01, { type: "sine", freq: 5007 * p, decay: 1.5, gain: v * 0.06 });
       toneAt(r, h + 0.025, { type: "sine", freq: 2112 * p, decay: 2.2, gain: v * 0.06 });
       toneAt(r, h + 0.025, { type: "sine", freq: 2119 * p, decay: 2.2, gain: v * 0.06 });
-      toneAt(r, h + 0.03, { type: "sine", freq: 2640 * p, decay: 2.1, gain: v * 0.055 });
-      toneAt(r, h + 0.03, { type: "sine", freq: 2649 * p, decay: 2.1, gain: v * 0.055 });
+      toneAt(r, h + 0.03, { type: "sine", freq: 2489 * p, decay: 2.1, gain: v * 0.055 });
+      toneAt(r, h + 0.03, { type: "sine", freq: 2497 * p, decay: 2.1, gain: v * 0.055 });
       noiseAt(r, h + 0.01, { filter: "bandpass", freq: 6000 * p, freqTo: 900 * p, q: 1.5, decay: 0.22, gain: v * 0.8 });
       toneAt(r, h, { type: "sine", freq: 110 * p, freqTo: 40, decay: 0.18, gain: v * 1.4 });
       noiseAt(r, h, { filter: "lowpass", freq: 500 * p, q: 1, decay: 0.2, gain: v * 1.1 });
