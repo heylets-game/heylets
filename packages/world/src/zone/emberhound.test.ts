@@ -35,15 +35,15 @@ describe("an Ember Hound's kit", () => {
   it("is Searing Bite, then Ember Burst: a burst for 7, a stack of Burning on a failed save, every 3 turns", () => {
     expect(ENEMIES.ember_hound.abilities).toEqual(["searing_bite", "ember_burst"]);
     expect(searingBite).toMatchObject({ range: 1, saveOr: { effect: "burning" } });
-    expect(emberBurst).toMatchObject({ burst: true, range: 2, cooldown: 3, saveOr: { effect: "burning" } });
+    expect(emberBurst).toMatchObject({ burst: true, range: 1, cooldown: 3, saveOr: { effect: "burning" } });
     expect(emberBurst.kit.dodge).toBe(true);
     expect(ENEMY_ABILITIES.ember_burst.damage).toBe(7);
   });
 });
 
 describe("an Ember Hound's Ember Burst", () => {
-  it("catches everyone within 2: all of it and a stack of Burning on a fail, none of it on a save, and nobody further off", () => {
-    const { state, hound } = setUp(at(5, 6), [at(6, 6), at(7, 6), at(9, 6)]);
+  it("catches everyone beside it: all of it and a stack of Burning on a fail, none of it on a save, and nobody further off", () => {
+    const { state, hound } = setUp(at(5, 6), [at(6, 6), at(4, 6), at(7, 6)]);
     let failed = 0;
     let dodged = 0;
     for (let seed = 1; seed <= 20; seed++) {
