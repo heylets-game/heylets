@@ -1156,12 +1156,13 @@ function lungeAt(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit): bool
  * An enemy uses an ability on `target`. One that lands on more than one hex (`area`, `sweep`) is aimed at `at`, which
  * may be a hex beside the target rather than theirs (ai.ts aims it to catch as many as it can); left out, at the target.
  * Each attack it makes spends one count of a Frenzy, once it is over (so the blood it draws in that attack still
- * bleeds); a call to its own side, or for more of it, is no attack, and spends none.
+ * bleeds); a call to its own side, or for more of it, or a mending of its own, is no attack, and spends none.
  */
 export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | null, at?: HexPos): void {
   if (attack.kit.rally) return howl(ctx, enemy, attack);
   if (attack.kit.field) return raiseField(ctx, enemy, attack);
   if (attack.kit.summon) return callForKin(ctx, enemy, attack);
+  if (attack.kit.heal) return mendAllies(ctx, enemy, attack, at ?? target?.pos ?? enemy.pos);
   enemyAttack(ctx, enemy, attack, target, at);
   attackMade(ctx, enemy);
 }
@@ -1172,6 +1173,25 @@ export function enemyAct(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Uni
  */
 export const alliesReached = (state: ZoneState, enemy: Unit, pos: HexPos, attack: EnemyStrike): Unit[] =>
   state.units.filter((u) => u.side === enemy.side && u.id !== enemy.id && !u.down && inFight(state, u.id) && gap(enemy, u, pos) <= attack.range);
+
+/**
+ * Who a mending for its own side (EnemyAbilityDef `heal`, a Hedge Witch's Witches' Brew) thrown from `from` at `at` lands
+ * on: every one of its user's side in the fight, standing (itself too), on any hex of it (spreadHexes; `at` alone for
+ * one with no spread).
+ */
+export function mendedBy(state: ZoneState, enemy: Unit, from: HexPos, attack: EnemyStrike, at: HexPos): Unit[] {
+  const hexes = spreadHexes(state, attack.kit, from, at) ?? [at];
+  return state.units.filter((u) => u.side === enemy.side && !u.down && inFight(state, u.id) && hexes.some((p) => covers(u, p)));
+}
+
+/** A mending for its own side (EnemyAbilityDef `heal`): its dice, rolled once for each it lands on (mendedBy). No attack: no Frenzy is spent. */
+function mendAllies(ctx: Ctx, enemy: Unit, attack: EnemyStrike, at: HexPos): void {
+  ctx.events.push({ t: "used", id: enemy.id, what: "attack", name: attack.name, at });
+  for (const ally of mendedBy(ctx.state, enemy, enemy.pos, attack, at)) {
+    const rolled = rollShown(ctx.rng, attack.kit.heal!);
+    heal(ctx, ally, rolled.total, { actor: enemy.id, what: attack.name, dice: rolled });
+  }
+}
 
 /** A call to its own side (a Pack Leader's Howl): every ally it reaches (alliesReached) is Frenzied for so many attacks. */
 function howl(ctx: Ctx, enemy: Unit, attack: EnemyStrike): void {

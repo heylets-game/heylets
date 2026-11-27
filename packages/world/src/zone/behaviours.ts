@@ -10,7 +10,7 @@
 
 import { hexDistance, hexNeighbors, posKey, type HexPos } from "@gantt-quest/core";
 import { tileAt } from "../map";
-import { alliesReached, dashWay, leaps, leavesReach, lungeLanding, shiftInto, shoveDest, spreadHexes } from "./combat";
+import { alliesReached, dashWay, leaps, leavesReach, lungeLanding, mendedBy, shiftInto, shoveDest, spreadHexes } from "./combat";
 import { has } from "./engine";
 import { HIGH_REACH, blast, covers, gap, inFight, meet, nearOf, reachFrom, reaches, sameHex, seesFor, span, strikes } from "./geometry";
 import { SPLASH_SHARE, type EnemyStrike, type Mind } from "./kit";
@@ -309,7 +309,51 @@ const summon: Behaviour = {
   },
 };
 
-export const BEHAVIOURS = { strike, burst, shove, rally, field, summon } satisfies Record<string, Behaviour>;
+/**
+ * What each HP a mending of its own side gives back is worth (behaviour `mend`), against each HP of damage a blow would
+ * do (worth 1 to `strike`): twice as much, so a hurt ally is mended before another blow is struck, as long as the
+ * mending would make good about half as much as the blow would do.
+ */
+export const HEAL_WORTH = 2;
+
+/**
+ * A mending for its own side (EnemyAbilityDef `heal`, a Hedge Witch's Witches' Brew): weighed at every hex it could be
+ * thrown at that would land on one of its side who is hurt (itself too), and worth HEAL_WORTH for each HP it would give
+ * back there: for each it lands on, its average heal, or what they have lost if that is less. Nothing where none it would
+ * land on is hurt. It reaches none of the other side, so it is nothing to walk toward by itself; but where it stands is
+ * weighed with the rest, so it will step to where it can reach a hurt ally.
+ */
+const mend: Behaviour = {
+  reaches: () => false,
+  value(look, from, attack, targets) {
+    const dice = attack.kit.heal;
+    if (!dice || targets.length === 0) return null;
+    const { state, enemy } = look;
+    const average = diceAverage(dice);
+    const hurt = state.units.filter((u) => u.side === enemy.side && !u.down && u.hp < u.maxHp && inFight(state, u.id));
+    if (hurt.length === 0) return null;
+    // Where it could land on one of them: their own hexes, and every hex as near to them as it spreads.
+    const wide = attack.kit.blast ?? 0;
+    const seen = new Set<string>();
+    let best: Use | null = null;
+    for (const ally of hurt) {
+      for (const own of span(ally)) {
+        for (const at of blast(state.map, own, wide)) {
+          const key = posKey(at);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          if (!tileAt(state.map, at) || !aimReaches(state, enemy, from, attack, at)) continue;
+          const given = mendedBy(state, enemy, from, attack, at).reduce((sum, u) => sum + Math.min(average, u.maxHp - u.hp), 0);
+          const worth = given * HEAL_WORTH * (look.whim?.(attack, null) ?? 1);
+          if (worth > 0 && (!best || worth > best.worth)) best = { attack, target: null, at, worth };
+        }
+      }
+    }
+    return best;
+  },
+};
+
+export const BEHAVIOURS = { strike, burst, shove, rally, field, summon, mend } satisfies Record<string, Behaviour>;
 
 export type BehaviourId = keyof typeof BEHAVIOURS;
 

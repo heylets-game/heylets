@@ -16,6 +16,7 @@ import type { FieldKind, SurfaceKind } from "./types";
  */
 export interface AbilityScales {
   damage?: ScaleRate;
+  heal?: ScaleRate;
 }
 
 /**
@@ -93,6 +94,13 @@ export interface EnemyAbilityDef {
    * It does no harm, and is aimed at nobody.
    */
   summon?: KinCall;
+  /**
+   * A mending for its own side, not an attack (a Hedge Witch's Witches' Brew): HP at level 1 (grown by `scales.heal`,
+   * then turned into dice), healed to every one of its side in the fight, itself as well, standing on the hexes it
+   * lands on. Thrown at a hex up to `range` off, it lands on that hex and every hex within `blast` of it (none: that
+   * hex alone). It needs a clear line, as a shot does, and does no harm (`damage` 0). Weighed up by behaviour `mend`.
+   */
+  heal?: number;
   /** Left under the target when it lands. */
   surface?: { kind: SurfaceKind; rounds: number };
   /** Knocks the target back when it lands: `true` for a hex, or a number of hexes (it stops early at anything in the way). */
@@ -158,7 +166,7 @@ export interface EnemyAbilityDef {
   drain?: number;
   /**
    * How an enemy weighs up using it (behaviours.ts): `strike` for one target, `burst` for everyone round, `shove` for
-   * one beside it with a drop or a pit at their back, `rally` for a call to its own side, `summon` for calling more of it. When not said, it follows the shape.
+   * one beside it with a drop or a pit at their back, `rally` for a call to its own side, `summon` for calling more of it, `mend` for healing its own side. When not said, it follows the shape.
    */
   behaviour?: string;
   /** How much its user favours it, beside its other abilities: a multiplier on what it is worth (ai.ts bestAttack). */
@@ -276,8 +284,12 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   // A Rime Wraith's bomb of ice, thrown onto a clump of 3 hexes: everyone there saves for half, and the ground is
   // left iced over whether they get clear or not.
   icy_bomb: { id: "icy_bomb", name: "Icy Bomb", damage: 8, potency: 4, range: 5, area: 3, surface: { kind: "ice", rounds: 3 }, cooldown: 3, weight: 2 },
-  thorn_hex: { id: "thorn_hex", name: "Thorn Hex", damage: 6, potency: 4, range: 5, saveOr: { effect: "bleeding" }, weight: 2 },
-  evil_eye: { id: "evil_eye", name: "Evil Eye", damage: 4, potency: 3, range: 5, saveOr: { effect: "exposed", turns: 2 }, weight: 2 },
+  // A Hedge Witch's everyday hex, from across the clearing: whoever it lands on is the worse at shaking off whatever
+  // comes next (2 less on every save) until their next turn is over, unless they shake this off first.
+  weakening_hex: { id: "weakening_hex", name: "Weakening Hex", damage: 6, potency: 4, range: 5, saveOr: { effect: "weakened", turns: 1, amount: 2 }, weight: 2 },
+  // A Hedge Witch's brew, flung over its own up to 5 hexes off: it splashes over that hex and the ring round it, and
+  // every one of its side there (itself too) is mended. It has to brew another before it can throw again.
+  witches_brew: { id: "witches_brew", name: "Witches' Brew", damage: 0, potency: 0, range: 5, blast: 1, heal: 6, cooldown: 3, behaviour: "mend", weight: 2 },
   crushing_strike: { id: "crushing_strike", name: "Crushing Strike", damage: 9, potency: 5, saveOr: { effect: "stunned", turns: 1 }, weight: 2 },
   sweeping_ruin: { id: "sweeping_ruin", name: "Sweeping Ruin", damage: 6, potency: 3, shape: "burst", weight: 2 },
 };

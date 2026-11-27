@@ -5,7 +5,7 @@
 // puts them on a map. A test fails if an ability or an enemy has no entry.
 
 import type { StatKey, Stats } from "@gantt-quest/core";
-import { ABILITIES, EFFECT_INFO, EFFECT_TICK, ENEMIES, STACK_TURNS, SUNDERED_DEFENCE, REELING_AP, type AbilityDef, type EffectKind, type Inflict, type Retort } from "../content";
+import { ABILITIES, EFFECT_INFO, EFFECT_TICK, ENEMIES, STACK_TURNS, SUNDERED_DEFENCE, REELING_AP, WEAKENED_SAVES, type AbilityDef, type EffectKind, type Inflict, type Retort } from "../content";
 import type { BehaviourId } from "./behaviours";
 import { ENEMY_ABILITIES, type EnemyAbilityDef } from "./enemyabilities";
 import { BLINK_AP } from "../gear";
@@ -505,6 +505,7 @@ export const SAVE_STAT: Record<Condition, StatKey> = {
   sundered: "str",
   memento_mori: "int_stat",
   reeling: "vit",
+  weakened: "vit",
   poisoned: "vit",
   prone: "agi",
   wet: "agi",
@@ -556,6 +557,7 @@ export const CONDITION_INFO: Record<Condition, { name: string; blurb: string; co
   sundered: info("sundered", `Its armor is dented: ${SUNDERED_DEFENCE} less Defence.`),
   memento_mori: info("memento_mori", "Each time it takes damage it starts Fumbling, unless it is Fumbling already."),
   reeling: info("reeling", `Shaken by a heavy blow: as much less AP on each of its turns while it lasts as its number says (${REELING_AP} unless said).`),
+  weakened: info("weakened", `Hexed: as much less on every save while it lasts as its number says (${WEAKENED_SAVES} unless said).`),
   fettered: { name: "Fettered", blurb: "Chained to a spot: it cannot go more than a hex from it by its own doing.", color: "#8fa8c8" },
   wet: { name: "Wet", blurb: "Soaked through: lightning hits it harder, and it cannot catch fire.", color: "#7dd3fc" },
   beacon: { name: "Beacon", blurb: `Gives light, and it and allies within 2 hexes get +${AURAS.beaconHit} to hit.`, color: "#fff7d6" },
@@ -610,6 +612,7 @@ const CONDITION_DETAIL: Partial<Record<Condition, (c: UnitCondition, by?: string
     return `Loses ${EFFECT_TICK.burning * n} HP at the start of each of its turns (${EFFECT_TICK.burning} for each of its ${plural(n, "stack")}). ${left}. Water puts it all out.`;
   },
   reeling: (c) => `Shaken by a heavy blow: ${c.amount ?? REELING_AP} AP less to spend on ${c.rounds > 1 ? `each of its next ${c.rounds} turns` : "its next turn"}.`,
+  weakened: (c) => `Hexed: ${c.amount ?? WEAKENED_SAVES} less on every save, for ${plural(c.rounds, "more turn")}.`,
   fettered: (c) => `Chained to a spot: it cannot go more than ${plural(c.amount ?? 1, "hex", "hexes")} from it by its own doing, for ${plural(c.rounds, "more turn")}.`,
   fumbling: (c) => `${nextOf(c.amount ?? c.rounds, "roll to hit is", "rolls to hit is")} made with disadvantage. Gone when the fight ends.`.replace(/^./, (x) => x.toUpperCase()),
   inspired: (c) => `${nextOf(c.amount ?? c.rounds, "roll to hit has", "rolls to hit has")} advantage. Gone when the fight ends.`.replace(/^./, (x) => x.toUpperCase()),
@@ -752,6 +755,8 @@ export function commonCostFor(unit: Pick<Unit, "kind" | "perks">, what: CommonAc
 
 /** What an enemy's ability does besides its damage, when it lands. */
 export type EnemyAttackKit = Pick<EnemyAbilityDef, "surface" | "push" | "chills" | "splash" | "drain" | "area" | "blast" | "sweep" | "cone" | "line" | "dash" | "onSave" | "rally" | "field" | "summon" | "tether" | "saves"> & {
+  /** What it heals each of its side it lands on (EnemyAbilityDef `heal`), grown with level. */
+  heal?: Dice;
   /** Its second shaking (EnemyAbilityDef `aftershock`), its damage grown with level as the first's is. */
   aftershock?: { dice: Dice; saveOr?: Inflict };
 };
@@ -896,6 +901,7 @@ export function abilityStrikes(ids: readonly string[], level: number, more = 0):
         cooldown: a.cooldown ?? 0,
         kit: {
           surface: a.surface, push: a.push, chills: a.chills, splash: a.splash, drain: a.drain, area: a.area, blast: a.blast, sweep: a.sweep, cone: a.cone, line: a.line, dash: a.dash, onSave: a.onSave, rally: a.rally, field: a.field, summon: a.summon, tether: a.tether, saves: a.saves,
+          ...(a.heal ? { heal: diceFor(scaled(a.heal, a.scales?.heal ?? DEFAULT_SCALE, level)) } : {}),
           ...(a.aftershock ? { aftershock: { dice: diceFor(scaled(a.aftershock.damage, a.scales?.damage ?? DEFAULT_SCALE, level) + edge), saveOr: a.aftershock.saveOr } } : {}),
         },
       },

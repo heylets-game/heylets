@@ -38,7 +38,7 @@ export function sandboxSlots(state: ZoneState, foe: Unit, dev: ZoneDevState): Hu
       id: `foe:${id}`,
       icon: { ...abilityIcon(id), flat: true },
       name: s.name,
-      line: [`${s.cost} AP`, s.cooldown ? `cooldown ${s.cooldown} (not in the sandbox)` : "", reach, s.harmless ? "" : `${diceText(s.dice)} damage`].filter(Boolean).join(" · "),
+      line: [`${s.cost} AP`, s.cooldown ? `cooldown ${s.cooldown} (not in the sandbox)` : "", reach, s.kit.heal ? `${diceText(s.kit.heal)} healing` : s.harmless ? "" : `${diceText(s.dice)} damage`].filter(Boolean).join(" · "),
       more: aimHint(s),
       picked: armed === id,
       run: () => use(s),
