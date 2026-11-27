@@ -176,12 +176,9 @@ const RES = 4;
 const PX = RES / 2;
 
 const NAME_FONT = `${16 * PX}px "IM Fell English SC", "IM Fell English", Georgia, serif`;
-/**
- * The level's number: bold IM Fell English, as the shield's points are. Not the blackletter of titles (Pirata One),
- * whose 0 is so narrow and barred that at a badge's size a 10 reads as 18.
- */
-const levelFont = (scale: number) => `bold ${Math.round(14 * PX * scale)}px "IM Fell English", Georgia, serif`;
-const LEVEL_FONT = levelFont(1);
+const LEVEL_FONT = `${14 * PX}px "Pirata One", "IM Fell English", Georgia, serif`;
+/** The level's face at `scale` times its usual size (see PlateStats.medal). */
+const levelFont = (scale: number) => (scale === 1 ? LEVEL_FONT : `${Math.round(14 * PX * scale)}px "Pirata One", "IM Fell English", Georgia, serif`);
 const SHIELD_FONT = `bold ${11 * PX}px "IM Fell English", Georgia, serif`;
 
 /** Screen pixels: the clear border round everything (room for the outline and a glow), the bars' width and heights. */
