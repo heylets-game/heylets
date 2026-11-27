@@ -1295,6 +1295,18 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
   const leap = leaps(attack);
   if (leap && !lungeAt(ctx, enemy, attack, target)) return;
   const melee = attack.range === 1 || leap;
+  // One that is only saved against (`saves`): no roll to hit. They save against what it leaves (Agility, if it leaves
+  // nothing), taking half and none of it on a success; on a failure, all of it and what it leaves.
+  if (attack.kit.saves) {
+    const saved = saveRoll(ctx, target, attack.saveOr ? SAVE_STAT[attack.saveOr.effect] : "agi", dc, attack.name).ok;
+    if (!attack.harmless) {
+      const dice = rollShown(ctx.rng, attack.dice);
+      damage(ctx, target, saved ? Math.floor(dice.total / 2) : dice.total, { actor: enemy.id, what: attack.name, dice, halved: saved });
+    }
+    if (!saved) leave(target, false);
+    else if (attack.kit.onSave && !target.down) inflict(ctx, target, attack.kit.onSave);
+    return;
+  }
   const roll = attackRoll(ctx, enemy, target, { label: attack.name, bonus: attack.potency, melee });
   if (!roll.ok) {
     ctx.events.push({ t: "miss", actor: enemy.id, target: target.id, what: attack.name });

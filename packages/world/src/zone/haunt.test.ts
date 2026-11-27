@@ -131,6 +131,28 @@ describe("a Haunt's Ghastly Fetter", () => {
     throw new Error("never fettered");
   }
 
+  it("is never rolled to hit: a save for half and nothing else, or all of it, Reeling and the chain", () => {
+    expect(fetter.kit.saves).toBe(true);
+    let saved = 0;
+    let failed = 0;
+    for (let seed = 1; seed <= 30; seed++) {
+      const { state, haunt } = setUp(at(5, 6), [at(9, 6)]);
+      const ctx = ctxOf(state, seed);
+      enemyAct(ctx, unit(ctx.state, haunt), fetter, unit(ctx.state, "ann"));
+      expect(ctx.events.some((e) => e.t === "roll" && e.roll.kind === "attack"), `seed ${seed}`).toBe(false);
+      expect(ctx.events.some((e) => e.t === "miss"), `seed ${seed}`).toBe(false);
+      const hit = hits(ctx, "ann");
+      expect(hit, `seed ${seed}`).toHaveLength(1);
+      const halved = hit[0].t === "hit" && !!hit[0].dice?.halved;
+      expect(has(ctx.state, "ann", "fettered"), `seed ${seed}`).toBe(!halved);
+      expect(has(ctx.state, "ann", "reeling"), `seed ${seed}`).toBe(!halved);
+      if (halved) saved++;
+      else failed++;
+    }
+    expect(saved).toBeGreaterThan(0);
+    expect(failed).toBeGreaterThan(0);
+  });
+
   it("leaves whoever fails to save Reeling by 1 for 3 turns, and chained to where they stood", () => {
     const { ctx } = fettered();
     const ann = unit(ctx.state, "ann");

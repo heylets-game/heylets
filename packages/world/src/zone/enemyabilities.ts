@@ -47,6 +47,12 @@ export interface EnemyAbilityDef {
   cooldown?: number;
   /** Left on a hero it gets through to, unless they save (a burst: on one who fails to brace). */
   saveOr?: Inflict;
+  /**
+   * Aimed at one hero but never rolled to hit (a Haunt's Ghastly Fetter): they save against `saveOr` (with the stat
+   * that shrugs it off; Agility if it leaves nothing), taking half and none of it on a success, and all of it with
+   * `saveOr` (and any `tether`) on a failure.
+   */
+  saves?: boolean;
   /** Left on a hero it gets through to who does save against `saveOr`: a lesser share of it (Savage Bite). */
   onSave?: Inflict;
   /**
@@ -213,9 +219,9 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   // A Haunt's spear of ice, flung straight through five hexes and everyone on them, each saving for half. It has to
   // freeze another before it can throw again.
   ice_spear: { id: "ice_spear", name: "Ice Spear", damage: 13, potency: 4, line: 5, cooldown: 2, weight: 2 },
-  // A Haunt's chain of grave-iron, flung at one hero from afar: whoever fails to shake it off is left reeling (an AP short
+  // A Haunt's chain of grave-iron, flung at one hero from afar, with no missing them: whoever fails to shake it off is left reeling (an AP short
   // on each of their next three turns) and held within a hex of where it caught them while it holds. Quick to throw.
-  ghastly_fetter: { id: "ghastly_fetter", name: "Ghastly Fetter", damage: 5, potency: 4, range: 5, cost: 1, cooldown: 3, saveOr: { effect: "reeling", turns: 3, amount: 1 }, tether: { reach: 1, turns: 3 }, weight: 2 },
+  ghastly_fetter: { id: "ghastly_fetter", name: "Ghastly Fetter", damage: 5, potency: 4, range: 5, cost: 1, cooldown: 3, saves: true, saveOr: { effect: "reeling", turns: 3, amount: 1 }, tether: { reach: 1, turns: 3 }, weight: 2 },
   // The dread round a Haunt: every hero within 2 hexes of it makes every save with disadvantage. Always on, never used.
   terror_aura: { id: "terror_aura", name: "Terror Aura", damage: 0, potency: 0, aura: { radius: 2, saves: "disadvantage" }, weight: 0 },
   venomous_bite: { id: "venomous_bite", name: "Venomous Bite", damage: 5, potency: 4, surface: { kind: "poison", rounds: 2 }, weight: 2 },
