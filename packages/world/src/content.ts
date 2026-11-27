@@ -510,10 +510,11 @@ export const ENEMIES: Record<string, EnemyDef> = {
     kind: "frost_wolf", name: "Frost Wolf", hp: 14, defence: 12, move: 3, save: 0, init: 2, xp: 11,
     abilities: ["rime_bite", "frost_breath"],
   },
-  // The ashlands' hounds, and what they bite catches fire.
+  // The ashlands' hounds: what they bite catches fire, and now and then the fire in them pulses out all round. (Searing
+  // Bite first: it is the one it strikes with at whoever steps away, combat.ts provoke.)
   ember_hound: {
     kind: "ember_hound", name: "Ember Hound", hp: 16, defence: 12, move: 3, save: 0, init: 1, xp: 12,
-    abilities: ["searing_bite"],
+    abilities: ["searing_bite", "ember_burst"],
   },
   // A cave bear's white cousin: as slow, as thick-hided, and every bit as cross.
   snow_bear: {

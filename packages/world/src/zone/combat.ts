@@ -1257,7 +1257,7 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
     const rolled = dice.total;
     for (const victim of caught) {
       const saved = saveRoll(ctx, victim, "agi", dc, attack.name).ok;
-      damage(ctx, victim, saved ? Math.floor(rolled / 2) : rolled, { actor: enemy.id, what: attack.name, dice, halved: saved });
+      if (!(saved && attack.kit.dodge)) damage(ctx, victim, saved ? Math.floor(rolled / 2) : rolled, { actor: enemy.id, what: attack.name, dice, halved: saved });
       if (!saved) leave(victim, false);
     }
     return;
@@ -1276,7 +1276,7 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
         continue;
       }
       const saved = saveRoll(ctx, victim, "agi", dc, attack.name).ok;
-      damage(ctx, victim, saved ? Math.floor(dice.total / 2) : dice.total, { actor: enemy.id, what: attack.name, dice, halved: saved });
+      if (!(saved && attack.kit.dodge)) damage(ctx, victim, saved ? Math.floor(dice.total / 2) : dice.total, { actor: enemy.id, what: attack.name, dice, halved: saved });
       if (!saved) leave(victim, false);
     }
     if (attack.kit.surface) placeSurface(ctx, spread, attack.kit.surface.kind, attack.kit.surface.rounds, enemy.id);
@@ -1294,7 +1294,7 @@ function enemyAttack(ctx: Ctx, enemy: Unit, attack: EnemyStrike, target: Unit | 
     const dice = rollShown(ctx.rng, attack.dice);
     for (const victim of state.units.filter((u) => u.side !== enemy.side && !u.down && !unseen(u) && inFight(state, u.id) && way.through.some((p) => covers(u, p)))) {
       const saved = saveRoll(ctx, victim, "agi", dc, attack.name).ok;
-      damage(ctx, victim, saved ? Math.floor(dice.total / 2) : dice.total, { actor: enemy.id, what: attack.name, dice, halved: saved });
+      if (!(saved && attack.kit.dodge)) damage(ctx, victim, saved ? Math.floor(dice.total / 2) : dice.total, { actor: enemy.id, what: attack.name, dice, halved: saved });
       if (!saved) leave(victim, false);
     }
     tumble(ctx, enemy, from, null, JUMP_DOWN);
