@@ -1973,11 +1973,13 @@ export const WEB_LAID = { spokes: 9, rings: 4, thread: 0.05, grow: 0.2, hold: 0.
  * A web laid flat on the ground at `at`, `radius` out (see WEB_LAID): spokes out from the middle and rings of thread
  * across them, each sagging in a little between spokes, thrown out from small to full size and then fading. Always on
  * the plane of the ground. `drop`: it starts that far above `at` and comes down onto it as it opens out (a net cast
- * over the ground), and `hold`, if said, is how long it lies there before fading. Lay it with MoveStage.lay.
+ * over the ground), `lies`, if said, is how long it lies there before fading, and `thick` how many times WEB_LAID's
+ * thread it is strung with. Lay it with MoveStage.lay.
  */
-export function groundWeb(at: THREE.Vector3, radius: number, color: string, drop = 0, lies?: number): (group: THREE.Object3D) => (dt: number) => boolean {
+export function groundWeb(at: THREE.Vector3, radius: number, color: string, drop = 0, lies?: number, thick = 1): (group: THREE.Object3D) => (dt: number) => boolean {
   return (group) => {
-    const { spokes, rings, thread, grow: opens, hold: held, fade } = WEB_LAID;
+    const { spokes, rings, grow: opens, hold: held, fade } = WEB_LAID;
+    const thread = WEB_LAID.thread * thick;
     const grow = drop > 0 ? opens * 2 : opens;
     const hold = lies ?? held;
     const positions: number[] = [];
@@ -2473,16 +2475,41 @@ function ghastlyFetter(stage: MoveStage, { figure, hitAt, crit, onImpact }: Move
  * edge, the seconds they take to get there, how high the web is held over the ground before it comes down (it takes
  * twice WEB_LAID.grow to come down), and how long it then lies before the web on the ground takes over.
  */
-export const SPIN_WEB = { spread: HEX * 2.45, lines: 7, shoot: 0.32, over: 2.6, lies: 1.1 };
+export const SPIN_WEB = { spread: HEX * 2.45, lines: 7, shoot: 0.32, over: 2.6, lies: 1.1, thick: 2.5 };
 
-/** A thread of silk drawn from `from` to `to` in a shallow arc, as a run of motes laid along it over `over` seconds, each hanging a moment. */
-function silkLine(stage: MoveStage, from: THREE.Vector3, to: THREE.Vector3, over: number, arc: number, silk: string) {
-  for (let s = 0; s <= over; s += 0.02) {
+/** How heavy a thread of silk is drawn (silkLine): its motes' size, how often one is laid, how long each hangs, and a streak at its head or not. */
+interface Thread {
+  size: [number, number];
+  every: number;
+  hangs: number;
+  head: boolean;
+}
+
+/** A fine thread (a Brood Swarm's, let down for the young). */
+const FINE_THREAD: Thread = { size: [0.18, 0.1], every: 0.02, hangs: 0.4, head: false };
+
+/** A heavy line of silk (a Spin Web's, shot out over the ground): thick, close-laid, hanging a good while, a bright streak at its head. */
+export const HEAVY_THREAD: Thread = { size: [0.42, 0.24], every: 0.01, hangs: 0.85, head: true };
+
+/**
+ * A thread of silk drawn from `from` to `to` in a shallow arc, as a run of motes laid along it over `over` seconds, each
+ * hanging a moment (as heavy as `thread` says), with a streak flying at its head for a heavy one.
+ */
+function silkLine(stage: MoveStage, from: THREE.Vector3, to: THREE.Vector3, over: number, arc: number, silk: string, thread: Thread = FINE_THREAD) {
+  const along = (k: number) => {
+    const at = from.clone().lerp(to, k);
+    at.y += arc * 4 * k * (1 - k);
+    return at;
+  };
+  for (let s = 0; s <= over; s += thread.every) {
     stage.later(() => {
       const k = s / over;
-      const at = from.clone().lerp(to, k);
-      at.y += arc * 4 * k * (1 - k);
-      stage.spawnFx("mote", Math.random() < 0.7 ? silk : SILK_DIM, false, { from: at, to: offset(at, 0, -0.05, 0), life: 0.4, size: [0.18, 0.1], spin: 0, fade: true });
+      const at = along(k);
+      stage.spawnFx("mote", Math.random() < 0.7 ? silk : SILK_DIM, false, { from: at, to: offset(at, 0, -0.05, 0), life: thread.hangs, size: thread.size, spin: 0, fade: true });
+      if (thread.head && k < 1) {
+        const next = along(Math.min(1, k + 0.08));
+        stage.spawnFx("streak", silk, next.x < at.x, { from: at, to: next, life: 0.08, size: [thread.size[0] * 2, thread.size[1] * 2.5], spin: 0, fade: true });
+      }
     }, s);
   }
 }
@@ -2495,7 +2522,7 @@ function silkLine(stage: MoveStage, from: THREE.Vector3, to: THREE.Vector3, over
  * settles, the lines going slack, and wisps drifting down after.
  */
 function spinWeb(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveCtx) {
-  const { spread, lines, shoot, over, lies } = SPIN_WEB;
+  const { spread, lines, shoot, over, lies, thick } = SPIN_WEB;
   const ground = hitAt.clone().setY(hitAt.y - 0.45);
   const floor = ground.clone().setY(ground.y + 0.05);
   const wait = Math.max(0, figure.strike("web") || figure.cast());
@@ -2518,16 +2545,17 @@ function spinWeb(stage: MoveStage, { figure, hitAt, dir, crit, onImpact }: MoveC
       const a = turn + (i / lines) * Math.PI * 2;
       const end = offset(floor, Math.cos(a) * spread, 0, Math.sin(a) * spread * 0.8);
       const late = i * 0.03;
-      stage.later(() => silkLine(stage, tip, end, shoot, 1.6, silk), late);
+      stage.later(() => silkLine(stage, tip, end, shoot, 1.6, silk, HEAVY_THREAD), late);
       stage.later(() => {
-        stage.spawnFx("burst", SILK_DIM, Math.cos(a) < 0, { from: end, to: offset(end, 0, 0.15, 0), life: 0.22, size: [0.3, 0.8], spin: 0.3, fade: true });
+        stage.spawnFx("burst", silk, Math.cos(a) < 0, { from: end, to: offset(end, 0, 0.25, 0), life: 0.3, size: [0.6, 1.5], spin: 0.3, fade: true });
+        stage.spawnFx("dust", DUST, Math.cos(a) < 0, { from: end, to: offset(end, Math.cos(a) * 0.3, 0.3, 0), life: 0.4, size: [0.4, 0.9], spin: 0, fade: true });
         // Strung from the edge up toward where the web is held, till it comes down.
-        silkLine(stage, end, offset(floor, Math.cos(a) * spread * 0.55, over, Math.sin(a) * spread * 0.45), 0.12, 0, SILK_DIM);
+        silkLine(stage, end, offset(floor, Math.cos(a) * spread * 0.55, over, Math.sin(a) * spread * 0.45), 0.15, 0, SILK_DIM, { ...HEAVY_THREAD, head: false, size: [0.32, 0.18] });
       }, late + shoot);
     }
     // The web itself: opened out high over the middle, then brought down over all of it.
     const held = shoot + lines * 0.03;
-    stage.later(() => stage.lay(groundWeb(floor, spread, silk, over, lies)), held - 0.1);
+    stage.later(() => stage.lay(groundWeb(floor, spread, silk, over, lies, thick)), held - 0.1);
     stage.later(() => {
       stage.wave({ at: floor, radius: spread * 1.05, life: 0.5, color: SILK, width: 0.14 });
       stage.later(() => stage.wave({ at: floor, radius: spread * 0.7, life: 0.4, color: SILK_DIM, width: 0.08 }), 0.08);
