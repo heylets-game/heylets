@@ -50,7 +50,6 @@ import {
   strikeHexes,
   unitStrike,
   FLEE_RANGE,
-  JOIN_RANGE,
   FREE_WALK,
   pathIn,
   HARBOR_CAVE,
@@ -170,7 +169,7 @@ import { useZone, type ZoneSend } from "./useZone";
 import { Icon } from "./items";
 import { label } from "./labels";
 import { FLOURISH, GUARDS, SONG_MOOD, SOUND_KIND, SUMMONS, THROW_COLOR, aimKind, fxFor } from "./zone/abilityFx";
-import { JOIN_WORDS, bandName, joinCauseUnit } from "./zone/joinCause";
+import { HERO_JOIN_WORDS, JOIN_WORDS, bandName, heroJoinUnit, joinCauseUnit } from "./zone/joinCause";
 import { RETORTS, enemyAbilityNamed, ownRoute } from "./zone/ownMoves";
 import { COMMON_ICON, ITEM_ICON, abilityIcon } from "./zone/actionIcons";
 import { BAR_SLOTS, assignSlot, barChoices, loadBar, moveSlot, saveBar } from "./zone/hotbar";
@@ -1709,7 +1708,11 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
           if (centre) view?.lookAt(centre, true);
         });
       } else if (ev.t === "fight_join") {
-        say(`${name(ev.id)} joins the fight.`);
+        // Why they came in, as a band's coming is told (zone/joinCause.ts).
+        const words = HERO_JOIN_WORDS[ev.why.kind];
+        const other = heroJoinUnit(ev.why);
+        if (words.line) say(words.line(name(ev.id), name(other), find(other ?? "")?.side === find(ev.id)?.side));
+        later(() => view?.floatOver(ev.id, words.float, "#9fe8ff"));
       } else if (ev.t === "round") {
         later(() => logAdd({ k: "head", text: `Round ${ev.n}` }));
       } else if (ev.t === "turn") {
@@ -2292,13 +2295,13 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       out.push({ hexes: seen, color: "#ff3b3b", line: 0.7, march: true });
     }
     // A fight under way that the hero being played is out of: how near it they can come before it draws them in, in the
-    // same red as a band's sight. Within JOIN_RANGE of anyone standing in it; for one who fled it, only an enemy in it
+    // same red as a band's sight. Within ALERT_RANGE of anyone standing in it; for one who fled it, only an enemy in it
     // within FLEE_RANGE brings them back (zone.ts drawnIn).
     const fight = state.encounter;
     if (fight && !fight.order.includes(act.id) && !act.down) {
       const fled = !!fight.fled?.includes(act.id);
       const fighters = state.units.filter((u) => fight.order.includes(u.id) && !u.down && (!fled || u.side !== act.side));
-      const range = fled ? FLEE_RANGE : JOIN_RANGE;
+      const range = fled ? FLEE_RANGE : ALERT_RANGE;
       const near = state.map.tiles.filter((t) => fighters.some((f) => gapTo(f, t) <= range));
       if (near.length > 0) out.push({ hexes: near, color: "#ff3b3b", line: 0.7, march: true });
     }

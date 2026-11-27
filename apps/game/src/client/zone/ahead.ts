@@ -27,7 +27,7 @@
 // what is drawn while the answer is on its way.
 
 import { hexDistance, posKey, type HexPos } from "@gantt-quest/core";
-import { ALERT_RANGE, FLEE_RANGE, FREE_WALK, JOIN_RANGE, courseFor, hasCondition, leavesReach, moveLeft, pathIn, payMove, sameHex, sees, zoneReach, type Budget, type Unit, type ZoneEvent, type ZoneState, type ZoneView } from "@gantt-quest/world";
+import { ALERT_RANGE, FLEE_RANGE, FREE_WALK, courseFor, hasCondition, leavesReach, moveLeft, pathIn, payMove, sameHex, sees, zoneReach, type Budget, type Unit, type ZoneEvent, type ZoneState, type ZoneView } from "@gantt-quest/world";
 
 /** A walk shown before the server has made it. */
 export interface WalkAhead {
@@ -102,7 +102,7 @@ function mayStopAt(view: ZoneView, unit: Unit, pos: HexPos): boolean {
     const fled = !!enc.fled?.includes(unit.id);
     for (const other of view.units) {
       if (!enc.order.includes(other.id) || other.down) continue;
-      if (fled ? other.side !== unit.side && hexDistance(other.pos, pos) <= FLEE_RANGE : hexDistance(other.pos, pos) <= JOIN_RANGE) return true;
+      if (fled ? other.side !== unit.side && hexDistance(other.pos, pos) <= FLEE_RANGE : hexDistance(other.pos, pos) <= ALERT_RANGE) return true;
     }
   }
   return false;

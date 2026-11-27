@@ -31,7 +31,7 @@ import { pickBellGoer, placeBell } from "./bell";
 import { abilityArea, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, doCommon, drinkItem, enemyAct, fieldsCatch, isBlink, moveLeft, resolveAbility, throwItem, walk } from "./combat";
 import { checkStrike } from "./strikes";
 import { UNTIMED_KEEPS, countDown, has, leaveFight, heal, regrow, removeCondition, tick, tickStacks, unseen, usesLeft, type Ctx } from "./engine";
-import { ALERT_RANGE, JOIN_RANGE, freeHexNear, generateZone } from "./gen";
+import { ALERT_RANGE, freeHexNear, generateZone } from "./gen";
 import { generateDelve } from "./delve";
 import { checkLoot, checkOpen, leaveBody, look, lootFor, lootGroup, openChest, payBounty, take } from "./loot";
 import { PARTY_SIZES, siteOpen, spaced } from "./sites";
@@ -330,13 +330,15 @@ function enter(ctx: Ctx, enc: Encounter, unit: Unit): void {
 }
 
 /**
- * Whether a hero out of the fight is near enough to be drawn into it: within JOIN_RANGE of anyone in it.
- * One who fled it has got clear, and only an enemy in it coming within FLEE_RANGE brings them back.
+ * Who in the fight draws a hero out of it into it, if anyone: the nearest standing in it within ALERT_RANGE (the
+ * range a band sees and hears from). One who fled it has got clear, and only an enemy in it coming within FLEE_RANGE brings them back.
  */
-function drawnIn(state: ZoneState, enc: Encounter, hero: Unit): boolean {
+function drawnBy(state: ZoneState, enc: Encounter, hero: Unit): Unit | undefined {
   const fled = !!enc.fled?.includes(hero.id);
-  return state.units.some((f) => enc.order.includes(f.id) && !f.down && (fled ? f.side !== hero.side && gap(f, hero) <= FLEE_RANGE : gap(f, hero) <= JOIN_RANGE));
+  const near = state.units.filter((f) => enc.order.includes(f.id) && !f.down && (fled ? f.side !== hero.side && gap(f, hero) <= FLEE_RANGE : gap(f, hero) <= ALERT_RANGE));
+  return near.sort((a, b) => gap(a, hero) - gap(b, hero))[0];
 }
+const drawnIn = (state: ZoneState, enc: Encounter, hero: Unit): boolean => !!drawnBy(state, enc, hero);
 
 /** Heroes near anyone in the fight are in it. */
 function pullIn(ctx: Ctx): void {
@@ -344,9 +346,10 @@ function pullIn(ctx: Ctx): void {
   if (!enc) return;
   for (const hero of standing(ctx.state, "hero")) {
     // Nobody is dragged into a fight while their player is not there to play it.
-    if (hero.away || enc.order.includes(hero.id) || !drawnIn(ctx.state, enc, hero)) continue;
+    const by = hero.away || enc.order.includes(hero.id) ? undefined : drawnBy(ctx.state, enc, hero);
+    if (!by) continue;
     enter(ctx, enc, hero);
-    ctx.events.push({ t: "fight_join", id: hero.id });
+    ctx.events.push({ t: "fight_join", id: hero.id, why: { kind: "near", near: by.id } });
   }
 }
 
@@ -357,9 +360,10 @@ function pullIn(ctx: Ctx): void {
 function reachIn(ctx: Ctx, unit: Unit, touched: Unit[]): void {
   const enc = ctx.state.encounter;
   if (!enc || unit.side !== "hero" || unit.down || enc.order.includes(unit.id)) return;
-  if (!touched.some((u) => u.id !== unit.id && enc.order.includes(u.id))) return;
+  const on = touched.find((u) => u.id !== unit.id && enc.order.includes(u.id));
+  if (!on) return;
   enter(ctx, enc, unit);
-  ctx.events.push({ t: "fight_join", id: unit.id });
+  ctx.events.push({ t: "fight_join", id: unit.id, why: { kind: "acted", on: on.id } });
 }
 
 /**
@@ -435,7 +439,7 @@ function engage(ctx: Ctx, groups: string[], why: JoinCause | ((group: string) =>
     if (enc.order.includes(u.id)) continue;
     enter(ctx, enc, u);
     // The band was told as one (alert); a hero coming in with it is told on their own.
-    if (!starting && u.side === "hero") ctx.events.push({ t: "fight_join", id: u.id });
+    if (!starting && u.side === "hero") ctx.events.push({ t: "fight_join", id: u.id, why: { kind: "band", group: fresh[0] } });
   }
   pullIn(ctx);
 }
