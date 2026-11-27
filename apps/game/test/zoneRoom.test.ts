@@ -42,12 +42,16 @@ let sockets: FakeSocket[];
 let storage: Map<string, unknown>;
 let alarm: number | null;
 let environment: string | undefined;
+let background: Promise<unknown>[] = [];
+/** Everything a room has left running behind it is done. */
+const settled = () => Promise.all(background.splice(0));
 
 /** A room as the runtime would hand it over: fresh in memory, with whatever sockets and storage outlived the last one. */
 function room() {
   const ctx = {
     setWebSocketAutoResponse() {},
-    waitUntil() {},
+    // What the room does not wait on (the bestiary's write): kept, so a test can wait for it with `settled`.
+    waitUntil: (work: Promise<unknown>) => void background.push(work),
     getWebSockets: (tag?: string) => sockets.filter((s) => s.closed === null && (!tag || (s.deserializeAttachment() as { playerId: string } | null)?.playerId === tag)),
     acceptWebSocket(ws: FakeSocket) {
       sockets.push(ws);
@@ -340,6 +344,15 @@ describe("ZoneRoom", () => {
     await act(zone, ann, { type: "dev", dev: { op: "heal" } });
     expect(inPack()).toBe(2);
     expect(hero(ann.state, "ann").items).toEqual({ healing: 2, poison: 2, fire: 1, oil: 1, water: 1, torch: 2 });
+  });
+
+  it("writes the enemies a hero is in a fight with into their bestiary", async () => {
+    const { zone, ann } = await arrive();
+    expect(sql.prepare("SELECT COUNT(*) AS n FROM bestiary").get()).toEqual({ n: 0 });
+    await pickFight(zone, ann);
+    await settled();
+    const wolves = ann.state.encounter!.order.filter((id) => hero(ann.state, id).side === "enemy").length;
+    expect(sql.prepare("SELECT player_id, kind, faced, kills FROM bestiary").all()).toEqual([{ player_id: "ann", kind: "wolf", faced: wolves, kills: 0 }]);
   });
 
   it("pays a won fight's XP and materials to the hero, and marks a map with no enemy left as cleared", async () => {

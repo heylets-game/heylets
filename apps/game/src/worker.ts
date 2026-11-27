@@ -16,6 +16,7 @@ import { gardenRoutes } from "./server/routes/garden";
 import { contentRoutes } from "./server/routes/content";
 import { crewRoutes } from "./server/routes/crew";
 import { devRoutes } from "./server/routes/dev";
+import { bestiaryRoutes } from "./server/routes/bestiary";
 import { fishRoutes } from "./server/routes/fish";
 import { gatherRoutes } from "./server/routes/gather";
 import { heroRoutes } from "./server/routes/heroes";
@@ -72,5 +73,6 @@ dealerRoutes(app);
 chestRoutes(app);
 gardenRoutes(app);
 zoneRoutes(app);
+bestiaryRoutes(app);
 
 export default app;

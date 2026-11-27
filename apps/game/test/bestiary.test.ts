@@ -1,0 +1,59 @@
+// The bestiary in D1 (src/server/bestiary.ts): a step's marks added to a hero's record, and one book for all of an account's heroes.
+
+import type { DatabaseSync } from "node:sqlite";
+import { beforeEach, describe, expect, it } from "vitest";
+import { bestiaryOf, bestiaryStatements, onePerAccount } from "../src/server/bestiary";
+import { addHero, openDb } from "./d1";
+
+let sql: DatabaseSync;
+let db: D1Database;
+
+beforeEach(() => {
+  ({ sql, db } = openDb());
+  for (const [id, name] of [["ann", "Ann"], ["ann2", "Annika"], ["bo", "Bo"]]) addHero(sql, { id, name });
+  // Ann and Annika are two heroes of one account; Bo has none (a hero made without one).
+  sql.prepare("UPDATE players SET user_id = 'acct-a' WHERE id IN ('ann', 'ann2')").run();
+  sql.prepare("UPDATE players SET user_id = NULL WHERE id = 'bo'").run();
+});
+
+describe("the bestiary's records", () => {
+  it("adds up what is faced and killed, and keeps the highest level and the first meeting", async () => {
+    await db.batch(bestiaryStatements(db, [{ hero: "ann", kind: "wolf", level: 3, faced: 2, kills: 0 }], 1000));
+    await db.batch(bestiaryStatements(db, [{ hero: "ann", kind: "wolf", level: 2, faced: 0, kills: 2 }, { hero: "ann", kind: "bandit", level: 1, faced: 1, kills: 1 }], 2000));
+    expect((await bestiaryOf(db, "ann")).records).toEqual([
+      { kind: "wolf", faced: 2, kills: 2, topLevel: 3, firstAt: 1000 },
+      { kind: "bandit", faced: 1, kills: 1, topLevel: 1, firstAt: 2000 },
+    ]);
+  });
+
+  it("is one book for every hero of an account, and nobody else's", async () => {
+    await db.batch(bestiaryStatements(db, [{ hero: "ann", kind: "wolf", level: 1, faced: 1, kills: 1 }, { hero: "ann2", kind: "wolf", level: 5, faced: 1, kills: 0 }, { hero: "bo", kind: "bear", level: 1, faced: 1, kills: 0 }], 1000));
+    const mine = [{ kind: "wolf", faced: 2, kills: 1, topLevel: 5, firstAt: 1000 }];
+    expect((await bestiaryOf(db, "ann")).records).toEqual(mine);
+    expect((await bestiaryOf(db, "ann2")).records).toEqual(mine);
+    expect((await bestiaryOf(db, "bo")).records).toEqual([{ kind: "bear", faced: 1, kills: 0, topLevel: 1, firstAt: 1000 }]);
+  });
+
+  it("writes nothing for a hero it does not know, and leaves out a kind the game no longer has", async () => {
+    await db.batch(bestiaryStatements(db, [{ hero: "nobody", kind: "wolf", level: 1, faced: 1, kills: 0 }, { hero: "bo", kind: "gone_kind", level: 1, faced: 1, kills: 0 }]));
+    expect(sql.prepare("SELECT COUNT(*) AS n FROM bestiary").get()).toEqual({ n: 1 });
+    expect((await bestiaryOf(db, "bo")).records).toEqual([]);
+  });
+
+  it("marks an account once for a kill two of its heroes, each on their own, were both in the fight for", async () => {
+    const wolf = { kind: "wolf", level: 1, faced: 0, kills: 1 };
+    const marks = [{ hero: "ann", ...wolf }, { hero: "ann2", ...wolf }, { hero: "bo", ...wolf }, { hero: "ann2", kind: "bear", level: 1, faced: 1, kills: 0 }];
+    expect(await onePerAccount(db, marks)).toEqual([marks[0], marks[2], marks[3]]);
+    expect(await onePerAccount(db, [marks[1]])).toEqual([marks[1]]);
+  });
+
+  it("goes with a guest's heroes into the account they sign up for", async () => {
+    await db.batch(bestiaryStatements(db, [{ hero: "bo", kind: "bear", level: 2, faced: 1, kills: 1 }], 500));
+    await db.batch(bestiaryStatements(db, [{ hero: "ann", kind: "bear", level: 1, faced: 2, kills: 0 }], 900));
+    // As auth.ts onLinkAccount moves them.
+    sql.prepare("UPDATE players SET user_id = 'acct-a' WHERE id = 'bo'").run();
+    const book = [{ kind: "bear", faced: 3, kills: 1, topLevel: 2, firstAt: 500 }];
+    expect((await bestiaryOf(db, "bo")).records).toEqual(book);
+    expect((await bestiaryOf(db, "ann")).records).toEqual(book);
+  });
+});

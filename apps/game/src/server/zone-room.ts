@@ -40,12 +40,13 @@
 // written on the socket itself, which outlives the room's hibernation.
 
 import { DurableObject } from "cloudflare:workers";
-import { EMOTE_MIN_MS, HARBOR_MAX_SAY, THROWABLE_KINDS, ZONE_CLIENT_ACTIONS, createZone, hiddenEnemies, loadZone, nextTick, stepZone, zoneAwaiting, zoneHero, zoneOptions, zoneUntimed, zoneView, validEmote, type ZoneAction, type ZoneEvent, type ZoneState } from "@gantt-quest/world";
+import { EMOTE_MIN_MS, HARBOR_MAX_SAY, THROWABLE_KINDS, ZONE_CLIENT_ACTIONS, bestiaryMarks, createZone, hiddenEnemies, loadZone, nextTick, stepZone, zoneAwaiting, zoneHero, zoneOptions, zoneUntimed, zoneView, validEmote, type ZoneAction, type ZoneEvent, type ZoneState } from "@gantt-quest/world";
 import { consumablesOf, gainConsumables, kitStatements, spendConsumables, type Consumables } from "./consumables";
 import { returnLuck, takeLuck } from "./well";
 import { applyZoneGrant, crewFor, heroInitFor, refreshHarbor, type Env } from "./db";
 import { isDev } from "./dev";
 import { clearNode } from "./atlas";
+import { bestiaryStatements, onePerAccount } from "./bestiary";
 import { clearPresence, getZoneRow, saveZoneStatement, setPresence, zoneStatus } from "./zones";
 import { closeBack, sendTo, tellTrades } from "./walk-room";
 
@@ -406,6 +407,17 @@ export class ZoneRoom extends DurableObject<Env> {
         news.add(effect.heroId);
       }
       await saveZoneStatement(db, next).run();
+    }
+    // The bestiary: who has now faced what, and what went down in whose fight. A courtesy to the log book: nobody
+    // waits on it to be told of the fight, and it is never a reason for one to fail. If it cannot be written (a
+    // database without migration 0069 yet), that is logged.
+    const met = bestiaryMarks(prev, next, res.events);
+    if (met.length > 0) {
+      this.ctx.waitUntil(
+        onePerAccount(db, met)
+          .then((marks) => db.batch(bestiaryStatements(db, marks)))
+          .catch((err) => console.warn("zone-room:bestiary-failed", { err: err instanceof Error ? err.message : String(err) })),
+      );
     }
     // A landfall cleared (nobody left to fight, nothing left to open) is cleared on the crew's chart: once, and
     // the Harbor is told, so a chart that is open there shows the routes beyond it.

@@ -61,3 +61,4 @@ export * from "./flotsam";
 export * from "./fishmonger";
 export * from "./dealer";
 export * from "./banter";
+export * from "./bestiary";

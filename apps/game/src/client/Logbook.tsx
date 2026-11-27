@@ -2,7 +2,8 @@
 // who they are (level, experience, what their gear adds up to); the
 // right-hand page turns with the ribbons down its edge: Stats, where points
 // are spent, and Skills, what the weapon in hand can do and the class
-// abilities slotted on top. A third ribbon opens the Catch Book.
+// abilities slotted on top, and the Bestiary, every enemy they have met
+// (Bestiary.tsx). A last ribbon opens the Catch Book.
 
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -27,7 +28,9 @@ import {
   unlockedFor,
   xpToNext,
 } from "@gantt-quest/world";
+import type { BestiaryRecord } from "@gantt-quest/world";
 import { api, type Me, type StatKey } from "./api";
+import { BestiaryPage, bestiaryNews } from "./Bestiary";
 import { CatchBookPanel } from "./CatchBook";
 import { useAct } from "./useAct";
 import { toOwned } from "./items";
@@ -35,7 +38,7 @@ import { blurb, label } from "./labels";
 import { spriteDataUrl, withLook } from "./render/sprites";
 import "./book.css";
 
-type Page = "stats" | "skills";
+type Page = "stats" | "skills" | "bestiary";
 
 type Hero = NonNullable<Me["character"]>;
 
@@ -77,6 +80,14 @@ export function Logbook({ me, refresh, onClose, onIsland = false }: Props) {
   const { busy, error, act } = useAct(refresh);
   const [page, setPage] = useState<Page>("stats");
   const [catches, setCatches] = useState(false);
+  // The bestiary is fetched as the book opens, so its ribbon can say there is something new on it.
+  const [beasts, setBeasts] = useState<BestiaryRecord[] | null>(null);
+  const [beastsError, setBeastsError] = useState<string | null>(null);
+  useEffect(() => {
+    api.bestiary().then((b) => setBeasts(b.records), (e: Error) => setBeastsError(e.message));
+  }, []);
+  // Read as the ribbon is drawn: opening the page marks it seen, and the next draw finds it so.
+  const beastNews = page !== "bestiary" && bestiaryNews(beasts, me.player.id);
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => e.key === "Escape" && !catches && onClose();
@@ -153,6 +164,7 @@ export function Logbook({ me, refresh, onClose, onIsland = false }: Props) {
               ))}
             </>
           )}
+          {page === "bestiary" && <BestiaryPage records={beasts} who={me.player.id} error={beastsError} />}
           {page === "skills" && (
             <>
               <h3>Skills</h3>
@@ -211,7 +223,7 @@ export function Logbook({ me, refresh, onClose, onIsland = false }: Props) {
         </section>
 
         <nav className="book-ribbons" aria-label="Pages">
-          {([["stats", "Stats", c.unspent_points > 0], ["skills", "Skills", slotOpen]] as const).map(([id, name, news]) => (
+          {([["stats", "Stats", c.unspent_points > 0], ["skills", "Skills", slotOpen], ["bestiary", "Bestiary", beastNews]] as const).map(([id, name, news]) => (
             <button key={id} className={`ribbon ${id} ${page === id ? "on" : ""}`} aria-pressed={page === id} onClick={() => setPage(id)}>
               {name}{news && <i aria-label="something waiting" />}
             </button>

@@ -2,7 +2,7 @@
 
 import type { StatKey } from "@gantt-quest/core";
 import type { FinishKind, Gossip, HutFinish, Muster, MusterAnswer, SowWith } from "@gantt-quest/world";
-import type { Appearance, BaitId, BoatId, RodId, CarryState, FishSpot, GatherChoice, HarborXpStatus, GatherSpot, HarborWorks, HutSummary, ItemDef, Lodestone, ProjectAmounts, PublicHero, Resources, SalesEntry, SalesmanId, SalesmanVisit, ShopEntry, Throwable, TradeSide } from "@gantt-quest/world";
+import type { Appearance, BaitId, BestiaryRecord, BoatId, RodId, CarryState, FishSpot, GatherChoice, HarborXpStatus, GatherSpot, HarborWorks, HutSummary, ItemDef, Lodestone, ProjectAmounts, PublicHero, Resources, SalesEntry, SalesmanId, SalesmanVisit, ShopEntry, Throwable, TradeSide } from "@gantt-quest/world";
 import { devTools } from "./devTools";
 import { actAs, actingHero } from "./party";
 import type { JoinNews } from "./joinWarning";
@@ -268,6 +268,8 @@ export const api = {
   takeFlotsam: (id: string) => request<FlotsamTaken>("/api/flotsam/take", { id }),
   sellFish: (ids: string[], to: "market" | "tam") => request<FishStock & { sold: { id: string; gold: number }[] }>("/api/fish/sell", { ids, to }),
   moveFish: (id: string, to: "trophy" | "icebox") => request<FishStock>("/api/fish/move", { id, to }),
+  /** The bestiary: what you have faced and killed of each kind of enemy. */
+  bestiary: () => request<{ records: BestiaryRecord[] }>("/api/bestiary"),
   /** The Catch Book, with the crew's records. */
   catchBook: () => request<CatchBook>("/api/fish/book"),
   /** The pub's wall of record fish: hang yours, or take it down. */
