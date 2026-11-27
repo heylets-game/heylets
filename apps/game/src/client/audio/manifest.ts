@@ -292,7 +292,7 @@ export const AUDIO: AudioManifest = {
 
 function bladeImpacts(): Record<string, SoundEvent> {
   /** Cutting and biting blows, heroes' and enemies': these land with a blade's bite rather than a thump. */
-  const BLADE = new Set(["Cleave", "Stab", "Eviscerate", "Tear", "Slash", "Cheap Shot", "Bite", "Savage Bite", "Great Lunge", "Sweeping Ruin", "Rake", "Rending Cleave", "Fell Swoop"]);
+  const BLADE = new Set(["Cleave", "Stab", "Eviscerate", "Tear", "Slash", "Cheap Shot", "Bite", "Savage Bite", "Great Lunge", "Rake", "Rending Cleave", "Fell Swoop"]);
   const names = new Set([...Object.values(ABILITIES).map((a) => a.name), ...Object.values(ENEMY_ABILITIES).map((a) => a.name)]);
   const out: Record<string, SoundEvent> = {};
   for (const name of names) {

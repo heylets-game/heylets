@@ -290,6 +290,4 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   // A Hedge Witch's brew, flung over its own up to 5 hexes off: it splashes over a clump of 3 hexes there, and every
   // one of its side on them (itself too) is mended. It has to brew another before it can throw again.
   witches_brew: { id: "witches_brew", name: "Witches' Brew", damage: 0, potency: 0, range: 5, area: 3, heal: 6, cooldown: 3, behaviour: "mend", weight: 2 },
-  crushing_strike: { id: "crushing_strike", name: "Crushing Strike", damage: 9, potency: 5, saveOr: { effect: "stunned", turns: 1 }, weight: 2 },
-  sweeping_ruin: { id: "sweeping_ruin", name: "Sweeping Ruin", damage: 6, potency: 3, shape: "burst", weight: 2 },
 };

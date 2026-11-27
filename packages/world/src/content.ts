@@ -537,10 +537,6 @@ export const ENEMIES: Record<string, EnemyDef> = {
     kind: "witch", name: "Hedge Witch", hp: 17, defence: 11, move: 2, save: 0, init: 0, xp: 15,
     abilities: ["weakening_hex", "witches_brew"],
   },
-  villain: {
-    kind: "villain", name: "Villain", hp: 38, defence: 12, move: 2, save: 3, init: 0, xp: 40, boss: true,
-    abilities: ["crushing_strike", "sweeping_ruin", "shove"],
-  },
 };
 
 /** What wanders the caverns' tunnels, as an even pick. */

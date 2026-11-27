@@ -4384,7 +4384,7 @@ let face: Face | null = null;
 /** The kinds that are townsfolk, each given a face of their own (see faceFor). */
 const TOWNSFOLK = /^(npc|dealer|regular_|salesman_|keeper_)/;
 /** The enemies drawn as people, each given a face of its own by its id (see faceFor), so no two in a fight are twins. */
-const FACED_FOES = new Set(["bandit", "brute", "archer", "cultist", "villain"]);
+const FACED_FOES = new Set(["bandit", "brute", "archer", "cultist"]);
 /** Of those, the living raiders, who also get their own skin, hair colour and facial hair; the drowned and the stone keep their look's. */
 const COLOURED_FOES = new Set(["bandit", "brute", "archer"]);
 /** Whether a kind's figure picks its face from a key (makeFigure's `face`): townsfolk and the enemies drawn as people. */
