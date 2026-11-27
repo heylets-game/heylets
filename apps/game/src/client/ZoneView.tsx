@@ -2228,7 +2228,11 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     return u ? span(u) : [pos];
   };
   /** What there is to search on a hex (a body, an open chest, the spoils), if anything. */
-  const lootOn = (pos: HexPos | null): LootSpot | undefined => (pos && state ? state.loot?.find((s) => sameHex(s.pos, pos)) : undefined);
+  // Two can fall on one hex: the one still to search comes first, so each is searched in turn and the ring goes when all are empty.
+  const lootOn = (pos: HexPos | null): LootSpot | undefined => {
+    const here = pos && state ? (state.loot ?? []).filter((s) => sameHex(s.pos, pos)) : [];
+    return here.find((s) => (lootIn(s, selfId)?.length ?? 1) > 0) ?? here[0];
+  };
 
   const overlays = useMemo<Overlay[]>(() => {
     const out: Overlay[] = [];
