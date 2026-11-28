@@ -38,6 +38,8 @@ export const ENEMY_FAMILY: Record<string, Family> = {
   spider: "bug", broodmother: "bug", spiderling: "bug",
   witch: "wild",
   bandit: "raider", archer: "raider", brute: "raider",
+  // What a squid hauled up with it from the bottom is a beast's, for its spoils.
+  squid: "beast",
   cultist: "cult",
   shade: "dead", skeleton: "dead", haunt: "dead", wraith: "dead",
   slime: "ooze",

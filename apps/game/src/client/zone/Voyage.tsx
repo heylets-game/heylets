@@ -117,6 +117,29 @@ const MODELS: Record<SeaThingId, () => THREE.Object3D> = {
 /** A station as it stands on the deck. */
 function stationModel(station: Station): THREE.Object3D {
   const g = new THREE.Group();
+  if (station.kind === "cannon") {
+    // A cannon on a wooden carriage, its muzzle out over the rail.
+    const carriage = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.22, 0.5), DARK_WOOD);
+    carriage.position.y = 0.16;
+    g.add(carriage);
+    for (const z of [-0.2, 0.2]) {
+      for (const x of [-0.2, 0.2]) {
+        const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.06, 10), WOOD);
+        wheel.rotation.x = Math.PI / 2;
+        wheel.position.set(x, 0.1, z + Math.sign(z) * 0.04);
+        g.add(wheel);
+      }
+    }
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.15, 0.9, 10), IRON);
+    barrel.rotation.z = (-station.side * Math.PI) / 2 + station.side * 0.12;
+    barrel.position.set(station.side * 0.22, 0.38, 0);
+    const lip = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.03, 6, 12), IRON);
+    lip.rotation.y = Math.PI / 2;
+    lip.position.set(station.side * 0.66, 0.43, 0);
+    g.add(barrel, lip);
+    g.position.x = station.side * 0.38;
+    return g;
+  }
   if (station.kind === "helm") {
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.7, 6), DARK_WOOD);
     post.position.y = 0.35;
@@ -315,6 +338,17 @@ export function useVoyage(renderer: RefObject<WorldRenderer | null>, state: Zone
   };
 
   const helm = near("helm")[0];
+  // A cannon the hero stands at, and what in the water on its side it would fire at: the nearest.
+  const cannon = near("cannon")[0];
+  const inWater = (u: Unit) => state.map.tiles.find((t) => t.q === u.pos.q && t.r === u.pos.r)?.biome === "water";
+  const mark = cannon
+    ? state.units
+        .filter((u) => u.side === "enemy" && !u.down && inWater(u) && shipFrame(v, u.pos).x * cannon.side > 0)
+        .map((u) => ({ u, d: hexDistance(u.pos, cannon.pos) }))
+        .filter((c) => c.d <= (STATIONS.cannon.reach ?? 0))
+        .sort((a, b) => a.d - b.d)[0]?.u
+    : undefined;
+  const loaded = !!cannon && (!state.encounter || voyage.fired?.[cannon.id] !== state.encounter.round);
   const over = lanesOver(voyage);
   const steer = (dir: -1 | 1) => send({ type: "steer", unit: self!.id, dir });
   const now = layer.current?.now() ?? voyage.t;
@@ -325,10 +359,11 @@ export function useVoyage(renderer: RefObject<WorldRenderer | null>, state: Zone
 
   const tip =
     hint ??
-    (state.encounter ? "Boarders! Clear the deck."
+    (state.encounter ? (cannon && mark ? "At a cannon: fire on what is in the water (it takes an action, once a round)." : "Trouble aboard! Clear the deck, and fire on what is in the water from a cannon.")
     : near("harpoon").length > 0 ? "Tap something adrift on your gun's side to harpoon it. Rocks are no use: steer round them."
+    : cannon ? "At a cannon: when something comes up out of the water on this side, fire on it."
     : helm ? "At the helm: put her over to dodge rocks or close on salvage."
-    : "Stand at a harpoon gun by the bow, or at the helm at the stern.");
+    : "Stand at a harpoon gun by the bow, a cannon amidships, or the helm at the stern.");
 
   const hud = (
     // In a fight the turn order sits across the top: the strip goes under it.
@@ -352,6 +387,11 @@ export function useVoyage(renderer: RefObject<WorldRenderer | null>, state: Zone
           <button className="small" disabled={!ready(helm) || over <= -LANES} title={STATIONS.helm.blurb} onClick={() => steer(-1)}>◀ Port</button>{" "}
           <button className="small" disabled={!ready(helm) || over >= LANES} title={STATIONS.helm.blurb} onClick={() => steer(1)}>Starboard ▶</button>
         </span>
+      )}
+      {!voyage.outcome && cannon && (
+        <button className="small" disabled={!mark || !loaded} title={!mark ? "Nothing in the water on this side, within reach." : !loaded ? "Fired this round: she is being loaded." : `${STATIONS.cannon.blurb} At ${mark.name}.`} onClick={() => mark && send({ type: "cannon", unit: self!.id, station: cannon.id, target: mark.id })}>
+          Fire the cannon{mark ? ` at the ${mark.name}` : ""}
+        </button>
       )}
       {voyage.outcome === "through" && <strong style={{ color: "#bfe3a0" }}>Through! The hold has been shared out.</strong>}
       {voyage.outcome === "sunk" && <strong style={{ color: "#f0a48f" }}>Her hull has given way. The hold is lost: leave the map and she limps home.</strong>}

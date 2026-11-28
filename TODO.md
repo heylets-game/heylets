@@ -44,17 +44,18 @@ line off once it is done.
 - A passage is sailed on a fixed Sloop (`PASSAGE_SHIP` in `apps/game/src/server/atlas.ts`). Read the crew's own ship
   and her hull from the shipyard (`packages/world/src/voyage/ships.ts`, `crew_ships`) once that is merged, and write
   her hull back when the voyage ends.
-- Stations still to build (`STATIONS` in `packages/world/src/voyage/voyage.ts`): cannon, pump, crow's nest. Hull hits
-  only take hull off: no breaches to mend with planks yet, and nobody goes overboard.
-- Sea creatures (a spitting squid with a `swims` flag in `ENEMY_KIT`) are not in: boarders are bandits and skeletons.
+- Stations still to build (`STATIONS` in `packages/world/src/voyage/voyage.ts`): pump, crow's nest. Hull hits only take
+  hull off: no breaches to mend with planks yet, and nobody goes overboard. The spitting squid (`squid` in `content.ts`)
+  never moves: a `swims` flag that lets sea creatures move through the water ring is still to do.
 - The harpoon is a tap on what is adrift (`zone/Voyage.tsx`): the sweeping aim, a line drawn to what was struck and a
   reel-in (`SpellFx.harpoon`) are not done, and a second line into wreckage shows nothing while it holds.
 - After a passage is beaten the party goes home: "Sail on to an island beyond" (open the next map from the deck) is
   not built. A sunk ship only says so in the strip; nobody is sent home, and half the hold is not kept.
 - A passage's mark on the atlas is a place's marker (`AtlasLayer`): it wants its own (a buoy), and the ship is not
   drawn sailing the route. A silent run past a passage has no night-sail moment.
-- Tune: rocks strike often for a lone hero (a sloop lost two thirds of her hull unsteered in one passage); the share of
-  routes with salvage waters (`PASSAGES`), the stretch's length (`VOYAGE_MS`) and what salvage pays.
+- Tune, now that rocks are rarer and softer (weight 3, 6 hull): the share of routes with salvage waters (`PASSAGES`), the
+  stretch's length (`VOYAGE_MS`), what salvage pays, and the squid's numbers and how often the sea sends trouble
+  (`SEA_EVENTS`).
 - A room's walls and a deck's edges are cut in half (`packages/world/src/roomedges.ts` says which; drawn by
   `cutColumn` and `wallSide` in `WorldRenderer.ts` and the floor fill in `render/ambience.ts`). Furniture stands on
   the floor half by its footprint (`onCutFloor` in `hutroom.ts`), anchored on the floor hex beside it: it cannot be

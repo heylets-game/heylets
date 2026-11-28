@@ -818,6 +818,8 @@ export const ENEMY_KIT: Record<string, EnemyKit> = {
   guardian: {},
   shade: {},
   bat: { fly: true },
+  // It never moves: it stays where it surfaced, and shoots from there.
+  squid: { mind: SHOOTER },
   skeleton: {},
   slime: {},
   haunt: {},
