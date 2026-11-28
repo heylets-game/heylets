@@ -55,7 +55,7 @@ line off once it is done.
   drawn sailing the route. A silent run past a passage has no night-sail moment.
 - Tune: rocks strike often for a lone hero (a sloop lost two thirds of her hull unsteered in one passage); the share of
   routes with salvage waters (`PASSAGES`), the stretch's length (`VOYAGE_MS`) and what salvage pays.
-- Rooms indoors still have a saw's edge down their sides: the floor's half-hex fill (`squareEdges` in
-  `render/ambience.ts`) is on for them but finds no notch to fill, because the hexes beside the floor are wall hexes.
-  Squaring a room means halving those wall columns and their panels (`buildWallPanels`, `wallSpot`, `lowerNearWalls` in
-  `WorldRenderer.ts`), and deciding where things hung on a wall go. The deck's bow and stern are still points.
+- A room's side walls are squared (`squared`, `halfColumn`, `wallSide` in `WorldRenderer.ts`; the floor's half-hex
+  fill is `squareEdges` in `render/ambience.ts`), but its back and front walls still zigzag along the row, as do a
+  deck's bow and stern: those want triangles, not half hexes. On a squared wall three hex sides share one straight
+  face, a third each, so two wide things hung on neighbouring sides of one wall hex can overlap.

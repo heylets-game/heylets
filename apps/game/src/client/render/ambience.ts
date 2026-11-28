@@ -107,6 +107,39 @@ const FILLET_STEPS = 5;
  * So where two hexes meet the light rolls off one and onto the next instead of snapping at a hard corner.
  * Calls `vertex` three times a triangle with a point and its normal.
  */
+/** A notch in a floor's side: the hex `q,r` beside floor tile `from` in its row (`side`: -1 to its west, 1 to its east), which the floor comes round above or below. */
+export interface SideNotch {
+  q: number;
+  r: number;
+  side: -1 | 1;
+  from: Tile;
+}
+
+/**
+ * The notches down the sides of a floor: for each tile of it, the hex beside it in its own row that is not floor
+ * (and that `open` allows: by default nothing there, or water), where the floor's rows above or below reach half a
+ * hex further. Filling the near half of each squares the floor's side off.
+ */
+export function sideNotches(tiles: readonly Tile[], floor: (t: Tile) => boolean, open: (there: Tile | undefined) => boolean = (there) => !there || there.biome === "water"): SideNotch[] {
+  const at = (q: number, r: number) => `${q},${r}`;
+  const all = new Map(tiles.map((t) => [at(t.q, t.r), t]));
+  const laid = (q: number, r: number) => {
+    const t = all.get(at(q, r));
+    return !!t && floor(t);
+  };
+  const out: SideNotch[] = [];
+  for (const t of tiles) {
+    if (!floor(t)) continue;
+    for (const side of [-1, 1] as const) {
+      const [hq, hr] = [t.q + side, t.r];
+      if (laid(hq, hr) || !open(all.get(at(hq, hr)))) continue;
+      const comesRound = side < 0 ? laid(hq + 1, hr - 1) || laid(hq, hr + 1) : laid(hq, hr - 1) || laid(hq - 1, hr + 1);
+      if (comesRound) out.push({ q: hq, r: hr, side, from: t });
+    }
+  }
+  return out;
+}
+
 export function hexTop(vertex: (x: number, y: number, z: number, nx: number, ny: number, nz: number) => void) {
   const inner = TILE_RADIUS - TILE_FILLET;
   const corner = (i: number) => [Math.sin((i * Math.PI) / 3), Math.cos((i * Math.PI) / 3)];
@@ -1225,20 +1258,13 @@ export class Ambience {
       }
       // Squared off: half a hex of the same floor in each notch along its sides, and a plain face down its outer edge.
       if (this.squareEdges) {
-        const at = (q: number, r: number) => `${q},${r}`;
-        const laid = new Set(under.map((t) => at(t.q, t.r)));
-        const others = new Map(tiles.map((t) => [at(t.q, t.r), t]));
         const edge: number[] = [];
         const HALF = Math.sqrt(3) / 2;
-        for (const t of under) {
-          for (const side of [-1, 1]) {
-            // The hex beside it in its own row, if no floor is there (and nothing else that stands: only water or nothing).
-            const [hq, hr] = [t.q + side, t.r];
-            const there = others.get(at(hq, hr));
-            if (laid.has(at(hq, hr)) || (there && (there.biome as string) !== "water")) continue;
-            // A notch, if the floor comes round it above or below: the rows there reach half a hex further.
-            const [above, below] = side < 0 ? [at(hq + 1, hr - 1), at(hq, hr + 1)] : [at(hq, hr - 1), at(hq - 1, hr + 1)];
-            if (!laid.has(above) && !laid.has(below)) continue;
+        const walls = new Map(tiles.map((t) => [`${t.q},${t.r}`, t]));
+        // A wall hex in a notch is halved by the renderer (WorldRenderer `squared`), and the floor runs under where it stood.
+        for (const { q, r, side, from: t } of sideNotches(tiles, (x) => (x.biome as string) === biome, (there) => !there || there.biome === "water" || (there.biome as string) === "wall")) {
+          const walled = (walls.get(`${q},${r}`)?.biome as string) === "wall";
+          {
             const p = place(t);
             // The middle of that hex, and the half of it on this floor's side.
             const [cx, y, cz, s] = [p.x + side * HALF * 2, p.y + 0.006, p.z, -side];
@@ -1252,7 +1278,7 @@ export class Ambience {
             // Its outer face, straight down: what shows of the floor's side from beyond it.
             const [z0, z1, low] = [cz - TILE_RADIUS, cz + TILE_RADIUS, y - 3];
             const quad: [number, number, number][] = side > 0 ? [[cx, y, z0], [cx, y, z1], [cx, low, z1], [cx, y, z0], [cx, low, z1], [cx, low, z0]] : [[cx, y, z1], [cx, y, z0], [cx, low, z0], [cx, y, z1], [cx, low, z0], [cx, low, z1]];
-            for (const v of quad) edge.push(...v);
+            if (!walled) for (const v of quad) edge.push(...v);
           }
         }
         if (edge.length > 0) {
