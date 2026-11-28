@@ -331,7 +331,8 @@ export function useVoyage(renderer: RefObject<WorldRenderer | null>, state: Zone
     : "Stand at a harpoon gun by the bow, or at the helm at the stern.");
 
   const hud = (
-    <div style={strip} role="status">
+    // In a fight the turn order sits across the top: the strip goes under it.
+    <div style={state.encounter ? { ...strip, top: 112 } : strip} role="status">
       <strong>{state.options.name ?? "At sea"}</strong>
       <span title="How much more her hull will take. Rocks that drift into her take it off: steer round them at the helm.">
         Hull {voyage.hull}/{voyage.hullMax}

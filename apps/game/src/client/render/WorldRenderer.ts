@@ -3386,8 +3386,11 @@ export class WorldRenderer {
     // Beside a side wall, the floor hex straight across; beside an end wall, whichever of its two the pointer is
     // nearer; in a corner, the one floor hex it has.
     const diagonal = (east: boolean, room: 1 | -1) => (room > 0 ? (east ? { q: hex.q, r: hex.r + 1 } : { q: hex.q - 1, r: hex.r + 1 }) : east ? { q: hex.q + 1, r: hex.r - 1 } : { q: hex.q, r: hex.r - 1 });
-    const pos = cut.cut === "side" ? { q: hex.q + cut.room, r: hex.r } : cut.cut === "end" ? diagonal(x >= mid.x, cut.room) : diagonal(cut.rx > 0, cut.rz);
-    return (this.tiles.find((t) => t.q === pos.q && t.r === pos.r)?.biome as string) === "floor" ? { pos, x, z } : null;
+    const isFloor = (p: HexPos) => (this.tiles.find((t) => t.q === p.q && t.r === p.r)?.biome as string) === "floor";
+    // (By a corner where the row below stops short, one of an end wall's two is itself a cut wall: then the other.)
+    const tries = cut.cut === "side" ? [{ q: hex.q + cut.room, r: hex.r }] : cut.cut === "end" ? [diagonal(x >= mid.x, cut.room), diagonal(x < mid.x, cut.room)] : [diagonal(cut.rx > 0, cut.rz)];
+    const pos = tries.find(isFloor);
+    return pos ? { pos, x, z } : null;
   }
 
   private markWalls() {
