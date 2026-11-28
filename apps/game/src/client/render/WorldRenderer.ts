@@ -51,7 +51,6 @@ import { VoidBackdrop, type BackdropKind } from "./backdrop";
 import { CAVE_FLOOR, ZoneScenery } from "./zoneScenery";
 import { CombatView, cutawayButton, type CutSpot } from "./cutaway";
 import { FLOOR_RANGE, FightCamera, SHOT_BOX, type Box, type Lens, type ShotEnd } from "./fightCamera";
-import type { Waygate } from "./waygate";
 import { HoverGlow } from "./hoverGlow";
 import { buildTownDressing, type TownDressing } from "./townDressing";
 import { GROUND_KIND, addFancyWater, addWaterRipple, setGroundFine, setGroundWet, setWaterNight, setWaterStanding, shoreSide, updateWater, waterAttribute, type Standing } from "./water";
@@ -59,7 +58,7 @@ import { ghostModel, propModel, tintGhost, type LightKind } from "./props";
 import { LAMP_TABLES, TableLamps } from "./tableLamps";
 import { LID_OPEN, chestMouth, crateMiddle, restingLid, sharedShape } from "./caveProps";
 import { PLACE_MODELS } from "./places";
-import { placeKit } from "./places/kit";
+import { placeKit, type LivePart } from "./places/kit";
 import { bedsSig } from "./places/garden";
 import { SQRT3, UP, hexToWorld, placeOf, yawOf } from "./places/placing";
 import { nearWater, openEar, sounds } from "../audio/gameSounds";
@@ -67,7 +66,7 @@ import type { AttackStyle, Fighter } from "../audio/names";
 import { PUFFS, footfalls, stepGround, worldToHex, type PuffLook } from "./footsteps";
 import { badgeTexture, badgesKey, bubbleTexture, markTexture, fxTexture, labelTexture, lookFor, plateFontsReady, plateKey, sleepZTexture, spriteKey, textTexture, type Badge, type FxKind, type PlateStats, type PlateTone } from "./sprites";
 
-/** What `setGlow` lights: a place by id, a waygate by its hex, or a prop by id. */
+/** What `setGlow` lights: a place by id, a map's landing by its hex, or a prop by id. */
 type GlowTarget = string | HexPos | { prop: string | number } | null;
 
 /** Spells fly as a coloured bolt; these are their colours, by ability name. */
@@ -939,8 +938,6 @@ export interface RendererCallbacks {
   /** `place` is the id of the point of interest whose model was clicked, when the click landed on one (and so means its door). */
   /** `unit`: the figure that was clicked, if the click landed on one (a hex may hold two). */
   onHexClick(pos: HexPos, place?: string, unit?: string): void;
-  /** The town's waygate has just begun to burst open (see setWaygateOpen): the moment for its sound. */
-  onWaygateBurst?(): void;
   onHover(pos: HexPos | null): void;
   /**
    * Where on the ground the pointer is, exactly, in hexes along q and r (fractions of one: not rounded to a hex), each
@@ -1112,8 +1109,8 @@ export class WorldRenderer {
     return this.backdropKind === "dark";
   }
   private poiGroup = new THREE.Group();
-  /** The waygates among the places (the Harbor's): each moves every frame, and is put away when the places are rebuilt. */
-  private gates: Waygate[] = [];
+  /** The parts of the places that move by themselves (the Harbor's fountain, the ship on the swell): each is turned every frame, and put away when the places are rebuilt. */
+  private liveParts: LivePart[] = [];
   /** What dresses the Harbor and is no place (townDressing.ts): its court, lamps, quay, forecourt. In the decor while the map is the Harbor's. */
   private townDressing: TownDressing | null = null;
   /** The lanterns over the pub's game tables. Hung in poiGroup, and rebuilt with it. */
@@ -3034,7 +3031,7 @@ export class WorldRenderer {
       this.markWalls();
     }
 
-    // The Harbor's dressing (townDressing.ts): the waygate's court, the lamps, the quay, the caverns' forecourt.
+    // The Harbor's dressing (townDressing.ts): the fountain's court, the lamps, the quay, the caverns' forecourt.
     this.townDressing?.dispose();
     this.townDressing = state.code === "harbor" && !state.far ? buildTownDressing(state.map, (p) => ({ ...hexToWorld(p), y: tileTop(tileAt(state.map, p)) })) : null;
     if (this.townDressing) {
@@ -3919,7 +3916,7 @@ export class WorldRenderer {
   /**
    * Light a structure up with a glowing outline, and show a hand for the pointer: the view calls this while the
    * pointer is on something a click goes into, and with null when it is not. `what` is a place's id, the hex a
-   * battle map's waygate hangs over, or a prop (`{ prop: id }`). One structure at a time; nothing is drawn for it while none is lit.
+   * battle map's landing (the longboat) is on, or a prop (`{ prop: id }`). One structure at a time; nothing is drawn for it while none is lit.
    */
   setGlow(what: GlowTarget) {
     const name = (w: GlowTarget) => (w === null ? "" : typeof w === "string" ? `place ${w}` : "prop" in w ? `prop ${w.prop}` : `gate ${key(w)}`);
@@ -3958,11 +3955,15 @@ export class WorldRenderer {
     return best && { x: xs / n, y: best.y };
   }
 
-  /** The structure `setGlow` named, as it stands now: a place's model, or the waygate over that hex of a battle map. */
+  /** The structure `setGlow` named, as it stands now: a place's model, or the landing on that hex of a battle map. */
   private glowRoot(): THREE.Object3D | null {
     const what = this.glowWhat;
     if (what === null) return null;
-    if (typeof what === "string") return this.poiObject(what) ?? null;
+    if (typeof what === "string") {
+      // (A model may name the part of it that is the place, where the rest is scenery beside it: `lit`, kit.ts.)
+      const model = this.poiObject(what);
+      return (model?.userData.lit as THREE.Object3D | undefined) ?? model ?? null;
+    }
     if ("prop" in what) return this.propModels.get(what.prop) ?? null;
     const at = hexToWorld(what);
     for (const pick of this.scenery?.picks ?? []) {
@@ -4173,8 +4174,8 @@ export class WorldRenderer {
       });
     }
     this.poiGroup.clear();
-    for (const gate of this.gates) gate.dispose();
-    this.gates = [];
+    for (const part of this.liveParts) part.dispose();
+    this.liveParts = [];
     this.poiTops.clear();
     this.twinkles = [];
     this.tableLamps.clear();
@@ -4626,9 +4627,12 @@ export class WorldRenderer {
       inModel: (place, x, z) => this.inModel(place, x, z),
       townLidAt: this.chestLid.at,
       townLidThrown: WorldRenderer.TOWN_LID,
-      gateOpen: this.gateOpen,
-      onWaygateBurst: () => this.callbacks.onWaygateBurst?.(),
-      gates: this.gates,
+      groundAt: (place, pos) => {
+        const at = hexToWorld(pos);
+        const flat = this.inModel(place, at.x, at.z);
+        return new THREE.Vector3(flat.x, (this.standAt(pos).y - this.standAt(place.pos).y) / placeOf(place, this.state?.far).scale, flat.y);
+      },
+      live: this.liveParts,
     });
     PLACE_MODELS.get(poi.kind)?.(poi, kit);
     return g;
@@ -4649,18 +4653,6 @@ export class WorldRenderer {
   /** Open the town chest's lid, or shut it: it swings on a spring, a little past where it is going and back. */
   setChestOpen(open: boolean) {
     this.chestLid.open = open;
-  }
-
-  /** Whether the town's waygate is open (a map is open through it), for a gate made after this was last said. */
-  private gateOpen = false;
-  /**
-   * Open the town's waygate (the crew has a map open through it) or close it (none is). It starts closed and
-   * asleep; told to open, it bursts out into its floating self (waygate.ts) and `onWaygateBurst` is called at that
-   * moment; told to close, it draws in and folds down. For anyone who asked for less motion it simply changes.
-   */
-  setWaygateOpen(open: boolean) {
-    this.gateOpen = open;
-    for (const gate of this.gates) gate.setOpen(open, this.still);
   }
 
   /** A chest's lid now: swinging open (eased, with a little bounce as it hits the end of its hinge), or at rest. */
@@ -4752,7 +4744,7 @@ export class WorldRenderer {
 
   /** Each frame: lids swinging, crates rocking, glints twinkling, the town chest's pennant flying. */
   private movePois() {
-    for (const gate of this.gates) gate.update(this.clock, this.ambience.night);
+    for (const part of this.liveParts) part.update(this.clock, this.ambience.night);
     this.townDressing?.update(this.clock, this.ambience.night);
     const flag = this.poiObject("townchest")?.userData.flag as THREE.Mesh | undefined;
     if (flag) {
@@ -5313,7 +5305,7 @@ export class WorldRenderer {
         }
       }
     }
-    // A waygate on a map hangs taller than a hero over its hex: pointing anywhere on it means that hex, not the
+    // The landing on a map (the longboat, a mooring post) stands up off its hex: pointing anywhere on it means that hex, not the
     // ground seen through or behind it (zoneScenery.ts keeps an unseen column for each to be hit).
     if (this.scenery && this.scenery.picks.length > 0) {
       const onGate = this.raycaster.intersectObjects(this.scenery.picks, false)[0];

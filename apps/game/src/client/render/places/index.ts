@@ -16,7 +16,8 @@ import { landing, cache, gate, cave, crate, glowcap, bell } from "./maps";
 import { lot, site, plot } from "./huts";
 import { garden } from "./garden";
 import { pub, shop, lapidary, finishes } from "./harborTown";
-import { works, waygate, townchest, board } from "./harborSquare";
+import { works, fountain, townchest, board } from "./harborSquare";
+import { ship } from "./shipyard";
 import { workshop } from "./workshops";
 import { rocks, wreck, lighthouse } from "./shore";
 import { ring, fishing, felling, quarry } from "./gathering";
@@ -40,7 +41,8 @@ export const PLACE_MODELS: PlaceModels = new Map<PoiKind, PlaceModel>([
   ["finishes", finishes],
   ["lapidary", lapidary],
   ["works", works],
-  ["waygate", waygate],
+  ["fountain", fountain],
+  ["ship", ship],
   ["townchest", townchest],
   ["board", board],
   ["apothecary", workshop],

@@ -1,5 +1,5 @@
 // Motes: small soft points of light that drift and fade, all moved by the
-// graphics card from one clock. Sparks off a brazier, the dust a waygate
+// graphics card from one clock. Sparks off a brazier, the dust a fountain
 // draws in, embers over a lava field, snow over a frozen void.
 //
 // Each mote is born at its own point, travels `rise` up (or down) over its

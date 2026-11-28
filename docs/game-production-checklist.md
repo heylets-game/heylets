@@ -98,7 +98,7 @@ There are 15 files today, `0001_init.sql` to `0015_content_overrides.sql` (more 
    - create a character and found a crew;
    - walk the Harbor, which proves the HarborRoom DO and its WebSocket;
    - enter the hut and the pub, and say one line to the barkeep (live AI);
-   - open the atlas at the waygate, set out for a place beside the Harbor and win a fight there, which proves the ZoneRoom DO;
+   - open the atlas aboard the ship at the middle pier, set out for a place beside the Harbor and win a fight there, which proves the ZoneRoom DO;
    - attach an email and receive the code from `noreply@heylets.party`;
    - after the `ADMIN_EMAILS` secret is set, check that the admin link shows for that account.
 4. Watch errors live while you play:

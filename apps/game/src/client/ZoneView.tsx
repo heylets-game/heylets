@@ -53,7 +53,7 @@ import {
   FREE_WALK,
   pathIn,
   HARBOR_CAVE,
-  HARBOR_WAYGATE,
+  HARBOR_SHIP,
   siteInside,
   zoneCleared,
   SURFACE_INFO,
@@ -526,7 +526,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   lootingNow.current = looting;
   /** Something clicked to be searched from further off than arm's length: the hero is walking up to it, and looks once there. */
   const lootNext = useRef<string | null>(null);
-  /** The waygate clicked from further off than beside it: the hero is walking up to it, and goes through once there. Its hex. */
+  /** The landing (the longboat) clicked from further off than beside it: the hero is walking up to it, and leaves once there. Its hex. */
   const gateNext = useRef<HexPos | null>(null);
   const [roll, setRoll] = useState<Roll | null>(null);
   /** What is being announced across the screen (zone/TurnBanner.tsx): a fight breaking out, whose turn it is, how it ended. */
@@ -2692,7 +2692,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   };
 
   click.current = (pos, clicked, chosen) => {
-    // Any click is a new order: a walk up to the waygate (or to something to search) that was under way no longer ends there.
+    // Any click is a new order: a walk up to the landing (or to something to search) that was under way no longer ends there.
     gateNext.current = null;
     lootNext.current = null;
     setWhichOne(null);
@@ -2755,9 +2755,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
         if (beside) walkTo(beside.pos);
         return;
       }
-      // A click on the waygate, out of a fight, is the way back to town: through it from beside it, or a walk up to
+      // A click on the landing, out of a fight, is the way back to the ship and town: from beside it, or a walk up to
       // it first and through it on getting there, with nothing more to click.
-      if (tileAt(state.map, pos)?.prop === "waygate" && !state.encounter?.order.includes(act.id)) {
+      if (tileAt(state.map, pos)?.prop === "landing" && !state.encounter?.order.includes(act.id)) {
         if (hexDistance(pos, act.pos) <= 1) return leave();
         const beside = [...reach.values()].filter((r) => r.stop && hexDistance(r.pos, pos) === 1).sort((a, b) => a.cost - b.cost)[0];
         if (beside) {
@@ -2907,9 +2907,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   /** Back up to the Harbor: out of a cave, standing at its mouth. From a place on the atlas, back to the atlas. */
   const leave = () => {
     if (state?.options.tier) {
-      // Off an atlas map by the ring it was come through: out at the town's waygate, which will take you back.
+      // Off an atlas map by the longboat it was come ashore in: back aboard the ship, at her pier in the Harbor, which will take you out again.
       try {
-        sessionStorage.setItem("gq.harborAt", `${HARBOR_WAYGATE.q},${HARBOR_WAYGATE.r}`);
+        sessionStorage.setItem("gq.harborAt", `${HARBOR_SHIP.q},${HARBOR_SHIP.r}`);
         if (zoneCleared(asState(state))) sessionStorage.removeItem("gq.atlas.zone");
         else sessionStorage.setItem("gq.atlas.zone", code);
       } catch {
@@ -2924,7 +2924,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     }
     onLeave();
   };
-  // Walked up to the waygate to go through it: once beside it and standing still (and the walk answered), through,
+  // Walked up to the landing to leave by it: once beside it and standing still (and the walk answered), away,
   // with nothing more to click. A fight breaking out calls it off, and so does any other click (see `click`).
   const leaveNow = useRef(leave);
   leaveNow.current = leave;
@@ -2951,9 +2951,9 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ownAt?.q, ownAt?.r, ownFighting, ahead.length]);
-  // The waygate lights up under the pointer (a glowing outline, and a hand for the pointer) whenever a click on it
+  // The landing lights up under the pointer (a glowing outline, and a hand for the pointer) whenever a click on it
   // would take the hero to it and through: out of a fight, with nothing picked to aim. Like the town's.
-  const overGate = !!hover && !!state && !!act && !pick && !dev.tool && tileAt(state.map, hover)?.prop === "waygate" && !state.encounter?.order.includes(act.id);
+  const overGate = !!hover && !!state && !!act && !pick && !dev.tool && tileAt(state.map, hover)?.prop === "landing" && !state.encounter?.order.includes(act.id);
   useEffect(() => {
     renderer.current?.setGlow(overGate ? hover : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps

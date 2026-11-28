@@ -861,10 +861,10 @@ export function layZone(seed: string, asked: ZoneOptions): Laid {
     }
   }
 
-  // The ring the party arrives by, behind where they stand: the hex beside the start that is furthest from everything else.
+  // The landing the party arrives by (the ship's longboat), behind where they stand: the hex beside the start that is furthest from everything else.
   {
     const behind = around(start).filter((p) => at(p) && !solidAt(p) && !taken.has(posKey(p))).sort((a, b) => Math.hypot(page(a).x - to.x, page(a).y - to.y) - Math.hypot(page(b).x - to.x, page(b).y - to.y)).pop();
-    if (behind && around(start).filter((p) => at(p) && !solidAt(p)).length >= 3) stand(behind, "waygate");
+    if (behind && around(start).filter((p) => at(p) && !solidAt(p)).length >= 3) stand(behind, "landing");
   }
 
   // ---------- the finish ----------

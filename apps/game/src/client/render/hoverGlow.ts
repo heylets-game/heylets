@@ -98,7 +98,7 @@ export class HoverGlow {
   private geometry = new THREE.BufferGeometry();
   private material: THREE.ShaderMaterial;
   private root: THREE.Object3D | null = null;
-  /** The lit structure's pieces that are drawn into the mask, and those that are only counted in how far it reaches (a waygate's unseen column). */
+  /** The lit structure's pieces that are drawn into the mask, and those that are only counted in how far it reaches (a landing's unseen box). */
   private solid: THREE.Mesh[] = [];
   private unseen: THREE.Mesh[] = [];
   /** How brightly it is lit, eased toward `goal`: it comes up quickly under the pointer and dies away when the pointer leaves. */

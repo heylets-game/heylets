@@ -304,16 +304,20 @@ describe("what stands on it", () => {
     expect(clutter(3)).toBeGreaterThan(clutter(0) * 1.3);
   });
 
-  it("the ring the party came through stands beside where they arrive, and there is one of it", () => {
+  it("the landing the party came ashore by stands beside where they arrive, and there is one of it", () => {
     for (const site of SITE_IDS) {
       for (const size of SIZES) {
         const plan = lay(`gate-${site}-${size}`, { site, size });
-        const gates = plan.map.tiles.filter((t) => t.prop === "waygate");
+        const gates = plan.map.tiles.filter((t) => t.prop === "landing");
         expect(gates, `${site} ${size}`).toHaveLength(1);
         expect(hexDistance(gates[0], plan.start), `${site} ${size}`).toBe(1);
-        expect(PROPS.waygate.blocks).toBe(true);
+        expect(PROPS.landing.blocks).toBe(true);
       }
     }
+    // It is the way back to the ship, lit by its lantern, and no map has the old waygate any more.
+    expect(PROPS.landing.light).toBe(2);
+    expect(PROPS.landing.blurb).toMatch(/ship/i);
+    expect("waygate" in PROPS).toBe(false);
   });
 });
 

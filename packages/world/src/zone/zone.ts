@@ -174,8 +174,17 @@ function renameConditions(state: ZoneState): ZoneState {
   return state;
 }
 
-/** A saved zone, brought up to date as it is loaded: conditions under their new names (renameConditions), a way out of a cave (ensureMouth), enemies' abilities (ensureEnemyAbilities), and room for the big ones (makeRoom). */
-export const loadZone = (state: ZoneState): ZoneState => makeRoom(ensureEnemyAbilities(ensureMouth(renameConditions(state))));
+/** What a prop was called on maps saved before it was renamed, and what it is called now. */
+const PROP_RENAMES: Record<string, string> = { waygate: "landing" };
+
+/** A map saved before a prop was renamed (PROP_RENAMES) carries it under its new name. Returns the same state, changed in place. */
+export function renameProps(state: ZoneState): ZoneState {
+  for (const t of state.map.tiles) if (t.prop && PROP_RENAMES[t.prop]) t.prop = PROP_RENAMES[t.prop];
+  return state;
+}
+
+/** A saved zone, brought up to date as it is loaded: conditions and props under their new names (renameConditions, renameProps), a way out of a cave (ensureMouth), enemies' abilities (ensureEnemyAbilities), and room for the big ones (makeRoom). */
+export const loadZone = (state: ZoneState): ZoneState => makeRoom(ensureEnemyAbilities(ensureMouth(renameProps(renameConditions(state)))));
 
 export function createZone(code: string, seed: string, options: ZoneOptions): ZoneState {
   const plan = options.delve ? generateDelve(seed, options) : generateZone(seed, options);

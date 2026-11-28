@@ -1,5 +1,5 @@
 // Three places: the screens before you have a character and a crew, the
-// crew's shared Harbor, and a map out through the waygate (a zone). The hash
+// crew's shared Harbor, and a map the crew's ship took them to (a zone). The hash
 // carries the map's code so it survives a reload (#zone/BCDF), or a crew
 // invite (#crew/BCDFGH). #atlas is the crew's atlas; #hut/<player id> is the
 // inside of that crew member's hut; #pub, #smithy, #apothecary, #galley and

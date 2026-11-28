@@ -20,8 +20,11 @@ export const OARLOCKS: readonly [THREE.Vector3, THREE.Vector3] = [new THREE.Vect
 /** An oar's length, handle to blade tip. */
 const OAR = 1.0;
 
-/** The hull's lines: at each station along it (z), how wide it is at the gunwale, how high the gunwale is, and how deep the keel. */
-const STATIONS: { z: number; half: number; top: number; keel: number }[] = [
+/** A hull's lines at one station along it (z): how wide it is at the gunwale, how high the gunwale is, and how deep the keel. */
+export interface HullStation { z: number; half: number; top: number; keel: number }
+
+/** The rowboat's lines, stern to bow. */
+const STATIONS: HullStation[] = [
   { z: -0.62, half: 0.27, top: 0.25, keel: -0.04 },
   { z: -0.42, half: 0.36, top: 0.23, keel: -0.08 },
   { z: -0.12, half: 0.4, top: 0.22, keel: -0.09 },
@@ -36,17 +39,19 @@ const STRIPE = new THREE.Color("#e9e0c8");
 const BOTTOM = new THREE.Color("#5a3d2a");
 const INSIDE = new THREE.Color("#b08452");
 const TIMBER = "#7a5634";
+/** The paint a crew's boats wear, for whatever else of theirs is painted to match (their ship: ship.ts). */
+export const BOAT_PAINT = { topside: TOPSIDE, stripe: STRIPE, bottom: BOTTOM, inside: INSIDE, timber: TIMBER } as const;
 const OARWOOD = "#c99b62";
 
 /**
  * A cross-section at a station, from the port gunwale down to the keel and up to the starboard gunwale: the
  * gunwale, a stripe just below it, the turn of the bilge, and the keel. `inset` shrinks it toward the inside.
  */
-function section(s: (typeof STATIONS)[number], inset = 0): number[][] {
+export function hullSection(s: HullStation, inset = 0, stripeDeep = 0.045): number[][] {
   const w = Math.max(0, s.half - inset);
   const top = s.top - inset * 0.3;
   const keel = s.keel + inset * 1.2;
-  const stripe = top - 0.045;
+  const stripe = top - stripeDeep;
   const bilge = keel + (top - keel) * 0.35;
   return [
     [w, top, s.z],
@@ -62,10 +67,29 @@ function section(s: (typeof STATIONS)[number], inset = 0): number[][] {
 /** Which colour each band of a section is painted, outside: the stripe under the gunwale, the topsides, the bottom. */
 const BANDS = [STRIPE, TOPSIDE, BOTTOM, BOTTOM, TOPSIDE, STRIPE];
 
-/** The hull's skin, lofted between the stations: outside (faces out, painted) or inside (faces in, bare wood). */
-function hullSkin(inside: boolean): THREE.BufferGeometry {
-  const inset = inside ? 0.025 : 0;
-  const rings = STATIONS.map((s) => section(s, inset));
+/** How a lofted hull is made, where it is not the rowboat's own: its lines, its paint, and how much of it is planked. */
+export interface HullLines {
+  stations: HullStation[];
+  /** The colour of each band of a section, outside, from the port gunwale round to the starboard one (six of them). */
+  bands?: THREE.Color[];
+  /** The bare wood inside. */
+  inside?: THREE.Color;
+  /** How far in the inner skin lies, and how deep the stripe under the gunwale is. */
+  thick?: number;
+  stripe?: number;
+  /** Which bands are planked (indices into `bands`): all of them, unless said. A hull half built has only its lower ones. */
+  only?: readonly number[];
+}
+
+/**
+ * A hull's skin, lofted between its stations (stern to bow, the stern closed off flat with a transom): outside
+ * (faces out, painted) or inside (faces in, bare wood). The rowboat's own, unless `lines` says another's (ship.ts).
+ */
+export function hullSkin(inside: boolean, lines: HullLines = { stations: STATIONS }): THREE.BufferGeometry {
+  const inset = inside ? (lines.thick ?? 0.025) : 0;
+  const bands = lines.bands ?? BANDS;
+  const wood = lines.inside ?? INSIDE;
+  const rings = lines.stations.map((s) => hullSection(s, inset, lines.stripe));
   const pos: number[] = [];
   const col: number[] = [];
   const tri = (a: number[], b: number[], c: number[], color: THREE.Color) => {
@@ -77,15 +101,16 @@ function hullSkin(inside: boolean): THREE.BufferGeometry {
   for (let i = 0; i < rings.length - 1; i++) {
     const a = rings[i], b = rings[i + 1];
     for (let j = 0; j < a.length - 1; j++) {
-      const color = inside ? INSIDE.clone().multiplyScalar(0.92 + (j % 2) * 0.1) : BANDS[j];
+      if (lines.only && !lines.only.includes(j)) continue;
+      const color = inside ? wood.clone().multiplyScalar(0.92 + (j % 2) * 0.1) : bands[j];
       tri(a[j], b[j], b[j + 1], color);
       tri(a[j], b[j + 1], a[j + 1], color);
     }
   }
   // The transom: the stern closed off flat.
   const stern = rings[0];
-  for (let j = 1; j < stern.length - 1; j++) {
-    const color = inside ? INSIDE : j === 1 || j === stern.length - 2 ? STRIPE : TOPSIDE;
+  for (let j = 1; j < stern.length - 1 && !lines.only; j++) {
+    const color = inside ? wood : j === 1 || j === stern.length - 2 ? bands[0] : bands[1];
     tri(stern[0], stern[j + 1], stern[j], color);
   }
   const geo = new THREE.BufferGeometry();
@@ -96,7 +121,7 @@ function hullSkin(inside: boolean): THREE.BufferGeometry {
 }
 
 /** A length of timber from one point to another, `w` wide and `h` deep. */
-function beam(from: THREE.Vector3, to: THREE.Vector3, w: number, h: number, material: THREE.Material): THREE.Mesh {
+export function beam(from: THREE.Vector3, to: THREE.Vector3, w: number, h: number, material: THREE.Material): THREE.Mesh {
   const along = to.clone().sub(from);
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, along.length()), material);
   mesh.position.copy(from).add(to).multiplyScalar(0.5);

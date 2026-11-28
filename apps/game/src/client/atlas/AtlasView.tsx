@@ -34,7 +34,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { hexDistance, type HexPos } from "@gantt-quest/core";
 import { ATLAS_HOME, ATLAS_SPACING, ATLAS_VIEW, LAIR_RINGS, LAND_GROUND, SITES, SPOIL_STONES, modEffect, modName, modSide, atlasNodeById, atlasTier, atlasWorld, bountyPay, modsOf, needsStone, nodePlace, nodeSite, stoneKey, stoneName, stoneOn, type AtlasNode, type Lodestone, type SiteDef, type SiteGround, type SiteId } from "@gantt-quest/world";
-import { HARBOR_WAYGATE, musterOpen } from "@gantt-quest/world";
+import { HARBOR_SHIP, musterOpen } from "@gantt-quest/world";
 import { MusterPanel, useMuster } from "./Muster";
 import { api, type Chart, type ChartNode, type Me } from "../api";
 import { useAudioScene } from "../audio/useAudioScene";
@@ -437,9 +437,9 @@ export function AtlasView({ me, refresh, onLeave }: { me: Me; refresh(): Promise
   const show = (n: ChartNode) => renderer.current?.lookAt(n.hex);
   const close = () => {
     remember(null);
-    // Back in town where the atlas is opened from: at the waygate.
+    // Back in town where the atlas is opened from: aboard the ship, at her pier.
     try {
-      sessionStorage.setItem("gq.harborAt", `${HARBOR_WAYGATE.q},${HARBOR_WAYGATE.r}`);
+      sessionStorage.setItem("gq.harborAt", `${HARBOR_SHIP.q},${HARBOR_SHIP.r}`);
     } catch {
       // Storage is off: the middle of the square it is.
     }
@@ -484,7 +484,7 @@ export function AtlasView({ me, refresh, onLeave }: { me: Me; refresh(): Promise
           {!shown && (error ?? unreached) && <span className="atlas-reckoning bad" role="alert">{error ?? unreached}</span>}
           {!chart && !unreached && <span className="atlas-reckoning">Unrolling the atlas…</span>}
         </div>
-        <button className="atlas-close" onClick={close} title="Back to the Harbor, at the waygate">Close atlas</button>
+        <button className="atlas-close" onClick={close} title="Back to the Harbor, at the ship's pier">Close atlas</button>
         <div className="atlas-corner">
           <button className="small" onClick={() => { const home = byId.get(ATLAS_HOME); if (home) show(home); }} title="Bring the Harbor back to the middle">Find the Harbor</button>
           <button className="small" onClick={() => setBag((open) => !open)} title="Your sea bag (I): drag a lodestone from it into a place's slot">{bag ? "Close the bag" : "Sea bag"}</button>

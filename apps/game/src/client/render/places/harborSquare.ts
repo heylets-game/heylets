@@ -1,10 +1,10 @@
 // What stands out in the open in the Harbor: the builders' yard where the crew's projects are paid for, the
-// notice board, the town chest on its dais and the waygate over its plinth.
+// notice board, the town chest on its dais and the fountain in the square.
 
 import * as THREE from "three";
 import type { BuildingGlow } from "../ambience";
 import { pennantTexture } from "../flag";
-import { makeWaygate } from "../waygate";
+import { makeFountain } from "../fountain";
 import { foldByLook, type PlaceModel } from "./kit";
 import { PLACE, UP, yawOf } from "./placing";
 
@@ -96,25 +96,18 @@ export const works: PlaceModel = (_poi, kit) => {
   foldByLook(g);
 };
 
-/** The waygate. */
-export const waygate: PlaceModel = (poi, kit) => {
-  const { g, add, lambert } = kit;
-  // The Harbor's waygate (waygate.ts), the crew's way out to the atlas and back: it hangs over a round
-  // plinth of three shallow steps in the middle of its court, a ring of brass let into the top step.
-  const stone = ["#6f747e", "#858a94", "#757a84"];
-  [[1.0, 0.1], [0.86, 0.1], [0.72, 0.08]].reduce((y, [r, h], i) => {
-    add(new THREE.CylinderGeometry(r - 0.025, r, h, 28), lambert(stone[i]), 0, y + h / 2, 0);
-    return y + h;
-  }, 0);
-  add(new THREE.TorusGeometry(0.64, 0.02, 5, 40).rotateX(Math.PI / 2), lambert("#c79a3e"), 0, 0.282, 0);
-  // (It is made as it stands now, with nothing played: asleep until a map is open through it. See setWaygateOpen.)
-  const gate = makeWaygate({ light: true, lift: 0.28, open: kit.gateOpen, onBurst: () => kit.onWaygateBurst() });
-  // A place's model is turned about the hex it is used from; the gate is turned back, to face the south, where the view opens from.
-  gate.object.rotation.y = -yawOf((poi.facing ?? 0) + (PLACE.waygate?.turn ?? 0));
-  g.add(gate.object);
-  kit.gates.push(gate);
-  // Pointing anywhere on it, however high, is pointing at the gate.
-  g.userData.door = poi.pos;
+/** The fountain. */
+export const fountain: PlaceModel = (poi, kit) => {
+  // The Harbor's fountain (fountain.ts): the old waygate's ring over a basin, water falling through it, in the
+  // middle of the court where the gate hung.
+  const made = makeFountain({ light: true });
+  // A place's model is turned about the hex it is used from; the fountain is turned back, its ring to face the
+  // south, where the view opens from.
+  made.object.rotation.y = -yawOf((poi.facing ?? 0) + (PLACE.fountain?.turn ?? 0));
+  kit.g.add(made.object);
+  kit.live.push(made);
+  // Pointing anywhere on it, however high, is pointing at the fountain.
+  kit.g.userData.door = poi.pos;
 };
 
 /** The town chest. */

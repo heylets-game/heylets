@@ -239,32 +239,32 @@ describe("zone generation", () => {
             expect(state.scene, where).toBeUndefined();
           } else {
             if (!indoors) {
-              // Round the start, what land there is lies level and open: nothing stands on it but the ring the party came through, beside them.
+              // Round the start, what land there is lies level and open: nothing stands on it but the landing the party came ashore by, beside them.
               const round = state.map.tiles.filter((t) => hexDistance(t, state.start) <= options.clear);
               for (const t of round) {
                 expect(t.elev ?? 0, where).toBe(0);
-                if (t.prop) expect([t.prop, hexDistance(t, state.start)], where).toEqual(["waygate", 1]);
+                if (t.prop) expect([t.prop, hexDistance(t, state.start)], where).toEqual(["landing", 1]);
                 else expect(solid(t), where).toBe(false);
               }
               // And there is a fair stretch of it: as much as two hexes all round would be, at the least.
               expect(round.filter((t) => !solid(t)).length, where).toBeGreaterThanOrEqual(19);
             } else {
               // Indoors the room's own walls are near, so it is a smaller stretch. The party stands on floor with floor all
-              // round them: nothing on it but the ring they came through, beside them.
+              // round them: nothing on it but the landing they came ashore by, beside them.
               const beside = state.map.tiles.filter((t) => hexDistance(t, state.start) <= 1);
               expect(beside, where).toHaveLength(7);
               for (const t of beside) {
-                if (t.prop) expect([t.prop, hexDistance(t, state.start)], where).toEqual(["waygate", 1]);
+                if (t.prop) expect([t.prop, hexDistance(t, state.start)], where).toEqual(["landing", 1]);
                 else expect(solid(t), where).toBe(false);
               }
-              expect(beside.filter((t) => t.prop === "waygate"), where).toHaveLength(1);
+              expect(beside.filter((t) => t.prop === "landing"), where).toHaveLength(1);
               // Two hexes out, what is not floor is the wall of the room (or a doorway in it), or the rock of the chamber:
               // nothing else stands there to bar the way, and the floor is level.
               const round = state.map.tiles.filter((t) => hexDistance(t, state.start) <= 2);
               for (const t of round) {
                 if (t.biome === "rock") continue;
                 expect(t.elev ?? 0, where).toBe(0);
-                if (t.prop && t.prop !== "waygate") expect(["wall", "wall_torch", "arch"], `${where}: ${t.prop}`).toContain(t.prop);
+                if (t.prop && t.prop !== "landing") expect(["wall", "wall_torch", "arch"], `${where}: ${t.prop}`).toContain(t.prop);
               }
               // And most of that is floor to stand on.
               expect(round.filter((t) => !solid(t)).length, where).toBeGreaterThanOrEqual(13);
@@ -5851,5 +5851,17 @@ describe("Ship's guns", () => {
     const next = must(state, { type: "use", by: "ann", unit: "ann", ability: "scattershot", at: unit(state, foe).pos }, events);
     expect(unit(next, "bo").hp).toBe(bo);
     expect(events.some((e) => e.t === "hit" && e.target === foe)).toBe(true);
+  });
+});
+
+describe("a map saved before the ships", () => {
+  it("has its waygate turned into the landing as it is loaded, so the way back is still there", () => {
+    const state = createZone("OLD", "old-gate", zoneOptions({ size: "small", biome: "meadow" }));
+    const landing = state.map.tiles.find((t) => t.prop === "landing")!;
+    expect(landing).toBeDefined();
+    landing.prop = "waygate";
+    const loaded = loadZone(state);
+    expect(loaded.map.tiles.filter((t) => t.prop === "landing")).toHaveLength(1);
+    expect(loaded.map.tiles.some((t) => t.prop === "waygate")).toBe(false);
   });
 });

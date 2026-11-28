@@ -50,8 +50,10 @@ export const PLACE: Partial<Record<Poi["kind"], { scale: number; back: number; t
   townchest: { scale: 1.6, back: SQRT3, turn: 0.5 },
   // Nell's stall stands on the hex beside where she is talked to, as the town chest does, at the size of a hero's room to stand in it.
   finishes: { scale: 1.5, back: SQRT3, turn: 0.5 },
-  // The waygate hangs over the middle of the hex beside the one it is used from, at its own size.
-  waygate: { scale: 1, back: SQRT3, turn: 0.5 },
+  // The fountain stands in the middle of the hex beside the one it is looked at from, at its own size.
+  fountain: { scale: 1, back: SQRT3, turn: 0.5 },
+  // The crew's ship is drawn at her own size from the pier head she is boarded from: she lies in the water beyond it.
+  ship: { scale: 1, back: 0 },
   ring: { scale: 1.5, back: 0.42 },
   felling: { scale: 1.5, back: 0.42 },
   quarry: { scale: 1.5, back: 0.42 },

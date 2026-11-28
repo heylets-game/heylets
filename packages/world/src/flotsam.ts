@@ -14,7 +14,7 @@
 import { hexDistance, type HexPos } from "@gantt-quest/core";
 import { FURNISHINGS, type Resources, type ResourceKind } from "./hut";
 import { GAME_DAY_MS } from "./gameclock";
-import { HARBOR_BOATS, HARBOR_ROCKS, HARBOR_SIDES, HARBOR_WRECK, generateHarbor } from "./harbor";
+import { HARBOR_BERTHS, HARBOR_BOATS, HARBOR_ROCKS, HARBOR_SIDES, HARBOR_WRECK, generateHarbor } from "./harbor";
 import { shoreAt } from "./fishingholes";
 import { poiAt, tileAt } from "./map";
 import { makeRng, seedFromString, type Rng } from "./rng";
@@ -133,7 +133,7 @@ const HARBOR = generateHarbor();
 let places: Places | null = null;
 function placesOf(): Places {
   if (places) return places;
-  const kept = new Set([...HARBOR_ROCKS, HARBOR_WRECK, ...HARBOR_BOATS.map((b) => b.at)].map(key));
+  const kept = new Set([...HARBOR_ROCKS, HARBOR_WRECK, ...HARBOR_BOATS.map((b) => b.at), ...HARBOR_BERTHS].map(key));
   const beach = (p: HexPos) => {
     const t = tileAt(HARBOR, p);
     return !!t && ["mud", "sand", "plains"].includes(t.biome) && !t.path && !t.built && !t.blocker && !poiAt(HARBOR, p) && shoreAt(HARBOR, p);

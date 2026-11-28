@@ -1,7 +1,7 @@
 // Going from one place to another without a loading screen.
 //
 // When the player sets off for another place (into the pub, back out to the
-// Harbor, through the waygate), the view on the screen is asked for its last
+// Harbor, aboard the ship), the view on the screen is asked for its last
 // picture. That picture is laid under the game, pushing in gently toward
 // where their hero stands, and only then is the next view made. The next view
 // starts unseen, is built over the picture, and fades in over it once it has

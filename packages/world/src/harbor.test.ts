@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EMOTES, emoteTyped, validEmote, HARBOR_APOTHECARY, HARBOR_LAPIDARY, HARBOR_BOATS, HARBOR_BRIDGE, HARBOR_BUILDINGS, HARBOR_CAVE, HARBOR_CAVE_STEPS, HARBOR_CHEST, HARBOR_COURT, HARBOR_DECOR, HARBOR_FIXTURES, HARBOR_FORECOURT, HARBOR_GALLEY, HARBOR_MAX_PATH, HARBOR_GATE, HARBOR_GATHER, HARBOR_HEART_AT, HARBOR_HOME_ROADS, HARBOR_LIGHTHOUSE, HARBOR_MOLE, HARBOR_PUB, HARBOR_WAYGATE, HARBOR_WRECK, HARBOR_SMITHY, HARBOR_GRID, HARBOR_SEA_REACH, HARBOR_BOARD, HARBOR_PIERS, HARBOR_PLOTS, HARBOR_RING, HARBOR_SHOP, HARBOR_SPAWN, HARBOR_SQUARE, HARBOR_WORKS, HARBOR_OAK, HARBOR_ROADS, HARBOR_SIDES, findPath, footing, frontOf, generateHarbor, roadHexes, harborDoor, harborPath, tileAt } from "./index";
+import { EMOTES, emoteTyped, validEmote, HARBOR_APOTHECARY, HARBOR_LAPIDARY, HARBOR_BOATS, HARBOR_BRIDGE, HARBOR_BUILDINGS, HARBOR_CAVE, HARBOR_CAVE_STEPS, HARBOR_CHEST, HARBOR_COURT, HARBOR_DECOR, HARBOR_FIXTURES, HARBOR_FORECOURT, HARBOR_GALLEY, HARBOR_MAX_PATH, HARBOR_GATE, HARBOR_GATHER, HARBOR_HEART_AT, HARBOR_HOME_ROADS, HARBOR_LIGHTHOUSE, HARBOR_MOLE, HARBOR_PUB, HARBOR_FOUNTAIN, HARBOR_SHIP, HARBOR_SLIPWAY, HARBOR_BERTHS, HARBOR_WRECK, HARBOR_SMITHY, HARBOR_GRID, HARBOR_SEA_REACH, HARBOR_BOARD, HARBOR_PIERS, HARBOR_PLOTS, HARBOR_RING, HARBOR_SHOP, HARBOR_SPAWN, HARBOR_SQUARE, HARBOR_WORKS, HARBOR_OAK, HARBOR_ROADS, HARBOR_SIDES, findPath, footing, frontOf, generateHarbor, roadHexes, harborDoor, harborPath, tileAt } from "./index";
 
 type Hex = { q: number; r: number };
 const key = (p: Hex) => `${p.q},${p.r}`;
@@ -9,7 +9,7 @@ const around = (p: Hex) => [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]].
 describe("harbor map", () => {
   const map = generateHarbor();
   /** Every hex a hero stands on to use a place. */
-  const doors = [...HARBOR_PLOTS, HARBOR_BOARD, HARBOR_SHOP, HARBOR_RING, HARBOR_PUB, HARBOR_WORKS, HARBOR_APOTHECARY, HARBOR_SMITHY, HARBOR_GALLEY, HARBOR_LIGHTHOUSE, HARBOR_CAVE, HARBOR_CHEST, HARBOR_LAPIDARY, HARBOR_WAYGATE, ...Object.values(HARBOR_GATHER)];
+  const doors = [...HARBOR_PLOTS, HARBOR_BOARD, HARBOR_SHOP, HARBOR_RING, HARBOR_PUB, HARBOR_WORKS, HARBOR_APOTHECARY, HARBOR_SMITHY, HARBOR_GALLEY, HARBOR_LIGHTHOUSE, HARBOR_CAVE, HARBOR_CHEST, HARBOR_LAPIDARY, HARBOR_FOUNTAIN, ...Object.values(HARBOR_GATHER)];
   /** The ground nobody walks through: under every building, and under the big pieces of the town's dressing. */
   const built = [...HARBOR_BUILDINGS.flatMap((b) => footing(b.door, b.shape, b.facing)), ...HARBOR_FIXTURES];
 
@@ -54,7 +54,7 @@ describe("harbor map", () => {
     }
     // No building stands on another, on a door, on the plaza or on a pier.
     expect(new Set(built.map(key)).size).toBe(built.length);
-    // (The plaza is the court round the waygate, which hangs over its middle.)
+    // (The plaza is the court round the fountain, which stands in its middle.)
     const open = new Set([...doors, HARBOR_SPAWN, ...HARBOR_COURT, ...HARBOR_PIERS].map(key));
     for (const p of built) {
       expect(open.has(key(p)), key(p)).toBe(false);
@@ -144,7 +144,7 @@ describe("harbor map", () => {
     expect(map.pois.find((p) => p.id === "cave")?.pos).toEqual(HARBOR_CAVE);
   });
 
-  it("rings the island with its places: each on the shoreline with the sea at its back, turned to face the waygate, a paved lane out to it, and nothing built inside the ring", () => {
+  it("rings the island with its places: each on the shoreline with the sea at its back, turned to face the fountain, a paved lane out to it, and nothing built inside the ring", () => {
     const square = new Set(HARBOR_SQUARE.map(key));
     const facing = (door: Hex) => HARBOR_BUILDINGS.find((b) => key(b.door) === key(door))!.facing;
     const fronts = (door: Hex, street: Set<string>) => frontOf(door, facing(door)).some((p) => street.has(key(p)));
@@ -154,7 +154,7 @@ describe("harbor map", () => {
     /** The water's edge: the sea, a pier's planking, the quay's paving along it, or the cliff the caverns open in. */
     const quay = street(7);
     const edge = (p: Hex) => ["water", "dock", "rampart"].includes(tileAt(map, p)?.biome ?? "water") || quay.has(key(p));
-    const places = HARBOR_BUILDINGS.filter((b) => !b.id.startsWith("plot") && !["waygate", "lighthouse", "fishing"].includes(b.id));
+    const places = HARBOR_BUILDINGS.filter((b) => !b.id.startsWith("plot") && !["fountain", "lighthouse", "fishing"].includes(b.id));
     expect(places.map((b) => b.id).sort()).toEqual(["apothecary", "board", "finishes", "galley", "lapidary", "pub", "shop", "smithy", "townchest", "works"]);
     for (const b of places) {
       const ground = footing(b.door, b.shape, b.facing);
@@ -220,7 +220,7 @@ describe("harbor map", () => {
     expect(map.pois.find((p) => p.id === "lapidary")).toMatchObject({ kind: "lapidary", pos: HARBOR_LAPIDARY });
     expect(dist(HARBOR_CHEST, HARBOR_RING)).toBeLessThanOrEqual(3);
     // Gaps between neighbours all the way round: no two places' ground touches.
-    const all = HARBOR_BUILDINGS.filter((b) => !b.id.startsWith("plot") && b.id !== "waygate");
+    const all = HARBOR_BUILDINGS.filter((b) => !b.id.startsWith("plot") && b.id !== "fountain");
     for (const a of all) for (const b of all) {
       if (a.id >= b.id) continue;
       for (const p of footing(a.door, a.shape, a.facing)) for (const s of footing(b.door, b.shape, b.facing)) expect(dist(p, s), `${a.id} and ${b.id}`).toBeGreaterThanOrEqual(2);
@@ -332,11 +332,13 @@ describe("harbor map", () => {
     // And from anywhere to anywhere among them: the far end of the housing island to the caverns, the fish shack to the last hut.
     for (const from of [HARBOR_CAVE, HARBOR_GATHER.fishing, HARBOR_LIGHTHOUSE, HARBOR_WORKS]) for (const to of HARBOR_PLOTS) expect(steps(from, to), `${key(from)} to ${key(to)}`).toBeLessThanOrEqual(HARBOR_MAX_PATH);
     // What a crew uses every day: the chest a few steps from where the gate is used, the stall and the board not many more.
-    expect(steps(HARBOR_WAYGATE, HARBOR_CHEST)).toBeLessThanOrEqual(9);
-    expect(steps(HARBOR_WAYGATE, HARBOR_SHOP)).toBeLessThanOrEqual(7);
+    expect(steps(HARBOR_FOUNTAIN, HARBOR_CHEST)).toBeLessThanOrEqual(9);
+    expect(steps(HARBOR_FOUNTAIN, HARBOR_SHOP)).toBeLessThanOrEqual(7);
     // (The board is the pub's, and the pub is on the far shore: it is the one daily thing that is a real walk.)
-    expect(steps(HARBOR_WAYGATE, HARBOR_BOARD)).toBeLessThanOrEqual(11);
-    expect(steps(HARBOR_SPAWN, HARBOR_WAYGATE)).toBe(1);
+    expect(steps(HARBOR_FOUNTAIN, HARBOR_BOARD)).toBeLessThanOrEqual(11);
+    expect(steps(HARBOR_SPAWN, HARBOR_FOUNTAIN)).toBe(1);
+    // The ship is used on every voyage: a straight walk down the green and out along the middle pier.
+    expect(steps(HARBOR_SPAWN, HARBOR_SHIP)).toBeLessThanOrEqual(12);
   });
 
   it("puts the galley on the quay by the piers, off the plots and the other places", () => {
@@ -528,24 +530,44 @@ describe("harbor map", () => {
     expect(harborPath(map, HARBOR_SPAWN, HARBOR_LIGHTHOUSE)!.at(-1)).toEqual(HARBOR_LIGHTHOUSE);
   });
 
-  it("hangs the waygate in the middle of the square, with heroes arriving beside it and a paved court all round it", () => {
-    const gate = HARBOR_BUILDINGS.find((b) => b.id === "waygate")!;
-    expect(map.pois.find((p) => p.id === "waygate")).toMatchObject({ kind: "waygate", pos: HARBOR_WAYGATE });
+  it("moors the crew's ship at the head of the middle pier, with her berth and the slipway on open water nothing floats on", () => {
+    expect(HARBOR_SHIP).toEqual(HARBOR_PIERS[1]);
+    expect(map.pois.find((p) => p.id === "ship")).toMatchObject({ kind: "ship", pos: HARBOR_SHIP });
+    // She is boarded from the planking: a hero walks there dry-shod from where they arrive.
+    expect(tileAt(map, HARBOR_SHIP)!.biome).toBe("dock");
+    expect(harborPath(map, HARBOR_SPAWN, HARBOR_SHIP)!.at(-1)).toEqual(HARBOR_SHIP);
+    // The slipway runs out from the quay: water, with paving beside it.
+    expect(tileAt(map, HARBOR_SLIPWAY)!.biome).toBe("water");
+    expect(around(HARBOR_SLIPWAY).some((n) => tileAt(map, n)?.biome === "cobble")).toBe(true);
+    // Her berth and the ways are water, all of it on the map, clear of the piers, the moored boats, the rocks and the wreck.
+    expect(HARBOR_BERTHS).toContainEqual(HARBOR_SLIPWAY);
+    expect(HARBOR_BERTHS.some((p) => dist(p, HARBOR_SHIP) === 1)).toBe(true);
+    const taken = new Set([...HARBOR_BOATS.map((b) => b.at), HARBOR_WRECK, ...map.pois.filter((p) => p.kind === "rocks").map((p) => p.pos)].map(key));
+    for (const p of HARBOR_BERTHS) {
+      expect(tileAt(map, p)?.biome, key(p)).toBe("water");
+      expect(taken.has(key(p)), key(p)).toBe(false);
+    }
+  });
+
+  it("stands the fountain in the middle of the square, where the waygate hung, with heroes arriving beside it and a paved court all round it", () => {
+    const gate = HARBOR_BUILDINGS.find((b) => b.id === "fountain")!;
+    expect(map.pois.find((p) => p.id === "fountain")).toMatchObject({ kind: "fountain", pos: HARBOR_FOUNTAIN });
+    expect(map.pois.some((p) => (p.kind as string) === "waygate")).toBe(false);
     expect(footing(gate.door, gate.shape, gate.facing)).toEqual([HARBOR_GATE]);
-    expect(harborDoor(HARBOR_GATE)).toEqual(HARBOR_WAYGATE);
-    // The square is the gate's hex and the two rings round it: nineteen hexes, all cobbled, and nothing in it but the gate.
+    expect(harborDoor(HARBOR_GATE)).toEqual(HARBOR_FOUNTAIN);
+    // The square is the fountain's hex and the two rings round it: nineteen hexes, all cobbled, and nothing in it but the fountain.
     expect(HARBOR_SQUARE).toHaveLength(19);
     for (const p of HARBOR_SQUARE) {
       expect(tileAt(map, p)!.biome, key(p)).toBe("cobble");
       expect(!!tileAt(map, p)!.built, key(p)).toBe(key(p) === key(HARBOR_GATE));
     }
-    // Used constantly: heroes arrive beside the gate, and where they stand to step through is beside both.
+    // Heroes arrive beside the fountain, and where they stand to look at it is beside both.
     expect(dist(HARBOR_SPAWN, HARBOR_GATE)).toBe(1);
-    expect(dist(HARBOR_WAYGATE, HARBOR_GATE)).toBe(1);
-    expect(dist(HARBOR_WAYGATE, HARBOR_SPAWN)).toBe(1);
-    // Both on the south side of it, which the view opens from: nobody stands hidden behind the gate.
+    expect(dist(HARBOR_FOUNTAIN, HARBOR_GATE)).toBe(1);
+    expect(dist(HARBOR_FOUNTAIN, HARBOR_SPAWN)).toBe(1);
+    // Both on the south side of it, which the view opens from: nobody stands hidden behind the fountain.
     expect(HARBOR_SPAWN.r).toBeGreaterThan(HARBOR_GATE.r);
-    expect(HARBOR_WAYGATE.r).toBeGreaterThan(HARBOR_GATE.r);
+    expect(HARBOR_FOUNTAIN.r).toBeGreaterThan(HARBOR_GATE.r);
     // The court: the six hexes round the gate, all level, every one of them open.
     expect(HARBOR_COURT).toHaveLength(6);
     for (const p of HARBOR_COURT) {
@@ -663,9 +685,9 @@ describe("harbor map", () => {
     };
     const places = HARBOR_DECOR.map(where);
     places.forEach((a, i) => places.forEach((b, j) => i < j && expect(Math.hypot(a.x - b.x, a.z - b.z), `${HARBOR_DECOR[i].kind} and ${HARBOR_DECOR[j].kind}`).toBeGreaterThan(0.5)));
-    // Nothing tall stands by the hex everyone arrives on, or by the one they use the gate from: only the court's
+    // Nothing tall stands by the hex everyone arrives on, or by the one they look at the fountain from: only the court's
     // own stones are on their corners, and none of those a whole one. The view of both is clear.
-    for (const hex of [HARBOR_SPAWN, HARBOR_WAYGATE]) {
+    for (const hex of [HARBOR_SPAWN, HARBOR_FOUNTAIN]) {
       const mid = where({ kind: "lamp", at: hex });
       places.forEach((p, i) => {
         if (Math.hypot(p.x - mid.x, p.z - mid.z) > 1.2) return;

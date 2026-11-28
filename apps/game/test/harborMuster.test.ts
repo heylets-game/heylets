@@ -155,6 +155,8 @@ beforeEach(() => {
   vi.setSystemTime(T0);
   ({ sql, db } = openDb({ answered }));
   for (const [who, crew] of [[ann, CREW], [bo, CREW], [cy, CREW], [dee, CREW], [eve, CREW], [fay, CREW], [{ id: "zed", name: "Zed" }, OTHER]] as const) addHero(sql, { ...who, crew, at: T0 });
+  // The crew sails a Galleon, which carries as many as a map takes: what a smaller ship changes has tests of its own (below).
+  sql.prepare("INSERT INTO crew_projects (crew_id, project_id, built_at) VALUES (?, 'galleon', ?)").run(CREW, T0);
   sockets = [];
   storage = new Map();
   alarm = null;
@@ -371,6 +373,36 @@ describe("answering a muster", () => {
     expect(optionsOf(full.code!).party).toBe(MUSTER_PARTY);
     // It has gone: the seventh is too late.
     expect(await answer(gil, "ready")).toEqual({ status: 409, json: { error: "There is no muster to answer." } });
+  });
+
+  it("with only the Sloop, starts as soon as four are ready: she carries no more", async () => {
+    sql.prepare("DELETE FROM crew_projects WHERE crew_id = ?").run(CREW);
+    for (const who of [ann, bo, cy, dee, eve]) inTown(who);
+    const muster = await called(ann, first());
+    expect(muster.most).toBe(4);
+    for (const who of [bo, cy]) expect((await answer(who, "ready")).json.muster).not.toHaveProperty("code");
+    const full = (await answer(dee, "ready")).json.muster!;
+    expect(full.ready).toEqual([ann, bo, cy, dee]);
+    expect(optionsOf(full.code!).party).toBe(4);
+    expect(await answer(eve, "ready")).toEqual({ status: 409, json: { error: "There is no muster to answer." } });
+  });
+
+  it("with only the Sloop, has the caller choose who stays ashore when parties make more than four", async () => {
+    sql.prepare("DELETE FROM crew_projects WHERE crew_id = ?").run(CREW);
+    // Bo plays a party of four: with Ann that is five heroes, for a ship that carries four.
+    sql.prepare("UPDATE players SET user_id = 'user-bo', party = 1 WHERE id = 'bo'").run();
+    for (let i = 1; i <= 3; i++) {
+      addHero(sql, { id: `bo${i}`, name: `Bo${i}`, crew: CREW, at: T0 + i });
+      sql.prepare("UPDATE players SET user_id = 'user-bo', party = 1 WHERE id = ?").run(`bo${i}`);
+    }
+    for (const who of [ann, bo]) inTown(who);
+    await called(ann, first());
+    const choosing = (await answer(bo, "ready")).json.muster!;
+    expect(choosing).not.toHaveProperty("code");
+    expect(choosing).toMatchObject({ choosing: true, most: 4, left: ["bo3"] });
+    // Ann takes the pick, and four set out.
+    const gone = (await ask("/answer", { who: ann, answer: "start", left: ["bo3"] })).json.muster!;
+    expect(optionsOf(gone.code!).party).toBe(4);
   });
 
   it("the caller's start sets out with whoever is ready, and nobody else can say it", async () => {

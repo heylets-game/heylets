@@ -1501,7 +1501,7 @@ function LodestoneDetail({ stone, total, how, inChest = false }: { stone: Lodest
           ))}
         </ul>
       )}
-      <p>{inChest ? "The crew keeps" : "You carry"} <strong>{total}</strong>{inChest ? " here" : ""}. Put one into a place's slot on the atlas, opened at the waygate, to set out for it: it is spent, and what it carries is added to the place. Stones are cut and worked at the Lapidary in the Harbor.</p>
+      <p>{inChest ? "The crew keeps" : "You carry"} <strong>{total}</strong>{inChest ? " here" : ""}. Put one into a place's slot on the atlas, opened aboard the ship at the pier, to set out for it: it is spent, and what it carries is added to the place. Stones are cut and worked at the Lapidary in the Harbor.</p>
       {how && <p className="muted">{how}</p>}
     </div>
   );

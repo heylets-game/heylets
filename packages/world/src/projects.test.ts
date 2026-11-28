@@ -4,6 +4,9 @@
 import { describe, expect, it } from "vitest";
 import {
   PROJECTS,
+  PROJECT_GROUPS,
+  SHIPS,
+  projectsIn,
   builtProjects,
   checkContribution,
   projectAmountsText,
@@ -29,9 +32,13 @@ const check = (id: string, state: { paid: Record<string, number>; built: boolean
   checkContribution(id, state, holdings, give, crew);
 
 describe("project catalogue", () => {
-  it("lists four projects, workshops first", () => {
-    expect(PROJECTS.map((p) => p.id)).toEqual(["apothecary", "smithy", "lighthouse", "galley"]);
-    expect(PROJECTS.filter((p) => p.open).map((p) => p.id)).toEqual(["apothecary", "smithy", "lighthouse", "galley"]);
+  it("lists the town's four buildings, workshops first, and the shipyard's two ships as a group of their own", () => {
+    expect(PROJECTS.map((p) => p.id)).toEqual(["apothecary", "smithy", "lighthouse", "galley", "brig", "galleon"]);
+    expect(PROJECTS.filter((p) => p.open).map((p) => p.id)).toEqual(["apothecary", "smithy", "lighthouse", "galley", "brig", "galleon"]);
+    expect(projectsIn().map((p) => p.id)).toEqual(["apothecary", "smithy", "lighthouse", "galley"]);
+    expect(projectsIn("shipyard").map((p) => p.id)).toEqual(["brig", "galleon"]);
+    expect(PROJECT_GROUPS.shipyard.name).toBe("Shipyard");
+    for (const p of PROJECTS) if (p.group) expect(PROJECT_GROUPS[p.group], p.id).toBeDefined();
     for (const p of PROJECTS) {
       expect(Object.values(p.cost).every((n) => Number.isInteger(n) && n! > 0), p.id).toBe(true);
       expect(p.benefit.length).toBeGreaterThan(0);
@@ -144,5 +151,41 @@ describe("what a crew has built", () => {
   it("is every project with a day it was finished, and nothing for a crew with no works", () => {
     expect(builtProjects({ projects: [{ id: "lighthouse", paid: {}, builtAt: 5 }, { id: "smithy", paid: {}, builtAt: null }], gifts: [] })).toEqual(["lighthouse"]);
     expect(builtProjects(undefined)).toEqual([]);
+  });
+});
+
+describe("the shipyard", () => {
+  const at = (id: string, builtAt: number | null, paid: Record<string, number> = {}): ProjectProgress => ({ id, paid, builtAt });
+  const wealthy = { gold: 5000, wood: 1000, iron: 1000, fur: 1000 };
+
+  it("builds the ships one after the other: the Brig from the first day, the Galleon only once the Brig is afloat", () => {
+    expect(projectById("brig")!.requires).toBeUndefined();
+    expect(projectById("galleon")!.requires).toEqual(["brig"]);
+    expect(projectLock("brig", [])).toBeNull();
+    expect(projectLock("galleon", [])).toEqual({ needs: ["brig"] });
+    expect(projectLockText(projectLock("galleon", [])!)).toBe("Unlocks once the Brig is built.");
+    // Paying into the Brig does not unlock the Galleon: she must be built.
+    expect(projectLock("galleon", [at("brig", null, { wood: 119 })])).toEqual({ needs: ["brig"] });
+    expect(projectLock("galleon", [at("brig", 5)])).toBeNull();
+    const refused = checkContribution("galleon", { paid: {}, built: false }, wealthy, { wood: 10 }, []);
+    expect(refused).toEqual({ ok: false, error: "The Galleon is locked. Unlocks once the Brig is built." });
+    expect(checkContribution("galleon", { paid: {}, built: false }, wealthy, { wood: 10 }, [at("brig", 5)])).toMatchObject({ ok: true, give: { wood: 10 } });
+  });
+
+  it("is paid for mostly in wood, iron and fur, and the last gift launches her", () => {
+    for (const id of ["brig", "galleon"]) {
+      const cost = projectById(id)!.cost;
+      expect(Object.keys(cost).sort(), id).toEqual(["fur", "gold", "iron", "wood"]);
+      expect(cost.wood!, id).toBeGreaterThan(cost.iron!);
+      expect(cost.iron!, id).toBeGreaterThan(cost.fur!);
+    }
+    const brig = projectById("brig")!;
+    const nearly = { ...brig.cost, wood: brig.cost.wood! - 1 };
+    expect(checkContribution("brig", { paid: nearly, built: false }, wealthy, { wood: 1 }, [])).toMatchObject({ ok: true, completes: true });
+  });
+
+  it("has a project for every ship but the one a crew starts with", () => {
+    expect(SHIPS.filter((s) => s.project).map((s) => s.project)).toEqual(projectsIn("shipyard").map((p) => p.id));
+    expect(SHIPS[0].project).toBeUndefined();
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MUSTER_CHOOSE_MS, MUSTER_LINGER_MS, MUSTER_MS, MUSTER_PARTY, answerMuster, musterGoing, musterHeroes, callMuster, musterAnswered, musterDue, musterOpen, musterShown, settleMuster, type Muster, type MusterMember } from "./muster";
+import { MUSTER_CHOOSE_MS, MUSTER_LINGER_MS, MUSTER_MS, MUSTER_PARTY, answerMuster, musterMost, musterOver, musterLeftPick, musterGoing, musterHeroes, callMuster, musterAnswered, musterDue, musterOpen, musterShown, settleMuster, type Muster, type MusterMember } from "./muster";
 
 const ann: MusterMember = { id: "a", name: "Ann" };
 const bo: MusterMember = { id: "b", name: "Bo" };
@@ -161,5 +161,46 @@ describe("a muster", () => {
     expect(musterShown(gone, NOW + 5000 + MUSTER_LINGER_MS)).toBe(false);
     expect(musterShown(called(), NOW + MUSTER_MS * 5)).toBe(true);
     expect(musterShown(null, NOW)).toBe(false);
+  });
+
+  describe("with a ship that carries fewer than a map takes", () => {
+    const who = (id: string, heroes = 1): MusterMember => ({ id, name: id.toUpperCase(), ...(heroes > 1 ? { heroes } : {}) });
+    const to = { node: "1,0", place: "Gull Rock" };
+
+    it("takes as many heroes as the ship carries, and never more than a map takes", () => {
+      expect(musterMost(callMuster("m", who("a"), { ...to, most: 4 }, [], 0))).toBe(4);
+      expect(musterMost(callMuster("m", who("a"), { ...to, most: 99 }, [], 0))).toBe(MUSTER_PARTY);
+      expect(musterMost(callMuster("m", who("a"), { ...to, most: 0 }, [], 0))).toBe(1);
+      // A muster from before ships has no number of its own: as many as a map takes.
+      expect(musterMost(callMuster("m", who("a"), to, [], 0))).toBe(MUSTER_PARTY);
+    });
+
+    it("starts when the ship is full, not when the map would be", () => {
+      const asked = ["b", "c", "d", "e"].map((id) => who(id));
+      let m = callMuster("m", who("a"), { ...to, most: 4 }, asked, 0);
+      for (const id of ["b", "c"]) {
+        const res = answerMuster(m, who(id), "ready", 1);
+        if ("error" in res) throw new Error(res.error);
+        expect(res.start).toBeUndefined();
+        m = res.muster;
+      }
+      const full = answerMuster(m, who("d"), "ready", 1);
+      expect("error" in full ? null : full.start).toBe(true);
+    });
+
+    it("has the caller choose who stays ashore when more are ready than she carries", () => {
+      const crowd: Muster = { ...callMuster("m", who("a"), { ...to, most: 4 }, [], 0), ready: [who("a"), who("b", 2), who("c", 2)] };
+      expect(musterOver(crowd)).toBe(true);
+      // The same five would all fit on a ship that carries five.
+      expect(musterOver({ ...crowd, most: 5 })).toBe(false);
+      const settled = settleMuster(crowd, 1);
+      expect(settled.start).toBeUndefined();
+      expect(settled.muster.choosing).toBe(true);
+      expect(musterGoing(crowd, musterLeftPick(crowd))).toBeLessThanOrEqual(4);
+      // Time up: it goes with the pick, four or fewer aboard.
+      const gone = settleMuster(settled.muster, settled.muster.deadline + 1);
+      expect(gone.start).toBe(true);
+      expect(musterGoing(gone.muster, gone.muster.left ?? [])).toBeLessThanOrEqual(4);
+    });
   });
 });

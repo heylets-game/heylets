@@ -14,8 +14,9 @@
 // where the rubble fell all come from a hash of the hex, so every screen
 // draws the same ruin and nothing is saved.
 //
-// Fire is the exception: flames (torchFlame) flicker, sparks rise, a waygate's
-// portal turns, and the fires nearest the view carry real light. The rest
+// Fire is the exception: flames (torchFlame) flicker, sparks rise, and the
+// fires nearest the view carry real light. (And the landing: the longboat the
+// party came ashore in slides up onto its hex a moment after the map is shown.) The rest
 // make do with a soft pool of glow laid on the ground round them.
 
 import * as THREE from "three";
@@ -23,7 +24,7 @@ import type { Clime, Tile } from "@gantt-quest/world";
 import { flickerFlame, torchFlame } from "./torchFlame";
 import { HIDES } from "./silhouette";
 import { moteField, type Mote, type MoteField } from "./motes";
-import { makeWaygate, type Waygate } from "./waygate";
+import { OARLOCKS, rowboatModel, shipOar } from "./rowboat";
 import { CUT_GHOST, CUT_NONE, CUT_SINK, addCutaway, sunkY } from "./cutaway";
 
 const SQRT3 = Math.sqrt(3);
@@ -105,7 +106,7 @@ interface Pal {
   /** The rock of a cliff, in bands, and the lip of earth (or ice) at its top. */
   cliff: THREE.Color[];
   lip: THREE.Color;
-  /** Carved signs that glow, and a waygate's light. */
+  /** Carved signs that glow. */
   glyph: THREE.Color;
   crystal: THREE.Color;
   crystalDeep: THREE.Color;
@@ -290,7 +291,8 @@ class Kit {
   emitters: Emitter[] = [];
   pools: Pool[] = [];
   motes: Mote[] = [];
-  portals: { matrix: THREE.Matrix4; color: THREE.Color; deep: THREE.Color; stone: THREE.Color }[] = [];
+  /** Where the party came ashore: the frame each landing stands in, and whether a boat lies there (out of doors) or only the line it was moored by. */
+  landings: { matrix: THREE.Matrix4; boat: boolean }[] = [];
   /**
    * Under a roof, the hexes of the outer wall, which the ground leaves out (past the wall there is nothing, not
    * even floor): each with what is left of its top inside the wall, as points [x, z] in the world.
@@ -329,7 +331,7 @@ class Kit {
     return new THREE.Vector3(x, y, z).applyMatrix4(this.M);
   }
 
-  /** The current frame, for something that is drawn on its own (a portal). */
+  /** The current frame, for something that is drawn on its own (the landing's longboat). */
   frame(): THREE.Matrix4 {
     return this.M.clone();
   }
@@ -546,7 +548,7 @@ class Kit {
     }
   }
 
-  /** A cold light: a crystal's, a waygate's. */
+  /** A cold light: a crystal's. */
   shine(x: number, y: number, z: number, color: THREE.Color, power: number, range: number, pool: number) {
     const at = this.world(x, y, z);
     this.emitters.push({ x: at.x, y: at.y, z: at.z, color, power, range, fire: false });
@@ -2773,21 +2775,49 @@ function bones(k: Kit, c: Ctx) {
 // ---- the way in ----
 
 /**
- * The hex a waygate hangs over: a worn round of stone let into the ground with a few of its kerb stones left, and
- * nothing more. The gate itself is made apart (waygate.ts: it moves, every piece of it), the same one the Harbor has.
+ * Where the party came ashore from the ship (props.ts `landing`), and the way back to her. Out of doors it is her
+ * longboat drawn up: log rollers under her keel, a kedge anchor dug in ahead with her painter made fast to it, and
+ * a lantern on a boathook stuck in the ground beside her. The boat herself is made apart (she slides in: see
+ * ZoneScenery). Under a roof or under ground, where no boat comes, it is the line they came in by: a post driven
+ * into the floor with an iron ring, the line made fast to it and running off the way they came, and the lantern.
  */
-function waygate(k: Kit, c: Ctx) {
+function landing(k: Kit, c: Ctx) {
   const P = c.pal;
-  k.cyl(P.stoneDark, 1.0, 1.0, 0.07, 0, 0, 0, 12);
-  k.cyl(P.stone, 0.9, 0.9, 0.05, 0, 0.05, 0, 12);
-  for (let j = 0; j < 6; j++) {
-    const a = (j / 6) * Math.PI * 2 + 0.3;
-    k.blob(j % 2 ? P.stone : P.stoneDark, 0.1 + c.n(10 + j) * 0.06, 0.07, 0.1, Math.cos(a) * 1.0, 0.04, Math.sin(a) * 1.0, j, a);
+  // Her bow to the open ground, where the party stands: she came in from behind them.
+  k.push(0, 0, 0, faceZ(c.facing));
+  if (c.roofed) {
+    k.cyl(P.woodDark, 0.1, 0.13, 0.95, 0, 0, 0, 7);
+    k.cyl(P.iron, 0.135, 0.135, 0.05, 0, 0.2, 0, 7);
+    k.cyl(P.iron, 0.115, 0.115, 0.05, 0, 0.78, 0, 7);
+    k.cyl(P.wood, 0.13, 0.1, 0.06, 0, 0.95, 0, 7);
+    // The line: three turns about the post, a coil at its foot, and the rest of it away behind into the dark.
+    for (let j = 0; j < 3; j++) k.cyl(ROPE, 0.125, 0.125, 0.04, 0, 0.5 + j * 0.05, 0, 8);
+    k.tube(ROPE, [[0, 0.56, -0.12], [0.04, 0.3, -0.5], [-0.03, 0.06, -0.82], [0, 0.03, -1.0]], () => 0.022, 4, 1, SOLID, true);
+    for (let j = 0; j < 3; j++) k.cyl(ROPE, 0.2 - j * 0.03, 0.2 - j * 0.03, 0.04, 0.42, j * 0.04, 0.2, 9);
+    lantern(k, P, -0.34, 0.3);
+  } else {
+    for (const z of [-0.5, 0.05, 0.55]) k.cyl(P.wood, 0.055, 0.055, 0.95, 0, 0.055, z, 6, (c.n(20 + z) - 0.5) * 0.3, 0, Math.PI / 2);
+    // The kedge, flukes in the ground ahead of her, and her painter back to the stem.
+    k.cyl(P.iron, 0.022, 0.022, 0.36, 0.12, 0, 0.92, 4, 0, 0.5, 0);
+    k.box(P.iron, 0.26, 0.03, 0.04, 0.12, 0.3, 0.84, 0, 0.5);
+    k.tube(P.iron, [[-0.02, 0.03, 0.98], [0.12, -0.02, 1.02], [0.26, 0.03, 0.98]], () => 0.022, 4);
+    k.tube(ROPE, [[0.12, 0.28, 0.86], [0.08, 0.2, 0.84], [0.02, 0.34, 0.8]], () => 0.016, 4, 1, SOLID, true);
+    lantern(k, P, 0.72, 0.1);
   }
-  // Its stone ring faces the south, where the view opens from; its light is seen whole from anywhere.
-  k.portals.push({ matrix: k.frame(), color: P.glyph, deep: P.crystalDeep, stone: P.stone });
-  k.shine(0, 1.9, 0.5, P.glyph, 1.3, 7.5, 3.2);
+  k.landings.push({ matrix: k.frame(), boat: !c.roofed });
+  k.pop();
   if (c.clime === "frost") k.blob(SNOW, 0.3, 0.06, 0.2, 0.7, 0.06, -0.5, 2, 0, 0, 0, SOLID, true);
+}
+
+/** The landing's lantern: a boathook stuck upright in the ground, a ship's lantern hung from its crook, burning. */
+function lantern(k: Kit, P: Pal, x: number, z: number) {
+  k.cyl(P.woodDark, 0.022, 0.028, 1.25, x, 0, z, 5);
+  k.box(P.iron, 0.16, 0.022, 0.022, x + 0.07, 1.22, z);
+  k.box(P.iron, 0.014, 0.1, 0.014, x + 0.14, 1.13, z);
+  k.box(P.iron, 0.12, 0.02, 0.12, x + 0.14, 0.9, z);
+  k.box(P.iron, 0.13, 0.025, 0.13, x + 0.14, 1.08, z);
+  for (const [dx, dz] of [[-0.05, -0.05], [0.05, -0.05], [-0.05, 0.05], [0.05, 0.05]]) k.box(P.iron, 0.012, 0.17, 0.012, x + 0.14 + dx, 0.91, z + dz);
+  k.fire(x + 0.14, 0.93, z, 0.075, { power: 0.9, range: 7.5, pool: 3.2, sparks: 0, small: true });
 }
 
 /** Every kind of thing a hex may carry (`Tile.prop`), and how it is drawn. */
@@ -2831,7 +2861,7 @@ const DRAW = {
   rug,
   stalagmite,
   bones,
-  waygate,
+  landing,
 } satisfies Record<string, (k: Kit, c: Ctx) => void>;
 
 /** The kinds drawn here: every one in the world's PROPS must be among them. */
@@ -2853,8 +2883,13 @@ const GIVES: Record<string, number> = {
 
 type Place = { x: number; y: number; z: number };
 
-/** How long after a map is first shown its waygate bursts open, in seconds: time for the place to rise round it. */
-const GATE_OPENS_AFTER = 1.6;
+/** How long after a map is first shown the longboat slides in to its landing, in seconds (time for the place to rise round it), and how long the slide takes. */
+const BOAT_LANDS_AFTER = 1.1;
+const BOAT_SLIDE = 1.5;
+/** How far back the longboat starts its slide, and how she lies when she has come to rest: heeled over on her bilge, her keel on the rollers. */
+const BOAT_FROM = 2.3;
+const BOAT_HEEL = 0.2;
+const BOAT_REST_Y = 0.2;
 
 export interface SceneryOptions {
   /**
@@ -2887,16 +2922,17 @@ export class ZoneScenery {
   private warm: THREE.MeshBasicMaterial;
   private cool: THREE.MeshBasicMaterial;
   private glow: THREE.MeshBasicMaterial;
-  private gates: Waygate[] = [];
+  /** The longboats on the map's landings: each slides up onto its hex once, a moment after the map is first shown. */
+  private boats: THREE.Group[] = [];
   /**
-   * What stands so tall on its hex that a pointer on it would otherwise land on the ground behind: a waygate's
-   * unseen column (see Waygate.pick). The view reads a hit on one as a click on the hex under it.
+   * What stands up off its hex so that a pointer on it would otherwise land on the ground behind: an unseen box
+   * about each landing (the longboat, the mooring post). The view reads a hit on one as a click on the hex under
+   * it, and lights its parent up as the thing pointed at.
    */
   readonly picks: THREE.Object3D[] = [];
   private motes: MoteField | null = null;
   private since = 1;
-  /** The map's waygates are still shut, waiting to burst open; and how long the map has been shown, in seconds. */
-  private gatesShut = true;
+  /** How long the map has been shown, in seconds: the longboats slide in by it. */
   private shown = 0;
   private still = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -3008,7 +3044,7 @@ export class ZoneScenery {
         this.group.add(mesh);
       }
 
-    // ---- fire: flames, sparks, portals, and the lights the nearest of them carry ----
+    // ---- fire: flames, sparks, and the lights the nearest of them carry ----
     const big = kit.flames.filter((f) => !f.small);
     const small = kit.flames.filter((f) => f.small).slice(0, Math.max(0, FLAME_BUDGET - big.length));
     for (const f of [...big, ...small]) {
@@ -3022,15 +3058,28 @@ export class ZoneScenery {
       this.motes = moteField(kit.motes, 0.11);
       this.group.add(this.motes.points);
     }
-    for (const p of kit.portals) {
-      // (On a map the gate is always open: you came through it. It is made shut only so that it can burst open
-      // once, a moment after the map is first shown: see `update`.)
-      const gate = makeWaygate({ color: p.color, deep: p.deep, stone: p.stone, open: this.still });
-      gate.object.applyMatrix4(p.matrix);
-      this.gates.push(gate);
-      this.picks.push(gate.pick);
-      this.group.add(gate.object);
+    // ---- the landings: the longboat the party came ashore in (the same boat a hero rows in the Harbor), her oars shipped ----
+    for (const l of kit.landings) {
+      const root = new THREE.Group();
+      root.applyMatrix4(l.matrix);
+      const pick = new THREE.Mesh(l.boat ? new THREE.BoxGeometry(1.2, 0.8, 1.9).translate(0, 0.4, 0) : new THREE.BoxGeometry(0.9, 1.3, 0.9).translate(0, 0.65, 0), new THREE.MeshBasicMaterial({ visible: false }));
+      pick.userData.glow = true;
+      root.add(pick);
+      this.picks.push(pick);
+      if (l.boat) {
+        const made = rowboatModel();
+        made.oars.forEach((oar, i) => shipOar(oar, OARLOCKS[i]));
+        made.group.traverse((o) => {
+          if (o instanceof THREE.Mesh) o.castShadow = true;
+        });
+        const boat = new THREE.Group();
+        boat.add(made.group);
+        root.add(boat);
+        this.boats.push(boat);
+      }
+      this.group.add(root);
     }
+    this.landBoats();
     this.emitters = kit.emitters;
     for (const e of kit.emitters) this.lights.push({ at: new THREE.Vector3(e.x, e.y, e.z), fire: e.fire });
     // A fixed handful of lights, moved to whichever fires are nearest the view: the count never changes, so no
@@ -3039,6 +3088,23 @@ export class ZoneScenery {
       const light = new THREE.PointLight("#ffffff", 0, 8, 1.5);
       this.slots.push({ light, of: null, gain: 0 });
       this.group.add(light);
+    }
+  }
+
+  /**
+   * Put each longboat where it is in its slide by now (`shown`): out of sight until it starts, then in from behind
+   * its hex, fast at first and slowing as her keel takes the ground, heeling over onto her bilge as she stops.
+   * For anyone who asked for less motion she is simply there.
+   */
+  private landBoats() {
+    const k = this.still ? 1 : Math.max(0, Math.min(1, (this.shown - BOAT_LANDS_AFTER) / BOAT_SLIDE));
+    const eased = 1 - (1 - k) ** 3;
+    for (const boat of this.boats) {
+      boat.visible = this.still || this.shown >= BOAT_LANDS_AFTER;
+      // A last lurch as she grounds: her bow lifts over the rollers and settles.
+      const lurch = Math.sin(Math.PI * Math.min(1, k * 1.15)) * (1 - k);
+      boat.position.set(0, BOAT_REST_Y + lurch * 0.1, -BOAT_FROM * (1 - eased));
+      boat.rotation.set(-lurch * 0.22, 0, BOAT_HEEL * eased);
     }
   }
 
@@ -3667,12 +3733,11 @@ export class ZoneScenery {
     // A torch on a wall the combat view has cut down burns where its bracket now is.
     for (const s of this.sinking) s.flame.position.y = sunkY(s.y, ...s.sunk);
     this.motes?.tick(clock);
-    // Arriving: the gate you came by bursts open once, when the map has had a moment to come up round it.
-    if (this.gatesShut && (this.shown += dt) > GATE_OPENS_AFTER) {
-      this.gatesShut = false;
-      for (const gate of this.gates) gate.setOpen(true);
+    // Arriving: the longboat you came in slides up onto its landing once, when the map has had a moment to come up round it.
+    if (this.shown < BOAT_LANDS_AFTER + BOAT_SLIDE) {
+      this.shown += dt;
+      this.landBoats();
     }
-    for (const gate of this.gates) gate.update(clock, dark);
     // Glow on the ground is faint by day, when the sun drowns it.
     const shown = 0.1 + 0.9 * dark;
     const waver = 1 + live * (Math.sin(clock * 9.1) * 0.05 + Math.sin(clock * 15.3) * 0.035);
@@ -3722,8 +3787,7 @@ export class ZoneScenery {
       }
     });
     this.motes?.dispose();
-    for (const gate of this.gates) gate.dispose();
-    this.gates = [];
+    this.boats = [];
     this.picks.length = 0;
     this.group.clear();
     this.flames = [];

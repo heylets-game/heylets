@@ -8,7 +8,8 @@
 // the seed a node's map and its dice are made from is rolled afresh and never
 // leaves the server.
 
-import { MAX_PARTY, atlasNodeById, atlasOpen, atlasView, cleanStone, needsStone, nodeOptions, nodePlace, stoneKey, stoneName, stoneOn, type AtlasNodeView, type Lodestone } from "@gantt-quest/world";
+import { MAX_PARTY, atlasNodeById, atlasOpen, atlasView, cleanStone, needsStone, nodeOptions, nodePlace, reachProblem, stoneKey, stoneName, stoneOn, type AtlasNodeView, type Lodestone } from "@gantt-quest/world";
+import { shipOf } from "./db/ships";
 import { spendStone } from "./lodestones";
 import { CAVE_IDLE_MS, createZoneRow, crewPlaces, type ZoneRow } from "./zones";
 
@@ -87,7 +88,9 @@ export async function chartFor(db: D1Database, crewId: string): Promise<Chart> {
 
 /**
  * Set out for a node: the map the crew is already fighting through there, or a fresh one made for a party of
- * this many. Refused unless a route runs to the node from the Harbor or from one they have cleared.
+ * this many (held to as many as the crew's ship carries). Refused unless a route runs to the node from the Harbor
+ * or from one they have cleared, and unless the crew's ship sails that far out (voyage/ships.ts): a map already
+ * being fought through can always be gone back to, whatever the ship.
  *
  * A fresh map is made with the lodestone put into the node's slot (`stone`: what it carries, as it is sent).
  * It comes out of the pack of whoever sets out, and is spent; what it carries is added to the node's own.
@@ -105,6 +108,9 @@ export async function openNode(db: D1Database, crewId: string, playerId: string,
   }
   const live = await liveZone(db, mine?.zone_code ?? null);
   if (live) return { code: live, fresh: false };
+  const { ship } = await shipOf(db, crewId);
+  const tooFar = reachProblem(ship, node.ring, node.name);
+  if (tooFar) return { error: tooFar, status: 409 };
   const set = stone === undefined || stone === null ? null : cleanStone(stone);
   if (stone !== undefined && stone !== null && !set) return { error: "That is no lodestone.", status: 400 };
   if (!set && needsStone(node)) return { error: `${node.name} needs a lodestone in its slot before anyone can set out for it.`, status: 409 };
@@ -114,7 +120,7 @@ export async function openNode(db: D1Database, crewId: string, playerId: string,
   // rolled here and kept here (the chart's own is the crew's id, which anyone in the crew can read).
   const attempt = (mine?.attempts ?? 0) + 1;
   // How much the stone carried goes with the map: the lodestones in its spoils are reckoned from it.
-  const options = nodeOptions(seed, node, Math.min(MAX_PARTY, Math.max(1, Math.round(party))), set ? stoneOn(node, set).added : [], set ? set.length : undefined);
+  const options = nodeOptions(seed, node, Math.min(MAX_PARTY, ship.heroes, Math.max(1, Math.round(party))), set ? stoneOn(node, set).added : [], set ? set.length : undefined);
   const code = await createZoneRow(db, playerId, options, crypto.randomUUID().slice(0, 12), "atlas", crewId, node.id);
   await db
     .prepare(
@@ -130,9 +136,9 @@ export async function openNode(db: D1Database, crewId: string, playerId: string,
  * Look at a node before a muster is called for it (nothing is made and nothing spent): the map already being fought
  * through there, if there is one (`live`: no muster is needed to join it), or what to call the place; or why nobody
  * can set out for it. The same refusals as `openNode`, short of the stone being in the pack: that is found out when
- * the muster starts and the stone is spent.
+ * the muster starts and the stone is spent. `most` is how many heroes the crew's ship carries: the muster's size.
  */
-export async function scoutNode(db: D1Database, crewId: string, nodeId: unknown, stone?: unknown): Promise<{ live: string } | { node: string; place: string; site: string; level: number } | { error: string; status: 400 | 409 }> {
+export async function scoutNode(db: D1Database, crewId: string, nodeId: unknown, stone?: unknown): Promise<{ live: string } | { node: string; place: string; site: string; level: number; most: number } | { error: string; status: 400 | 409 }> {
   const seed = atlasSeed(crewId);
   const node = atlasNodeById(seed, nodeId);
   if (!node || node.kind === "harbor") return { error: "There is no such landfall.", status: 400 };
@@ -144,10 +150,13 @@ export async function scoutNode(db: D1Database, crewId: string, nodeId: unknown,
   }
   const live = await liveZone(db, mine?.zone_code ?? null);
   if (live) return { live };
+  const { ship } = await shipOf(db, crewId);
+  const tooFar = reachProblem(ship, node.ring, node.name);
+  if (tooFar) return { error: tooFar, status: 409 };
   const set = stone === undefined || stone === null ? null : cleanStone(stone);
   if (stone !== undefined && stone !== null && !set) return { error: "That is no lodestone.", status: 400 };
   if (!set && needsStone(node)) return { error: `${node.name} needs a lodestone in its slot before anyone can set out for it.`, status: 409 };
-  return { node: node.id, place: node.name, site: nodePlace(seed, node), level: node.level };
+  return { node: node.id, place: node.name, site: nodePlace(seed, node), level: node.level, most: ship.heroes };
 }
 
 /** A node's map has been cleared: the node is cleared for the crew. True if this is what cleared it. */
