@@ -55,3 +55,11 @@ line off once it is done.
   drawn sailing the route. A silent run past a passage has no night-sail moment.
 - Tune: rocks strike often for a lone hero (a sloop lost two thirds of her hull unsteered in one passage); the share of
   routes with salvage waters (`PASSAGES`), the stretch's length (`VOYAGE_MS`) and what salvage pays.
+- A room's walls and a deck's edges are cut in half (`packages/world/src/roomedges.ts` says which; drawn by
+  `cutColumn` and `wallSide` in `WorldRenderer.ts` and the floor fill in `render/ambience.ts`). Furniture stands on
+  the floor half by its footprint (`onCutFloor` in `hutroom.ts`), anchored on the floor hex beside it: it cannot be
+  anchored on the half itself, small things cannot be set down there, and nobody walks there. Corners are squared
+  (a quarter of the corner hex goes to the floor); a wall with floor on both sides of it is left whole. A corner's
+  face along the side wall takes wallpaper but nothing can be hung on it. Several
+  hex sides share one straight face (a third each on a side wall, half each on a back or front wall), so two wide
+  things hung on neighbouring sides of one wall hex can overlap.

@@ -43,6 +43,7 @@ export * from "./carry";
 export * from "./catalogue";
 export * from "./classabilities";
 export * from "./zone";
+export * from "./roomedges";
 export * from "./atlas";
 export * from "./voyage/seathings";
 export * from "./voyage/drift";

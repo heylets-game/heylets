@@ -205,13 +205,15 @@ describe("furniture anywhere inside its hex", () => {
     expect(placeProblem(room, [], "chair", middle, { x: BIG_REACH + 0.05, z: 0, angle: 0 })).toMatch(/inside the hex/);
   });
 
-  it("puts a stool right up against a wall but not through it", () => {
+  it("puts a stool right up against a wall: onto the half hex a cut wall gave up, as far as its own hex lets it go", () => {
     const toWall = hexCentre(HEX_DIRS[toBackWall]);
     const len = Math.hypot(toWall.x, toWall.z);
     const at = (d: number) => ({ x: (toWall.x / len) * d, z: (toWall.z / len) * d, angle: 0 });
     // The stool is half a unit across, and the wall's side about 0.87 from the middle: square to it, the stool can come to about 0.5.
     expect(placeProblem(room, [], "chair", backFloor, at(0.5))).toBeNull();
-    expect(placeProblem(room, [], "chair", backFloor, at(0.75))).toMatch(/through the wall/);
+    // The back wall is cut across its middle (roomedges.ts): the floor runs on under its near half, and the stool with it.
+    expect(placeProblem(room, [], "chair", backFloor, at(0.75))).toBeNull();
+    expect(placeProblem(room, [], "chair", backFloor, at(BIG_REACH + 0.05))).toMatch(/inside the hex/);
   });
 
   it("keeps big pieces off the doorway", () => {

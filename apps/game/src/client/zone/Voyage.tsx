@@ -21,10 +21,14 @@ import * as THREE from "three";
 import { hexDistance, type HexPos } from "@gantt-quest/core";
 import { LANES, STATIONS, driftField, framePage, lanesOver, seaOf, shipFrame, stationsOn, type Drifting, type SeaThingId, type Station, type Unit, type VoyageOptions, type VoyageState, type ZoneView } from "@gantt-quest/world";
 import type { ZoneSend } from "../useZone";
+import { buildLowPoly } from "../render/gearModels";
 import { tileTop, type WorldRenderer } from "../render/WorldRenderer";
 
 const SQRT3 = Math.sqrt(3);
 const SEA_TOP = tileTop({ q: 0, r: 0, biome: "water", h: 0 });
+/** A mounted harpoon gun: how large the hand weapon's model is built for the deck, and the colour of its trim. */
+const GUN_SCALE = 0.07;
+const GUN_TRIM = "#c9a24a";
 /** How near a tap must fall to something adrift to be taken as aimed at it, in hexes. */
 const TAP_NEAR = 1.4;
 
@@ -127,15 +131,22 @@ function stationModel(station: Station): THREE.Object3D {
     }
     return g;
   }
-  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 0.5, 6), IRON);
-  post.position.y = 0.25;
-  const gun = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 0.8, 7), IRON);
-  gun.position.set(station.side * 0.25, 0.56, 0);
-  gun.rotation.z = (-station.side * Math.PI) / 2.3;
-  const barb = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.24, 5), DARK_WOOD);
-  barb.position.set(station.side * 0.66, 0.66, 0);
-  barb.rotation.z = (-station.side * Math.PI) / 2.3;
-  g.add(post, gun, barb);
+  // The gun itself is the heroes' own harpoon gun (render/gearModels.ts), built large and laid on a swivel post
+  // with its harpoon pointing out over the rail: the same thing a hero carries, as a ship mounts it.
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.11, 0.55, 6), IRON);
+  post.position.y = 0.27;
+  const yoke = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.08, 0.3), IRON);
+  yoke.position.y = 0.56;
+  g.add(post, yoke);
+  const built = buildLowPoly("harpoon-gun", GUN_TRIM);
+  if (built) {
+    const gun = built.model;
+    // Its barrel runs up its own height: tipped over to lie level, muzzle outboard, a little above the rail.
+    gun.scale.setScalar(GUN_SCALE);
+    gun.rotation.z = (-station.side * Math.PI) / 2 + station.side * 0.12;
+    gun.position.set(station.side * 0.12, 0.7, 0);
+    g.add(gun);
+  }
   // Pushed out to the rail.
   g.position.x = station.side * 0.42;
   return g;

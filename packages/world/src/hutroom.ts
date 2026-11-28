@@ -5,6 +5,7 @@
 // Durable Object checks each request against the rules here: where the walls
 // are, where a furnishing may stand, and that furniture is walked around.
 
+import { onFloorPart, squaredWalls } from "./roomedges";
 import type { HutFinish } from "./finishes";
 import { allHexesInGrid, posKey, type HexGrid, type HexPos } from "@gantt-quest/core";
 import { harborPoi, type HarborPlayer, type EmoteMessage, type EmoteRequest, type LookMessage, type LookRequest, type XpMessage } from "./harbor";
@@ -327,6 +328,22 @@ export function footprintCentre(defId: string, pos: HexPos, spot: FloorSpot): { 
   return toRoom(fp.x ?? 0, fp.z ?? 0, spot.angle, mid.x + spot.x, mid.z + spot.z);
 }
 
+/** How near a cut wall's straight face a footprint may come. */
+const WALL_CLEAR = 0.02;
+
+/**
+ * Whether a point of the room is on the floor a cut wall hex gave up (roomedges.ts `squaredWalls`): on the
+ * room's side of the straight face down its middle (a side wall) or across it (a back or front wall), or in the
+ * quarter a corner gave.
+ */
+export function onCutFloor(room: WorldMap, p: { x: number; z: number }): boolean {
+  const hex = hexAt(p.x, p.z);
+  const cut = squaredWalls(room).get(`${hex.q},${hex.r}`);
+  if (!cut) return false;
+  const mid = hexCentre(hex);
+  return onFloorPart(cut, p.x - mid.x, p.z - mid.z, WALL_CLEAR);
+}
+
 /** Why the floor hex `pos` cannot be stood on by a furnishing, or null. */
 function floorProblem(room: WorldMap, pos: HexPos): string | null {
   if (!Number.isInteger(pos.q) || !Number.isInteger(pos.r)) return "That is not a place in the room.";
@@ -377,7 +394,8 @@ export function placeProblem(room: WorldMap, placed: Placed[], defId: string, po
   for (const p of shapeOutline(shape)) {
     const problem = floorProblem(room, hexAt(p.x, p.z));
     if (problem === "The doorway has to stay clear.") return problem;
-    if (problem) return "It would go through the wall.";
+    // (The near half of a wall hex cut square is floor: a piece may stand against the straight wall.)
+    if (problem && !onCutFloor(room, p)) return "It would go through the wall.";
   }
   const flat = isFlat(defId);
   if (floorPieces(placed, flat).some((f) => shapesOverlap(shape, footprintShape(f.defId, f, spotOf(f))))) return flat ? "There is already a rug there." : "Something already stands there.";
