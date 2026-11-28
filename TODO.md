@@ -38,3 +38,20 @@ line off once it is done.
 - A `Release-note: skip` on any one commit in a PR hides the whole squash-merged PR from the notice board (Atlas #500,
   class abilities #494, the enemy rework #650 all needed overrides). Make `skip` apply only to its own `* subject`
   section of a squash message in `apps/game/scripts/release-notes.ts`, or have CI flag a PR whose branch has a `skip`.
+
+## Voyages
+
+- A passage is sailed on a fixed Sloop (`PASSAGE_SHIP` in `apps/game/src/server/atlas.ts`). Read the crew's own ship
+  and her hull from the shipyard (`packages/world/src/voyage/ships.ts`, `crew_ships`) once that is merged, and write
+  her hull back when the voyage ends.
+- Stations still to build (`STATIONS` in `packages/world/src/voyage/voyage.ts`): cannon, pump, crow's nest. Hull hits
+  only take hull off: no breaches to mend with planks yet, and nobody goes overboard.
+- Sea creatures (a spitting squid with a `swims` flag in `ENEMY_KIT`) are not in: boarders are bandits and skeletons.
+- The harpoon is a tap on what is adrift (`zone/Voyage.tsx`): the sweeping aim, a line drawn to what was struck and a
+  reel-in (`SpellFx.harpoon`) are not done, and a second line into wreckage shows nothing while it holds.
+- After a passage is beaten the party goes home: "Sail on to an island beyond" (open the next map from the deck) is
+  not built. A sunk ship only says so in the strip; nobody is sent home, and half the hold is not kept.
+- A passage's mark on the atlas is a place's marker (`AtlasLayer`): it wants its own (a buoy), and the ship is not
+  drawn sailing the route. A silent run past a passage has no night-sail moment.
+- Tune: rocks strike often for a lone hero (a sloop lost two thirds of her hull unsteered in one passage); the share of
+  routes with salvage waters (`PASSAGES`), the stretch's length (`VOYAGE_MS`) and what salvage pays.
