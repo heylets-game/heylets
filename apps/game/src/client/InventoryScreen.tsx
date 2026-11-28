@@ -1501,7 +1501,7 @@ function LodestoneDetail({ stone, total, how, inChest = false }: { stone: Lodest
           ))}
         </ul>
       )}
-      <p>{inChest ? "The crew keeps" : "You carry"} <strong>{total}</strong>{inChest ? " here" : ""}. Put one into a place's slot on the atlas, opened at the waygate, to set out for it: it is spent, and what it says is added to the place. Charters are drawn up and worked at the Chartmaker's in the Harbor.</p>
+      <p>{inChest ? "The crew keeps" : "You carry"} <strong>{total}</strong>{inChest ? " here" : ""}. Put one into a place's slot on the atlas, opened at the waygate, to set out for it: it is spent, and what it says is added to the place. Charters are drawn up and worked at Charter & Trade in the Harbor.</p>
       {how && <p className="muted">{how}</p>}
     </div>
   );
@@ -1547,7 +1547,7 @@ function MaterialDetail({ kind, total, where = "pack" }: { kind: ResourceKind; t
         : where === "at-town" ? <p className="muted">Drag it into the town chest, or shift-click it; right-click to put in part of it.</p>
         : where === "pack" && <p className="muted">Stow it in a chest in your hut to free the square, or hand it to a crewmate in a trade.</p>}
       {price && <p className="muted">The market stall buys it for {price}g each.</p>}
-      {kind === "gem" && <p className="muted">The Chartmaker's buys them for {GEM_PRICE}g each. Sealing a charter there takes gems, and so does annotating one with a boon.</p>}
+      {kind === "gem" && <p className="muted">Charter & Trade buys them for {GEM_PRICE}g each. Sealing a charter there takes gems, and so does annotating one with a boon.</p>}
     </div>
   );
 }

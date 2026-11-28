@@ -25,7 +25,7 @@ describe("the Lapidary", () => {
     // Nothing is haggled over there, and nobody had to build it.
     expect(isKeeperShop("lapidary")).toBe(false);
     const place = KEEPER_PLACES.lapidary;
-    expect(place.title).toBe("The Chartmaker's");
+    expect(place.title).toBe("Charter & Trade");
     expect(place.keeper.id).toBe("keeper:lapidary");
     // Nobody shares a name or a look with her.
     for (const shop of KEEPER_SHOPS) {
