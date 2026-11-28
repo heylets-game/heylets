@@ -11,7 +11,7 @@ import { buildCaveDressing } from "./caveDressing";
 import { reportEnv } from "../ui/env";
 import { makeRenderer } from "./graphics";
 import { apothecaryWallTexture, galleyWallTexture, lapidaryWallTexture, panelTexture, smithyWallTexture, wallpaperTexture } from "./groundArt";
-import { Ambience, type RoomLight, TILE_FILLET, TILE_RADIUS, TORCH_LIFT, dryPatch, hexTop, meadowAt, sideNotches, tallGrass, type BuildingGlow } from "./ambience";
+import { Ambience, type RoomLight, TILE_FILLET, TILE_RADIUS, TORCH_LIFT, dryPatch, endNotches, hexTop, meadowAt, sideNotches, tallGrass, type BuildingGlow } from "./ambience";
 import "./camera.css";
 import { CAMERA_ICON, PINCH_PAN_SLACK, followIconSvg, pixelGlyphSvg, readFollow, writeFollow } from "./cameraFollow";
 import type { HexPos } from "@gantt-quest/core";
@@ -3273,27 +3273,30 @@ export class WorldRenderer {
    * nobody, and has no copy.
    */
   /**
-   * Indoors, the wall hexes in the notches down a room's sides (ambience.ts `sideNotches`), by key, with which
-   * way the room lies from each (1: to its east). Each is drawn as half a column with one straight face toward
-   * the room (`halfWalls`), so a room's side walls run straight; the floor is laid under the half it gave up.
-   * The rules know nothing of it: a thing hung on such a wall is still on one of its hex's sides, and is only
-   * shown on the straight face (`wallSide`).
+   * Indoors, the wall hexes that stand in the notches of a room's floor (ambience.ts `sideNotches`, `endNotches`),
+   * by key: down its sides (`side`), or along its back or front (`end`), and which way the room lies from each
+   * (`room`: 1 is toward +x for a side, toward +z for an end). Each is drawn cut straight where it faces the room
+   * (`cutWalls`): a side wall as half a column, an end wall with its point taken off. The floor is laid under what
+   * it gave up, so a room's walls run straight. The rules know nothing of it: a thing hung on such a wall is
+   * still on one of its hex's sides, and is only shown on the straight face (`wallSide`).
    */
-  private squared = new Map<string, 1 | -1>();
+  private squared = new Map<string, { cut: "side" | "end"; room: 1 | -1 }>();
   private halfWalls = new THREE.Group();
   private halfWallMeshes = new Map<string, THREE.Mesh>();
   private static readonly HALF_WALL = new THREE.MeshLambertMaterial({ color: "#3a2b20", side: THREE.DoubleSide });
 
-  /** Half a wall column, its top at y = 0: the half away from the room, which lies toward `room` (1: +x). */
-  private static halfColumn(room: 1 | -1): THREE.BufferGeometry {
-    const a = (-room * Math.sqrt(3)) / 2 * TILE_RADIUS;
-    const top: [number, number][] = [[0, -TILE_RADIUS], [a, -TILE_RADIUS / 2], [a, TILE_RADIUS / 2], [0, TILE_RADIUS]];
+  /** A cut wall column, its top at y = 0: what is left of the hex on the far side of its straight face. */
+  private static cutColumn(cut: "side" | "end", room: 1 | -1): THREE.BufferGeometry {
+    const a = (Math.sqrt(3) / 2) * TILE_RADIUS;
+    const R = TILE_RADIUS;
+    // The top's outline: half the hex (cut down its middle), or the hex without its point toward the room.
+    const top: [number, number][] =
+      cut === "side" ? [[0, -R], [-room * a, -R / 2], [-room * a, R / 2], [0, R]] : [[-a, (room * R) / 2], [-a, (-room * R) / 2], [0, -room * R], [a, (-room * R) / 2], [a, (room * R) / 2]];
     const v: number[] = [];
     const tri = (...pts: [number, number, number][]) => pts.forEach((p) => v.push(...p));
-    tri([top[0][0], 0, top[0][1]], [top[1][0], 0, top[1][1]], [top[2][0], 0, top[2][1]]);
-    tri([top[0][0], 0, top[0][1]], [top[2][0], 0, top[2][1]], [top[3][0], 0, top[3][1]]);
-    for (let i = 0; i < 4; i++) {
-      const [p, q] = [top[i], top[(i + 1) % 4]];
+    for (let i = 1; i + 1 < top.length; i++) tri([top[0][0], 0, top[0][1]], [top[i][0], 0, top[i][1]], [top[i + 1][0], 0, top[i + 1][1]]);
+    for (let i = 0; i < top.length; i++) {
+      const [p, q] = [top[i], top[(i + 1) % top.length]];
       tri([p[0], 0, p[1]], [q[0], 0, q[1]], [q[0], -TILE_DEPTH, q[1]]);
       tri([p[0], 0, p[1]], [q[0], -TILE_DEPTH, q[1]], [p[0], -TILE_DEPTH, p[1]]);
     }
@@ -3303,24 +3306,31 @@ export class WorldRenderer {
     return geo;
   }
 
-  /** Find the room's notch walls and stand a half column for each. Called when the ground is built. */
+  /** Find the room's notch walls and stand a cut column for each. Called when the ground is built. */
   private squareWalls(state: RenderState) {
-    for (const mesh of this.halfWallMeshes.values()) mesh.geometry.dispose();
+    for (const mesh of this.halfWallMeshes.values()) {
+      mesh.geometry.dispose();
+      (mesh.material as THREE.Material).dispose();
+    }
     this.halfWalls.clear();
     this.halfWallMeshes.clear();
     this.squared.clear();
     if (!state.indoors || !this.ambience.squareEdges) return;
+    const floor = (t: Tile) => (t.biome as string) === "floor";
+    const wall = (there: Tile | undefined) => (there?.biome as string) === "wall";
     const twice = new Set<string>();
-    for (const n of sideNotches(this.tiles, (t) => (t.biome as string) === "floor", (there) => (there?.biome as string) === "wall")) {
+    for (const n of sideNotches(this.tiles, floor, wall)) {
       const k = key(n);
       // A wall with floor on both sides of it is left whole: there is no half to give up.
-      if (this.squared.has(k) && this.squared.get(k) !== -n.side) twice.add(k);
-      this.squared.set(k, -n.side as 1 | -1);
+      if (this.squared.has(k) && this.squared.get(k)!.room !== -n.side) twice.add(k);
+      this.squared.set(k, { cut: "side", room: -n.side as 1 | -1 });
     }
     for (const k of twice) this.squared.delete(k);
-    for (const [k, room] of this.squared) {
+    // The back and front walls: a wall in a side's notch already has its cut, and keeps it.
+    for (const n of endNotches(this.tiles, floor, wall)) if (!this.squared.has(key(n)) && !twice.has(key(n))) this.squared.set(key(n), { cut: "end", room: n.room });
+    for (const [k, { cut, room }] of this.squared) {
       const [q, r] = k.split(",").map(Number);
-      const mesh = new THREE.Mesh(WorldRenderer.halfColumn(room), WorldRenderer.HALF_WALL);
+      const mesh = new THREE.Mesh(WorldRenderer.cutColumn(cut, room), WorldRenderer.HALF_WALL.clone());
       const { x, z } = hexToWorld({ q, r });
       mesh.position.set(x, tileTop(this.tiles.find((t) => t.q === q && t.r === r)), z);
       mesh.castShadow = mesh.receiveShadow = true;
@@ -3329,24 +3339,34 @@ export class WorldRenderer {
       this.halfWalls.add(mesh);
     }
     if (!this.halfWalls.parent) this.scene.add(this.halfWalls);
-    // The whole columns are put away, and the halves stood at the right height, the next time the walls are cut for the camera.
+    // The whole columns are put away, and the cut ones stood at the right height, the next time the walls are cut for the camera.
     this.wallTurn = NaN;
   }
 
   /**
    * Side `side` of wall hex `pos` as it is drawn (hutroom.ts `wallFace` says where the rules have it). On a
-   * squared wall the three sides that faced the room are one straight face two units long: each side is given a
-   * third of it, in order, so what hangs on them keeps its place along the wall.
+   * squared wall the sides that faced the room are one straight face, and each is given its share of it in
+   * order (a third each of a side wall's, half each of an end wall's), so what hangs on them keeps its place
+   * along the wall.
    */
   private wallSide(pos: HexPos, side: number): ReturnType<typeof wallFace> {
-    const room = this.squared.get(key(pos));
+    const sq = this.squared.get(key(pos));
+    if (!sq) return wallFace(pos, side);
     const dir = HEX_DIRS[side];
-    // The sides toward the room: the one straight across, and the two beside it.
-    const toward = room && (room > 0 ? (dir.q === 1 && dir.r <= 0) || (dir.q === 0 && dir.r === 1) : (dir.q === -1 && dir.r >= 0) || (dir.q === 0 && dir.r === -1));
-    if (!room || !toward) return wallFace(pos, side);
     const mid = hexToWorld(pos);
-    const third = 2 / 3;
-    return { x: mid.x, z: mid.z + dir.r * third, nx: room, nz: 0, tx: 0, tz: -room * third };
+    const { room } = sq;
+    if (sq.cut === "side") {
+      // The sides toward the room: the one straight across, and the two beside it.
+      const toward = room > 0 ? (dir.q === 1 && dir.r <= 0) || (dir.q === 0 && dir.r === 1) : (dir.q === -1 && dir.r >= 0) || (dir.q === 0 && dir.r === -1);
+      if (!toward) return wallFace(pos, side);
+      const third = 2 / 3;
+      return { x: mid.x, z: mid.z + dir.r * third, nx: room, nz: 0, tx: 0, tz: -room * third };
+    }
+    // An end wall: the two sides either side of the point it lost.
+    if (dir.r !== room) return wallFace(pos, side);
+    const half = Math.sqrt(3) / 2;
+    const east = dir.q + dir.r / 2 > 0 ? 1 : -1;
+    return { x: mid.x + (east * half) / 2, z: mid.z + room * 0.5, nx: 0, nz: room, tx: room * half, tz: 0 };
   }
 
   private markWalls() {
@@ -3383,7 +3403,11 @@ export class WorldRenderer {
       const top = toward > 0.6 ? kerb : Math.max(raised, tileTop(t));
       // A squared wall's whole column is put away: its half stands in its place, at the same height.
       const half = this.halfWallMeshes.get(key(t));
-      if (half) half.position.y = top;
+      if (half) {
+        half.position.y = top;
+        // In the colour its whole column was painted, so it stands among the others as one of them.
+        if (this.terrain!.instanceColor) this.terrain!.getColorAt(i, (half.material as THREE.MeshLambertMaterial).color);
+      }
       m.compose(new THREE.Vector3(x, top, z), upright, half ? new THREE.Vector3(0, 0, 0) : new THREE.Vector3(1, 1, 1));
       this.terrain!.setMatrixAt(i, m);
     });
@@ -3586,6 +3610,8 @@ export class WorldRenderer {
     // A place's hex keeps its green: the ambience lays no dry grass there, so it would be parched for nothing.
     const placeKeys = this.placeKeys();
     const places = new Set(placeKeys);
+    // The cut walls take their colour from this paint the next time the walls are gone over.
+    if (this.halfWallMeshes.size > 0) this.wallTurn = NaN;
     this.paintedFrom = { terrain: this.terrain, night: this.paintedNight, far: !!this.state?.far, roofed: this.roofed, places: placeKeys.join(";"), reach: this.paintReach() };
     this.tiles.forEach((t, i) => {
       c.set((t.clime && t.clime !== "greenwood" && CLIME_COLOR[t.clime][t.biome]) || (this.state?.far && FAR_COLOR[t.biome]) || BIOME_COLOR[t.biome]);
