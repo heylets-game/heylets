@@ -747,6 +747,12 @@ export class Ambience {
   private lamp = new THREE.PointLight("#ffd7a1", 0, 0, 0);
   /** What a room's floor is laid with: boards, as in the huts and the pub, flagstones (the smithy), or a hut's own finish. Read when the ground is built. */
   floorLook: "planks" | "flags" | { id: string; look: FloorLook } = "planks";
+  /**
+   * Whether laid floors (boards, flags, pier planks) are squared off along their sides: where one row of a floor
+   * stops half a hex short of the rows above and below it, the notch is filled with half a hex of the same floor,
+   * so a ship's deck or a room has straight sides, not a saw's edge. Only how it looks: nobody stands on a half hex.
+   */
+  squareEdges = false;
   /** Whether the hut's hanging lamp is lit. Off, the room is lit only by its candles, lanterns and fires. */
   private lampOn = true;
   /**
@@ -1216,6 +1222,47 @@ export class Ambience {
           normals.push(nx, ny, nz);
           uvs.push((p.x + x) / GROUND_SPAN, (p.z + z) / GROUND_SPAN);
         });
+      }
+      // Squared off: half a hex of the same floor in each notch along its sides, and a plain face down its outer edge.
+      if (this.squareEdges) {
+        const at = (q: number, r: number) => `${q},${r}`;
+        const laid = new Set(under.map((t) => at(t.q, t.r)));
+        const others = new Map(tiles.map((t) => [at(t.q, t.r), t]));
+        const edge: number[] = [];
+        const HALF = Math.sqrt(3) / 2;
+        for (const t of under) {
+          for (const side of [-1, 1]) {
+            // The hex beside it in its own row, if no floor is there (and nothing else that stands: only water or nothing).
+            const [hq, hr] = [t.q + side, t.r];
+            const there = others.get(at(hq, hr));
+            if (laid.has(at(hq, hr)) || (there && (there.biome as string) !== "water")) continue;
+            // A notch, if the floor comes round it above or below: the rows there reach half a hex further.
+            const [above, below] = side < 0 ? [at(hq + 1, hr - 1), at(hq, hr + 1)] : [at(hq, hr - 1), at(hq - 1, hr + 1)];
+            if (!laid.has(above) && !laid.has(below)) continue;
+            const p = place(t);
+            // The middle of that hex, and the half of it on this floor's side.
+            const [cx, y, cz, s] = [p.x + side * HALF * 2, p.y + 0.006, p.z, -side];
+            const corners: [number, number][] = [[0, -TILE_RADIUS], [s * HALF, -TILE_RADIUS / 2], [s * HALF, TILE_RADIUS / 2], [0, TILE_RADIUS]];
+            for (const i of s > 0 ? [0, 3, 2, 0, 2, 1] : [0, 1, 2, 0, 2, 3]) {
+              const [x, z] = corners[i];
+              positions.push(cx + x, y, cz + z);
+              normals.push(0, 1, 0);
+              uvs.push((cx + x) / GROUND_SPAN, (cz + z) / GROUND_SPAN);
+            }
+            // Its outer face, straight down: what shows of the floor's side from beyond it.
+            const [z0, z1, low] = [cz - TILE_RADIUS, cz + TILE_RADIUS, y - 3];
+            const quad: [number, number, number][] = side > 0 ? [[cx, y, z0], [cx, y, z1], [cx, low, z1], [cx, y, z0], [cx, low, z1], [cx, low, z0]] : [[cx, y, z1], [cx, y, z0], [cx, low, z0], [cx, y, z1], [cx, low, z0], [cx, low, z1]];
+            for (const v of quad) edge.push(...v);
+          }
+        }
+        if (edge.length > 0) {
+          const sides = new THREE.BufferGeometry();
+          sides.setAttribute("position", new THREE.Float32BufferAttribute(edge, 3));
+          sides.computeVertexNormals();
+          const face = new THREE.Mesh(sides, new THREE.MeshLambertMaterial({ color: biome === "dock" ? "#6b4a2c" : "#4a3a2e" }));
+          face.receiveShadow = true;
+          this.group.add(face);
+        }
       }
       const sheet = new THREE.BufferGeometry();
       sheet.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));

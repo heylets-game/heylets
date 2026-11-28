@@ -1675,6 +1675,8 @@ export class WorldRenderer {
     // The ground is redrawn for a new map, and whenever this one has more or fewer hexes than it was drawn with.
     const hexCount = state.map.tiles.length;
     this.ambience.floorLook = state.floor ?? "planks";
+    // A ship's deck and a room indoors have straight sides (ambience.ts `squareEdges`); a pier or a yard out of doors keeps its hexes.
+    this.ambience.squareEdges = !!state.openSea || !!state.indoors;
     // A hut's wallpaper or floor changed while it is open (its owner chose another from Nell's): papered and laid again.
     const floorKey = dressingKey(state.floor ?? "planks");
     const relaid = !first && floorKey !== this.floorKey;
