@@ -190,7 +190,7 @@ export function createZone(code: string, seed: string, options: ZoneOptions): Zo
   }
   // A ship's deck has no mouth to it, no room to be made and no bell: it is the sea's map, and keeps its own state.
   if (options.voyage) {
-    state.voyage = newVoyage(options.voyage);
+    state.voyage = newVoyage(options.voyage, seed);
     return state;
   }
   ensureMouth(state);

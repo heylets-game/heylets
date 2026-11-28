@@ -95,7 +95,7 @@ describe("a harpoon gun", () => {
       state = sailTo(state, ms);
       if (state.encounter) break;
       const v = state.voyage!;
-      const thing = driftField(seaOf(state.seed, v), v.t, v.steers, new Set(v.taken)).find((d) => (d.kind === "driftwood" || d.kind === "crate" || d.kind === "barrel") && d.x > gun.x + 0.5 && Math.hypot(d.x - gun.x, d.y - gun.y) < STATIONS.harpoon.reach! - 0.5);
+      const thing = driftField(seaOf(v), v.t, v.steers, new Set(v.taken)).find((d) => (d.kind === "driftwood" || d.kind === "crate" || d.kind === "barrel") && d.x > gun.x + 0.5 && Math.hypot(d.x - gun.x, d.y - gun.y) < STATIONS.harpoon.reach! - 0.5);
       if (thing) return { state, gun, thing };
     }
     throw new Error("nothing came within reach before the boarders did");
@@ -113,7 +113,7 @@ describe("a harpoon gun", () => {
     expect(state.voyage!.taken).toEqual([thing.n]);
     // It is gone from the sea, and the gun is not ready again at once.
     const v = state.voyage!;
-    expect(driftField(seaOf(state.seed, v), v.t, v.steers, new Set(v.taken)).some((d) => d.n === thing.n)).toBe(false);
+    expect(driftField(seaOf(v), v.t, v.steers, new Set(v.taken)).some((d) => d.n === thing.n)).toBe(false);
     expect(fails(state, { type: "harpoon", by: "ann", unit: "ann", station: "harpoon-starboard", aim })).toMatch(/hauled in/);
   });
 

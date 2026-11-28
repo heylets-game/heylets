@@ -168,6 +168,11 @@ export interface RenderState {
    */
   far?: boolean;
   /**
+   * The sea on this map is played on (a ship's deck at sea: things adrift are pointed at): every hex of its
+   * water is kept, however far from land, so all of it can be clicked.
+   */
+  openSea?: boolean;
+  /**
    * What lies round the map. "sea" (or nothing said) is the open sea. Any other is a void the land floats over as
    * a thick slab of rock, with slow cloud below and the distance lost in haze (render/backdrop.ts): `mist` pale
    * grey-green, `abyss` near-black blue with drifting motes, `lava` a molten glow from underneath, `frost` a pale
@@ -2980,7 +2985,7 @@ export class WorldRenderer {
           // A map that is all sea is drawn whole, and so is a map of the world: its seas are part of it, and what
           // lies round it is mist, not water.
           // Nor is any of it left out over a void: there is no sea there to show in its place.
-          if (land.length === 0 || state.far || this.backdropKind !== "sea") return false;
+          if (land.length === 0 || state.far || state.openSea || this.backdropKind !== "sea") return false;
           // The Harbor's sea is only as wide as a boat can go (HARBOR_SEA_REACH), and all of it is drawn, so its
           // edge is where the rowing stops.
           if (this.mapCode === "harbor") return false;

@@ -162,6 +162,7 @@ import * as THREE from "three";
 import { SpellFx, WAVE_PACE } from "./render/SpellFx";
 import { DREAD, FETTER, FIELD_LOOKS, fieldReach } from "./render/signatureMoves";
 import { TacticsLayer, type Overlay } from "./render/TacticsLayer";
+import { useVoyage } from "./zone/Voyage";
 import { spriteDataUrl } from "./render/sprites";
 import { WorldRenderer, hexToWorld, tileTop, type RenderState } from "./render/WorldRenderer";
 import { HudBar, type HudSlot } from "./ui/Hud";
@@ -2128,6 +2129,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
 
   // The dev toolbox's way in: while this zone is on screen it can send dev actions and arm a tool.
   const send = zone.send;
+  // A ship at sea: its drift field, its stations and its strip (zone/Voyage.tsx). Nothing, on any other map.
+  const voyage = useVoyage(renderer, state, self, send);
   useEffect(() => {
     setZoneDev({ open: { code, send: (op) => send({ type: "dev", dev: op }) } });
     return () => setZoneDev({ open: null, tool: null, heroes: [], flags: NO_FLAGS, picked: null });
@@ -2191,6 +2194,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       ],
       // Lit tiles are a turn's movement; walking freely, nothing is lit.
       freeRoam: !fighting,
+      ...(state.options.voyage ? { openSea: true } : {}),
       // Underground, light comes only from torches (held, or lying where they were thrown) and fire.
       lights: state.options.biome === "caves" ? Object.keys(state.lights ?? {}).map((k) => { const [q, r] = k.split(",").map(Number); return { q, r }; }) : undefined,
       reach,
@@ -2692,6 +2696,8 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
   };
 
   click.current = (pos, clicked, chosen) => {
+    // On a voyage a tap on the water is a harpoon's, not a walk's.
+    if (!clicked && voyage.click(pos)) return;
     // Any click is a new order: a walk up to the waygate (or to something to search) that was under way no longer ends there.
     gateNext.current = null;
     lootNext.current = null;
@@ -3297,6 +3303,7 @@ export function ZoneView({ code, me, refresh, onLeave }: { code: string; me: Me;
       }}
     >
       <div className="stage" ref={mount} />
+      {voyage.hud}
       {/* The edge of the screen while a fight is on: red while you wait, gold when it is yours. */}
       <div className="zone-frame" aria-hidden />
 

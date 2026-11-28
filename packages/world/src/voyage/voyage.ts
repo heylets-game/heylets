@@ -45,7 +45,7 @@ export interface VoyageOptions {
 export const VOYAGE_MS = 150_000;
 export const VOYAGE_TAIL_MS = 14_000;
 /** How many hexes of water lie round the deck on the map: room for what comes alongside. */
-export const DECK_MARGIN = 4;
+export const DECK_MARGIN = 7;
 /** When boarders come over the rail, as shares of the stretch. */
 export const BOARDINGS = [0.3, 0.68];
 /** The most lanes the helm may carry her off her course, either way. */
@@ -77,6 +77,8 @@ export interface Station {
 
 /** The voyage as a map's state keeps it. */
 export interface VoyageState {
+  /** What its sea is made from: its own, not the map's seed, so a client may be told it and draw the same sea. */
+  sea: string;
   /** Time at sea so far, in ms: it stands still while a fight is on. */
   t: number;
   /** The server's clock when `t` was last counted (null until the room first tells the time). */
@@ -141,17 +143,25 @@ export function shipFrame(v: VoyageOptions, p: HexPos): { x: number; y: number }
   const at = flat(p);
   return { x: at.x - mid.x, y: mid.y - at.y };
 }
+/**
+ * Where a point of the ship's frame is on the page (a hex's step being 1: across, and down), for whoever draws
+ * the sea: the same reckoning as `shipFrame`, the other way.
+ */
+export function framePage(v: VoyageOptions, at: { x: number; y: number }): { x: number; y: number } {
+  const mid = flat(hexAt(DECK_MARGIN + (v.deck.cols - 1) / 2, DECK_MARGIN + (v.deck.rows - 1) / 2));
+  return { x: mid.x + at.x, y: mid.y - at.y };
+}
 /** Her hull in that frame: how far it reaches across, ahead and astern of the middle of her deck. */
 export const hullOf = (v: VoyageOptions) => ({ half: v.deck.cols / 2, fore: (v.deck.rows * SQRT3) / 4, aft: (v.deck.rows * SQRT3) / 4 });
 
 // ---------- the sea ----------
 
-export const newVoyage = (v: VoyageOptions): VoyageState => ({
-  t: 0, now: null, ms: v.ms ?? VOYAGE_MS, steers: [], taken: [], struck: [], held: {}, hull: Math.min(v.hull, v.sound ?? v.hull), hullMax: v.hull, hold: [], holdMax: v.hold, ready: {}, boarded: 0,
+export const newVoyage = (v: VoyageOptions, seed: string): VoyageState => ({
+  sea: `sea${seedFromString(`${seed}|sea`)}`, t: 0, now: null, ms: v.ms ?? VOYAGE_MS, steers: [], taken: [], struck: [], held: {}, hull: Math.min(v.hull, v.sound ?? v.hull), hullMax: v.hull, hold: [], holdMax: v.hold, ready: {}, boarded: 0,
 });
 
-/** The sea a map's voyage is sailed through: its own, from the map's seed. */
-export const seaOf = (seed: string, voyage: Pick<VoyageState, "ms">): Sea => ({ seed: `${seed}|sea`, ms: voyage.ms });
+/** The sea a voyage is sailed through. */
+export const seaOf = (voyage: Pick<VoyageState, "sea" | "ms">): Sea => ({ seed: voyage.sea, ms: voyage.ms });
 
 /** How far the helm has put her over, in lanes: starboard is +. */
 export const lanesOver = (voyage: Pick<VoyageState, "steers">): number => voyage.steers.reduce((n, s) => n + s.dir, 0);
@@ -178,7 +188,7 @@ export function looseHarpoon(v: VoyageOptions, voyage: VoyageState, seed: string
   if (station.side !== 0 && aim.x * station.side <= 0) return { error: "That gun does not bear on the other side." };
   if (voyage.hold.length >= voyage.holdMax) return { error: "The hold is full." };
   voyage.ready[station.id] = voyage.t + def.reload;
-  const sea = seaOf(seed, voyage);
+  const sea = seaOf(voyage);
   const hit = harpoonHit(sea, voyage.t, voyage.steers, new Set(voyage.taken), shipFrame(v, station.pos), aim, def.reach!, def.slack);
   if (!hit) return { miss: true };
   const needs = SEA_THINGS[hit.kind].harpoons ?? 1;
@@ -223,7 +233,7 @@ export function passSea(v: VoyageOptions, voyage: VoyageState, seed: string, ms:
   if (voyage.outcome || ms <= 0) return out;
   const [from, to] = [voyage.t, voyage.t + ms];
   voyage.t = to;
-  const sea = seaOf(seed, voyage);
+  const sea = seaOf(voyage);
   for (const thing of hullStrikes(sea, from, to, voyage.steers, hullOf(v), new Set([...voyage.taken, ...voyage.struck]))) {
     voyage.struck.push(thing.n);
     delete voyage.held[thing.n];
@@ -262,4 +272,4 @@ export function holdShare(voyage: Pick<VoyageState, "hold">, among: number): { g
 }
 
 /** Where a thing with a line in it is now, for whoever draws the line: null once it is gone. */
-export const heldThing = (seed: string, voyage: VoyageState, n: number): Drifting | null => driftAt(seaOf(seed, voyage), n, voyage.t, voyage.steers);
+export const heldThing = (voyage: VoyageState, n: number): Drifting | null => driftAt(seaOf(voyage), n, voyage.t, voyage.steers);
