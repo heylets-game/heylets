@@ -13,7 +13,7 @@ import { hexDistance, type HexPos } from "@gantt-quest/core";
 import { FISH, FISH_IDS, type FishDef, type FishRarity, type Water } from "./fishcatalog";
 import { FISH_SPOTS, bitesUnder, type CastSky, type FishSpot, type Vessel } from "./fishing";
 import { GAME_DAY_MS, harborSky } from "./gameclock";
-import { HARBOR_BOATS, HARBOR_BRIDGE, HARBOR_CAVE, HARBOR_LAPIDARY, HARBOR_PLOTS, HARBOR_RING, HARBOR_GATHER, HARBOR_LIGHTHOUSE, HARBOR_PIERS, HARBOR_PUB, HARBOR_ROCKS, HARBOR_SIDES, HARBOR_SPAWN, HARBOR_WRECK, fishSpotAt, generateHarbor, seaEdge, waterSpotAt } from "./harbor";
+import { HARBOR_BERTHS, HARBOR_BOATS, HARBOR_BRIDGE, HARBOR_CAVE, HARBOR_LAPIDARY, HARBOR_PLOTS, HARBOR_RING, HARBOR_GATHER, HARBOR_LIGHTHOUSE, HARBOR_PIERS, HARBOR_PUB, HARBOR_ROCKS, HARBOR_SIDES, HARBOR_SPAWN, HARBOR_WRECK, fishSpotAt, generateHarbor, seaEdge, waterSpotAt } from "./harbor";
 import { tileAt, type WorldMap } from "./map";
 import { makeRng, seedFromString, type Rng } from "./rng";
 
@@ -117,7 +117,7 @@ let places: Places | null = null;
 function placesOf(): Places {
   if (places) return places;
   const land = landOf(HARBOR);
-  const kept = new Set([...HARBOR_ROCKS, HARBOR_WRECK, ...HARBOR_BOATS.map((b) => b.at)].map(key));
+  const kept = new Set([...HARBOR_ROCKS, HARBOR_WRECK, ...HARBOR_BOATS.map((b) => b.at), ...HARBOR_BERTHS].map(key));
   const near: HexPos[] = [];
   const far: HexPos[] = [];
   for (const t of HARBOR.tiles) {

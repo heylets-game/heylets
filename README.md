@@ -1,6 +1,6 @@
 # The Harbor of Heylets
 
-A live co-op game. Your crew shares a harbour town. From the waygate in its square you open the crew's atlas, a chart of places that grows as you clear them, and step through to a freshly generated map: a ruin, a snowfield, a cave, a stronghold. You walk it freely, fight what lives there turn by turn on its hexes, search what they leave behind, and bring the loot home.
+A live co-op game. Your crew shares a harbour town. From the crew's ship at the pier you open the crew's atlas, a chart of places that grows as you clear them, and sail out to a freshly generated map: a ruin, a snowfield, a cave, a stronghold. You walk it freely, fight what lives there turn by turn on its hexes, search what they leave behind, and bring the loot home.
 
 - **Play:** https://harbor.heylets.party
 - **Staging:** https://harbor-staging.heylets.party
@@ -17,13 +17,14 @@ It runs entirely on Cloudflare: Workers, Durable Objects, D1, Workers AI and Ema
 - **Gathering:** fish from anywhere along the shore, fell trees, work the quarry. Fishing is a fight with one fish at a time, costs no stamina, and is best where the fish shadows show (holes that move with the time of day and the weather); the quarry is thirty seconds at a rock face, hunting for the seam; felling is played through your hero's eyes: thirty seconds chopping, then thirty seconds splitting the logs on a block.
 - **Your hut:** buy a plot, fill a resource bin to raise a shack, then furnish it, craft for it and upgrade it. Rest there to recover.
 - **The pub:** a meal that gives back a gathering outing, table games played for a stake, the regulars and their errands, and traveling salesmen who drop in from time to time.
-- **Crew projects:** pay together into the Apothecary and Smithy first; once both stand, the Lighthouse and the Galley unlock.
+- **Crew projects:** pay together into the Apothecary and Smithy first; once both stand, the Lighthouse and the Galley unlock. The works' Shipyard tab builds the crew's bigger ships, the Brig and then the Galleon, which rise on the slipway beside the pier as they are paid for.
 - **Around town:** the market stall, the notice board with each release's news, Charter & Trade (where charters are drawn up and worked), the town chest the crew shares, and trading or giving gear to crewmates.
 
-**The atlas** is the crew's chart of the world, opened at the waygate. Setting out for a place on it is a voyage.
+**The atlas** is the crew's chart of the world, opened aboard the crew's ship at the middle pier. Setting out for a place on it is a voyage.
+- **The ship:** every crew starts with a Sloop. A ship sets how far out on the atlas the crew can go and how many heroes a voyage takes: the Sloop carries four as far as three landfalls out, the Brig five as far as seven, the Galleon six anywhere. Her hull is mended with wood at the works.
 - **Places:** each node is a place to clear. Clearing one opens the ones beyond it; lookouts lift the cloud over a wide stretch, and lairs hold a boss.
 - **Charters:** setting out for a place takes a charter, laid in its slot. A charter can carry modifiers that make the map harder and its bounty richer.
-- **Setting out:** when one of you sets out, everyone in town is asked whether they are coming.
+- **Setting out:** when one of you sets out, everyone in town is asked whether they are coming. You come ashore by the ship's longboat, and walk back to it to leave.
 
 **A map** is one place on the atlas, generated from a seed.
 - **Walking:** out of a fight, you walk where you like. A fight starts when you come close to an enemy band, and other bands that hear it join in.

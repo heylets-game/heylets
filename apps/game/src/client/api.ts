@@ -1,7 +1,7 @@
 // HTTP helpers for the Harbor screens.
 
 import type { StatKey } from "@gantt-quest/core";
-import type { FinishKind, Gossip, HutFinish, Muster, MusterAnswer, SowWith } from "@gantt-quest/world";
+import type { CrewShip, FinishKind, Gossip, HutFinish, Muster, MusterAnswer, SowWith } from "@gantt-quest/world";
 import type { Appearance, BaitId, BoatId, RodId, CarryState, FishSpot, GatherChoice, HarborXpStatus, GatherSpot, HarborWorks, HutSummary, ItemDef, Lodestone, ProjectAmounts, PublicHero, Resources, SalesEntry, SalesmanId, SalesmanVisit, ShopEntry, Throwable, TradeSide } from "@gantt-quest/world";
 import { devTools } from "./devTools";
 import { actAs, actingHero } from "./party";
@@ -306,6 +306,8 @@ export const api = {
   /** Ask a keeper to take something off a price: `ask` is one of HAGGLE_ASKS. One try a day for each thing. */
   haggle: (shop: string, key: string, ask: string) => request<HaggleResult>("/api/keeper/haggle", { shop, key, ask }),
   galley: () => request<GalleyView>("/api/galley"),
+  /** Mend the crew's ship with your own wood: as much as her hull needs, or as far as your wood goes. */
+  mendShip: () => request<{ wood: number; ship: CrewShip; stock: ProjectAmounts }>("/api/ship/mend", {}),
   giveToProject: (projectId: string, give: ProjectAmounts) => request<Works & { completed: boolean; xp?: XpResult }>("/api/projects/give", { projectId, give }),
   hut: () => request<Hut>("/api/hut"),
   craft: (defId: string) => request<{ ok: true; xp?: XpResult }>("/api/hut/craft", { defId }),

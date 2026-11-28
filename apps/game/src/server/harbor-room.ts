@@ -144,7 +144,7 @@ export class HarborRoom extends DurableObject<Env> {
     // The crew's muster: how it stands; one called; an answer to it. (The worker has checked who is asking.)
     if (pathname === "/muster") return Response.json({ muster: await this.musterNow() });
     if (pathname === "/muster/call") {
-      const body = (await request.json().catch(() => null)) as { by?: MusterMember; to?: { node: string; place: string; site?: string; level?: number }; stone?: unknown } | null;
+      const body = (await request.json().catch(() => null)) as { by?: MusterMember; to?: { node: string; place: string; site?: string; level?: number; most?: number }; stone?: unknown } | null;
       if (!body?.by?.id || !body.to?.node) return Response.json({ error: "Nothing to muster for." }, { status: 400 });
       const kept = await this.ctx.storage.get<KeptMuster>("muster");
       if (kept && musterOpen(kept.muster)) {
@@ -263,7 +263,7 @@ export class HarborRoom extends DurableObject<Env> {
 
   /**
    * They set out: the map is made for as many heroes as the ready bring (their parties too), with the caller's
-   * lodestone, and everyone is told its code. Unless that is more than a map takes: then the caller is given time to
+   * lodestone, and everyone is told its code. Unless that is more than the crew's ship carries (the muster's `most`): then the caller is given time to
    * choose who stays behind (`left`: who they chose, with their "start"), and it sets out once they have, or once
    * their time is up.
    */

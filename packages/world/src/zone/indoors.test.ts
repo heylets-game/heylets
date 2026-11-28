@@ -104,7 +104,7 @@ describe("maps under a roof and under ground", () => {
             expect(posts, where).not.toContain(posKey(chest.pos));
           }
           expect(plan.map.pois.length, where).toBeGreaterThanOrEqual(1);
-          expect(plan.map.tiles.filter((t) => t.prop === "waygate").length, where).toBe(1);
+          expect(plan.map.tiles.filter((t) => t.prop === "landing").length, where).toBe(1);
           expect(plan.groups.length, where).toBeLessThanOrEqual(4);
           bands += plan.groups.length;
         }
@@ -156,7 +156,7 @@ describe("maps under a roof and under ground", () => {
         expect(plan.map.tiles.some((t) => t.biome === "rock" && t.h > 2.2)).toBe(true);
         if (floor.some((t) => t.elev === 2)) shelves++;
         if (plan.map.tiles.some((t) => t.biome === "water")) pools++;
-        expect(plan.map.tiles.some((t) => t.prop === "crystal" || t.prop === "waygate")).toBe(true);
+        expect(plan.map.tiles.some((t) => t.prop === "crystal" || t.prop === "landing")).toBe(true);
         if (site === "hollow") expect(plan.map.tiles.some((t) => t.prop === "bones" || t.prop === "ribs" || t.prop === "skull")).toBe(true);
       }
     }

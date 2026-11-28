@@ -25,11 +25,26 @@ export interface ProjectDef {
   open: boolean;
   /** Projects the crew must have built before this one can be paid into. */
   requires?: string[];
+  /** The group it is listed under (PROJECT_GROUPS): its projects are shown together, on a tab of their own. None: with the town's buildings. */
+  group?: ProjectGroupId;
 }
+
+/**
+ * Groups of projects that are shown together, apart from the town's buildings. A project says which it is in
+ * (`ProjectDef.group`); the works lists each group on a tab of its own, by this name.
+ */
+export const PROJECT_GROUPS = {
+  shipyard: { name: "Shipyard", blurb: "Bigger ships for the crew, built on the slipway beside the pier. Each sails further out on the atlas and carries more heroes." },
+} satisfies Record<string, { name: string; blurb: string }>;
+export type ProjectGroupId = keyof typeof PROJECT_GROUPS;
 
 // The Apothecary and the Smithy are the Harbor's first buildings and open from
 // the start. The Lighthouse and the Galley are the second tier: they unlock
 // once both workshops stand (see `projectLock`).
+//
+// The Brig and the Galleon are the shipyard's (group "shipyard"): the crew's
+// bigger ships (voyage/ships.ts says what each one is), built one after the
+// other. Their costs are tuning values, like the ships' own numbers.
 export const PROJECTS: ProjectDef[] = [
   {
     id: "apothecary",
@@ -65,7 +80,29 @@ export const PROJECTS: ProjectDef[] = [
     open: true,
     requires: ["apothecary", "smithy"],
   },
+  {
+    id: "brig",
+    name: "Brig",
+    blurb: "Two masts and square sails, built on the slipway beside the pier.",
+    benefit: "The crew's ship becomes a Brig: she sails to landfalls up to 7 out from the Harbor, and carries 5 heroes.",
+    cost: { gold: 400, wood: 120, iron: 40, fur: 20 },
+    open: true,
+    group: "shipyard",
+  },
+  {
+    id: "galleon",
+    name: "Galleon",
+    blurb: "Three masts and a high stern: the biggest hull the slipway will take.",
+    benefit: "The crew's ship becomes a Galleon: she sails anywhere on the atlas, and carries 6 heroes.",
+    cost: { gold: 1200, wood: 300, iron: 120, fur: 60 },
+    open: true,
+    requires: ["brig"],
+    group: "shipyard",
+  },
 ];
+
+/** The projects of one group, in catalogue order; with no group, the town's buildings. */
+export const projectsIn = (group?: ProjectGroupId): ProjectDef[] => PROJECTS.filter((p) => p.group === group);
 
 export const projectById = (id: string): ProjectDef | undefined => PROJECTS.find((p) => p.id === id);
 

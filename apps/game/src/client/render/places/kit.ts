@@ -8,7 +8,8 @@
 //   - on the group's `userData`: `glows` (lit windows and lanterns, a BuildingGlow each) and `panes` (the glass
 //     made with `warmPane`), which come up at dusk; `smoke` (a chimney top); `beacon` and `shine` (a lighthouse's
 //     lantern, and the ironwork its beam lights); `glowAt` (the light of glowing mushrooms); `door` (the hex that
-//     pointing anywhere on the model means); and the parts the renderer moves: a chest's `lid`, a crate's `body`,
+//     pointing anywhere on the model means); `lit` (the part of the model that lights up under the pointer, where
+//     that is not all of it); and the parts the renderer moves: a chest's `lid`, a crate's `body`,
 //     the town chest's `townLid`, `townShine` and `flag`;
 //   - on a mesh's `userData`: `glow` for one that is light and not a solid (no shadow, no ink, folded apart).
 //
@@ -16,8 +17,8 @@
 
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import type { HexPos } from "@gantt-quest/core";
 import type { Poi, PoiKind, WorldMap } from "@gantt-quest/world";
-import type { Waygate } from "../waygate";
 import type { RenderState } from "../WorldRenderer";
 
 /** What a model is told of the scene it is built for: the renderer says these afresh for every model. */
@@ -35,12 +36,19 @@ export interface PlaceScene {
   /** How far open the town chest's lid is now (0 shut, 1 thrown back), and its angle about its hinges when it is thrown back. */
   townLidAt: number;
   townLidThrown: number;
-  /** Whether the town's waygate is open now: a gate is made as it stands. */
-  gateOpen: boolean;
-  /** To be called the moment a waygate begins to burst open (its sound hangs on it). */
-  onWaygateBurst(): void;
-  /** The renderer's waygates: a model that makes one puts it here, to be turned each frame and let go with the model. */
-  gates: Waygate[];
+  /**
+   * The middle of a hex's top (any hex of the map), in the space of `poi`'s model as the renderer will set it down:
+   * for a model that reaches over more ground than its own hex (a ship in the water beyond her pier).
+   */
+  groundAt(poi: Poi, pos: HexPos): THREE.Vector3;
+  /** The parts of the places that move by themselves: a model that makes one (a fountain, a ship on the swell) puts it here, to be turned each frame and let go with the model. */
+  live: LivePart[];
+}
+
+/** A part of a place's model that moves by itself: turned once a frame (`time` in seconds, `dark` 0 by day to 1 at night), and let go when the places are rebuilt. */
+export interface LivePart {
+  update(time: number, dark?: number): void;
+  dispose(): void;
 }
 
 /** The kit: the group being built, three helpers to build it with, and the scene. */

@@ -104,9 +104,10 @@ export function tileCost(t: Tile): number {
  * `gate` is a locked door there, standing on a `gate` tile; `crate` and `glowcap` stand about a delve's floor.
  * `lot`, `site` and `plot` exist only in the Harbor: a plot for sale, one bought with its shack not yet up, and a
  * crew member's hut. `board` and `shop` are its notice board and market stall, and `dealer` is where one stands to
- * deal with whoever keeps a shop, or with the pub's dealer. `door` is the way out of a hut's room.
+ * deal with whoever keeps a shop, or with the pub's dealer. `door` is the way out of a hut's room. `fountain` is
+ * the fountain in the Harbor's square, and `ship` the crew's ship at the pier (its `tier` says which: an index into SHIPS).
  */
-export type PoiKind = "waygate" | "cave" | "landing" | "lair" | "shrine" | "cache" | "camp" | "plot" | "board" | "shop" | "ring" | "dice" | "door" | "works" | "pub" | "counter" | "shoals" | "crew" | "tide" | "trader" | "rocks" | "wreck" | "lot" | "site" | "pickup" | "fishing" | "felling" | "quarry" | "apothecary" | "smithy" | "galley" | "lighthouse" | "gate" | "dealer" | "crate" | "glowcap" | "lapidary" | "townchest" | "garden" | "well" | "finishes" | "bell";
+export type PoiKind = "fountain" | "ship" | "cave" | "landing" | "lair" | "shrine" | "cache" | "camp" | "plot" | "board" | "shop" | "ring" | "dice" | "door" | "works" | "pub" | "counter" | "shoals" | "crew" | "tide" | "trader" | "rocks" | "wreck" | "lot" | "site" | "pickup" | "fishing" | "felling" | "quarry" | "apothecary" | "smithy" | "galley" | "lighthouse" | "gate" | "dealer" | "crate" | "glowcap" | "lapidary" | "townchest" | "garden" | "well" | "finishes" | "bell";
 
 export interface Poi {
   id: string;
@@ -131,7 +132,10 @@ export interface Poi {
   facing?: number;
   /** For a pickup: what lies there for the taking. */
   find?: ResourceKind;
-  /** For a bought plot whose shack is not up yet: how full its resource bin is, 0 to 1. */
+  /**
+   * For a bought plot whose shack is not up yet: how full its resource bin is, 0 to 1. For a building site in the
+   * Harbor, how far its project is paid for; for the crew's ship, how far the next hull on the slipway is.
+   */
   fill?: number;
   /** For a keeper's stall in the Harbor (Nell's): covered up for the night, its keeper gone home. */
   shut?: boolean;

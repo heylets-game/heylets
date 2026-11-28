@@ -148,7 +148,8 @@ describe("scouting a place before a muster is called for it", () => {
   /** What scouting says of a place nobody is on and anyone may set out for. */
   const placeOf = (id: string, crew = CREW) => {
     const node = atlasNodeById(atlasSeed(crew), id)!;
-    return { node: id, place: node.name, site: nodePlace(atlasSeed(crew), node), level: node.level };
+    // (`most`: as many heroes as the crew's ship carries. A new crew has the Sloop.)
+    return { node: id, place: node.name, site: nodePlace(atlasSeed(crew), node), level: node.level, most: 4 };
   };
   /** Scout, and expect the refusal `openNode` gives for the same thing, with nothing written by either. */
   const refused = async (id: unknown, stone?: unknown) => {

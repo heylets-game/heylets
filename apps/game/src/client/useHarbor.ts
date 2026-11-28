@@ -147,7 +147,7 @@ export function useHarbor(onMoved: (id: string, path: HexPos[]) => void, onXp?: 
           believed.current = me ? { id: me.id, pos: me.pos, vessel: me.vessel } : null;
         }
         setCrew(msg.crew);
-        setBoard({ members: msg.members, works: msg.works, maps: msg.maps });
+        setBoard({ members: msg.members, works: msg.works, maps: msg.maps, ship: msg.ship });
         // A trade may have changed while there was no connection to hear of it, and flotsam been taken.
         setTrades((n) => n + 1);
         setFlotsam((f) => ({ gone: [], sync: f.sync + 1 }));
@@ -158,7 +158,7 @@ export function useHarbor(onMoved: (id: string, path: HexPos[]) => void, onXp?: 
       } else if (msg.type === "muster") {
         setMuster(msg.muster);
       } else if (msg.type === "board") {
-        setBoard({ members: msg.members, works: msg.works, maps: msg.maps });
+        setBoard({ members: msg.members, works: msg.works, maps: msg.maps, ship: msg.ship });
       } else if (msg.type === "joined") {
         // Your own hero as the room has them now: a boat bought since changes where you can go. Where you stand
         // is kept as believed while walks are still ahead (the room tells this from where it last had you).

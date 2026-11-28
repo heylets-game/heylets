@@ -9,12 +9,12 @@
 // `MusterPanel` is the card: where to, how long is left, who has said what,
 // and the two buttons that are yours to press. The one who called it gets
 // "Start anyway" and "Call it off"; everyone else "Ready up" and "Not this
-// time". With more ready than a map takes it says so, and once it would set
+// time". With more ready than the crew's ship carries it says so, and once it would set
 // out the caller ticks who goes. It draws what it is handed, and knows no rules
 // but the counting.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MUSTER_CHOOSE_MS, MUSTER_LINGER_MS, MUSTER_MS, MUSTER_PARTY, musterGoing, musterHeroes, musterOpen, musterReadyHeroes, type Muster, type MusterAnswer } from "@gantt-quest/world";
+import { MUSTER_CHOOSE_MS, MUSTER_LINGER_MS, MUSTER_MS, musterGoing, musterMost, musterHeroes, musterOpen, musterReadyHeroes, type Muster, type MusterAnswer } from "@gantt-quest/world";
 import { api } from "../api";
 import { useCountdown } from "../ui/useCountdown";
 import "./muster.css";
@@ -98,7 +98,9 @@ export function MusterPanel({ muster, me, onSay, busy, error }: { muster: Muster
   const ready = !!me && isReady(muster, me);
   // Too many ready: how many, and (for the caller, choosing) who they have ticked to stay behind.
   const heroes = musterHeroes(muster);
-  const over = heroes > MUSTER_PARTY;
+  /** How many the crew's ship carries: the most that go. */
+  const most = musterMost(muster);
+  const over = heroes > most;
   const [staying, setStaying] = useState<string[]>(muster.left ?? []);
   const pickKey = (muster.left ?? []).join(",");
   useEffect(() => setStaying(muster.left ?? []), [muster.id, pickKey]);
@@ -115,12 +117,12 @@ export function MusterPanel({ muster, me, onSay, busy, error }: { muster: Muster
   let line: string;
   if (muster.failed) line = muster.failed;
   else if (muster.code && leftBehind) line = `${muster.by.name} has set out, with as many as the map had room for. You stay behind this time.`;
-  else if (muster.code) line = ready ? "Through the waygate you go." : `${muster.by.name} has set out. The waygate in the square will take you after them, if you change your mind.`;
-  else if (choosing && mine) line = `${heroes} heroes are ready, and a map takes ${MUSTER_PARTY}. Choose who goes.`;
-  else if (choosing) line = `${heroes} heroes are ready, and a map takes ${MUSTER_PARTY}: ${muster.by.name} is choosing who goes.`;
+  else if (muster.code) line = ready ? "All aboard: you are away." : `${muster.by.name} has set out. Go aboard the ship at the pier to follow, if you change your mind.`;
+  else if (choosing && mine) line = `${heroes} heroes are ready, and the ship carries ${most}. Choose who goes.`;
+  else if (choosing) line = `${heroes} heroes are ready, and the ship carries ${most}: ${muster.by.name} is choosing who goes.`;
   else if (mine) line = waiting > 0 ? `Asking the crew. Waiting on ${waiting}.` : "Everyone has answered.";
   else if (ready) line = `You are coming. Waiting for ${muster.by.name} to start.`;
-  else if (declined) line = "You are staying in town. You can still follow through the waygate later.";
+  else if (declined) line = "You are staying in town. You can still follow later: go aboard the ship at the pier.";
   else line = `${muster.by.name} is setting out, and asks who is coming.`;
 
   return (
@@ -153,7 +155,7 @@ export function MusterPanel({ muster, me, onSay, busy, error }: { muster: Muster
         </ul>
         {open && !choosing && heroes > 1 && (
           <p className={`muster-count ${over ? "over" : ""}`}>
-            {over ? `${heroes} heroes are ready, and a map takes ${MUSTER_PARTY}. ${mine ? "You" : muster.by.name} will choose who stays behind.` : `${heroes} of ${MUSTER_PARTY} heroes`}
+            {over ? `${heroes} heroes are ready, and the ship carries ${most}. ${mine ? "You" : muster.by.name} will choose who stays behind.` : `${heroes} of ${most} heroes`}
           </p>
         )}
         {choosing && mine && (
@@ -180,8 +182,8 @@ export function MusterPanel({ muster, me, onSay, busy, error }: { muster: Muster
           </ul>
         )}
         {choosing && mine && (
-          <p className={`muster-count ${going > MUSTER_PARTY ? "over" : ""}`}>
-            {going} of {MUSTER_PARTY} going{going > MUSTER_PARTY ? `: leave ${going - MUSTER_PARTY} more behind` : ""}
+          <p className={`muster-count ${going > most ? "over" : ""}`}>
+            {going} of {most} going{going > most ? `: leave ${going - most} more behind` : ""}
           </p>
         )}
         {error && <p className="bad muster-error" role="alert">{error}</p>}
@@ -190,7 +192,7 @@ export function MusterPanel({ muster, me, onSay, busy, error }: { muster: Muster
             {mine ? (
               <>
                 {choosing ? (
-                  <button className="primary" disabled={busy || going > MUSTER_PARTY} onClick={() => onSay("start", staying)} title="Set out now, with the heroes ticked">Set out</button>
+                  <button className="primary" disabled={busy || going > most} onClick={() => onSay("start", staying)} title="Set out now, with the heroes ticked">Set out</button>
                 ) : (
                   <button className="primary" disabled={busy} onClick={() => onSay("start")} title="Set out now, with whoever has said they are ready">Start anyway</button>
                 )}

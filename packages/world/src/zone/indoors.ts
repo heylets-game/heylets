@@ -282,7 +282,7 @@ export function layInside(seed: string, options: ZoneOptions, siteId: SiteId, gr
       for (let k = 0; k < n && pool.length > 0; ) if (stand(pool.splice(rng.int(0, pool.length - 1), 1)[0], prop)) k++;
     };
 
-    // Where the party comes in: the ring against the near wall, and open floor before it.
+    // Where the party comes in: the landing (props.ts) against the near wall, and open floor before it.
     {
       const room = rooms.get(startCell)!;
       const { x0, y0, y1 } = bounds(startCell);
@@ -290,7 +290,7 @@ export function layInside(seed: string, options: ZoneOptions, siteId: SiteId, gr
       start = H(x0 + 1, cy);
       for (const p of disk(start, 2)) reserved.add(posKey(p));
       const gate = at(H(x0, cy));
-      if (gate) gate.prop = "waygate";
+      if (gate) gate.prop = "landing";
       some(wallside(room).filter((p) => hexDistance(p, start) > 3), 2, "barrels");
       some(wallside(room).filter((p) => hexDistance(p, start) > 2), 2, "banner");
     }
@@ -476,13 +476,13 @@ export function layInside(seed: string, options: ZoneOptions, siteId: SiteId, gr
     for (const key of tunnels) reserved.add(key);
     for (const room of rooms.values()) for (const d of room.doors) for (const p of [d, ...around(d)]) reserved.add(posKey(p));
 
-    // Where the party comes in: the ring at the near side of the first chamber.
+    // Where the party comes in: the landing at the near side of the first chamber.
     {
       const room = rooms.get(startCell)!;
       start = room.centre;
       for (const p of disk(start, 2)) reserved.add(posKey(p));
       const gate = around(start).filter((p) => walk(p) && !tunnels.has(posKey(p)) && spare(p)).sort((a, b) => page(a).x - page(b).x)[0] ?? around(start).filter((p) => walk(p) && spare(p))[0];
-      if (gate) at(gate)!.prop = "waygate";
+      if (gate) at(gate)!.prop = "landing";
     }
 
     const free = (room: Room) => room.floor.filter((p) => walk(p) && !reserved.has(posKey(p)) && !at(p)!.prop && !at(p)!.ladder);

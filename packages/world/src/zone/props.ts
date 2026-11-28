@@ -67,7 +67,9 @@ export const PROPS = {
   stalagmite: { name: "Stalagmite", blocks: true, hides: true, blurb: "A fang of wet stone, grown up from the floor a drip at a time." },
   bones: { name: "Bones", blurb: "Gnawed, cracked, and not all of them from animals." },
   // ---- the way in ----
-  waygate: { name: "Waygate", blocks: true, light: 2, blurb: "The ring the charter drew you through. It is the way back, too." },
+  // (The ship's longboat drawn up where the party came ashore, a lantern in her bow; under a roof or under ground,
+  // where no boat could come, the line they came in by, made fast to a post with a lantern on it.)
+  landing: { name: "Landing", blocks: true, light: 2, blurb: "Where you came ashore from the ship. Walk back to it to leave." },
 } satisfies Record<string, PropDef>;
 
 export type PropKind = keyof typeof PROPS;

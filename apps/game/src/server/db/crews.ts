@@ -6,6 +6,7 @@ import { asCrop, atlasNodeById, roofColor, type GardenBed, type HarborBoard } fr
 import { crewWorks } from "../projects";
 import { crewPresence } from "../zones";
 import { parseBin } from "./plots";
+import { crewShipState } from "./ships";
 import { currentCrewSql, now, type Env } from "./rows";
 
 // ---------- crews and the Harbor ----------
@@ -122,8 +123,9 @@ const OPEN_MAP_MS = 12 * 60 * 60_000;
 /** What everyone in a Harbor is told about its crew: who is in it and where, its works and the maps it has open. */
 export async function harborBoard(db: D1Database, crewId: string): Promise<HarborBoard> {
   // None of these needs another's answer, so they are all asked for together.
-  const [works, members, zoneOf, open, gardens] = await Promise.all([
+  const [works, ship, members, zoneOf, open, gardens] = await Promise.all([
     crewWorks(db, crewId),
+    crewShipState(db, crewId),
     db
       .prepare(
         `SELECT m.player_id AS id, c.name, c.class_id AS classId, c.level, COALESCE(h.tier, 1) AS hutTier, h.plot AS plot, h.bin_json AS bin, h.roof AS roof
@@ -136,7 +138,7 @@ export async function harborBoard(db: D1Database, crewId: string): Promise<Harbo
       .all<{ id: string; name: string; classId: string; level: number; hutTier: number; plot: number | null; bin: string | null; roof: string | null }>(),
     // Who is out on a zone, and whether they are fighting there.
     crewPresence(db, crewId),
-    // The maps the crew has open out through the waygate: made for a place on its atlas, not cleared, and walked on
+    // The maps the crew has open, out where its ship took it: made for a place on its atlas, not cleared, and walked on
     // lately (as long as the atlas itself keeps a map: zones.ts CAVE_IDLE_MS). The crew's id is its chart's seed.
     db
       .prepare("SELECT code, node FROM zones WHERE kind = 'atlas' AND crew_id = ?1 AND status != 'cleared' AND updated_at > ?2 ORDER BY updated_at DESC LIMIT 6")
@@ -165,7 +167,7 @@ export async function harborBoard(db: D1Database, crewId: string): Promise<Harbo
     ...(zoneOf.has(m.id) ? { zone: zoneOf.get(m.id) } : {}),
   }));
   const maps = open.results.map((z) => ({ code: z.code, node: z.node ?? "", place: (z.node ? atlasNodeById(crewId, z.node)?.name : null) ?? "a landfall" }));
-  return { members: roster, works,...(maps.length > 0 ? { maps } : {}) };
+  return { members: roster, works, ship, ...(maps.length > 0 ? { maps } : {}) };
 }
 
 /** Ask a crew's Harbor to re-read its notice board and tell everyone present. Never throws. */

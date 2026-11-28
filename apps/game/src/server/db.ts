@@ -27,6 +27,7 @@ export { CELLS_SQL, carriedSql, carryState, equipItem, getInventory, packHasRoom
 export { buyShopItem, getShop, sellItem, sellMaterial, type ShopView } from "./db/stall";
 export { heroInitFor, publicHero } from "./db/heroes";
 export { orderAtPub } from "./db/pub";
+export { crewShipState, mendShip, shipOf } from "./db/ships";
 export { applyZoneGrant } from "./db/rewards";
 export { createCrew, crewFor, getCrew, harborBoard, joinCrew, leaveCrew, refreshHarbor, worldsOfAccount, type AccountWorld, type Crew } from "./db/crews";
 export { buyPlot, fillBin, hasShack, homeOf, plotOf } from "./db/plots";

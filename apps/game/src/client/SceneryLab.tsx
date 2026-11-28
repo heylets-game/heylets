@@ -4,7 +4,7 @@
 //
 // One hand-laid map carries every kind of thing a hex can carry: a walled
 // courtyard with towers and a gate, a pillared hall on a paved platform with
-// a dais at its head, a palisaded camp, a waygate, a rib cage with its skull,
+// a dais at its head, a palisaded camp, a landing, a rib cage with its skull,
 // crystals, terraces of high ground with ladders up them. Buttons switch its
 // climate, its backdrop and the hour. Two more maps are places under a roof
 // and under ground, as the `dark` backdrop draws them: a hall (walled rooms
@@ -147,9 +147,9 @@ function sampleMap(clime: Clime): WorldMap {
   put(9, 9, "boulder");
   put(10, 9, "obelisk");
 
-  // ---- the way in: a waygate on a round of paving, a brazier either side ----
+  // ---- the way in: the landing (the longboat drawn up), a brazier either side ----
   fill(13, 11, 15, 13, "paved", 0);
-  put(14, 12, "waygate");
+  put(14, 12, "landing");
   put(13, 11, "brazier");
   put(15, 11, "brazier");
   put(13, 15, "banner");
@@ -256,7 +256,7 @@ function hallMap(clime: Clime): WorldMap {
     put(10, r, r === 11 ? "pillar_broken" : "pillar");
   }
   for (let r = 4; r <= 12; r++) put(7, r, "rug");
-  put(8, 13, "waygate");
+  put(8, 13, "landing");
   put(11, 3, "weapon_rack");
   put(12, 7, "statue");
   put(11, 9, "table");
@@ -342,7 +342,7 @@ function caveMap(clime: Clime): WorldMap {
     }
     rim = next;
   }
-  put(8, 12, "waygate");
+  put(8, 12, "landing");
   put(9, 7, "stalagmite");
   put(4, 7, "stalagmite");
   put(9, 10, "stalagmite");

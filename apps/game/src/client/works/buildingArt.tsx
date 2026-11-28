@@ -1,6 +1,6 @@
 // Pixel-art pictures of the Harbor's crew projects, for the works panel's
-// tabs: the apothecary, the smithy, the lighthouse and the galley, plus a
-// padlock for a project that is not open yet. Drawn in code like the item
+// tabs: the apothecary, the smithy, the lighthouse and the galley, the
+// shipyard and its ships, plus a padlock for a project that is not open yet. Drawn in code like the item
 // icons in itemArt.ts (16x16, flat colours, a dark one-pixel outline, shown
 // with nearest-neighbour scaling) but kept apart from that table, as these
 // are pictures of places rather than things anyone carries.
@@ -18,7 +18,46 @@ type Art = (p: Pen) => void;
 /** Rows of a filled shape given as [y, x0, x1] spans. */
 const spans = (p: Pen, color: string, rows: [number, number, number][]) => rows.forEach(([y, a, b]) => p.r(a, y, b - a + 1, 1, color));
 
+/** A ship under sail on a strip of sea: a painted hull, and a mast with two square sails for each `[x, top, width]`. `castle`: a high stern. */
+function shipArt(p: Pen, masts: [x: number, top: number, wide: number][], castle = false) {
+  p.r(0, 14, 16, 2, "#3b6e8c");
+  spans(p, "#5a3d2a", [[11, 1, 14], [12, 2, 14], [13, 3, 12]]);
+  p.r(1, 10, 14, 1, "#e9e0c8");
+  p.r(1, 11, 13, 1, "#3b6e8c");
+  if (castle) {
+    p.r(11, 8, 4, 2, "#5a3d2a");
+    p.r(12, 9, 2, 1, "#ffe2a0");
+  }
+  p.l(1, 10, 0, 8, "#3a2414");
+  for (const [x, top, wide] of masts) {
+    p.r(x, top, 1, 10 - top, "#3a2414");
+    const half = Math.floor(wide / 4);
+    p.r(x - half, top + 1, half * 2 + 1, 3, "#efe4c8");
+    p.r(x - half - 1, top + 5, half * 2 + 3, Math.max(1, 9 - (top + 5)), "#e3d6b4");
+  }
+  const [x, top] = masts[Math.floor((masts.length - 1) / 2)];
+  p.r(x + 1, top, 2, 1, "#b9433d");
+}
+
 const ART: Record<string, Art> = {
+  // The shipyard's: a ship under sail, by how many masts she steps, and a hull in frame on the ways for the yard itself.
+  sloop: (p) => shipArt(p, [[7, 2, 11]]),
+  brig: (p) => shipArt(p, [[5, 3, 9], [10, 1, 11]]),
+  galleon: (p) => shipArt(p, [[3, 4, 8], [7, 1, 10], [11, 3, 9]], true),
+  shipyard: (p) => {
+    // The ways sloping down to the water, a keel on them with its frames standing, and a builder's ladder.
+    p.r(0, 14, 16, 2, "#3b6e8c");
+    p.l(1, 12, 14, 14, "#4a3524");
+    p.l(1, 13, 14, 15, "#4a3524");
+    p.l(2, 10, 13, 12, "#7a5634");
+    for (const [x, y] of [[3, 6], [5, 5], [7, 5], [9, 6], [11, 7]]) p.r(x, y, 1, 11 - y + Math.round((x - 2) / 5), "#b5895a");
+    p.l(2, 6, 12, 7, "#c9a877");
+    p.r(13, 8, 1, 4, "#7a5634");
+    p.r(1, 7, 1, 4, "#7a5634");
+    p.r(14, 3, 1, 9, "#8a6a44");
+    p.r(15, 3, 1, 9, "#8a6a44");
+    for (const y of [4, 6, 8, 10]) p.r(14, y, 2, 1, "#c9a877");
+  },
   apothecary: (p) => {
     // A narrow plastered shop under a dark green roof, a lit window, a green sign and herbs by the door.
     spans(p, "#2f5a3a", [[1, 7, 8], [2, 6, 9], [3, 5, 10], [4, 4, 11], [5, 3, 12], [6, 2, 13]]);

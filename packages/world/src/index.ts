@@ -49,6 +49,7 @@ export * from "./voyage/seathings";
 export * from "./voyage/drift";
 export * from "./voyage/voyage";
 export * from "./muster";
+export * from "./voyage/ships";
 export * from "./atlasMap";
 export * from "./lodestone";
 export * from "./townchest";

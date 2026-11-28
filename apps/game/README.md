@@ -1,6 +1,6 @@
 # The Harbor of Heylets (`apps/game`)
 
-A live co-op game. A crew shares **the Harbor** (a walkable town where you see each other). From the waygate they open **the atlas**, the crew's chart of places, and step through to **a map** (a zone: one seeded hex map), where they walk freely, fight turn by turn on the tiles, and bring XP and loot home.
+A live co-op game. A crew shares **the Harbor** (a walkable town where you see each other). From their ship at the pier they open **the atlas**, the crew's chart of places, and sail out to **a map** (a zone: one seeded hex map), where they walk freely, fight turn by turn on the tiles, and bring XP and loot home.
 
 It's live at https://harbor.heylets.party, with staging at https://harbor-staging.heylets.party. For setting up and deploying production, see [`docs/game-production-checklist.md`](../../docs/game-production-checklist.md); the [root README](../../README.md) has the deploy steps for both.
 
@@ -75,6 +75,7 @@ A tab left open on an older build is told when a newer one is out (`src/client/N
 | `…/zone/` | Fights and walking on a map's tiles. `zone.ts` is the reducer: `stepZone(state, action)` → new state and events. `combat.ts` and `kit.ts` are what units can do, `rules.ts` the dice, `ai.ts` the enemy's turn, `geometry.ts` and `light.ts` where things are and what can be seen, `surfaces.ts` and `weather.ts` the ground and the air, `loot.ts` and `spoils.ts` what there is to take |
 | `…/zone/gen.ts`, `lay.ts`, `indoors.ts`, `sites.ts`, `props.ts`, `mods.ts` | Making a map from a seed and options: its site, its ground and what stands on it, the bands that hold it, and a charter's modifiers. `delve.ts` (with `…/caverns.ts`) lays the caverns under the Harbor |
 | `…/atlas.ts`, `atlasMap.ts`, `muster.ts` | The crew's chart of places, how it is drawn as a map of its own, and asking the crew who is coming |
+| `…/voyage/ships.ts` | The crew's ships as data (`SHIPS`): each one's deck, hull, hold, how many heroes she carries and how far out on the atlas she sails; which one a crew sails; mending a hull |
 | `…/lodestone.ts`, `stonecraft.ts`, `lapidary.ts`, `townchest.ts` | Charters (lodestones, in the code and in stored data), working them at Charter & Trade (the Lapidary, in the code), what its keeper pays for gems, and the crew's shared chest |
 | `…/map.ts` | Tiles, places (`Poi`) and weighted pathfinding, shared by every map |
 | `…/harbor.ts` | The Harbor map, path check and message types |
@@ -86,7 +87,7 @@ A tab left open on an older build is told when a newer one is out (`src/client/N
 | `…/fishing.ts`, `fishingholes.ts`, `fishfight.ts`, `sitting.ts`, `fishcatalog.ts`, `fishmarket.ts`, `catchbook.ts`, `fishmonger.ts` | Fishing: a sitting anywhere along the shore or afloat, bait (what it does, what it costs, when it is used up), the crew's fishing holes (where the fish are, by the clock and the weather), the fight with one fish, the catalogue of what can be caught, selling it, the Catch Book, and Bram the fishmonger at the shack, who buys the catch and sells the bait |
 | `…/felling.ts`, `mine.ts` | Felling's two rounds, and the quarry's rock face |
 | `…/timing.ts` | The timed stop used on the splitting block (and by the older gathering outings): markers, grades and how a stat eases them |
-| `…/projects.ts` | Crew projects |
+| `…/projects.ts` | Crew projects: the town's buildings, and groups of projects shown together (`PROJECT_GROUPS`: the shipyard's ships) |
 | `…/pub.ts`, `regulars.ts`, `salesman.ts` | The pub's room and its menu of meals; its regulars and their errands; the traveling salesmen |
 | `…/keepers.ts`, `apothecary.ts`, `smithy.ts`, `galley.ts` | The rooms you walk into with a keeper inside (smithy, apothecary, galley, Charter & Trade), their keepers, stock and haggling |
 | `…/gameclock.ts` | The Harbor's clock and weather, from the wall clock alone, so every browser and the server agree |
@@ -101,11 +102,12 @@ A tab left open on an older build is told when a newer one is out (`src/client/N
 | `apps/game/src/server/pub-room.ts` | One Durable Object per crew for the pub: presence, walking, chat and the game tables |
 | `apps/game/src/server/stake-table.ts` | A game table for any stake game: antes, prize, per-player views, forfeits |
 | `apps/game/src/server/gather.ts`, `fishing.ts`, `bait.ts`, `projects.ts`, `trade.ts`, `workshops.ts`, `lapidary.ts`, `townchest.ts`, `lodestones.ts` | D1 work for each of those |
+| `apps/game/src/server/db/ships.ts` | The crew's ship in D1: which one it sails (the best it has built), her hull (`crew_ships`), and mending it |
 | `apps/game/src/server/ai.ts` | Prompts and the Workers AI calls (and the mock): the barkeep, and naming a hero |
 | `apps/game/src/server/db/`, `db.ts` | D1 access, a module to each domain: players and sign-in, characters, inventory, the market stall, crews, plots, huts and their containers, spending, rewards. `db.ts` only passes on what they export, so everything is still imported from `./db` |
 | `apps/game/src/server/auth.ts` | Logins (Better Auth): accounts, guests, sessions, and the player behind a request |
 | `apps/game/src/server/email.ts` | Sending the codes for a new password |
-| `apps/game/src/client/render/` | Three.js renderer (`WorldRenderer.ts`), the model of every kind of place on a map, a function to each kind (`places/`: `index.ts` lists them and says how to add one, `placing.ts` says how big each is drawn), the heroes and enemies as figures (`figures.ts`, `gearModels.ts`), a map's scenery and backdrop (`zoneScenery.ts`, `backdrop.ts`), spell effects (`SpellFx.ts`), furniture models (`props.ts`), the sky, weather, shadows and moving decoration (`ambience.ts`), the gathering stages (`FishingStage.ts`, `MineStage.ts`, `fellingScene.ts`), the pub's tables (`TableStage.ts`), and a map's combat view (`cutaway.ts`: on by itself in a fight, or with its button or V, walls and rock in the way sink to a kerb and trees thin to ghosts, all in the scenery's own shaders) |
+| `apps/game/src/client/render/` | Three.js renderer (`WorldRenderer.ts`), the model of every kind of place on a map, a function to each kind (`places/`: `index.ts` lists them and says how to add one, `placing.ts` says how big each is drawn), the heroes and enemies as figures (`figures.ts`, `gearModels.ts`), the crew's ship drawn from her catalogue entry (`ship.ts`, moored and on the slipway by `places/shipyard.ts`), the fountain in the square (`fountain.ts`), a map's scenery and backdrop (`zoneScenery.ts`, `backdrop.ts`), spell effects (`SpellFx.ts`), furniture models (`props.ts`), the sky, weather, shadows and moving decoration (`ambience.ts`), the gathering stages (`FishingStage.ts`, `MineStage.ts`, `fellingScene.ts`), the pub's tables (`TableStage.ts`), and a map's combat view (`cutaway.ts`: on by itself in a fight, or with its button or V, walls and rock in the way sink to a kerb and trees thin to ghosts, all in the scenery's own shaders) |
 | `apps/game/src/client/*.tsx` | The main menu (`MainMenu.tsx`: continue, create or join a world, settings, account), character creation (`CharacterCreation.tsx`), the settings shared with the game menu (`Settings.tsx`), the Harbor, huts, the pub, keeper rooms, notice board (`board/`), works (`works/`), the atlas (`atlas/`), the town chest (`chest/`), gathering, trading, inventory, market stall, and a map and its fights (`ZoneView.tsx`, `zone/`) |
 | `apps/game/src/client/itemArt.ts` | Pixel-art item icons drawn in code; the accent colour is the item's rarity |
 

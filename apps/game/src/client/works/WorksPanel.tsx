@@ -1,7 +1,9 @@
 // The Harbor's works: the projects the whole crew pays into together.
 //
-// One tab per project, each with its picture and its state (built, locked,
-// or how far along), and a last tab for who gave what. A project's tab
+// One tab per building, each with its picture and its state (built, locked,
+// or how far along); one tab for each group of projects that go together
+// (PROJECT_GROUPS: the shipyard, with the crew's ship and the bigger ones to
+// build); and a last tab for who gave what. A project's tab
 // shows what it is, what it gives, and a row per cost: what is paid, what
 // the player holds, and a stepper to choose how much to give. One button
 // gives the lot.
@@ -12,7 +14,12 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import {
+  HULL_PER_WOOD,
   PROJECTS,
+  PROJECT_GROUPS,
+  STARTING_SHIP,
+  cleanHull,
+  mendCost,
   projectAmountsText,
   projectById,
   projectCostKinds,
@@ -20,11 +27,15 @@ import {
   projectLock,
   projectLockText,
   projectProgress,
+  projectsIn,
+  shipById,
   type CrewProject,
+  type CrewShip,
   type HarborWorks,
   type ProjectAmounts,
   type ProjectCostKind,
   type ProjectDef,
+  type ProjectGroupId,
   type ProjectLock,
 } from "@gantt-quest/world";
 import { api } from "../api";
@@ -57,9 +68,9 @@ function statusOf(def: ProjectDef, project: CrewProject | undefined, crew: CrewP
   return { kind: "open", progress: projectProgress(def, project?.paid ?? {}) };
 }
 
-/** The tab to open on: the first project the crew can pay into (furthest along first), else the first one. */
+/** The tab to open on: the first building the crew can pay into (furthest along first), else the first one. */
 function firstTab(projects: CrewProject[]): string {
-  const open = PROJECTS.map((def) => ({ def, s: statusOf(def, projects.find((p) => p.id === def.id), projects) })).filter((x) => x.s.kind === "open");
+  const open = projectsIn().map((def) => ({ def, s: statusOf(def, projects.find((p) => p.id === def.id), projects) })).filter((x) => x.s.kind === "open");
   const best = open.sort((a, b) => (b.s.kind === "open" ? b.s.progress : 0) - (a.s.kind === "open" ? a.s.progress : 0))[0];
   return best?.def.id ?? PROJECTS[0].id;
 }
@@ -255,13 +266,72 @@ function GiftLog({ works }: { works: HarborWorks }) {
 }
 
 const LOG = "log";
+/** The groups of projects that have a tab of their own, in the order they are listed, and each one's tab id. */
+const GROUPS = Object.keys(PROJECT_GROUPS) as ProjectGroupId[];
+const groupTab = (group: ProjectGroupId) => `group:${group}`;
 
-export function WorksPanel({ works, refresh, onClose }: { works: HarborWorks | undefined; refresh(): Promise<unknown>; onClose(): void }) {
+/** A group's state at a glance: built once every project in it is; else as its next project stands. */
+function groupStatus(group: ProjectGroupId, crew: CrewProject[]): Status {
+  const all = projectsIn(group).map((def) => statusOf(def, crew.find((p) => p.id === def.id), crew));
+  return all.find((s) => s.kind === "open") ?? all.find((s) => s.kind === "locked") ?? { kind: "built" };
+}
+
+/**
+ * The crew's ship, at the head of the shipyard's tab: which one lies at the pier, what she does for the crew, and
+ * how her hull stands, with a button to mend it with the player's own wood.
+ */
+function ShipCard({ ship, stock, onMend }: { ship: CrewShip | undefined; stock: ProjectAmounts | null; onMend(): Promise<string | null> }) {
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const def = shipById(ship?.id) ?? STARTING_SHIP;
+  const hull = cleanHull(def, ship?.hull);
+  const needs = mendCost(def, hull);
+  const wood = stock?.wood ?? 0;
+  const spend = Math.min(needs, wood);
+  const mend = async () => {
+    setBusy(true);
+    setProblem(null);
+    try {
+      setProblem(await onMend());
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="works-ship" aria-label="The crew's ship">
+      <span className="works-picture built"><BuildingIcon id={def.id} size={54} /></span>
+      <div className="works-project-text">
+        <h3>The crew's ship: the {def.name} <span className="tag good">Afloat</span></h3>
+        <p className="muted">{def.blurb} She carries <strong>{def.heroes}</strong> heroes and sails {def.reach === null ? <strong>anywhere on the atlas</strong> : <>as far as <strong>{def.reach}</strong> landfalls out from the Harbor</>}.</p>
+        <div className="works-hull">
+          <span className="works-kind">Hull</span>
+          <span className="bar works-bar" role="progressbar" aria-label="The ship's hull" aria-valuemin={0} aria-valuemax={def.hull} aria-valuenow={hull}>
+            <span className={`bar-fill works-fill ${needs === 0 ? "met" : ""}`} style={{ width: `${(100 * hull) / def.hull}%` }} />
+            <span>{hull} / {def.hull}</span>
+          </span>
+          {needs === 0 ? (
+            <span className="good small-note">✓ Sound</span>
+          ) : (
+            <button type="button" className="small" disabled={busy || spend === 0} title={spend === 0 ? "Mending takes wood, and you have none." : `Each piece of wood mends ${HULL_PER_WOOD} of her hull. You have ${wood}.`} onClick={() => void mend()}>
+              {busy ? "Mending…" : spend === 0 ? `Needs ${needs} wood` : `Mend with ${spend} wood`}
+            </button>
+          )}
+        </div>
+        {problem && <p className="bad" role="alert">{problem}</p>}
+      </div>
+    </section>
+  );
+}
+
+export function WorksPanel({ works, ship, refresh, onClose }: { works: HarborWorks | undefined; ship?: CrewShip; refresh(): Promise<unknown>; onClose(): void }) {
   const [fetched, setFetched] = useState<HarborWorks | null>(null);
   const [stock, setStock] = useState<ProjectAmounts | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [tab, setTab] = useState<string | null>(null);
+  /** The ship as the last mending left her, until the Harbor's board says the same. */
+  const [mended, setMended] = useState<CrewShip | null>(null);
+  useEffect(() => setMended(null), [ship?.id, ship?.hull]);
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
   useEffect(() => {
     api.projects().then((r) => {
@@ -281,7 +351,7 @@ export function WorksPanel({ works, refresh, onClose }: { works: HarborWorks | u
       setFetched(res.works);
       setStock(res.stock);
       const xp = res.xp?.text ? ` ${res.xp.text}` : "";
-      setNotice((res.completed ? `The ${def.name} is built! It stands in the Harbor for the whole crew.` : `You gave ${projectAmountsText(amounts)} to the ${def.name}.`) + xp);
+      setNotice((res.completed ? (def.group === "shipyard" ? `The ${def.name} is launched! She lies at the pier, the crew's ship from now on.` : `The ${def.name} is built! It stands in the Harbor for the whole crew.`) : `You gave ${projectAmountsText(amounts)} to the ${def.name}.`) + xp);
       // Gold left the character sheet too.
       void refresh();
       return null;
@@ -292,7 +362,25 @@ export function WorksPanel({ works, refresh, onClose }: { works: HarborWorks | u
     }
   };
 
-  const ids = [...PROJECTS.map((p) => p.id), LOG];
+  /** Mend the crew's ship with the player's wood. The Harbor's board brings her new hull; the wood left is told here. */
+  const mend = async (): Promise<string | null> => {
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await api.mendShip();
+      setStock(res.stock);
+      setMended(res.ship);
+      setNotice(`You mended the ship's hull with ${res.wood} wood.`);
+      void refresh();
+      return null;
+    } catch (e) {
+      api.projects().then((r) => setStock(r.stock), () => {});
+      return (e as Error).message;
+    }
+  };
+
+  const ids = [...projectsIn().map((p) => p.id), ...GROUPS.map(groupTab), LOG];
+  const group = GROUPS.find((g) => groupTab(g) === current);
   const onTabKey = (e: KeyboardEvent, i: number) => {
     const to = e.key === "ArrowRight" ? (i + 1) % ids.length : e.key === "ArrowLeft" ? (i - 1 + ids.length) % ids.length : e.key === "Home" ? 0 : e.key === "End" ? ids.length - 1 : -1;
     if (to < 0) return;
@@ -310,16 +398,18 @@ export function WorksPanel({ works, refresh, onClose }: { works: HarborWorks | u
           <span className="spacer" />
           <button className="small" onClick={onClose}>Close</button>
         </header>
-        <p className="muted works-intro">Buildings the whole crew pays for together. Anyone can give; once every cost is met it stands for good.</p>
+        <p className="muted works-intro">Buildings and ships the whole crew pays for together. Anyone can give; once every cost is met it stands for good.</p>
         {error && <p className="bad" role="alert">{error}</p>}
         {!shown && !error && <p className="muted">Looking over the plans…</p>}
         {shown && current && (
           <>
-            <div className="works-tabs" role="tablist" aria-label="Projects">
+            <div className="works-tabs" role="tablist" aria-label="Projects" style={{ gridTemplateColumns: `repeat(${ids.length}, minmax(0, 1fr))` }}>
               {ids.map((id, i) => {
                 const d = projectById(id);
+                const g = GROUPS.find((one) => groupTab(one) === id);
                 const selected = id === current;
-                const status = d ? statusOf(d, shown.projects.find((p) => p.id === id), shown.projects) : null;
+                const status = d ? statusOf(d, shown.projects.find((p) => p.id === id), shown.projects) : g ? groupStatus(g, shown.projects) : null;
+                const name = d ? label("project", id) : g ? PROJECT_GROUPS[g].name : "Log";
                 return (
                   <button
                     key={id}
@@ -329,15 +419,15 @@ export function WorksPanel({ works, refresh, onClose }: { works: HarborWorks | u
                     aria-selected={selected}
                     tabIndex={selected ? 0 : -1}
                     className={`works-tab ${selected ? "selected" : ""} ${status?.kind ?? "log"}`}
-                    title={d ? label("project", id) : "Recent contributions"}
+                    title={d || g ? name : "Recent contributions"}
                     onClick={() => {
                       setTab(id);
                       setNotice(null);
                     }}
                     onKeyDown={(e) => onTabKey(e, i)}
                   >
-                    {d ? <BuildingIcon id={id} size={36} dim={status?.kind === "locked"} /> : <span className="works-log-icon" aria-hidden>✎</span>}
-                    <span className="works-tab-name">{d ? label("project", id) : "Log"}</span>
+                    {d || g ? <BuildingIcon id={g ?? id} size={36} dim={status?.kind === "locked"} /> : <span className="works-log-icon" aria-hidden>✎</span>}
+                    <span className="works-tab-name">{name}</span>
                     {status ? <TabStatus status={status} /> : <span className="works-tab-state">{shown.gifts.length ? `${shown.gifts.length} recent` : "none yet"}</span>}
                   </button>
                 );
@@ -347,6 +437,15 @@ export function WorksPanel({ works, refresh, onClose }: { works: HarborWorks | u
             <div className="works-body">
               {def ? (
                 <ProjectView key={def.id} def={def} project={shown.projects.find((p) => p.id === def.id)} crew={shown.projects} stock={stock} onGive={give(def)} />
+              ) : group ? (
+                // A group's projects go together on its one tab, under what they are for. (The shipyard's: the crew's ship first.)
+                <section className="works-group" role="tabpanel" aria-label={PROJECT_GROUPS[group].name}>
+                  <p className="muted works-intro">{PROJECT_GROUPS[group].blurb}</p>
+                  {group === "shipyard" && <ShipCard ship={mended ?? ship} stock={stock} onMend={mend} />}
+                  {projectsIn(group).map((one) => (
+                    <ProjectView key={one.id} def={one} project={shown.projects.find((p) => p.id === one.id)} crew={shown.projects} stock={stock} onGive={give(one)} />
+                  ))}
+                </section>
               ) : (
                 <section role="tabpanel" aria-label="Recent contributions">
                   <h3 className="works-log-title">Recent contributions</h3>

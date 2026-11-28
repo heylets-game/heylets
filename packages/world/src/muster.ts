@@ -7,9 +7,12 @@
 // answered, or when the time runs out, whichever comes first; it is made for
 // as many as are ready, and only they are taken to it. Nobody has to go:
 // one who said no, or said nothing, stays in town, and can still walk
-// through the waygate to the map later.
+// aboard at the pier and follow them to the map later.
 //
-// Anyone may ready up, even past the most a map takes. If it would set out with
+// A voyage takes as many heroes as the crew's ship carries (voyage/ships.ts):
+// the muster is told that number when it is called (`most`).
+//
+// Anyone may ready up, even past the most the ship carries. If it would set out with
 // too many, it does not: the caller chooses who stays behind instead (a hero at
 // a time, so a party can come one short), with the heroes who readied last
 // picked to begin with. If they do not choose in time, that pick goes.
@@ -49,6 +52,8 @@ export interface Muster {
   /** Where to: the atlas node, and what to call it. */
   node: string;
   place: string;
+  /** The most heroes that go: what the crew's ship carries. Absent (a muster from before ships): as many as a map takes. */
+  most?: number;
   /** What kind of place it is, and the level of what is there, for the prompt. */
   site?: string;
   level?: number;
@@ -60,7 +65,7 @@ export interface Muster {
   ready: MusterMember[];
   declined: string[];
   /**
-   * More are ready than a map takes, so the caller is choosing who stays behind (until `deadline`, which was put back
+   * More are ready than the ship carries, so the caller is choosing who stays behind (until `deadline`, which was put back
    * when the choosing began).
    */
   choosing?: true;
@@ -77,8 +82,10 @@ export interface Muster {
 export type MusterAnswer = "ready" | "no" | "start" | "cancel";
 export const MUSTER_ANSWERS: readonly MusterAnswer[] = ["ready", "no", "start", "cancel"];
 
-/** The most heroes a muster takes: as many as a map takes (zone.ts MAX_PARTY), parties and all. */
+/** The most heroes any muster takes: as many as a map takes (zone.ts MAX_PARTY), parties and all. */
 export const MUSTER_PARTY = MAX_PARTY;
+/** The most heroes this muster takes: what the crew's ship carries, and never more than a map takes. */
+export const musterMost = (m: Pick<Muster, "most">): number => Math.max(1, Math.min(MUSTER_PARTY, Math.floor(m.most ?? MUSTER_PARTY)));
 
 /** How many heroes are ready: everyone ready, with their parties. */
 export const musterHeroes = (m: Pick<Muster, "ready">): number => m.ready.reduce((sum, r) => sum + heroesOf(r), 0);
@@ -97,18 +104,18 @@ export function musterGoing(m: Pick<Muster, "ready">, left: readonly string[] = 
   return m.ready.reduce((sum, r) => (left.includes(r.id) ? sum : sum + (r.party ? 1 + r.party.filter((h) => !left.includes(h.id)).length : heroesOf(r))), 0);
 }
 
-/** Whether more are ready than a map takes. */
-export const musterOver = (m: Pick<Muster, "ready">): boolean => musterHeroes(m) > MUSTER_PARTY;
+/** Whether more are ready than the ship carries. */
+export const musterOver = (m: Pick<Muster, "ready" | "most">): boolean => musterHeroes(m) > musterMost(m);
 
 /**
  * Who stays behind unless the caller says otherwise: heroes off the end of the ready list until the rest fit, those
  * who readied last first, and each member's party before the member. Never the caller.
  */
-export function musterLeftPick(m: Pick<Muster, "ready" | "by">): string[] {
+export function musterLeftPick(m: Pick<Muster, "ready" | "by" | "most">): string[] {
   const left: string[] = [];
   for (const r of [...m.ready].reverse()) {
     for (const id of [...(r.party ?? []).map((h) => h.id).reverse(), ...(r.id === m.by.id ? [] : [r.id])]) {
-      if (musterGoing(m, left) <= MUSTER_PARTY) return left;
+      if (musterGoing(m, left) <= musterMost(m)) return left;
       left.push(id);
     }
   }
@@ -116,13 +123,13 @@ export function musterLeftPick(m: Pick<Muster, "ready" | "by">): string[] {
 }
 
 /** Who stays behind as the caller asked: only heroes who are ready, and never the caller. Null if the rest would not fit. */
-export function musterLeftAsked(m: Pick<Muster, "ready" | "by">, asked: unknown): string[] | null {
+export function musterLeftAsked(m: Pick<Muster, "ready" | "by" | "most">, asked: unknown): string[] | null {
   const ids = new Set(musterReadyHeroes(m).map((h) => h.id));
   const left = Array.isArray(asked) ? [...new Set(asked.filter((id): id is string => typeof id === "string" && ids.has(id) && id !== m.by.id))] : [];
-  return musterGoing(m, left) <= MUSTER_PARTY ? left : null;
+  return musterGoing(m, left) <= musterMost(m) ? left : null;
 }
 
-export function callMuster(id: string, by: MusterMember, to: { node: string; place: string; site?: string; level?: number }, asked: MusterMember[], now: number): Muster {
+export function callMuster(id: string, by: MusterMember, to: { node: string; place: string; site?: string; level?: number; most?: number }, asked: MusterMember[], now: number): Muster {
   return {
     id,
     by,
@@ -130,6 +137,7 @@ export function callMuster(id: string, by: MusterMember, to: { node: string; pla
     place: to.place,
     ...(to.site ? { site: to.site } : {}),
     ...(to.level !== undefined ? { level: to.level } : {}),
+    ...(to.most !== undefined ? { most: to.most } : {}),
     deadline: now + MUSTER_MS,
     asked: asked.filter((m) => m.id !== by.id),
     ready: [by],
@@ -151,7 +159,7 @@ export const musterAnswered = (m: Muster): boolean => m.asked.every((a) => m.rea
  * asked has answered, or there is no room for another hero. While the caller is choosing, only once their time is up.
  */
 export const musterDue = (m: Muster, now: number): boolean =>
-  musterOpen(m) && (m.choosing ? now >= m.deadline : now >= m.deadline || musterAnswered(m) || musterHeroes(m) >= MUSTER_PARTY);
+  musterOpen(m) && (m.choosing ? now >= m.deadline : now >= m.deadline || musterAnswered(m) || musterHeroes(m) >= musterMost(m));
 
 /**
  * It is due, or the caller has said to start (`asked`: who they leave behind, if they said). With room for everyone
@@ -195,7 +203,7 @@ function answerOnly(m: Muster, who: MusterMember, answer: MusterAnswer, now: num
   if (caller) return { error: "You called it: you are going. Call it off if you are not." };
   const others = m.ready.filter((r) => r.id !== who.id);
   if (answer === "ready") {
-    // Past the most a map takes is fine: the caller chooses who stays behind.
+    // Past the most the ship carries is fine: the caller chooses who stays behind.
     const next: Muster = { ...m, ready: [...others, who], declined: m.declined.filter((id) => id !== who.id) };
     return musterDue(next, now) ? { muster: next, start: true } : { muster: next };
   }

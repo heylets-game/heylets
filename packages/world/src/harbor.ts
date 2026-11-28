@@ -13,6 +13,7 @@ import type { ItemDef } from "./gear";
 import type { Stats } from "@gantt-quest/core";
 import type { HarborWorks } from "./projects";
 import type { Muster } from "./muster";
+import type { CrewShip } from "./voyage/ships";
 import type { GardenBed } from "./garden";
 import { HARBOR_FINISHES } from "./finishes";
 import { findPath, tileAt, type Biome, type Poi, type PoiKind, type Tile, type WorldMap } from "./map";
@@ -86,9 +87,9 @@ export function frontOf(door: HexPos, facing = 0): HexPos[] {
 }
 
 /**
- * The town's plan: a ring on the coast. The waygate hangs in the middle of the island, in the square, and every
+ * The town's plan: a ring on the coast. The fountain stands in the middle of the island, in the square, and every
  * place stands right on the shoreline all the way round it, like the numbers on a clock: its back to the sea, its
- * front turned in to the gate, a gap between it and its neighbours. Inside the ring there is one open green and
+ * front turned in to the fountain, a gap between it and its neighbours. Inside the ring there is one open green and
  * nothing built: the square, the lanes that run out from it like spokes, the town well, the old oak.
  *
  * - The square (`HARBOR_SQUARE`) is the gate's hex and the two rings round it, all cobbled, with nothing else in
@@ -107,17 +108,39 @@ export function frontOf(door: HexPos, facing = 0): HexPos[] {
  */
 /** The middle of the town's island, in columns across and rows down: what its coast and its wall curve round. */
 export const HARBOR_HEART_AT = { col: 13.5, row: 14 };
-/** The hex the waygate hangs over: the middle of the square, at the island's heart. Nobody walks through it. */
+/**
+ * The hex the fountain stands on: the middle of the square, at the island's heart. Nobody walks through it. (The
+ * crew's waygate hung here before they had a ship, and the plan still calls this hex the gate: every place on the
+ * shore is turned to face it.)
+ */
 export const HARBOR_GATE: HexPos = at(13, 16);
-/** Where a player appears on arrival: beside the waygate, on its south-east side, where the view opens from. */
+/** Where a player appears on arrival: beside the fountain, on its south-east side, where the view opens from. */
 export const HARBOR_SPAWN: HexPos = at(13, 17);
-/** The square: every hex within two of the waygate. All of it cobbled. */
+/** The square: every hex within two of the fountain. All of it cobbled. */
 export const HARBOR_SQUARE: HexPos[] = allHexesInGrid({ cols: 28, rows: 31 }).filter((p) => {
   const dq = p.q - HARBOR_GATE.q, dr = p.r - HARBOR_GATE.r;
   return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2 <= 2;
 });
-/** Pier heads, off the south shore: the end of each pier's planking. A moored ship lies in the water beyond each one. */
+/** Pier heads, off the south shore: the end of each pier's planking. */
 export const HARBOR_PIERS: HexPos[] = [at(8, 26), at(13, 27), at(18, 26)];
+/**
+ * The crew's ship (voyage/ships.ts): where a hero stands to go aboard, the head of the middle pier, straight down
+ * the green from the square. She lies in the water beyond it, stern to the pier and bow to the open sea. Going
+ * aboard is how the crew gets anywhere: it opens the atlas, and takes a hero out to a map the crew has open; and
+ * a hero who leaves a map comes back here.
+ */
+export const HARBOR_SHIP: HexPos = HARBOR_PIERS[1];
+/**
+ * The slipway: where the crew's next ship is built, a hex of water against the quay between the middle pier and
+ * the east one. The ways run out from the quay here, due south, and the hull rises on them as the crew pays for
+ * her at the works. Scenery: nobody stands here, and a boat passes it by.
+ */
+export const HARBOR_SLIPWAY: HexPos = at(16, 25);
+/**
+ * The water the ship and the slipway lie over: the six hexes out from the pier head, and the six out from the quay
+ * at the slipway. Still water (a boat rows through), but nothing is set afloat on it: no fishing hole, no flotsam.
+ */
+export const HARBOR_BERTHS: HexPos[] = [...[1, 2, 3, 4, 5, 6].map((i) => at(13, 27 + i)), ...[0, 1, 2, 3, 4, 5].map((i) => at(16, 25 + i))];
 /**
  * Hut plots, handed out to crew members in the order they joined: each is the doorstep of a hut that stands on the
  * two hexes behind it. All twelve are on the housing island, over the bridge east of the town, and none is set
@@ -210,13 +233,13 @@ export const HARBOR_LAPIDARY: HexPos = at(5, 14);
  */
 export const HARBOR_CHEST: HexPos = at(5, 18);
 /**
- * The waygate: the ring a lodestone opens, and the crew's way out to the atlas and back. Where a hero stands to
- * step through it: beside where everyone arrives, on the gate's south-west side. The gate itself hangs over the
- * hex up and to the right of that (`HARBOR_GATE`), the middle of the square, with its round court about it
- * (`HARBOR_COURT`). It was here before the town was, and nobody had to build it. Both this hex and the one
- * heroes arrive on are on the side of the gate the view opens from: nobody stands hidden behind it.
+ * The fountain: the old waygate's ring of stone, set upright in a basin with water falling through it, where the
+ * gate used to hang (the crew goes out by ship now: `HARBOR_SHIP`). Where a hero stands to look at it: beside
+ * where everyone arrives, on its south-west side. The fountain itself stands on the hex up and to the right of
+ * that (`HARBOR_GATE`), the middle of the square, with its round court about it (`HARBOR_COURT`). Both this hex
+ * and the one heroes arrive on are on the side the view opens from: nobody stands hidden behind it.
  */
-export const HARBOR_WAYGATE: HexPos = at(12, 17);
+export const HARBOR_FOUNTAIN: HexPos = at(12, 17);
 /** The apothecary's door, on the south-east shore at the end of its lane, a little south of the bridge: its back to the sea, its front turned in to the north-west. A building site until the crew has paid for it. */
 export const HARBOR_APOTHECARY: HexPos = at(21, 18);
 /** The smithy's door, on the north-west shore at the end of its lane from the square: its back to the sea, its front turned in to the south-east. A building site until the crew has paid for it. */
@@ -254,7 +277,7 @@ export const HARBOR_BUILDINGS: { id: string; door: HexPos; shape: Footing; groun
   { id: "townchest", door: HARBOR_CHEST, shape: "single", ground: "cobble", facing: 4 },
   { id: "board", door: HARBOR_BOARD, shape: "single", ground: "cobble", facing: 1 },
   { id: "lapidary", door: HARBOR_LAPIDARY, shape: "pair", ground: "cobble", facing: 5 },
-  { id: "waygate", door: HARBOR_WAYGATE, shape: "single", ground: "cobble" },
+  { id: "fountain", door: HARBOR_FOUNTAIN, shape: "single", ground: "cobble" },
   ...HARBOR_PLOTS.map((door, i) => ({ id: `plot:${i}`, door, shape: "pair" as const, ground: "plains" as const, facing: HARBOR_PLOT_FACING[i] })),
 ];
 
@@ -312,7 +335,7 @@ export const HARBOR_ROADS: HarborRoad[] = [
 export const HARBOR_HOME_ROADS: HarborRoad[] = HARBOR_ROADS.slice(-4);
 
 /**
- * The waygate's court: the six hexes round the gate, all paved, so the gate hangs in the middle of a round of
+ * The fountain's court: the six hexes round it, all paved, so the fountain stands in the middle of a round of
  * stone at the corner of the square (the renderer lays one round of paving over the lot). In `HARBOR_SIDES` order.
  */
 export const HARBOR_COURT: HexPos[] = HARBOR_SIDES.map((d) => ({ q: HARBOR_GATE.q + d.q, r: HARBOR_GATE.r + d.r }));
@@ -357,15 +380,16 @@ export interface HarborDecor {
 }
 /** The kinds that stand in the middle of a hex and fill it. */
 const FIXTURE_KINDS: ReadonlySet<DecorKind> = new Set(["well", "statue", "crane"]);
-/** The corner of a hex of the court's ring that points at the gate's `j`th standing stone (see HARBOR_COURT). */
+/** The corner of a hex of the court's ring that points at the court's `j`th standing stone (see HARBOR_COURT). */
 const courtStone = (j: number, kind: DecorKind): HarborDecor => ({ kind, at: HARBOR_COURT[j], corner: (j + 5) % 6, turn: j });
 const lamps = (...spots: [col: number, r: number, corner: number][]): HarborDecor[] => spots.map(([col, r, corner]) => ({ kind: "lamp", at: at(col, r), corner }));
 export const HARBOR_DECOR: HarborDecor[] = [
-  // The waygate's court: standing stones round it, whole behind it (to the north and east), broken toward the sea,
-  // (The stones stand on the six corners of the court: three whole ones behind the gate as it is first seen, a
-  // broken one either side, and in front, between where heroes arrive and where they stand to use it, only a stump.)
+  // The fountain's court: the standing stones of the old waygate round it, whole behind it (to the north and east),
+  // broken toward the sea. (The stones stand on the six corners of the court: three whole ones behind the fountain
+  // as it is first seen, a broken one either side, and in front, between where heroes arrive and where they stand
+  // to look at it, only a stump.)
   courtStone(0, "pillar"), courtStone(1, "pillar"), courtStone(5, "pillar"), courtStone(2, "pillar_broken"), courtStone(4, "pillar_broken"), courtStone(3, "stump"),
-  // Lamps stand only where one would: two at the gate's court, one where the lanes fork off the High Street on
+  // Lamps stand only where one would: two at the fountain's court, one where the lanes fork off the High Street on
   // either side of the square, one at each end of the bridge, one at each pier head and one where the housing
   // island's paths meet. (Every place has a lantern of its own at its door.)
   ...lamps([11, 17, 4], [14, 17, 2], [12, 14, 5], [19, 16, 3]),
@@ -453,7 +477,7 @@ const around = (p: HexPos) => NEIGHBOURS.map((d) => ({ q: p.q + d.q, r: p.r + d.
  * stand on the west and east shoulders where the wall never reached; and the
  * south shore is a quay of bare earth with three piers, the sea beyond them
  * dotted with rocks and a wreck. Inland it is grass, with a cobbled plaza at
- * the heart, the waygate in the middle of it, and the town laid out along its
+ * the heart, the fountain in the middle of it, and the town laid out along its
  * roads (HARBOR_ROADS; the plan is set out above HARBOR_GATE): the High
  * Street east and west out of the plaza, two roads down to the paved quay, a
  * lane up to the caverns, and Hut Row across the north with every hut on it.
@@ -531,7 +555,7 @@ export function generateHarbor(): WorldMap {
   }
   // The lighthouse's point: bare ground round its doorstep, out into the sea, so the tower can be walked up to.
   for (const p of around(HARBOR_LIGHTHOUSE)) if (tileAt(map, p)?.biome === "water") lay(p, "mud");
-  // The waygate's court, paved all round the gate; and the crane's mole, built out from the quay.
+  // The fountain's court, paved all round it; and the crane's mole, built out from the quay.
   for (const p of HARBOR_COURT) lay(p, "cobble");
   lay(HARBOR_MOLE, "cobble");
   // The caverns' forecourt: a paved terrace a step above the grass, and the two broad steps the lane climbs to it.
@@ -557,7 +581,8 @@ export function generateHarbor(): WorldMap {
     harborPoi("lighthouse", "lighthouse", HARBOR_LIGHTHOUSE),
     harborPoi("lapidary", "lapidary", HARBOR_LAPIDARY),
     harborPoi("townchest", "townchest", HARBOR_CHEST),
-    harborPoi("waygate", "waygate", HARBOR_WAYGATE),
+    harborPoi("fountain", "fountain", HARBOR_FOUNTAIN),
+    harborPoi("ship", "ship", HARBOR_SHIP),
     harborPoi("well", "well", HARBOR_WELL),
     harborPoi("fishing", "fishing", HARBOR_GATHER.fishing),
     harborPoi("felling", "felling", HARBOR_GATHER.felling),
@@ -812,7 +837,7 @@ export interface HarborMember {
   roof?: string;
 }
 
-/** A map the crew has open out through the waygate: its code, the atlas node it was made for, and what the place is called. */
+/** A map the crew has open, out where its ship took it: its code, the atlas node it was made for, and what the place is called. */
 export interface HarborMap {
   code: string;
   node: string;
@@ -825,9 +850,11 @@ export interface HarborBoard {
   works?: HarborWorks;
   /**
    * The atlas maps the crew has open (made, not yet cleared, and walked on lately), the latest first. While there
-   * is one the town's waygate stands open, and stepping through it goes there. Absent when there is none.
+   * is one, going aboard the ship at the pier goes there. Absent when there is none.
    */
   maps?: HarborMap[];
+  /** The crew's ship: which one lies at the pier (the best it owns), and how her hull stands. Absent on boards from before ships: the Sloop, sound. */
+  ship?: CrewShip;
 }
 
 /**

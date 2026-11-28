@@ -1,5 +1,5 @@
 // What dresses the Harbor and is not a place: the round of paving under the
-// waygate and the standing stones about it, the lamps along the streets, the
+// fountain's court and the standing stones about it, the lamps along the streets, the
 // well in the square, the quay's kerb, mooring posts, cargo and crane, and
 // the forecourt of the caverns with its stone keepers and braziers.
 //
@@ -163,7 +163,7 @@ function barrel(k: Kit, x: number, y: number, z: number, s = 1, lying = false) {
   k.solid.pop();
 }
 
-/** A standing stone of the waygate's court: an old column, fluted, banded with brass, signs burning cold up its face. `tall` whole; shorter is broken off. */
+/** A standing stone of the fountain's court (the old waygate's): an old column, fluted, banded with brass, signs burning cold up its face. `tall` whole; shorter is broken off. */
 function courtPillar(k: Kit, tall: number, whole: boolean, seed: number) {
   const s = k.solid;
   s.box(STONE_DARK, 0.56, 0.42, 0.56, 0, -0.3, 0);
@@ -601,7 +601,7 @@ function courtTexture(): THREE.CanvasTexture {
   return courtArt;
 }
 
-/** How wide the waygate's court is paved, from its middle: out to where the far corners of the hexes round the gate are. */
+/** How wide the fountain's court is paved, from its middle: out to where the far corners of the hexes round it are. */
 export const COURT_RADIUS = 2.52;
 
 export interface TownDressing {
@@ -653,7 +653,7 @@ export function buildTownDressing(map: WorldMap, place: (p: HexPos) => Place): T
     for (const paint of [kit.solid, kit.warm, kit.cool]) paint.pop();
   }
 
-  // ---- the waygate's court: one round of paving over the seven hexes, and a kerb of dressed stone round it ----
+  // ---- the fountain's court: one round of paving over the seven hexes, and a kerb of dressed stone round it ----
   const gateAt = place(HARBOR_GATE);
   const courtY = Math.max(gateAt.y, ...HARBOR_COURT.map((p) => place(p).y)) + 0.022;
   const paving = new THREE.Mesh(new THREE.CircleGeometry(COURT_RADIUS, 72).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ map: courtTexture() }));
