@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FURNISHINGS } from "./hut";
 import { hexCentre, hutRoom, onCutFloor, placeProblem, hutFloor } from "./hutroom";
-import { endNotches, sideNotches, squaredWalls } from "./roomedges";
+import { edgeFills, endNotches, sideNotches, squaredWalls } from "./roomedges";
 import type { Tile } from "./map";
 
 const key = (p: { q: number; r: number }) => `${p.q},${p.r}`;
@@ -33,6 +33,22 @@ describe("a floor's notches", () => {
     expect(new Set([...sides, ...ends].map(key)).size).toBe(sides.length + ends.length);
   });
 
+  it("square a deck off: a half hex in every notch down its sides and along its ends, and a quarter at each corner where a full row ends", () => {
+    for (const [cols, rows] of [[3, 8], [3, 10], [4, 7]]) {
+      const fills = edgeFills(deck(cols, rows), planks);
+      const count = (cut: string) => fills.filter((f) => f.cut === cut).length;
+      expect(count("side"), `${cols}x${rows}`).toBe(rows);
+      // Each end row has a full-width side and a short side: one corner at each end, and half hexes over the rest of it.
+      expect(count("corner"), `${cols}x${rows}`).toBe(2);
+      expect(count("end"), `${cols}x${rows}`).toBe(cols * 2);
+      for (const f of fills) expect(planks(f.from)).toBe(true);
+      expect(new Set(fills.map(key)).size).toBe(fills.length);
+      // The floor it adds up to is the deck's own square: so many whole hexes' worth of halves and quarters.
+      const area = fills.reduce((n, f) => n + (f.cut === "corner" ? 0.25 : 0.5), 0);
+      expect(area).toBe(rows / 2 + cols + 0.5);
+    }
+  });
+
   it("are not found where something else stands, unless it is allowed", () => {
     const tiles = deck(3, 4).map((t) => (t.biome === "water" ? { ...t, biome: "rock" as const } : t));
     expect(sideNotches(tiles, planks)).toEqual([]);
@@ -54,7 +70,9 @@ describe("a room's cut walls", () => {
         expect(room.tiles.find((t) => t.q === q && t.r === r)!.biome, k).toBe("wall");
         // The room's side of it is floor it gave up; the far side is still wall.
         const mid = hexCentre({ q, r });
-        const off = (d: number) => (cut.cut === "side" ? { x: mid.x + cut.room * d, z: mid.z } : { x: mid.x, z: mid.z + cut.room * d });
+        // A little way toward the room (both ways, in a corner) is floor it gave up; the same way out is still wall.
+        const [dx, dz] = cut.cut === "side" ? [cut.room, 0] : cut.cut === "end" ? [0, cut.room] : [cut.rx, cut.rz];
+        const off = (d: number) => ({ x: mid.x + dx * d, z: mid.z + dz * d });
         expect(onCutFloor(room, off(0.3)), k).toBe(true);
         expect(onCutFloor(room, off(-0.3)), k).toBe(false);
       }

@@ -58,7 +58,8 @@ line off once it is done.
 - A room's walls and a deck's edges are cut in half (`packages/world/src/roomedges.ts` says which; drawn by
   `cutColumn` and `wallSide` in `WorldRenderer.ts` and the floor fill in `render/ambience.ts`). Furniture stands on
   the floor half by its footprint (`onCutFloor` in `hutroom.ts`), anchored on the floor hex beside it: it cannot be
-  anchored on the half itself, small things cannot be set down there, and nobody walks there. Left whole: a wall hex
-  at a room's corner with floor on only one of its two near sides, and a wall with floor on both sides of it. Several
+  anchored on the half itself, small things cannot be set down there, and nobody walks there. Corners are squared
+  (a quarter of the corner hex goes to the floor); a wall with floor on both sides of it is left whole. A corner's
+  face along the side wall takes wallpaper but nothing can be hung on it. Several
   hex sides share one straight face (a third each on a side wall, half each on a back or front wall), so two wide
   things hung on neighbouring sides of one wall hex can overlap.

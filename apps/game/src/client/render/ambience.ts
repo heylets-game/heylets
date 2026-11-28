@@ -14,7 +14,7 @@ import { devTools } from "../devTools";
 import { fancy, fancyGrass } from "./fancy";
 import { WIND_DIR, addFieldSway, gustAt, setFieldCalm, windPower } from "./wind";
 import { addCutaway } from "./cutaway";
-import { nightAt, rainOf, stormAt, timeOfDay, weatherAt, type FloorLook, type Tile, endNotches, sideNotches } from "@gantt-quest/world";
+import { nightAt, rainOf, stormAt, timeOfDay, weatherAt, type FloorLook, type Tile, edgeFills } from "@gantt-quest/world";
 import type { LightKind } from "./props";
 import type { LampLight } from "./tableLamps";
 
@@ -1223,53 +1223,52 @@ export class Ambience {
           uvs.push((p.x + x) / GROUND_SPAN, (p.z + z) / GROUND_SPAN);
         });
       }
-      // Squared off: half a hex of the same floor in each notch along its sides, and a plain face down its outer edge.
+      // Squared off: the floor is given part of each hex at its edge (roomedges.ts `edgeFills`): half of each notch
+      // down its sides and along its ends, a quarter of each corner. Where no wall stands there, a plain face
+      // goes down the floor's new outer edge.
       if (this.squareEdges) {
         const edge: number[] = [];
-        const HALF = Math.sqrt(3) / 2;
+        const HALF = (Math.sqrt(3) / 2) * TILE_RADIUS;
+        const R = TILE_RADIUS;
         const walls = new Map(tiles.map((t) => [`${t.q},${t.r}`, t]));
-        // A wall hex in a notch is halved by the renderer (WorldRenderer `squared`), and the floor runs under where it stood.
-        for (const { q, r, side, from: t } of sideNotches(tiles, (x) => (x.biome as string) === biome, (there) => !there || there.biome === "water" || (there.biome as string) === "wall")) {
-          const walled = (walls.get(`${q},${r}`)?.biome as string) === "wall";
-          {
-            const p = place(t);
-            // The middle of that hex, and the half of it on this floor's side.
-            const [cx, y, cz, s] = [p.x + side * HALF * 2, p.y + 0.006, p.z, -side];
-            const corners: [number, number][] = [[0, -TILE_RADIUS], [s * HALF, -TILE_RADIUS / 2], [s * HALF, TILE_RADIUS / 2], [0, TILE_RADIUS]];
-            for (const i of s > 0 ? [0, 3, 2, 0, 2, 1] : [0, 1, 2, 0, 2, 3]) {
-              const [x, z] = corners[i];
+        for (const fill of edgeFills(tiles, (x) => (x.biome as string) === biome, (there) => !there || there.biome === "water" || (there.biome as string) === "wall")) {
+          const walled = (walls.get(`${fill.q},${fill.r}`)?.biome as string) === "wall";
+          const p = place(fill.from);
+          // The middle of that hex, by how far it lies from the floor tile beside it.
+          const cx = p.x + Math.sqrt(3) * (fill.q - fill.from.q + (fill.r - fill.from.r) / 2);
+          const cz = p.z + 1.5 * (fill.r - fill.from.r);
+          const y = p.y + 0.006;
+          // The part the floor is given, going round from the hex's middle line; and which of its edges are the floor's new outer ones.
+          let part: [number, number][];
+          let outer: [[number, number], [number, number]][];
+          if (fill.cut === "side") {
+            const s = fill.room;
+            part = [[0, -R], [s * HALF, -R / 2], [s * HALF, R / 2], [0, R]];
+            outer = [[[0, -R], [0, R]]];
+          } else if (fill.cut === "end") {
+            const s = fill.room;
+            part = [[-HALF, 0], [-HALF, (s * R) / 2], [0, s * R], [HALF, (s * R) / 2], [HALF, 0]];
+            outer = [[[-HALF, 0], [HALF, 0]]];
+          } else {
+            const [sx, sz] = [fill.rx, fill.rz];
+            part = [[0, 0], [sx * HALF, 0], [sx * HALF, (sz * R) / 2], [0, sz * R]];
+            outer = [[[0, 0], [sx * HALF, 0]], [[0, 0], [0, sz * R]]];
+          }
+          for (let i = 1; i + 1 < part.length; i++) {
+            // Wound so its face is up, whichever way round the part was listed.
+            const [a, b, c] = [part[0], part[i], part[i + 1]];
+            const up = (b[1] - a[1]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[1] - a[1]) > 0;
+            for (const [x, z] of up ? [a, b, c] : [a, c, b]) {
               positions.push(cx + x, y, cz + z);
               normals.push(0, 1, 0);
               uvs.push((cx + x) / GROUND_SPAN, (cz + z) / GROUND_SPAN);
             }
-            // Its outer face, straight down: what shows of the floor's side from beyond it.
-            const [z0, z1, low] = [cz - TILE_RADIUS, cz + TILE_RADIUS, y - 3];
-            const quad: [number, number, number][] = side > 0 ? [[cx, y, z0], [cx, y, z1], [cx, low, z1], [cx, y, z0], [cx, low, z1], [cx, low, z0]] : [[cx, y, z1], [cx, y, z0], [cx, low, z0], [cx, y, z1], [cx, low, z0], [cx, low, z1]];
-            if (!walled) for (const v of quad) edge.push(...v);
-          }
-        }
-        // And its ends: the point of each hex past the last row, where it reaches in between two of the floor's.
-        for (const { q, r, room, from } of endNotches(tiles, (x) => (x.biome as string) === biome, (there) => !there || there.biome === "water" || (there.biome as string) === "wall")) {
-          const walled = (walls.get(`${q},${r}`)?.biome as string) === "wall";
-          const p = place(from);
-          // That hex's middle is a row from `from`, half a hex along; the floor takes the half of it on the room's side,
-          // cut straight across its middle.
-          const cx = p.x + (from.q + from.r / 2 < q + r / 2 ? HALF : -HALF);
-          const [cz, y] = [p.z - room * 1.5, p.y + 0.006];
-          const R = TILE_RADIUS;
-          // (Three triangles of a five-sided half: across the middle, down both sides, and in to the point.)
-          const half: [number, number][] = room > 0 ? [[-HALF, 0], [-HALF, R / 2], [0, R], [HALF, R / 2], [HALF, 0]] : [[HALF, 0], [HALF, -R / 2], [0, -R], [-HALF, -R / 2], [-HALF, 0]];
-          const tri = [half[0], half[1], half[2], half[0], half[2], half[3], half[0], half[3], half[4]];
-          for (const [x, z] of tri) {
-            positions.push(cx + x, y, cz + z);
-            normals.push(0, 1, 0);
-            uvs.push((cx + x) / GROUND_SPAN, (cz + z) / GROUND_SPAN);
           }
           if (walled) continue;
-          // Its outer face, straight down, along the floor's new edge.
-          const [x0, x1, z, low] = [cx - HALF, cx + HALF, cz, y - 3];
-          const quad: [number, number, number][] = [[x0, y, z], [x1, y, z], [x1, low, z], [x0, y, z], [x1, low, z], [x0, low, z]];
-          for (const v of quad) edge.push(...v);
+          const low = y - 3;
+          for (const [[ax, az], [bx, bz]] of outer) {
+            for (const v of [[cx + ax, y, cz + az], [cx + bx, y, cz + bz], [cx + bx, low, cz + bz], [cx + ax, y, cz + az], [cx + bx, low, cz + bz], [cx + ax, low, cz + az]]) edge.push(...v);
+          }
         }
         if (edge.length > 0) {
           const sides = new THREE.BufferGeometry();

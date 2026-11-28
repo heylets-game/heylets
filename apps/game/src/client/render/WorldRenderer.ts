@@ -16,7 +16,7 @@ import "./camera.css";
 import { CAMERA_ICON, PINCH_PAN_SLACK, followIconSvg, pixelGlyphSvg, readFollow, writeFollow } from "./cameraFollow";
 import type { HexPos } from "@gantt-quest/core";
 import { hexDistance } from "@gantt-quest/core";
-import { lookStep, lookYaw, BASE_HEIGHT, HARBOR_HEART_AT, BIG_REACH, ENEMIES, HEX_DIRS, SEATS, spanAt, squaredWalls, tileCost, WALL_FACE_HALF, WALL_ITEM_BOTTOM, WALL_ITEM_TOP, hexAt, reachable, tileAt, wallFace, wallFaces, type Biome, type Clime, type Emote, type Outfit, type Poi, type Tile, type WorldMap, type FloorLook, type WallCut, type WallLook } from "@gantt-quest/world";
+import { lookStep, lookYaw, BASE_HEIGHT, HARBOR_HEART_AT, BIG_REACH, ENEMIES, HEX_DIRS, SEATS, onFloorPart, spanAt, squaredWalls, tileCost, WALL_FACE_HALF, WALL_ITEM_BOTTOM, WALL_ITEM_TOP, hexAt, reachable, tileAt, wallFace, wallFaces, type Biome, type Clime, type Emote, type Outfit, type Poi, type Tile, type WorldMap, type FloorLook, type WallCut, type WallLook } from "@gantt-quest/world";
 import { fancy, fancyGrass, inkLine } from "./fancy";
 import { NightLife } from "./nightlife";
 import { Storm } from "./storm";
@@ -3286,12 +3286,17 @@ export class WorldRenderer {
   private static readonly HALF_WALL = new THREE.MeshLambertMaterial({ color: "#3a2b20", side: THREE.DoubleSide });
 
   /** A cut wall column, its top at y = 0: what is left of the hex on the far side of its straight face. */
-  private static cutColumn(cut: "side" | "end", room: 1 | -1): THREE.BufferGeometry {
+  private static cutColumn(cut: WallCut): THREE.BufferGeometry {
     const a = (Math.sqrt(3) / 2) * TILE_RADIUS;
     const R = TILE_RADIUS;
+    const room = cut.cut === "corner" ? 1 : cut.room;
     // The top's outline: the half of the hex away from the room, cut down its middle (a side wall) or across it (an end wall).
+    // A corner keeps all of the hex but the quarter inside the room: listed from the hex's middle (the room's
+    // corner), so the fan below fills it though it bends there.
     const top: [number, number][] =
-      cut === "side" ? [[0, -R], [-room * a, -R / 2], [-room * a, R / 2], [0, R]] : [[-a, 0], [-a, (-room * R) / 2], [0, -room * R], [a, (-room * R) / 2], [a, 0]];
+      cut.cut === "side" ? [[0, -R], [-room * a, -R / 2], [-room * a, R / 2], [0, R]]
+      : cut.cut === "end" ? [[-a, 0], [-a, (-room * R) / 2], [0, -room * R], [a, (-room * R) / 2], [a, 0]]
+      : [[0, 0], [0, cut.rz * R], [-cut.rx * a, (cut.rz * R) / 2], [-cut.rx * a, (-cut.rz * R) / 2], [0, -cut.rz * R], [cut.rx * a, (-cut.rz * R) / 2], [cut.rx * a, 0]];
     const v: number[] = [];
     const tri = (...pts: [number, number, number][]) => pts.forEach((p) => v.push(...p));
     for (let i = 1; i + 1 < top.length; i++) tri([top[0][0], 0, top[0][1]], [top[i][0], 0, top[i][1]], [top[i + 1][0], 0, top[i + 1][1]]);
@@ -3318,9 +3323,9 @@ export class WorldRenderer {
     if (!state.indoors || !this.ambience.squareEdges) return;
     // Which walls are cut, and how, is the rules' to say (roomedges.ts): furniture is let onto the same halves.
     for (const [k, cut] of squaredWalls({ tiles: this.tiles })) this.squared.set(k, cut);
-    for (const [k, { cut, room }] of this.squared) {
+    for (const [k, cut] of this.squared) {
       const [q, r] = k.split(",").map(Number);
-      const mesh = new THREE.Mesh(WorldRenderer.cutColumn(cut, room), WorldRenderer.HALF_WALL.clone());
+      const mesh = new THREE.Mesh(WorldRenderer.cutColumn(cut), WorldRenderer.HALF_WALL.clone());
       const { x, z } = hexToWorld({ q, r });
       mesh.position.set(x, tileTop(this.tiles.find((t) => t.q === q && t.r === r)), z);
       mesh.castShadow = mesh.receiveShadow = true;
@@ -3344,18 +3349,21 @@ export class WorldRenderer {
     if (!sq) return wallFace(pos, side);
     const dir = HEX_DIRS[side];
     const mid = hexToWorld(pos);
-    const { room } = sq;
+    const half = Math.sqrt(3) / 2;
     if (sq.cut === "side") {
+      const { room } = sq;
       // The sides toward the room: the one straight across, and the two beside it.
       const toward = room > 0 ? (dir.q === 1 && dir.r <= 0) || (dir.q === 0 && dir.r === 1) : (dir.q === -1 && dir.r >= 0) || (dir.q === 0 && dir.r === -1);
       if (!toward) return wallFace(pos, side);
       const third = 2 / 3;
       return { x: mid.x, z: mid.z + dir.r * third, nx: room, nz: 0, tx: 0, tz: -room * third };
     }
-    // An end wall: the two sides either side of the point it lost, on the face across its middle.
+    // An end wall: the two sides either side of the point it lost, on the face across its middle. A corner has
+    // only one side toward the floor, and the half of that face the room keeps: the stretch along the back wall.
+    const room = sq.cut === "end" ? sq.room : sq.rz;
     if (dir.r !== room) return wallFace(pos, side);
-    const half = Math.sqrt(3) / 2;
     const east = dir.q + dir.r / 2 > 0 ? 1 : -1;
+    if (sq.cut === "corner" && east !== sq.rx) return wallFace(pos, side);
     return { x: mid.x + (east * half) / 2, z: mid.z, nx: 0, nz: room, tx: room * half, tz: 0 };
   }
 
@@ -3374,9 +3382,11 @@ export class WorldRenderer {
     const cut = this.squared.get(key(hex));
     if (!cut || this.lowered.has(key(hex))) return null;
     const mid = hexToWorld(hex);
-    if ((cut.cut === "side" ? x - mid.x : z - mid.z) * cut.room <= 0) return null;
-    // Beside a side wall, the floor hex straight across; beside an end wall, whichever of its two the pointer is nearer.
-    const pos = cut.cut === "side" ? { q: hex.q + cut.room, r: hex.r } : cut.room > 0 ? (x >= mid.x ? { q: hex.q, r: hex.r + 1 } : { q: hex.q - 1, r: hex.r + 1 }) : x >= mid.x ? { q: hex.q + 1, r: hex.r - 1 } : { q: hex.q, r: hex.r - 1 };
+    if (!onFloorPart(cut, x - mid.x, z - mid.z, 1e-6)) return null;
+    // Beside a side wall, the floor hex straight across; beside an end wall, whichever of its two the pointer is
+    // nearer; in a corner, the one floor hex it has.
+    const diagonal = (east: boolean, room: 1 | -1) => (room > 0 ? (east ? { q: hex.q, r: hex.r + 1 } : { q: hex.q - 1, r: hex.r + 1 }) : east ? { q: hex.q + 1, r: hex.r - 1 } : { q: hex.q, r: hex.r - 1 });
+    const pos = cut.cut === "side" ? { q: hex.q + cut.room, r: hex.r } : cut.cut === "end" ? diagonal(x >= mid.x, cut.room) : diagonal(cut.rx > 0, cut.rz);
     return (this.tiles.find((t) => t.q === pos.q && t.r === pos.r)?.biome as string) === "floor" ? { pos, x, z } : null;
   }
 
@@ -3514,6 +3524,24 @@ export class WorldRenderer {
       const list = byWall.get(key(f.pos)) ?? [];
       list.push(a, b, c, a, c, d);
       byWall.set(key(f.pos), list);
+    }
+    // A corner's other face, along the side wall: no side of its hex is hung there, but it is wall all the same.
+    for (const [k, cut] of this.squared) {
+      if (cut.cut !== "corner") continue;
+      const [q, r] = k.split(",").map(Number);
+      const tile = tileAt(state.map, { q, r });
+      if (!tile || tile.h < 0.9) continue;
+      const mid = hexToWorld({ q, r });
+      const top = tileTop(tile) - TILE_FILLET;
+      const x = mid.x + cut.rx * 0.006;
+      const [z0, z1] = [mid.z, mid.z + cut.rz * TILE_RADIUS];
+      // Left to right as seen from the room.
+      const [zl, zr] = cut.rx * cut.rz > 0 ? [z1, z0] : [z0, z1];
+      const corner = (z: number, y: number, u: number, v: number) => [x, y, z, cut.rx, 0, 0, u, v];
+      const [a, b, c, d] = [corner(zl, FLOOR_TOP, 0, 0), corner(zr, FLOOR_TOP, 1, 0), corner(zr, top, 1, 1), corner(zl, top, 0, 1)];
+      const list = byWall.get(k) ?? [];
+      list.push(a, b, c, a, c, d);
+      byWall.set(k, list);
     }
     for (const [wall, verts] of byWall) {
       const geometry = new THREE.BufferGeometry();

@@ -5,7 +5,7 @@
 // Durable Object checks each request against the rules here: where the walls
 // are, where a furnishing may stand, and that furniture is walked around.
 
-import { squaredWalls } from "./roomedges";
+import { onFloorPart, squaredWalls } from "./roomedges";
 import type { HutFinish } from "./finishes";
 import { allHexesInGrid, posKey, type HexGrid, type HexPos } from "@gantt-quest/core";
 import { harborPoi, type HarborPlayer, type EmoteMessage, type EmoteRequest, type LookMessage, type LookRequest, type XpMessage } from "./harbor";
@@ -333,14 +333,15 @@ const WALL_CLEAR = 0.02;
 
 /**
  * Whether a point of the room is on the floor a cut wall hex gave up (roomedges.ts `squaredWalls`): on the
- * room's side of the straight face down its middle (a side wall) or across it (a back or front wall).
+ * room's side of the straight face down its middle (a side wall) or across it (a back or front wall), or in the
+ * quarter a corner gave.
  */
 export function onCutFloor(room: WorldMap, p: { x: number; z: number }): boolean {
   const hex = hexAt(p.x, p.z);
   const cut = squaredWalls(room).get(`${hex.q},${hex.r}`);
   if (!cut) return false;
   const mid = hexCentre(hex);
-  return (cut.cut === "side" ? p.x - mid.x : p.z - mid.z) * cut.room >= WALL_CLEAR;
+  return onFloorPart(cut, p.x - mid.x, p.z - mid.z, WALL_CLEAR);
 }
 
 /** Why the floor hex `pos` cannot be stood on by a furnishing, or null. */
