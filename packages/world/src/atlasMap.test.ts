@@ -22,7 +22,7 @@ const tileAtHex = (world: AtlasWorld, hex: HexPos): Tile | undefined => world.ma
 /** Whether the cloud is lifted from a hex, by the rule: near enough the Harbor or somewhere cleared, or right by somewhere open. */
 const seenBy = (nodes: AtlasNodeView[]) => {
   const reached = nodes.filter((n) => n.state === "harbor" || n.state === "cleared");
-  const open = nodes.filter((n) => n.state === "open");
+  const open = nodes.filter((n) => n.state === "open" || n.state === "beyond");
   return (hex: HexPos) => reached.some((n) => hexDistance(n.hex, hex) <= (n.state === "cleared" && n.kind === "lookout" ? ATLAS_FARSIGHT : ATLAS_SIGHT)) || open.some((n) => hexDistance(n.hex, hex) <= ATLAS_GLIMPSE);
 };
 
@@ -34,15 +34,72 @@ describe("the world the atlas lies on", () => {
     expect(lie("CREWAA")).not.toBe(lie("CREWBB"));
   });
 
-  it("has seas, sand, grass, forest and hills, with the sea and the land each in a good share", () => {
+  it("is an ocean with islands in it: mostly sea, with sand, grass, forest and hills each a share of the land", () => {
     for (const seed of SEEDS) {
       const count: Record<string, number> = {};
       for (let q = -60; q <= 60; q += 2) for (let r = -60; r <= 60; r += 2) count[atlasGround(seed, { q, r }).biome] = (count[atlasGround(seed, { q, r }).biome] ?? 0) + 1;
       const total = Object.values(count).reduce((a, b) => a + b, 0);
       expect(Object.keys(count).sort(), seed).toEqual(["forest", "hills", "plains", "sand", "water"]);
-      expect(count.water / total, seed).toBeGreaterThan(0.08);
-      expect(count.water / total, seed).toBeLessThan(0.5);
-      for (const kind of ["forest", "plains", "sand", "hills"]) expect(count[kind] / total, `${seed} ${kind}`).toBeGreaterThan(0.03);
+      expect(count.water / total, seed).toBeGreaterThan(0.72);
+      expect(count.water / total, seed).toBeLessThan(0.93);
+      for (const kind of ["forest", "plains", "sand", "hills"]) expect(count[kind] / total, `${seed} ${kind}`).toBeGreaterThan(0.003);
+    }
+  });
+});
+
+describe("the islands", () => {
+  const cells = (radius: number): AtlasCell[] => {
+    const out: AtlasCell[] = [];
+    for (let q = -radius; q <= radius; q++) for (let r = -radius; r <= radius; r++) if (ring({ q, r }) <= radius) out.push({ q, r });
+    return out;
+  };
+
+  it("put land under and beside every place, and open sea between one place and the next", () => {
+    for (const seed of SEEDS) {
+      let apart = 0;
+      let links = 0;
+      for (const c of cells(7)) {
+        const n = atlasNode(seed, c);
+        // Somewhere to stand, and to land a boat: no place is a hex alone in the water.
+        const beside = HARBOR_SIDES.map((d) => atlasGround(seed, { q: n.hex.q + d.q, r: n.hex.r + d.r }).biome);
+        if (n.land !== "sea") expect(beside.filter((b) => b !== "water").length, `${seed} ${n.id}`).toBeGreaterThanOrEqual(4);
+        for (const id of n.links) {
+          const other = atlasNodeById(seed, id)!;
+          links++;
+          // Halfway along the route: water, nearly always. (Two islands that lie close run together now and then.)
+          const mid = { q: Math.round((n.hex.q + other.hex.q) / 2), r: Math.round((n.hex.r + other.hex.r) / 2) };
+          if (atlasLie(seed, mid).open) apart++;
+        }
+      }
+      expect(apart / links, seed).toBeGreaterThan(0.9);
+    }
+  });
+
+  it("are sea out past their coasts whatever the climate: the open ocean is water even in the ashlands", () => {
+    const seen = new Set<string>();
+    for (const seed of SEEDS) {
+      for (let q = -400; q <= 400; q += 7) {
+        for (let r = -400; r <= 400; r += 7) {
+          const lie = atlasLie(seed, { q, r });
+          if (!lie.open) continue;
+          seen.add(lie.tract);
+          expect(lie.land).toBe("sea");
+          expect(atlasGround(seed, { q, r }).biome, `${seed} ${q},${r}`).toBe("water");
+        }
+      }
+    }
+    expect([...seen].sort()).toEqual([...CLIMES].sort());
+  });
+
+  it("leave every place on the hex it always stood on, spread out: the same land, climate and name as before the sea came in", () => {
+    // The first lattice's hexes, doubled: so every one is even, and what a place is reads the same there.
+    for (const seed of SEEDS) {
+      for (const c of cells(6)) {
+        const hex = atlasHex(seed, c);
+        expect(hex.q % 2 === 0 && hex.r % 2 === 0, `${seed} ${c.q},${c.r}`).toBe(true);
+        const n = atlasNode(seed, c);
+        if (n.kind !== "harbor") expect(atlasLie(seed, hex)).toMatchObject({ land: n.land, clime: n.clime });
+      }
     }
   });
 });
@@ -92,7 +149,7 @@ describe("where the places lie", () => {
         for (const id of n.links) {
           const other = atlasNodeById(seed, id)!;
           all++;
-          if (hexDistance(n.hex, other.hex) > ATLAS_SPACING + 1) long++;
+          if (hexDistance(n.hex, other.hex) > ATLAS_SPACING * 1.2) long++;
           expect(hexDistance(n.hex, other.hex), `${n.id} to ${id}`).toBeLessThanOrEqual(ATLAS_SPACING * 2);
         }
       }
@@ -136,7 +193,8 @@ describe("the window a crew is shown", () => {
   it("gives every place they know somewhere to stand, and builds only the lighthouse and the sea caves' mouths", () => {
     for (const seed of SEEDS) {
       const nodes = charted(seed, 6);
-      const world = atlasWorld(seed, nodes);
+      // A window wide enough to hold them all: six places out is further than one window reaches.
+      const world = atlasWorld(seed, nodes, { q: 0, r: 0 }, ATLAS_VIEW * 2);
       for (const n of nodes) {
         if (n.state === "fogged") continue;
         const tile = tileAtHex(world, n.hex)!;
@@ -161,13 +219,16 @@ describe("the window a crew is shown", () => {
       // Every place within a few rings, as a crew that had opened them all would be shown them.
       const nodes: AtlasNodeView[] = [];
       for (let q = -9; q <= 9; q++) for (let r = -9; r <= 9; r++) if (ring({ q, r }) <= 9) nodes.push({ ...atlasNode(seed, { q, r }), state: q === 0 && r === 0 ? "harbor" : "open" });
-      for (const centre of [{ q: 0, r: 0 }, { q: 30, r: -14 }]) {
-        const world = atlasWorld(seed, nodes, centre);
+      // (In windows twice as wide as the view's, to take in places of every climate.)
+      const reach = ATLAS_VIEW * 2;
+      for (const centre of [{ q: 0, r: 0 }, { q: 60, r: -28 }]) {
+        const world = atlasWorld(seed, nodes, centre, reach);
         const tiles = new Map(world.map.tiles.map((t) => [posKey(t), t]));
         for (const n of nodes) {
           if (n.state === "fogged" || n.kind === "harbor") continue;
           const tile = tiles.get(posKey(n.hex));
-          if (!tile) continue;
+          // (One at the very edge of the window has not all its neighbours on it.)
+          if (!tile || hexDistance(n.hex, centre) >= reach) continue;
           const where = `${seed} ${n.id} (${n.kind} on ${n.clime} ${n.land})`;
           // The same reckoning as the ground itself: the land and the climate at its hex.
           const lie = atlasLie(seed, n.hex);
@@ -223,7 +284,7 @@ describe("the window a crew is shown", () => {
       expect(world.clear.map((c) => posKey(c.hex)).sort()).toEqual(told.map((n) => posKey(n.hex)).sort());
       for (const c of world.clear) {
         const n = told.find((n) => posKey(n.hex) === posKey(c.hex))!;
-        expect(c.reach).toBe(n.state === "open" ? ATLAS_GLIMPSE : n.kind === "lookout" ? ATLAS_FARSIGHT : ATLAS_SIGHT);
+        expect(c.reach).toBe(n.state === "open" || n.state === "beyond" ? ATLAS_GLIMPSE : n.kind === "lookout" ? ATLAS_FARSIGHT : ATLAS_SIGHT);
       }
       // And no fog is handed over as ground: under the cloud there is nothing, or (at its edge) the land itself.
       expect(world.map.tiles.some((t) => t.biome === "fog")).toBe(false);

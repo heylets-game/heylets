@@ -73,10 +73,10 @@ A tab left open on an older build is told when a newer one is out (`src/client/N
 |---|---|
 | `packages/world/src/` | All game rules. Pure and deterministic, no I/O. Start here. |
 | `…/zone/` | Fights and walking on a map's tiles. `zone.ts` is the reducer: `stepZone(state, action)` → new state and events. `combat.ts` and `kit.ts` are what units can do, `rules.ts` the dice, `ai.ts` the enemy's turn, `geometry.ts` and `light.ts` where things are and what can be seen, `surfaces.ts` and `weather.ts` the ground and the air, `loot.ts` and `spoils.ts` what there is to take |
-| `…/zone/gen.ts`, `lay.ts`, `indoors.ts`, `sites.ts`, `props.ts`, `mods.ts` | Making a map from a seed and options: its site, its ground and what stands on it, the bands that hold it, and a lodestone's modifiers. `delve.ts` (with `…/caverns.ts`) lays the caverns under the Harbor |
+| `…/zone/gen.ts`, `lay.ts`, `indoors.ts`, `sites.ts`, `props.ts`, `mods.ts` | Making a map from a seed and options: its site, its ground and what stands on it, the bands that hold it, and a charter's modifiers. `delve.ts` (with `…/caverns.ts`) lays the caverns under the Harbor |
 | `…/atlas.ts`, `atlasMap.ts`, `muster.ts` | The crew's chart of places, how it is drawn as a map of its own, and asking the crew who is coming |
 | `…/voyage/ships.ts` | The crew's ships as data (`SHIPS`): each one's deck, hull, hold, how many heroes she carries and how far out on the atlas she sails; which one a crew sails; mending a hull |
-| `…/lodestone.ts`, `stonecraft.ts`, `lapidary.ts`, `townchest.ts` | Lodestones, working them at the Lapidary, what its keeper pays for gems, and the crew's shared chest |
+| `…/lodestone.ts`, `stonecraft.ts`, `lapidary.ts`, `townchest.ts` | Charters (lodestones, in the code and in stored data), working them at Charter & Trade (the Lapidary, in the code), what its keeper pays for gems, and the crew's shared chest |
 | `…/map.ts` | Tiles, places (`Poi`) and weighted pathfinding, shared by every map |
 | `…/harbor.ts` | The Harbor map, path check and message types |
 | `…/hero.ts`, `progression.ts`, `classabilities.ts`, `content.ts` | A hero as a fight sees one, levelling, class abilities, and the tables of weapons, abilities and enemies |
@@ -89,7 +89,7 @@ A tab left open on an older build is told when a newer one is out (`src/client/N
 | `…/timing.ts` | The timed stop used on the splitting block (and by the older gathering outings): markers, grades and how a stat eases them |
 | `…/projects.ts` | Crew projects: the town's buildings, and groups of projects shown together (`PROJECT_GROUPS`: the shipyard's ships) |
 | `…/pub.ts`, `regulars.ts`, `salesman.ts` | The pub's room and its menu of meals; its regulars and their errands; the traveling salesmen |
-| `…/keepers.ts`, `apothecary.ts`, `smithy.ts`, `galley.ts` | The rooms you walk into with a keeper inside (smithy, apothecary, galley, Lapidary), their keepers, stock and haggling |
+| `…/keepers.ts`, `apothecary.ts`, `smithy.ts`, `galley.ts` | The rooms you walk into with a keeper inside (smithy, apothecary, galley, Charter & Trade), their keepers, stock and haggling |
 | `…/gameclock.ts` | The Harbor's clock and weather, from the wall clock alone, so every browser and the server agree |
 | `…/dice.ts`, `shoals.ts`, `tide.ts`, `crew.ts`, `stakes.ts` | The pub's table games, each a pure reducer with a per-player view, and the stake they are played for |
 | `…/trade.ts` | Offers between crewmates and their validation |
@@ -138,7 +138,7 @@ In dev builds the page exposes `window.__harbor` in the Harbor and `window.__gqZ
 - Art is drawn in code: figures and props from simple shapes, icons as pixel art. Admins can recolour and swap icons from `#admin`.
 - The galley and the lighthouse stand in the Harbor with nothing to do yet, and the sparring ring is shut.
 - Trading is not held back while one of the two is in a fight on a map.
-- Balance on the maps has had no tuning pass: Action Points, band sizes and lodestone modifiers are first numbers.
+- Balance on the maps has had no tuning pass: Action Points, band sizes and charter modifiers are first numbers.
 - The Harbor has twelve plots: a crew larger than that can't all own one.
 - Crew chat isn't stored.
 - Timing in fishing and the quarry trusts the client's reported moment within a round trip, so a script can always hit dead centre (capped at +20% a roll). Felling's report is replayed against what an axe could do (swing speed, regrowth, the round's length by the server's clock), but a script can still chop at the fastest swing and strike every log dead centre: at most the payout cap.

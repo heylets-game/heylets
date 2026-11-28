@@ -6,6 +6,8 @@
 // (what each ability does on the tiles), surfaces.ts (the ground), ai.ts
 // (the enemy's turn) and zone.ts (the reducer that ties them together).
 
+import type { VoyageOptions, VoyageState } from "../voyage/voyage";
+import type { Salvage } from "../voyage/seathings";
 import type { HexPos, Stats } from "@gantt-quest/core";
 import type { EffectKind, Inflict } from "../content";
 import type { Dice } from "./rules";
@@ -275,6 +277,11 @@ export interface ZoneOptions {
   stone?: number;
   /** The climate it lies in, on a map the atlas made (left out for the greenwood): its ground is painted to suit. */
   clime?: Clime;
+  /**
+   * A voyage (voyage/voyage.ts): the map is the deck of this ship with the sea round it, not a place. Nothing
+   * else here lays its ground; `level` is how dangerous the water is, and `party` how many the boarders are sized for.
+   */
+  voyage?: VoyageOptions;
 }
 
 /**
@@ -363,6 +370,8 @@ export interface ZoneState {
    * Server time, in ms, as the room told it. Missing until the room first tells the time.
    */
   clock?: { at: number; torchAt: number };
+  /** On a voyage's map: the sea, the hull and the hold (voyage/voyage.ts). */
+  voyage?: VoyageState;
   /**
    * Each hero's last walk out of a fight, while nothing has come of it (zone.ts, move): where it set off, the hexes
    * it went through, and when (server time). A walk clicked while it is still being played on screen may call it off
@@ -514,6 +523,10 @@ export type ZoneAction =
   | { type: "forage"; by: string; unit: string; poi: string }
   /** Unlock a locked door from beside it with a key off the ring, or force it without one. */
   | { type: "unlock"; by: string; unit: string; poi: string }
+  /** On a voyage: loose a harpoon from a gun the hero stands at, along `aim` (in the ship's frame: starboard, ahead; any length). */
+  | { type: "harpoon"; by: string; unit: string; station: string; aim: { x: number; y: number } }
+  /** On a voyage: put the helm over a lane, to port (-1) or starboard (1), from beside it. */
+  | { type: "steer"; by: string; unit: string; dir: -1 | 1 }
   /** The server's own, never a client's: the time now, so time out of a fight can pass (zone/clock.ts). */
   | { type: "time"; now: number }
   | { type: "end_turn"; by: string; unit: string }
@@ -525,7 +538,7 @@ export type ZoneAction =
   | { type: "dev"; by: string; dev: DevOp };
 
 /** Action types a player's client may send. `dev` is let through only on a development deployment. */
-export const ZONE_CLIENT_ACTIONS: ReadonlySet<ZoneAction["type"]> = new Set(["move", "use", "common", "throw", "drink", "light", "pickup", "stow", "open", "loot", "take", "unlock", "forage", "end_turn", "dev"]);
+export const ZONE_CLIENT_ACTIONS: ReadonlySet<ZoneAction["type"]> = new Set(["move", "use", "common", "throw", "drink", "light", "pickup", "stow", "open", "loot", "take", "unlock", "forage", "harpoon", "steer", "end_turn", "dev"]);
 
 /** One d20 roll, as shown on the roll card. */
 export interface Roll {
@@ -710,7 +723,16 @@ export type ZoneEvent =
   /** The last enemy group on the map is gone. */
   | { t: "cleared" }
   /** A map the atlas made has been cleared: its experience is paid (the `spoils` before this), and its spoils lie at `spot` for the taking. */
-  | { t: "bounty"; spot?: string };
+  | { t: "bounty"; spot?: string }
+  /** On a voyage. A harpoon loosed from a station by a hero: what it took (`n`, the thing's number in the sea), if anything, and whether that is aboard (`haul`) or wants another line (`needs`). */
+  | { t: "harpooned"; id: string; station: string; aim: { x: number; y: number }; n?: number; kind?: string; haul?: Salvage[]; needs?: number }
+  | { t: "steered"; id: string; dir: -1 | 1 }
+  /** Something adrift struck the hull, and took so much off it. */
+  | { t: "hull_struck"; n: number; kind: string; hull: number }
+  /** Boarders are over the rail. */
+  | { t: "boarded"; group: string; units: string[] }
+  /** The voyage is over: through the stretch (each hero's share of the hold is paid), or sunk. */
+  | { t: "voyage_over"; outcome: "through" | "sunk" };
 
 /** Things the server must carry out: what a player's own hero earned, from a won fight or a chest. */
 export type ZoneEffect = {

@@ -18,12 +18,12 @@ It runs entirely on Cloudflare: Workers, Durable Objects, D1, Workers AI and Ema
 - **Your hut:** buy a plot, fill a resource bin to raise a shack, then furnish it, craft for it and upgrade it. Rest there to recover.
 - **The pub:** a meal that gives back a gathering outing, table games played for a stake, the regulars and their errands, and traveling salesmen who drop in from time to time.
 - **Crew projects:** pay together into the Apothecary and Smithy first; once both stand, the Lighthouse and the Galley unlock. The works' Shipyard tab builds the crew's bigger ships, the Brig and then the Galleon, which rise on the slipway beside the pier as they are paid for.
-- **Around town:** the market stall, the notice board with each release's news, the Lapidary (where lodestones are cut and worked), the town chest the crew shares, and trading or giving gear to crewmates.
+- **Around town:** the market stall, the notice board with each release's news, Charter & Trade (where charters are drawn up and worked), the town chest the crew shares, and trading or giving gear to crewmates.
 
 **The atlas** is the crew's chart of the world, opened aboard the crew's ship at the middle pier. Setting out for a place on it is a voyage.
 - **The ship:** every crew starts with a Sloop. A ship sets how far out on the atlas the crew can go and how many heroes a voyage takes: the Sloop carries four as far as three landfalls out, the Brig five as far as seven, the Galleon six anywhere. Her hull is mended with wood at the works.
 - **Places:** each node is a place to clear. Clearing one opens the ones beyond it; lookouts lift the cloud over a wide stretch, and lairs hold a boss.
-- **Lodestones:** setting out for a place takes a lodestone, put into its slot. A stone can carry modifiers that make the map harder and its bounty richer.
+- **Charters:** setting out for a place takes a charter, laid in its slot. A charter can carry modifiers that make the map harder and its bounty richer.
 - **Setting out:** when one of you sets out, everyone in town is asked whether they are coming. You come ashore by the ship's longboat, and walk back to it to leave.
 
 **A map** is one place on the atlas, generated from a seed.

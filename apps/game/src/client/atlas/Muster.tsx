@@ -196,7 +196,7 @@ export function MusterPanel({ muster, me, onSay, busy, error }: { muster: Muster
                 ) : (
                   <button className="primary" disabled={busy} onClick={() => onSay("start")} title="Set out now, with whoever has said they are ready">Start anyway</button>
                 )}
-                <button disabled={busy} onClick={() => onSay("cancel")} title="Nobody goes anywhere. Your lodestone stays in your pack.">Call it off</button>
+                <button disabled={busy} onClick={() => onSay("cancel")} title="Nobody goes anywhere. Your charter stays in your pack.">Call it off</button>
               </>
             ) : ready ? (
               <>

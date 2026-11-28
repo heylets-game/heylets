@@ -1,7 +1,8 @@
-// Dealing with the lapidary, standing in front of her in her shop
-// (KeeperView): everything to do with lodestones and gems. She cuts a plain
-// lodestone from stone and iron, works the ones you carry at her bench (fuse,
-// attune, temper, reroll: atlas/StoneBench.tsx), and buys gems for gold.
+// Dealing with the chartmaker (the lapidary, in the code), standing in front
+// of her in her shop (KeeperView): everything to do with charters (lodestones,
+// in the code) and gems. She draws up a blank one from fur and wood, works the
+// ones you carry at her bench (fuse, attune, temper, reroll, shown as bind,
+// annotate, seal, redraw: atlas/StoneBench.tsx), and buys gems for gold.
 //
 // It stands on the same shelves as the smith's and the apothecary's
 // (ShopShelf.tsx): her face and her last word at the top with what you hold,
@@ -24,10 +25,10 @@ import "./works.css";
 
 /** What she says, out loud over her head, to each thing she does for you. */
 const SAYS = {
-  cut: "Plain and true. It will open a place, and no more.",
+  cut: "Blank and true. It will open a place, and no more.",
   fuse: "Three into one. Look what it kept of each.",
-  attune: "It has taken it. Mind where you carry that.",
-  temper: "Harder now. So is wherever it takes you.",
+  attune: "The ink has taken. Mind where you carry that.",
+  temper: "Sealed, and sterner for it. So is wherever it takes you.",
   reroll: "Not what it was. That is all I promise.",
   gem: "A fair stone. Done.",
   gems: "Good colour, the lot. I will take them.",
@@ -51,7 +52,7 @@ export function LapidaryKeeperPanel({ me, refresh, onSay, onDone }: {
 
   const made = (stone: Lodestone, how: keyof typeof SAYS) => {
     onSay(SAYS[how]);
-    setSaid({ text: `“${SAYS[how]}” ${how === "cut" ? "A plain lodestone" : stoneName(stone)} goes into your pack.`, tone: "good" });
+    setSaid({ text: `“${SAYS[how]}” ${how === "cut" ? "A blank charter" : stoneName(stone)} goes into your pack.`, tone: "good" });
   };
   const sell = async (qty: number): Promise<boolean> => {
     setBusy(true);
@@ -82,7 +83,7 @@ export function LapidaryKeeperPanel({ me, refresh, onSay, onDone }: {
     tag: <>Pays <ThingIcon icon={GOLD_ICON} size={16} />{GEM_PRICE}g</>,
     corner: <span className="ss-ribbon">You carry {gems}</span>,
     facts: [`You carry ${gems}`, `${GEM_PRICE}g each`],
-    brief: "Tempering a lodestone takes gems, and so does attuning one to a boon. Sell what you will not spend.",
+    brief: "Sealing a charter takes gems, and so does annotating one with a boon. Sell what you will not spend.",
     problem: gems < 1 ? "You carry no gems." : null,
     act: { label: `Sell 1 · ${GEM_PRICE}g`, disabled: busy || gems < 1, run: () => sell(1) },
     more: gems > 1 ? <button className="small" disabled={busy} onClick={() => void sell(gems)}>Sell all {gems} · {GEM_PRICE * gems}g</button> : undefined,
@@ -97,10 +98,10 @@ export function LapidaryKeeperPanel({ me, refresh, onSay, onDone }: {
       says={keeper.line}
       said={said}
       onDone={onDone}
-      purse={<RewardChips zeros gold={gold} resources={{ gem: gems, stone: held.stone ?? 0, iron: held.iron ?? 0 }} />}
+      purse={<RewardChips zeros gold={gold} resources={{ gem: gems, fur: held.fur ?? 0, wood: held.wood ?? 0 }} />}
       shelves={[
-        { id: "gems", title: "Gems she buys", sub: `${GEM_PRICE}g each · tempering and attuning take them too`, wares: [gemWare] },
-        { id: "bench", title: "At her bench", sub: "Lodestones cut plain, or worked · out of your pack", wares: [], body: <StoneBench me={me} refresh={refresh} onMade={made} /> },
+        { id: "gems", title: "Gems she buys", sub: `${GEM_PRICE}g each · sealing and annotating take them too`, wares: [gemWare] },
+        { id: "bench", title: "At her bench", sub: "Charters drawn up blank, or worked · out of your pack", wares: [], body: <StoneBench me={me} refresh={refresh} onMade={made} /> },
       ]}
       notes={<p>Gems turn up in the quarry's seams and geodes, in a pearl oyster on the line, and now and then on what you beat out on the maps.</p>}
     />

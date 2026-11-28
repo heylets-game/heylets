@@ -6,7 +6,7 @@
 
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ATLAS_HOME, HARBOR_SPAWN, MUSTER_CHOOSE_MS, MUSTER_LINGER_MS, MUSTER_MS, MUSTER_PARTY, atlasNodeById, needsStone, stoneItem, type Muster, type MusterAnswer, type MusterMember, type ZoneMod, type ZoneOptions } from "@gantt-quest/world";
+import { ATLAS_HOME, HARBOR_SPAWN, MUSTER_CHOOSE_MS, MUSTER_LINGER_MS, MUSTER_MS, MUSTER_PARTY, atlasNodeById, atlasPassage, needsStone, stoneItem, type Muster, type MusterAnswer, type MusterMember, type ZoneMod, type ZoneOptions } from "@gantt-quest/world";
 import { atlasSeed, chartFor, clearNode, openNode, scoutNode } from "../src/server/atlas";
 import { lodestonesOf } from "../src/server/lodestones";
 import { CAVE_IDLE_MS, getZoneRow } from "../src/server/zones";
@@ -133,8 +133,8 @@ const seed = atlasSeed(CREW);
 const nodeOf = (id: string) => atlasNodeById(seed, id)!;
 /** A landfall beside the Harbor: it needs no lodestone. */
 const first = () => nodeOf(ATLAS_HOME).links[0];
-/** A place a ring out from `from`, which a route runs to once `from` is cleared: it needs a lodestone. */
-const beyond = (from: string) => nodeOf(from).links.find((id) => nodeOf(id).ring === 2)!;
+/** A place a ring out from `from`, which a route runs to over calm water once `from` is cleared: it needs a lodestone. */
+const beyond = (from: string) => nodeOf(from).links.find((id) => nodeOf(id).ring === 2 && atlasPassage(seed, from, id)!.kind === "calm")!;
 /** Clear the landfall beside the Harbor and give the place beyond it. */
 async function farPlace(): Promise<string> {
   const near = first();
@@ -559,7 +559,7 @@ describe("a muster and the lodestone", () => {
     const muster = await called(ann, far, "");
     vi.setSystemTime(T0 + 4000);
     const ended = (await answer(bo, "ready")).json.muster!;
-    expect(ended).toEqual({ ...muster, ready: [ann, bo], failed: expect.stringMatching(/You have no plain lodestone/), endedAt: T0 + 4000 });
+    expect(ended).toEqual({ ...muster, ready: [ann, bo], failed: expect.stringMatching(/You have no blank charter/), endedAt: T0 + 4000 });
     expect(ended).not.toHaveProperty("code");
     expect(zones()).toEqual([]);
     expect(nodeRow(far)).toBeUndefined();
@@ -583,7 +583,7 @@ describe("a muster and the lodestone", () => {
     await called(ann, far, "");
     sql.prepare("DELETE FROM consumables WHERE player_id = 'ann'").run();
     const ended = (await answer(bo, "ready")).json.muster!;
-    expect(ended.failed).toMatch(/You have no plain lodestone/);
+    expect(ended.failed).toMatch(/You have no blank charter/);
     expect(zones()).toEqual([]);
   });
 
@@ -592,11 +592,11 @@ describe("a muster and the lodestone", () => {
     inTown(bo);
     const far = await farPlace();
     // The worker's scouting refuses this before a muster is called; the room, asked all the same, makes nothing.
-    expect(await scoutNode(db, CREW, far)).toMatchObject({ status: 409, error: expect.stringMatching(/needs a lodestone/) });
+    expect(await scoutNode(db, CREW, far)).toMatchObject({ status: 409, error: expect.stringMatching(/needs a charter/) });
     const res = await ask("/call", { by: ann, to: { node: far, place: nodeOf(far).name } });
     expect(res.status).toBe(200);
     const ended = (await answer(bo, "ready")).json.muster!;
-    expect(ended.failed).toMatch(/needs a lodestone/);
+    expect(ended.failed).toMatch(/needs a charter/);
     expect(zones()).toEqual([]);
     expect(nodeRow(far)).toBeUndefined();
   });
@@ -676,7 +676,7 @@ describe("a muster's alarm", () => {
     await called(ann, far, "");
     vi.setSystemTime(T0 + MUSTER_MS);
     await room().alarm();
-    expect(kept()!.muster).toMatchObject({ failed: expect.stringMatching(/You have no plain lodestone/), endedAt: T0 + MUSTER_MS });
+    expect(kept()!.muster).toMatchObject({ failed: expect.stringMatching(/You have no blank charter/), endedAt: T0 + MUSTER_MS });
     expect(b.musters.at(-1)).toEqual(kept()!.muster);
     expect(zones()).toEqual([]);
     expect(alarm).toBe(T0 + MUSTER_MS + MUSTER_LINGER_MS);

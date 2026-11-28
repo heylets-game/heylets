@@ -1,9 +1,9 @@
 // The atlas as a world to look at: the hex map the chart's nodes stand on.
 //
 // The world is as endless as the chart (atlas.ts) and worked out the same
-// way, from the chart's seed and a hex alone: seas and their coasts, sand
-// along the shore, grass, forest, and ridges of hills that climb into
-// mountains. A node stands on its own hex of it (`AtlasNode.hex`), and what
+// way, from the chart's seed and a hex alone: an ocean, and in it an island
+// for every place, with sand along its shore, grass, forest, and ridges of
+// hills that climb into mountains. A node stands on its own hex of it (`AtlasNode.hex`), and what
 // lies there is what the node is (`atlasLie` in atlas.ts, which both this
 // ground and the node are made from): a place drawn on sand is a desert, one
 // in the trees is in the woods, one among the peaks is high, broken ground.
@@ -50,7 +50,7 @@ export interface AtlasWorld {
 export const ATLAS_VIEW = 62;
 /** How far the cloud is lifted round the Harbor and a cleared node, round a node that is only open, and round a lookout the crew has cleared. */
 export const ATLAS_SIGHT = ATLAS_SPACING + 2;
-export const ATLAS_GLIMPSE = 2;
+export const ATLAS_GLIMPSE = 3;
 export const ATLAS_FARSIGHT = ATLAS_SPACING * 3 + 1;
 /** How far past the lit ground the land is still handed over, to show through the cloud's edge. */
 export const ATLAS_RIM = 3;
@@ -65,13 +65,14 @@ const inClime = (clime: Clime) => (clime === "greenwood" ? {} : { clime });
  * also says what a place standing on it is), as a tile to draw. `memo` saves working the same noise out twice.
  */
 export function atlasGround(seed: string, hex: HexPos, memo?: Map<string, number>): Ground {
-  const { land, clime, fine, up, lea } = atlasLie(seed, hex, memo);
+  const { land, clime, fine, up, lea, open } = atlasLie(seed, hex, memo);
   const here = inClime(clime);
   const lift = (biome: Biome, more = 0): Ground => ({ biome, h: BASE_HEIGHT[biome] + more + fine * 0.05, ...here });
   switch (land) {
-    // In the ashlands what lies lowest is not water: it is drawn as low, bare ground, and painted as the fire it is.
+    // In the ashlands what lies lowest on an island is not water: it is drawn as low, bare ground, and painted as
+    // the fire it is. (The open ocean is water there as anywhere: a ship sails it.)
     case "sea":
-      return clime === "ash" ? { biome: "sand", h: BASE_HEIGHT.water + 0.02, ...here } : { biome: "water", h: BASE_HEIGHT.water, ...here };
+      return clime === "ash" && !open ? { biome: "sand", h: BASE_HEIGHT.water + 0.02, ...here } : { biome: "water", h: BASE_HEIGHT.water, ...here };
     // Hills that climb into mountains along the spine of their ridge.
     case "hills":
       return { ...lift("hills", Math.min(1.1, up * 4.5)), ...(up > 0.12 && fine > 0.55 ? { blocker: "boulders" as Blocker } : {}) };
@@ -180,7 +181,8 @@ export function atlasWorld(seed: string, nodes: readonly AtlasNodeView[], centre
   };
   const clear: AtlasWorld["clear"] = [];
   for (const n of known) {
-    const far = n.state === "open" ? ATLAS_GLIMPSE : n.kind === "lookout" ? ATLAS_FARSIGHT : ATLAS_SIGHT;
+    // (Somewhere only open to them, or beyond a passage, is seen a little way round and no more.)
+    const far = n.state === "open" || n.state === "beyond" ? ATLAS_GLIMPSE : n.kind === "lookout" ? ATLAS_FARSIGHT : ATLAS_SIGHT;
     round(n.hex, far, lit);
     round(n.hex, far + ATLAS_RIM, shown);
     clear.push({ hex: n.hex, reach: far });
@@ -197,7 +199,7 @@ export function atlasWorld(seed: string, nodes: readonly AtlasNodeView[], centre
   };
   for (const n of known) {
     if (n.kind === "harbor") stand(`node:${n.id}`, "lighthouse", n.hex, true);
-    else if (n.kind === "seacave") stand(`node:${n.id}`, "cave", { q: n.hex.q + HARBOR_SIDES[5].q, r: n.hex.r + HARBOR_SIDES[5].r }, n.state !== "open");
+    else if (n.kind === "seacave") stand(`node:${n.id}`, "cave", { q: n.hex.q + HARBOR_SIDES[5].q, r: n.hex.r + HARBOR_SIDES[5].r }, n.state === "cleared");
   }
 
   // The grid is only how far across the window reaches: its tiles are not counted from a corner of it.

@@ -14,7 +14,7 @@ import { devTools } from "../devTools";
 import { fancy, fancyGrass } from "./fancy";
 import { WIND_DIR, addFieldSway, gustAt, setFieldCalm, windPower } from "./wind";
 import { addCutaway } from "./cutaway";
-import { nightAt, rainOf, stormAt, timeOfDay, weatherAt, type FloorLook, type Tile } from "@gantt-quest/world";
+import { nightAt, rainOf, stormAt, timeOfDay, weatherAt, type FloorLook, type Tile, edgeFills } from "@gantt-quest/world";
 import type { LightKind } from "./props";
 import type { LampLight } from "./tableLamps";
 
@@ -747,6 +747,12 @@ export class Ambience {
   private lamp = new THREE.PointLight("#ffd7a1", 0, 0, 0);
   /** What a room's floor is laid with: boards, as in the huts and the pub, flagstones (the smithy), or a hut's own finish. Read when the ground is built. */
   floorLook: "planks" | "flags" | { id: string; look: FloorLook } = "planks";
+  /**
+   * Whether laid floors (boards, flags, pier planks) are squared off along their sides: where one row of a floor
+   * stops half a hex short of the rows above and below it, the notch is filled with half a hex of the same floor,
+   * so a ship's deck or a room has straight sides, not a saw's edge. Only how it looks: nobody stands on a half hex.
+   */
+  squareEdges = false;
   /** Whether the hut's hanging lamp is lit. Off, the room is lit only by its candles, lanterns and fires. */
   private lampOn = true;
   /**
@@ -1216,6 +1222,62 @@ export class Ambience {
           normals.push(nx, ny, nz);
           uvs.push((p.x + x) / GROUND_SPAN, (p.z + z) / GROUND_SPAN);
         });
+      }
+      // Squared off: the floor is given part of each hex at its edge (roomedges.ts `edgeFills`): half of each notch
+      // down its sides and along its ends, a quarter of each corner. Where no wall stands there, a plain face
+      // goes down the floor's new outer edge.
+      if (this.squareEdges) {
+        const edge: number[] = [];
+        const HALF = (Math.sqrt(3) / 2) * TILE_RADIUS;
+        const R = TILE_RADIUS;
+        const walls = new Map(tiles.map((t) => [`${t.q},${t.r}`, t]));
+        for (const fill of edgeFills(tiles, (x) => (x.biome as string) === biome, (there) => !there || there.biome === "water" || (there.biome as string) === "wall")) {
+          const walled = (walls.get(`${fill.q},${fill.r}`)?.biome as string) === "wall";
+          const p = place(fill.from);
+          // The middle of that hex, by how far it lies from the floor tile beside it.
+          const cx = p.x + Math.sqrt(3) * (fill.q - fill.from.q + (fill.r - fill.from.r) / 2);
+          const cz = p.z + 1.5 * (fill.r - fill.from.r);
+          const y = p.y + 0.006;
+          // The part the floor is given, going round from the hex's middle line; and which of its edges are the floor's new outer ones.
+          let part: [number, number][];
+          let outer: [[number, number], [number, number]][];
+          if (fill.cut === "side") {
+            const s = fill.room;
+            part = [[0, -R], [s * HALF, -R / 2], [s * HALF, R / 2], [0, R]];
+            outer = [[[0, -R], [0, R]]];
+          } else if (fill.cut === "end") {
+            const s = fill.room;
+            part = [[-HALF, 0], [-HALF, (s * R) / 2], [0, s * R], [HALF, (s * R) / 2], [HALF, 0]];
+            outer = [[[-HALF, 0], [HALF, 0]]];
+          } else {
+            const [sx, sz] = [fill.rx, fill.rz];
+            part = [[0, 0], [sx * HALF, 0], [sx * HALF, (sz * R) / 2], [0, sz * R]];
+            outer = [[[0, 0], [sx * HALF, 0]], [[0, 0], [0, sz * R]]];
+          }
+          for (let i = 1; i + 1 < part.length; i++) {
+            // Wound so its face is up, whichever way round the part was listed.
+            const [a, b, c] = [part[0], part[i], part[i + 1]];
+            const up = (b[1] - a[1]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[1] - a[1]) > 0;
+            for (const [x, z] of up ? [a, b, c] : [a, c, b]) {
+              positions.push(cx + x, y, cz + z);
+              normals.push(0, 1, 0);
+              uvs.push((cx + x) / GROUND_SPAN, (cz + z) / GROUND_SPAN);
+            }
+          }
+          if (walled) continue;
+          const low = y - 3;
+          for (const [[ax, az], [bx, bz]] of outer) {
+            for (const v of [[cx + ax, y, cz + az], [cx + bx, y, cz + bz], [cx + bx, low, cz + bz], [cx + ax, y, cz + az], [cx + bx, low, cz + bz], [cx + ax, low, cz + az]]) edge.push(...v);
+          }
+        }
+        if (edge.length > 0) {
+          const sides = new THREE.BufferGeometry();
+          sides.setAttribute("position", new THREE.Float32BufferAttribute(edge, 3));
+          sides.computeVertexNormals();
+          const face = new THREE.Mesh(sides, new THREE.MeshLambertMaterial({ color: biome === "dock" ? "#6b4a2c" : "#4a3a2e", side: THREE.DoubleSide }));
+          face.receiveShadow = true;
+          this.group.add(face);
+        }
       }
       const sheet = new THREE.BufferGeometry();
       sheet.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));

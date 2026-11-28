@@ -169,7 +169,7 @@ describe("selling foraged goods to the stall", () => {
   it("buys herbs and mushrooms only, whole amounts the seller holds, and sends gems to the Lapidary", () => {
     expect(Object.keys(STALL_BUYS).sort()).toEqual(["herbs", "mushrooms"]);
     const have = { herbs: 4, mushrooms: 1, wood: 9, gem: 2, iron: 3 };
-    expect(sellMaterialProblem("gem", 2, have)).toMatch(/Lapidary/);
+    expect(sellMaterialProblem("gem", 2, have)).toMatch(/Charter & Trade/);
     expect(sellMaterialProblem("iron", 1, have)).toMatch(/does not buy/);
     expect(sellMaterialProblem("herbs", 4, have)).toBeNull();
     expect(sellMaterialProblem("mushrooms", 1, have)).toBeNull();

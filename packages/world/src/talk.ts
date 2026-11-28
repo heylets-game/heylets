@@ -212,7 +212,7 @@ export function salesmanTalk(s: Pick<Salesman, "id" | "name" | "greeting">, unit
 const KEEPER_ASKS: Record<KeeperHouse, TalkChoice> = {
   smithy: { id: "shop", label: "Show me your iron", opens: "shop" },
   apothecary: { id: "shop", label: "What have you brewing?", opens: "shop" },
-  lapidary: { id: "shop", label: "Let's talk stones", opens: "shop" },
+  lapidary: { id: "shop", label: "Let's talk charters", opens: "shop" },
   galley: { id: "cook", label: "What's in the pot?", says: "Nothing for you. The pot's for the pub, and the pub pays. Eat at the bar like everyone else." },
 };
 

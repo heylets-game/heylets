@@ -14,7 +14,7 @@ const SHOWN = 3;
 /** The place in the scene a building someone is inside is drawn as: a hut is its owner's plot. */
 export const insidePoi = (inside: string): string => (inside.startsWith("hut:") ? `plot:${inside.slice(4)}` : inside);
 
-const NAMES: Record<string, string> = { pub: "the pub", smithy: "the smithy", apothecary: "the apothecary", galley: "the galley", lapidary: "the Lapidary" };
+const NAMES: Record<string, string> = { pub: "the pub", smithy: "the smithy", apothecary: "the apothecary", galley: "the galley", lapidary: "Charter & Trade" };
 
 /** Where someone is, in words: "in the pub", "at home", "in Ada's hut". */
 export function insideWords(p: HarborPlayer, members: HarborMember[]): string {

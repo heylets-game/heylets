@@ -200,7 +200,7 @@ type Held = { stack: Stack; from: Zone | "worn" };
 type Verdict = "ok" | "swap" | "bad";
 /** Said when a potion or a flask is sent toward a chest or the trade table. */
 const STAYS_IN_PACK = "Potions, flasks and bombs stay in your pack: they cannot be stowed or traded yet.";
-const STONES_STAY = "Lodestones are not stowed at home or traded hand to hand: the town chest, in the square, takes them, and the whole crew shares it.";
+const STONES_STAY = "Charters are not stowed at home or traded hand to hand: the town chest, in the square, takes them, and the whole crew shares it.";
 /** A stack that can be split, and so moved in part: a material's, or (at the town chest) lodestones'. */
 type Splittable = Extract<Stack, { t: "mat" | "stone" }>;
 /** What a stack is counted under on either side: a material's kind, or a lodestone's kind as an item. Gear is not counted. */
@@ -210,7 +210,7 @@ const firstKey = (s: Splittable): string => (s.t === "mat" ? `mat:${s.kind}:0` :
 /** Where a tab of the town chest keeps how its things lie, beside the chests of the hut (which are numbered from 1). */
 const TOWN_SIDE = 1_000_000;
 /** The lodestones tab's shelves: what a stone that carries so many is called. */
-const STONE_SHELVES = ["Plain", "Dull", "Bright", "Singing"];
+const STONE_SHELVES = ["Blank", "Faded", "Fine", "Sealed"];
 /** A decoration kept in a chest lies on its grid too, a square each. */
 const decorKey = (id: number) => `decor:${id}`;
 
@@ -1243,11 +1243,11 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
                   }).sort((a, b) => stoneKey(a.stone).localeCompare(stoneKey(b.stone)));
                   return (
                     <section key={shelf} className="town-shelf">
-                      <h3>{shelf} <span className="muted">· {n === 0 ? "carries nothing" : n === 1 ? "carries one thing" : `carries ${n} things`}</span></h3>
+                      <h3>{shelf} <span className="muted">· {n === 0 ? "says nothing" : n === 1 ? "says one thing" : `says ${n} things`}</span></h3>
                       <div className="town-places">
                         {here.length === 0
                           ? <span className="muted town-none">None kept.</span>
-                          : here.map((h) => townPlace(`stone:${stoneKey(h.stone)}:0`, h.stone.length ? h.stone.map((id) => modName(id)).join(", ") : "Plain", <Icon name={STONE_ICON(n).name} color={STONE_ICON(n).color} size={Math.round(CU * 0.9)} />, h.qty))}
+                          : here.map((h) => townPlace(`stone:${stoneKey(h.stone)}:0`, h.stone.length ? h.stone.map((id) => modName(id)).join(", ") : "Blank", <Icon name={STONE_ICON(n).name} color={STONE_ICON(n).color} size={Math.round(CU * 0.9)} />, h.qty))}
                       </div>
                     </section>
                   );
@@ -1261,7 +1261,7 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
               <>
                 <span
                   className={`carry ${chestUsed > chestTotal ? "bad" : chestUsed === chestTotal ? "warn" : "muted"}`}
-                  title={`${CHEST_COLS} × ${chestRows} squares. Each thing takes its own footprint; a stack of up to ${STACK_MAX} of a material or of lodestones takes one. Whatever one of the crew puts in, any of you may take out.`}
+                  title={`${CHEST_COLS} × ${chestRows} squares. Each thing takes its own footprint; a stack of up to ${STACK_MAX} of a material or of charters takes one. Whatever one of the crew puts in, any of you may take out.`}
                 >
                   {chestUsed} / {chestTotal}{chestUsed > chestTotal ? " · over" : ""}
                 </span>
@@ -1271,12 +1271,12 @@ export function InventoryScreen({ me, refresh, onClose, onLogbook, onIsland = fa
               </>
             ) : tab ? (
               <>
-                <span className="muted chest-keys">Drop {tab.kind === "materials" ? "materials" : "lodestones"} anywhere here · shift-click takes a stack out · right-click takes part</span>
+                <span className="muted chest-keys">Drop {tab.kind === "materials" ? "materials" : "charters"} anywhere here · shift-click takes a stack out · right-click takes part</span>
                 <span className="spacer" />
                 <button
                   className="small"
                   disabled={!stacks.some((s) => s.t === (tab.kind === "materials" ? "mat" : "stone"))}
-                  title={tab.kind === "materials" ? "Every material in your pack, into the chest" : "Every lodestone in your pack, into the chest"}
+                  title={tab.kind === "materials" ? "Every material in your pack, into the chest" : "Every charter in your pack, into the chest"}
                   onClick={() => putAll(tab.kind === "materials" ? "mat" : "stone")}
                 >
                   Put in all you carry
@@ -1489,7 +1489,7 @@ function LodestoneDetail({ stone, total, how, inChest = false }: { stone: Lodest
         </div>
       </div>
       {stone.length === 0 ? (
-        <p className="muted">It carries nothing: it opens a place and changes nothing about it.</p>
+        <p className="muted">It says nothing: it opens a place and changes nothing about it.</p>
       ) : (
         <ul className="stone-carries">
           {stone.map((id) => (
@@ -1501,7 +1501,7 @@ function LodestoneDetail({ stone, total, how, inChest = false }: { stone: Lodest
           ))}
         </ul>
       )}
-      <p>{inChest ? "The crew keeps" : "You carry"} <strong>{total}</strong>{inChest ? " here" : ""}. Put one into a place's slot on the atlas, opened aboard the ship at the pier, to set out for it: it is spent, and what it carries is added to the place. Stones are cut and worked at the Lapidary in the Harbor.</p>
+      <p>{inChest ? "The crew keeps" : "You carry"} <strong>{total}</strong>{inChest ? " here" : ""}. Put one into a place's slot on the atlas, opened aboard the ship at the pier, to set out for it: it is spent, and what it says is added to the place. Charters are drawn up and worked at Charter & Trade in the Harbor.</p>
       {how && <p className="muted">{how}</p>}
     </div>
   );
@@ -1547,7 +1547,7 @@ function MaterialDetail({ kind, total, where = "pack" }: { kind: ResourceKind; t
         : where === "at-town" ? <p className="muted">Drag it into the town chest, or shift-click it; right-click to put in part of it.</p>
         : where === "pack" && <p className="muted">Stow it in a chest in your hut to free the square, or hand it to a crewmate in a trade.</p>}
       {price && <p className="muted">The market stall buys it for {price}g each.</p>}
-      {kind === "gem" && <p className="muted">The Lapidary buys them for {GEM_PRICE}g each. Tempering a lodestone there takes gems, and so does attuning one to a boon.</p>}
+      {kind === "gem" && <p className="muted">Charter & Trade buys them for {GEM_PRICE}g each. Sealing a charter there takes gems, and so does annotating one with a boon.</p>}
     </div>
   );
 }

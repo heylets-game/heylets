@@ -63,7 +63,7 @@ export async function spendStone(db: D1Database, playerId: string, stone: Lodest
 }
 
 /**
- * Cut a plain lodestone from stone and iron, into the pack. The materials are taken and the stone gained in
+ * Draw up a blank charter (a plain lodestone) from fur and wood, into the pack. The materials are taken and the stone gained in
  * one batch, which checks again that the materials are there and (for the first of a stack, which takes a
  * square) that the pack has the room. Returns why not, or null once it is in the pack.
  */
@@ -76,7 +76,7 @@ export async function cutStone(db: D1Database, playerId: string): Promise<string
     ...spend,
     db.prepare("INSERT INTO consumables (player_id, kind, qty) SELECT ?1, ?2, 1 WHERE changes() > 0 ON CONFLICT(player_id, kind) DO UPDATE SET qty = qty + 1").bind(playerId, STONE_ITEM),
   ]);
-  return res[spend.length].meta.changes > 0 ? null : "You have not the stone and iron for it, or the room in your pack.";
+  return res[spend.length].meta.changes > 0 ? null : "You have not the fur and wood for it, or the room in your pack.";
 }
 
 // ---------- the bench: working the stones in a pack into others (packages/world/src/stonecraft.ts) ----------
@@ -111,7 +111,7 @@ function benchSwap(db: D1Database, playerId: string, used: Map<string, number>, 
 /** Fuse three lodestones from the pack into one that carries one more thing. Returns why not, or the stone made. */
 export async function fuseStones(db: D1Database, playerId: string, raw: unknown): Promise<string | { made: Lodestone }> {
   const stones = (Array.isArray(raw) ? raw : []).map(cleanStone);
-  if (stones.some((s) => !s)) return "That is no lodestone.";
+  if (stones.some((s) => !s)) return "That is no charter.";
   const problem = fuseProblem(stones as Lodestone[]);
   if (problem) return problem;
   const used = new Map<string, number>();
@@ -126,7 +126,7 @@ export async function fuseStones(db: D1Database, playerId: string, raw: unknown)
 /** Add a chosen modifier to a lodestone from the pack, for gold and that modifier's material. Returns why not, or the stone made. */
 export async function attuneStone(db: D1Database, playerId: string, raw: unknown, mod: unknown): Promise<string | { made: Lodestone }> {
   const stone = cleanStone(raw);
-  if (!stone) return "That is no lodestone.";
+  if (!stone) return "That is no charter.";
   const problem = attuneProblem(stone, mod);
   if (problem) return problem;
   const made = attuned(stone, mod as ZoneModId);
@@ -140,7 +140,7 @@ export async function attuneStone(db: D1Database, playerId: string, raw: unknown
 /** Raise one thing a lodestone from the pack carries by a rank, for gold, its material and gems. Returns why not, or the stone made. */
 export async function temperStone(db: D1Database, playerId: string, raw: unknown, mod: unknown): Promise<string | { made: Lodestone }> {
   const stone = cleanStone(raw);
-  if (!stone) return "That is no lodestone.";
+  if (!stone) return "That is no charter.";
   const problem = temperProblem(stone, mod);
   if (problem) return problem;
   const made = tempered(stone, mod as ZoneMod);
@@ -154,7 +154,7 @@ export async function temperStone(db: D1Database, playerId: string, raw: unknown
 /** For gold, change what a lodestone from the pack carries for as many other things. Returns why not, or the stone made. */
 export async function rerollStone(db: D1Database, playerId: string, raw: unknown): Promise<string | { made: Lodestone }> {
   const stone = cleanStone(raw);
-  if (!stone) return "That is no lodestone.";
+  if (!stone) return "That is no charter.";
   const problem = rerollProblem(stone);
   if (problem) return problem;
   const made = reroll(dice(), stone);

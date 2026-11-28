@@ -13,7 +13,8 @@ CREATE TABLE crew_ships (
 -- Until now a crew went anywhere on its atlas through the waygate. From here a ship sails only so far out: the
 -- Sloop to ring 3, the Brig to ring 7, the Galleon anywhere. A crew that has already cleared a place further out
 -- than a ship reaches is given the ship that covers it, built and afloat, so nobody loses the way to anywhere
--- they have been. (A node's id is its cell, 'q,r', and its ring is how far that is from 0,0 in hexes.)
+-- they have been. (A landfall's id is its cell, 'q,r', and its ring is how far that is from 0,0 in hexes. A sea
+-- passage's id is its two ends, 'q,r|q,r', and is left out: its ends are landfalls, counted on their own.)
 --
 -- Past ring 3: the Brig.
 INSERT INTO crew_projects (crew_id, project_id, built_at)
@@ -24,7 +25,7 @@ FROM (
     SELECT crew_id,
            CAST(substr(node, 1, instr(node, ',') - 1) AS INTEGER) AS q,
            CAST(substr(node, instr(node, ',') + 1) AS INTEGER) AS r
-    FROM atlas_nodes WHERE status = 'cleared' AND instr(node, ',') > 0
+    FROM atlas_nodes WHERE status = 'cleared' AND instr(node, ',') > 0 AND instr(node, '|') = 0
   )
   GROUP BY crew_id
 )
@@ -40,7 +41,7 @@ FROM (
     SELECT crew_id,
            CAST(substr(node, 1, instr(node, ',') - 1) AS INTEGER) AS q,
            CAST(substr(node, instr(node, ',') + 1) AS INTEGER) AS r
-    FROM atlas_nodes WHERE status = 'cleared' AND instr(node, ',') > 0
+    FROM atlas_nodes WHERE status = 'cleared' AND instr(node, ',') > 0 AND instr(node, '|') = 0
   )
   GROUP BY crew_id
 )

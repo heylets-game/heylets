@@ -16,7 +16,7 @@ import "./camera.css";
 import { CAMERA_ICON, PINCH_PAN_SLACK, followIconSvg, pixelGlyphSvg, readFollow, writeFollow } from "./cameraFollow";
 import type { HexPos } from "@gantt-quest/core";
 import { hexDistance } from "@gantt-quest/core";
-import { lookStep, lookYaw, BASE_HEIGHT, HARBOR_HEART_AT, BIG_REACH, ENEMIES, HEX_DIRS, SEATS, spanAt, tileCost, WALL_FACE_HALF, WALL_ITEM_BOTTOM, WALL_ITEM_TOP, hexAt, reachable, tileAt, wallFace, wallFaces, type Biome, type Clime, type Emote, type Outfit, type Poi, type Tile, type WorldMap, type FloorLook, type WallLook } from "@gantt-quest/world";
+import { lookStep, lookYaw, BASE_HEIGHT, HARBOR_HEART_AT, BIG_REACH, ENEMIES, HEX_DIRS, SEATS, onFloorPart, spanAt, squaredWalls, tileCost, WALL_FACE_HALF, WALL_ITEM_BOTTOM, WALL_ITEM_TOP, hexAt, reachable, tileAt, wallFace, wallFaces, type Biome, type Clime, type Emote, type Outfit, type Poi, type Tile, type WorldMap, type FloorLook, type WallCut, type WallLook } from "@gantt-quest/world";
 import { fancy, fancyGrass, inkLine } from "./fancy";
 import { NightLife } from "./nightlife";
 import { Storm } from "./storm";
@@ -166,6 +166,11 @@ export interface RenderState {
    * before a window's edge, so the edge is never seen.
    */
   far?: boolean;
+  /**
+   * The sea on this map is played on (a ship's deck at sea: things adrift are pointed at): every hex of its
+   * water is kept, however far from land, so all of it can be clicked.
+   */
+  openSea?: boolean;
   /**
    * What lies round the map. "sea" (or nothing said) is the open sea. Any other is a void the land floats over as
    * a thick slab of rock, with slow cloud below and the distance lost in haze (render/backdrop.ts): `mist` pale
@@ -1667,6 +1672,8 @@ export class WorldRenderer {
     // The ground is redrawn for a new map, and whenever this one has more or fewer hexes than it was drawn with.
     const hexCount = state.map.tiles.length;
     this.ambience.floorLook = state.floor ?? "planks";
+    // A ship's deck and a room indoors have straight sides (ambience.ts `squareEdges`); a pier or a yard out of doors keeps its hexes.
+    this.ambience.squareEdges = !!state.openSea || !!state.indoors;
     // A hut's wallpaper or floor changed while it is open (its owner chose another from Nell's): papered and laid again.
     const floorKey = dressingKey(state.floor ?? "planks");
     const relaid = !first && floorKey !== this.floorKey;
@@ -2977,7 +2984,7 @@ export class WorldRenderer {
           // A map that is all sea is drawn whole, and so is a map of the world: its seas are part of it, and what
           // lies round it is mist, not water.
           // Nor is any of it left out over a void: there is no sea there to show in its place.
-          if (land.length === 0 || state.far || this.backdropKind !== "sea") return false;
+          if (land.length === 0 || state.far || state.openSea || this.backdropKind !== "sea") return false;
           // The Harbor's sea is only as wide as a boat can go (HARBOR_SEA_REACH), and all of it is drawn, so its
           // edge is where the rowing stops.
           if (this.mapCode === "harbor") return false;
@@ -3022,6 +3029,7 @@ export class WorldRenderer {
     this.terrain = terrain;
     this.scene.add(terrain);
     this.wallTiles = this.tiles.flatMap((t, i) => (WALLS.has(t.biome) ? [i] : []));
+    this.squareWalls(state);
     if (this.seeThrough && this.wallTiles.length > 0) {
       this.wallMarks = new THREE.InstancedMesh(geo, hidingMaterial([GROUND_FLOOR]), this.wallTiles.length);
       this.wallMarks.renderOrder = HIDES;
@@ -3261,6 +3269,124 @@ export class WorldRenderer {
    * Stand the walls' copies (see wallMarks) where the walls are now. One cut down to a kerb for the camera hides
    * nobody, and has no copy.
    */
+  /**
+   * Indoors, the wall hexes that stand in the notches of a room's floor (ambience.ts `sideNotches`, `endNotches`),
+   * by key: down its sides (`side`), or along its back or front (`end`), and which way the room lies from each
+   * (`room`: 1 is toward +x for a side, toward +z for an end). Each is drawn cut straight where it faces the room
+   * (`cutWalls`): a side wall as half a column, an end wall with its point taken off. The floor is laid under what
+   * it gave up, so a room's walls run straight. The rules know nothing of it: a thing hung on such a wall is
+   * still on one of its hex's sides, and is only shown on the straight face (`wallSide`).
+   */
+  private squared = new Map<string, WallCut>();
+  private halfWalls = new THREE.Group();
+  private halfWallMeshes = new Map<string, THREE.Mesh>();
+  private static readonly HALF_WALL = new THREE.MeshLambertMaterial({ color: "#3a2b20", side: THREE.DoubleSide });
+
+  /** A cut wall column, its top at y = 0: what is left of the hex on the far side of its straight face. */
+  private static cutColumn(cut: WallCut): THREE.BufferGeometry {
+    const a = (Math.sqrt(3) / 2) * TILE_RADIUS;
+    const R = TILE_RADIUS;
+    const room = cut.cut === "corner" ? 1 : cut.room;
+    // The top's outline: the half of the hex away from the room, cut down its middle (a side wall) or across it (an end wall).
+    // A corner keeps all of the hex but the quarter inside the room: listed from the hex's middle (the room's
+    // corner), so the fan below fills it though it bends there.
+    const top: [number, number][] =
+      cut.cut === "side" ? [[0, -R], [-room * a, -R / 2], [-room * a, R / 2], [0, R]]
+      : cut.cut === "end" ? [[-a, 0], [-a, (-room * R) / 2], [0, -room * R], [a, (-room * R) / 2], [a, 0]]
+      : [[0, 0], [0, cut.rz * R], [-cut.rx * a, (cut.rz * R) / 2], [-cut.rx * a, (-cut.rz * R) / 2], [0, -cut.rz * R], [cut.rx * a, (-cut.rz * R) / 2], [cut.rx * a, 0]];
+    const v: number[] = [];
+    const tri = (...pts: [number, number, number][]) => pts.forEach((p) => v.push(...p));
+    for (let i = 1; i + 1 < top.length; i++) tri([top[0][0], 0, top[0][1]], [top[i][0], 0, top[i][1]], [top[i + 1][0], 0, top[i + 1][1]]);
+    for (let i = 0; i < top.length; i++) {
+      const [p, q] = [top[i], top[(i + 1) % top.length]];
+      tri([p[0], 0, p[1]], [q[0], 0, q[1]], [q[0], -TILE_DEPTH, q[1]]);
+      tri([p[0], 0, p[1]], [q[0], -TILE_DEPTH, q[1]], [p[0], -TILE_DEPTH, p[1]]);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(v, 3));
+    geo.computeVertexNormals();
+    return geo;
+  }
+
+  /** Find the room's notch walls and stand a cut column for each. Called when the ground is built. */
+  private squareWalls(state: RenderState) {
+    for (const mesh of this.halfWallMeshes.values()) {
+      mesh.geometry.dispose();
+      (mesh.material as THREE.Material).dispose();
+    }
+    this.halfWalls.clear();
+    this.halfWallMeshes.clear();
+    this.squared.clear();
+    if (!state.indoors || !this.ambience.squareEdges) return;
+    // Which walls are cut, and how, is the rules' to say (roomedges.ts): furniture is let onto the same halves.
+    for (const [k, cut] of squaredWalls({ tiles: this.tiles })) this.squared.set(k, cut);
+    for (const [k, cut] of this.squared) {
+      const [q, r] = k.split(",").map(Number);
+      const mesh = new THREE.Mesh(WorldRenderer.cutColumn(cut), WorldRenderer.HALF_WALL.clone());
+      const { x, z } = hexToWorld({ q, r });
+      mesh.position.set(x, tileTop(this.tiles.find((t) => t.q === q && t.r === r)), z);
+      mesh.castShadow = mesh.receiveShadow = true;
+      mesh.userData.wallKey = k;
+      this.halfWallMeshes.set(k, mesh);
+      this.halfWalls.add(mesh);
+    }
+    if (!this.halfWalls.parent) this.scene.add(this.halfWalls);
+    // The whole columns are put away, and the cut ones stood at the right height, the next time the walls are cut for the camera.
+    this.wallTurn = NaN;
+  }
+
+  /**
+   * Side `side` of wall hex `pos` as it is drawn (hutroom.ts `wallFace` says where the rules have it). On a
+   * squared wall the sides that faced the room are one straight face, and each is given its share of it in
+   * order (a third each of a side wall's, half each of an end wall's), so what hangs on them keeps its place
+   * along the wall.
+   */
+  private wallSide(pos: HexPos, side: number): ReturnType<typeof wallFace> {
+    const sq = this.squared.get(key(pos));
+    if (!sq) return wallFace(pos, side);
+    const dir = HEX_DIRS[side];
+    const mid = hexToWorld(pos);
+    const half = Math.sqrt(3) / 2;
+    if (sq.cut === "side") {
+      const { room } = sq;
+      // The sides toward the room: the one straight across, and the two beside it.
+      const toward = room > 0 ? (dir.q === 1 && dir.r <= 0) || (dir.q === 0 && dir.r === 1) : (dir.q === -1 && dir.r >= 0) || (dir.q === 0 && dir.r === -1);
+      if (!toward) return wallFace(pos, side);
+      const third = 2 / 3;
+      return { x: mid.x, z: mid.z + dir.r * third, nx: room, nz: 0, tx: 0, tz: -room * third };
+    }
+    // An end wall: the two sides either side of the point it lost, on the face across its middle. A corner has
+    // only one side toward the floor, and the half of that face the room keeps: the stretch along the back wall.
+    const room = sq.cut === "end" ? sq.room : sq.rz;
+    if (dir.r !== room) return wallFace(pos, side);
+    const east = dir.q + dir.r / 2 > 0 ? 1 : -1;
+    if (sq.cut === "corner" && east !== sq.rx) return wallFace(pos, side);
+    return { x: mid.x + (east * half) / 2, z: mid.z, nx: 0, nz: room, tx: room * half, tz: 0 };
+  }
+
+  /**
+   * Where the pointer is on the floor a cut wall gave up (the half hex on the room's side of it), and the floor
+   * hex beside it that a piece set down there is anchored on; or null if the pointer is not over such floor.
+   */
+  private cutFloorUnder(): { pos: HexPos; x: number; z: number } | null {
+    if (this.squared.size === 0) return null;
+    const ray = this.raycaster.ray;
+    if (Math.abs(ray.direction.y) < 1e-6) return null;
+    const far = (FLOOR_TOP - ray.origin.y) / ray.direction.y;
+    if (far <= 0) return null;
+    const [x, z] = [ray.origin.x + ray.direction.x * far, ray.origin.z + ray.direction.z * far];
+    const hex = hexAt(x, z);
+    const cut = this.squared.get(key(hex));
+    if (!cut || this.lowered.has(key(hex))) return null;
+    const mid = hexToWorld(hex);
+    if (!onFloorPart(cut, x - mid.x, z - mid.z, 1e-6)) return null;
+    // Beside a side wall, the floor hex straight across; beside an end wall, whichever of its two the pointer is
+    // nearer; in a corner, the one floor hex it has.
+    const diagonal = (east: boolean, room: 1 | -1) => (room > 0 ? (east ? { q: hex.q, r: hex.r + 1 } : { q: hex.q - 1, r: hex.r + 1 }) : east ? { q: hex.q + 1, r: hex.r - 1 } : { q: hex.q, r: hex.r - 1 });
+    const pos = cut.cut === "side" ? { q: hex.q + cut.room, r: hex.r } : cut.cut === "end" ? diagonal(x >= mid.x, cut.room) : diagonal(cut.rx > 0, cut.rz);
+    return (this.tiles.find((t) => t.q === pos.q && t.r === pos.r)?.biome as string) === "floor" ? { pos, x, z } : null;
+  }
+
   private markWalls() {
     if (!this.terrain || !this.wallMarks) return;
     const m = new THREE.Matrix4();
@@ -3292,7 +3418,15 @@ export class WorldRenderer {
       const { x, z } = hexToWorld(t);
       const toward = (x - this.middle.x) * Math.sin(this.yaw) + (z - this.middle.z) * Math.cos(this.yaw);
       if (toward > 0.6) this.lowered.add(key(t));
-      m.compose(new THREE.Vector3(x, toward > 0.6 ? kerb : Math.max(raised, tileTop(t)), z), upright, new THREE.Vector3(1, 1, 1));
+      const top = toward > 0.6 ? kerb : Math.max(raised, tileTop(t));
+      // A squared wall's whole column is put away: its half stands in its place, at the same height.
+      const half = this.halfWallMeshes.get(key(t));
+      if (half) {
+        half.position.y = top;
+        // In the colour its whole column was painted, so it stands among the others as one of them.
+        if (this.terrain!.instanceColor) this.terrain!.getColorAt(i, (half.material as THREE.MeshLambertMaterial).color);
+      }
+      m.compose(new THREE.Vector3(x, top, z), upright, half ? new THREE.Vector3(0, 0, 0) : new THREE.Vector3(1, 1, 1));
       this.terrain!.setMatrixAt(i, m);
     });
     this.terrain.instanceMatrix.needsUpdate = true;
@@ -3373,7 +3507,7 @@ export class WorldRenderer {
     for (const f of wallFaces(state.map)) {
       const tile = tileAt(state.map, f.pos);
       if (!tile) continue;
-      const at = wallFace(f.pos, f.side);
+      const at = this.wallSide(f.pos, f.side);
       const top = tileTop(tile) - TILE_FILLET;
       const lift = 0.006;
       const [cx, cz] = [at.x + at.nx * lift, at.z + at.nz * lift];
@@ -3387,6 +3521,24 @@ export class WorldRenderer {
       const list = byWall.get(key(f.pos)) ?? [];
       list.push(a, b, c, a, c, d);
       byWall.set(key(f.pos), list);
+    }
+    // A corner's other face, along the side wall: no side of its hex is hung there, but it is wall all the same.
+    for (const [k, cut] of this.squared) {
+      if (cut.cut !== "corner") continue;
+      const [q, r] = k.split(",").map(Number);
+      const tile = tileAt(state.map, { q, r });
+      if (!tile || tile.h < 0.9) continue;
+      const mid = hexToWorld({ q, r });
+      const top = tileTop(tile) - TILE_FILLET;
+      const x = mid.x + cut.rx * 0.006;
+      const [z0, z1] = [mid.z, mid.z + cut.rz * TILE_RADIUS];
+      // Left to right as seen from the room.
+      const [zl, zr] = cut.rx * cut.rz > 0 ? [z1, z0] : [z0, z1];
+      const corner = (z: number, y: number, u: number, v: number) => [x, y, z, cut.rx, 0, 0, u, v];
+      const [a, b, c, d] = [corner(zl, FLOOR_TOP, 0, 0), corner(zr, FLOOR_TOP, 1, 0), corner(zr, top, 1, 1), corner(zl, top, 0, 1)];
+      const list = byWall.get(k) ?? [];
+      list.push(a, b, c, a, c, d);
+      byWall.set(k, list);
     }
     for (const [wall, verts] of byWall) {
       const geometry = new THREE.BufferGeometry();
@@ -3420,7 +3572,7 @@ export class WorldRenderer {
     // The back wall is the row furthest from the door. Its faces, left to right as seen from the room.
     const back = wallFaces(state.map)
       .filter((f) => f.pos.r === 0)
-      .map((f) => ({ ...f, at: wallFace(f.pos, f.side) }))
+      .map((f) => ({ ...f, at: this.wallSide(f.pos, f.side) }))
       .sort((a, b) => a.at.x - b.at.x);
     if (back.length === 0) return;
     const count = Math.min(OUTLOOK_PANES, back.length);
@@ -3467,7 +3619,7 @@ export class WorldRenderer {
 
   /** Where a wall piece hangs: on side `side` of wall hex `pos`, `x` along it and `y` up from the floor; and which way it faces. */
   private wallSpot(pos: HexPos, side: number, x: number, y: number): { at: THREE.Vector3; yaw: number } {
-    const f = wallFace(pos, side);
+    const f = this.wallSide(pos, side);
     return { at: new THREE.Vector3(f.x + f.tx * x, FLOOR_TOP + y, f.z + f.tz * x), yaw: Math.atan2(f.nx, f.nz) };
   }
 
@@ -3494,6 +3646,8 @@ export class WorldRenderer {
     // A place's hex keeps its green: the ambience lays no dry grass there, so it would be parched for nothing.
     const placeKeys = this.placeKeys();
     const places = new Set(placeKeys);
+    // The cut walls take their colour from this paint the next time the walls are gone over.
+    if (this.halfWallMeshes.size > 0) this.wallTurn = NaN;
     this.paintedFrom = { terrain: this.terrain, night: this.paintedNight, far: !!this.state?.far, roofed: this.roofed, places: placeKeys.join(";"), reach: this.paintReach() };
     this.tiles.forEach((t, i) => {
       c.set((t.clime && t.clime !== "greenwood" && CLIME_COLOR[t.clime][t.biome]) || (this.state?.far && FAR_COLOR[t.biome]) || BIOME_COLOR[t.biome]);
@@ -4453,13 +4607,14 @@ export class WorldRenderer {
         return { pos: prop?.pos ?? { q: 0, r: 0 }, x: round(x), z: round(z), on: id };
       }
     }
-    const hit = this.raycaster.intersectObject(this.terrain)[0];
-    if (!hit || hit.instanceId === undefined) return null;
-    const t = this.tiles[hit.instanceId];
-    let pos = { q: t.q, r: t.r };
-    let [px, pz] = [hit.point.x, hit.point.z];
+    // Over the half hex of floor a cut wall gave up: the piece is anchored on the floor hex beside it, pushed that way.
+    const strip = this.cutFloorUnder();
+    const hit = strip ? undefined : this.raycaster.intersectObject(this.terrain)[0];
+    if (!strip && (!hit || hit.instanceId === undefined)) return null;
+    let pos = strip ? strip.pos : { q: this.tiles[hit!.instanceId!].q, r: this.tiles[hit!.instanceId!].r };
+    let [px, pz] = strip ? [strip.x, strip.z] : [hit!.point.x, hit!.point.z];
     const fp = holding.footprint;
-    if (!holding.small && fp && Math.hypot(fp.x ?? 0, fp.z ?? 0) > 0.3) {
+    if (!strip && !holding.small && fp && Math.hypot(fp.x ?? 0, fp.z ?? 0) > 0.3) {
       // A long piece is held by its middle: the hex it is anchored on is back along it from the pointer.
       const turn = -yawOf(holding.facing, holding.angle);
       const [c, s] = [Math.cos(turn), Math.sin(turn)];
@@ -4484,9 +4639,13 @@ export class WorldRenderer {
    * beside it), as far along and as high as it points, kept on that side.
    */
   private aimAtWall(mount: { w: number; h: number }): PlaceTarget | null {
-    const hit = this.raycaster.intersectObject(this.terrain!)[0];
-    if (!hit || hit.instanceId === undefined) return null;
-    const t = this.tiles[hit.instanceId];
+    const ground = this.raycaster.intersectObject(this.terrain!)[0];
+    // A squared wall is its half column, not a hex of the ground: the pointer is on it if that is what it meets first.
+    const half = this.raycaster.intersectObjects(this.halfWalls.children)[0];
+    const hit = half && (!ground || half.distance <= ground.distance) ? half : ground;
+    if (!hit) return null;
+    const t = hit === half ? this.tiles.find((tile) => key(tile) === (half.object.userData.wallKey as string)) : hit.instanceId === undefined ? undefined : this.tiles[hit.instanceId];
+    if (!t) return null;
     const point = hit.point;
     let pos: HexPos;
     let side: number;
@@ -4499,10 +4658,15 @@ export class WorldRenderer {
       if (!sides?.length) return null;
       // The side the pointer is nearest, of those that face the room.
       const score = (s: number) => {
-        const f = wallFace(pos, s);
+        const f = this.wallSide(pos, s);
         return f.nx * (point.x - mid.x) + f.nz * (point.z - mid.z);
       };
-      side = sides.reduce((a, b) => (score(b) > score(a) ? b : a));
+      // (On a squared wall the sides that face the room lie along one straight face: the one whose stretch of it the pointer is nearest.)
+      const near = (s: number) => {
+        const f = this.wallSide(pos, s);
+        return Math.hypot(point.x - f.x, point.z - f.z);
+      };
+      side = this.squared.has(key(t)) ? sides.reduce((a, b) => (near(b) < near(a) ? b : a)) : sides.reduce((a, b) => (score(b) > score(a) ? b : a));
       // On the face of the wall (not its top), the height is where the pointer is.
       if (hit.face && Math.abs(hit.face.normal.y) < 0.5) y = point.y - FLOOR_TOP;
     } else if (t.biome === "floor") {
@@ -4513,16 +4677,17 @@ export class WorldRenderer {
         if (this.lowered.has(key(w))) return;
         const back = HEX_DIRS.findIndex((o) => o.q === -dir.q && o.r === -dir.r);
         if (!this.hangable.get(key(w))?.includes(back)) return;
-        const f = wallFace(w, back);
+        const f = this.wallSide(w, back);
         const d = Math.hypot(point.x - f.x, point.z - f.z);
         if (d < 0.6 && (!best || d < best.d)) best = { pos: w, side: back, d };
       });
       if (!best) return null;
       ({ pos, side } = best);
     } else return null;
-    const f = wallFace(pos, side);
+    const f = this.wallSide(pos, side);
     const along = Math.max(0, WALL_FACE_HALF - mount.w / 2);
-    const x = Math.max(-along, Math.min(along, (point.x - f.x) * f.tx + (point.z - f.z) * f.tz));
+    // (A squared wall's sides are each a third of its straight face: `tx,tz` is that much shorter than a unit.)
+    const x = Math.max(-along, Math.min(along, ((point.x - f.x) * f.tx + (point.z - f.z) * f.tz) / (f.tx * f.tx + f.tz * f.tz)));
     y = Math.max(WALL_ITEM_BOTTOM + mount.h / 2, Math.min(WALL_ITEM_TOP - mount.h / 2, y));
     this.wallY = y;
     return { pos, x: round(x), z: 0, wall: { side, y: round(y) } };

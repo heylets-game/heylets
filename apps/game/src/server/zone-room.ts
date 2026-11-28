@@ -116,6 +116,12 @@ export function zoneActionFrom(raw: unknown, by: string, dev: boolean): ZoneActi
   const lean = a.lean && typeof a.lean === "object" && Number.isFinite((a.lean as { q: unknown }).q) && Number.isFinite((a.lean as { r: unknown }).r) ? { q: Number((a.lean as { q: number }).q), r: Number((a.lean as { r: number }).r) } : undefined;
   if (a.type === "use") return text(a.ability) ? { type: "use", by, unit: a.unit, ability: a.ability, target, at: hex(a.at), ...(lean ? { lean } : {}) } : null;
   if (a.type === "common") return text(a.what) ? { type: "common", by, unit: a.unit, what: a.what as never, target, at: hex(a.at) } : null;
+  // A voyage's stations: an aim in the ship's own frame (finite numbers, nothing more is asked of it here), or which way to put the helm.
+  if (a.type === "harpoon") {
+    const aim = (a.aim && typeof a.aim === "object" ? a.aim : {}) as { x?: unknown; y?: unknown };
+    return text(a.station) && Number.isFinite(aim.x) && Number.isFinite(aim.y) ? { type: "harpoon", by, unit: a.unit, station: a.station, aim: { x: Number(aim.x), y: Number(aim.y) } } : null;
+  }
+  if (a.type === "steer") return a.dir === 1 || a.dir === -1 ? { type: "steer", by, unit: a.unit, dir: a.dir } : null;
   if (a.type === "throw") return text(a.item) && isHex(a.at) ? { type: "throw", by, unit: a.unit, item: a.item as never, at: hex(a.at)! } : null;
   if (a.type === "drink") return text(a.item) ? { type: "drink", by, unit: a.unit, item: a.item as never } : null;
   if (a.type === "pickup") return isHex(a.at) ? { type: "pickup", by, unit: a.unit, at: hex(a.at)! } : null;

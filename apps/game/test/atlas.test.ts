@@ -3,7 +3,7 @@
 
 import type { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
-import { ATLAS_HOME, GEM_PRICE, PLAIN_STONE_COST, STACK_MAX, TOWN_TABS_MAX, TOWN_TAB_CELLS, atlasNodeById, attuneCost, modsOf, nodePlace, townTabCost, needsStone, rerollCost, stoneItem, temperCost, type ZoneMod, type ZoneOptions } from "@gantt-quest/world";
+import { ATLAS_HOME, GEM_PRICE, PLAIN_STONE_COST, STACK_MAX, TOWN_TABS_MAX, TOWN_TAB_CELLS, atlasNodeById, attuneCost, modsOf, nodePlace, townTabCost, needsStone, rerollCost, stoneItem, temperCost, type ZoneMod, type ZoneOptions, atlasPassage, atlasWay } from "@gantt-quest/world";
 import { atlasSeed, chartFor, clearNode, devClearNode, devResetChart, enterProblem, openNode, scoutNode } from "../src/server/atlas";
 import { applyZoneGrant, carryState, sellMaterial } from "../src/server/db";
 import { sellGems } from "../src/server/lapidary";
@@ -25,8 +25,19 @@ beforeEach(() => {
 
 const home = (crew = CREW) => atlasNodeById(atlasSeed(crew), ATLAS_HOME)!;
 const first = (crew = CREW) => home(crew).links[0];
-/** A node a ring out that a route runs to from `from`. */
-const beyond = (from: string, crew = CREW) => atlasNodeById(atlasSeed(crew), from)!.links.find((id) => atlasNodeById(atlasSeed(crew), id)!.ring === 2)!;
+/** A node a ring out that a route runs to from `from`, over calm water. */
+const beyond = (from: string, crew = CREW) => atlasNodeById(atlasSeed(crew), from)!.links.find((id) => atlasNodeById(atlasSeed(crew), id)!.ring === 2 && atlasPassage(atlasSeed(crew), from, id)!.kind === "calm")!;
+/** A node a ring out from one of the landfalls by the Harbor, with an encounter on the only water to it: the landfall, the node and the passage. */
+const barred = (crew = CREW) => {
+  const seed = atlasSeed(crew);
+  for (const from of home(crew).links) {
+    for (const id of atlasNodeById(seed, from)!.links) {
+      const way = atlasNodeById(seed, id)!.ring === 2 ? atlasWay(seed, new Set([from]), id) : null;
+      if (way?.way === "beyond") return { from, node: id, passage: way.by!.id };
+    }
+  }
+  throw new Error("no barred place on this chart");
+};
 const states = async (crew = CREW) => new Map((await chartFor(db, crew)).nodes.map((n) => [n.id, n.state]));
 /** Put a lodestone in someone's pack: a plain one, or one that carries these. */
 const give = (who: string, stone: ZoneMod[] = []) =>
@@ -180,15 +191,15 @@ describe("scouting a place before a muster is called for it", () => {
     expect(await refused("nowhere")).toMatchObject({ status: 400 });
     expect(await refused({ q: 1, r: 0 })).toMatchObject({ status: 400 });
     expect(await refused(undefined)).toMatchObject({ status: 400 });
-    expect(await refused(node, "rainy")).toMatchObject({ status: 400, error: "That is no lodestone." });
+    expect(await refused(node, "rainy")).toMatchObject({ status: 400, error: "That is no charter." });
 
     await clearNode(db, CREW, node);
     expect(await refused(node)).toMatchObject({ status: 409, error: expect.stringMatching(/cleared already/) });
     expect(await refused(node, "")).toMatchObject({ status: 409, error: expect.stringMatching(/cleared already/) });
     // Beyond it a route now runs, and the place needs a lodestone in its slot.
-    expect(await refused(far)).toMatchObject({ status: 409, error: expect.stringMatching(/needs a lodestone/) });
-    expect(await refused(far, null)).toMatchObject({ status: 409, error: expect.stringMatching(/needs a lodestone/) });
-    expect(await refused(far, "rainy")).toMatchObject({ status: 400, error: "That is no lodestone." });
+    expect(await refused(far)).toMatchObject({ status: 409, error: expect.stringMatching(/needs a charter/) });
+    expect(await refused(far, null)).toMatchObject({ status: 409, error: expect.stringMatching(/needs a charter/) });
+    expect(await refused(far, "rainy")).toMatchObject({ status: 400, error: "That is no charter." });
   });
 
   it("does not look in the pack: a stone that is not held is found out when the muster starts", async () => {
@@ -200,7 +211,7 @@ describe("scouting a place before a muster is called for it", () => {
     expect(await scoutNode(db, CREW, far, "hardy+numerous")).toEqual(placeOf(far));
     expect(everything()).toBe(before);
     // Setting out is where it is refused.
-    expect(await openNode(db, CREW, "ann", far, 2, "")).toMatchObject({ status: 409, error: expect.stringMatching(/You have no plain lodestone/) });
+    expect(await openNode(db, CREW, "ann", far, 2, "")).toMatchObject({ status: 409, error: expect.stringMatching(/You have no blank charter/) });
   });
 
   it("gives the map already being fought through there, whatever is held out, and the place again once that map is let go", async () => {
@@ -226,7 +237,7 @@ describe("scouting a place before a muster is called for it", () => {
     // Left alone too long, that map is gone: the place is there to be set out for again, with a stone.
     sql.prepare("UPDATE zones SET updated_at = ? WHERE code = ?").run(Date.now() - CAVE_IDLE_MS - 1000, b.code);
     const later = everything();
-    expect(await scoutNode(db, CREW, far)).toMatchObject({ status: 409, error: expect.stringMatching(/needs a lodestone/) });
+    expect(await scoutNode(db, CREW, far)).toMatchObject({ status: 409, error: expect.stringMatching(/needs a charter/) });
     expect(await scoutNode(db, CREW, far, "")).toEqual(placeOf(far));
     expect(everything()).toBe(later);
   });
@@ -260,8 +271,8 @@ describe("lodestones", () => {
     expect((await openNode(db, CREW, "ann", node, 2)) as { fresh: boolean }).toMatchObject({ fresh: true });
     await clearNode(db, CREW, node);
     // Beyond it: refused without one, with one that is not held, and with nonsense.
-    expect(await openNode(db, CREW, "ann", far, 2)).toMatchObject({ status: 409, error: expect.stringMatching(/needs a lodestone/) });
-    expect(await openNode(db, CREW, "ann", far, 2, "")).toMatchObject({ status: 409, error: expect.stringMatching(/You have no plain lodestone/) });
+    expect(await openNode(db, CREW, "ann", far, 2)).toMatchObject({ status: 409, error: expect.stringMatching(/needs a charter/) });
+    expect(await openNode(db, CREW, "ann", far, 2, "")).toMatchObject({ status: 409, error: expect.stringMatching(/You have no blank charter/) });
     expect(await openNode(db, CREW, "ann", far, 2, "rainy")).toMatchObject({ status: 400 });
     give("bo");
     // Bo's stone is not Ann's.
@@ -298,14 +309,14 @@ describe("lodestones", () => {
     expect((await chartFor(db, CREW)).nodes.find((n) => n.id === node)!.stone).toBeUndefined();
   });
 
-  it("a plain one can be cut from stone and iron, and not without them", async () => {
-    expect(await cutStone(db, "ann")).toMatch(/stone and iron/);
+  it("a blank one can be drawn up from fur and wood, and not without them", async () => {
+    expect(await cutStone(db, "ann")).toMatch(/fur and wood/);
     for (const [kind, qty] of Object.entries(PLAIN_STONE_COST)) sql.prepare("INSERT INTO resources (player_id, kind, qty) VALUES ('ann', ?, ?)").run(kind, qty! * 2 + 1);
     expect(await cutStone(db, "ann")).toBeNull();
     expect(await cutStone(db, "ann")).toBeNull();
     expect(await lodestonesOf(db, "ann")).toEqual([{ stone: [], qty: 2 }]);
     // What was left is not enough for a third.
-    expect(await cutStone(db, "ann")).toMatch(/stone and iron/);
+    expect(await cutStone(db, "ann")).toMatch(/fur and wood/);
     expect(sql.prepare("SELECT kind, qty FROM resources WHERE player_id = 'ann' ORDER BY kind").all()).toEqual(Object.keys(PLAIN_STONE_COST).sort().map((kind) => ({ kind, qty: 1 })));
   });
 });
@@ -327,7 +338,7 @@ describe("the town chest", () => {
 
   it("starts with a chest, a tab for materials and one for lodestones, all empty, and makes them once", async () => {
     const chest = await chestFor(db, CREW);
-    expect(chest.tabs.map((t) => [t.name, t.kind])).toEqual([["Chest", "general"], ["Materials", "materials"], ["Lodestones", "lodestones"]]);
+    expect(chest.tabs.map((t) => [t.name, t.kind])).toEqual([["Chest", "general"], ["Materials", "materials"], ["Charters", "lodestones"]]);
     expect(chest.tabs.every((t) => t.gear.length === 0 && t.stacks.length === 0)).toBe(true);
     expect(chest.nextTab).toBe(townTabCost(1));
     expect((await chestFor(db, CREW)).tabs.map((t) => t.id)).toEqual(chest.tabs.map((t) => t.id));
@@ -467,7 +478,7 @@ describe("the town chest", () => {
     sql.prepare("UPDATE characters SET gold = ? WHERE player_id = 'bo'").run(cost + townTabCost(2) - 1);
     expect(await chestBuyTab(db, CREW, "bo", "  Spare   gear ")).toBeNull();
     const chest = await chestFor(db, CREW);
-    expect(chest.tabs.map((t) => [t.name, t.kind])).toEqual([["Chest", "general"], ["Materials", "materials"], ["Lodestones", "lodestones"], ["Spare gear", "general"]]);
+    expect(chest.tabs.map((t) => [t.name, t.kind])).toEqual([["Chest", "general"], ["Materials", "materials"], ["Charters", "lodestones"], ["Spare gear", "general"]]);
     expect(chest.nextTab).toBe(townTabCost(2));
     expect(townTabCost(2)).toBeGreaterThan(cost);
     expect(gold("bo")).toBe(townTabCost(2) - 1);
@@ -547,7 +558,7 @@ describe("the Lapidary: the lodestone bench, and gems", () => {
     expect(gems()).toBe(3);
     expect(gold("ann")).toBe(had + 2 * GEM_PRICE);
     // The stall sends them on: nothing is taken and nothing paid.
-    expect(await sellMaterial(db, "ann", "gem", 1)).toMatch(/Lapidary/);
+    expect(await sellMaterial(db, "ann", "gem", 1)).toMatch(/Charter & Trade/);
     expect(gems()).toBe(3);
     expect(await sellGems(db, "ann", 3)).toBe(3 * GEM_PRICE);
     expect(gems()).toBe(0);
@@ -578,7 +589,7 @@ describe("the Lapidary: the lodestone bench, and gems", () => {
     expect(await fuseStones(db, "ann", ["hardy", "hardy", "hardy"])).toMatch(/no longer have/);
     expect(await fuseStones(db, "ann", ["hardy", "hardy", ""])).toMatch(/same number/);
     expect(await fuseStones(db, "ann", ["hardy", "hardy"])).toMatch(/takes 3/);
-    expect(await fuseStones(db, "ann", ["hardy", "hardy", "rainy"])).toMatch(/no lodestone/);
+    expect(await fuseStones(db, "ann", ["hardy", "hardy", "rainy"])).toMatch(/no charter/);
     expect(await fuseStones(db, "ann", "hardy")).toMatch(/takes 3/);
     // Bo's are not Ann's.
     for (let i = 0; i < 3; i++) give("bo", ["swift"]);
@@ -639,8 +650,8 @@ describe("ranks and boons", () => {
     expect(await lodestonesOf(db, "ann")).toEqual([{ stone: ["hardy2", "swift"], qty: 1 }]);
     expect((sql.prepare("SELECT gold FROM characters WHERE player_id = 'ann'").get() as { gold: number }).gold).toBe(0);
     // What cannot be: a thing it does not carry, the rank it used to have, a stone not held.
-    expect(await temperStone(db, "ann", "hardy2+swift", "savage")).toMatch(/does not carry/);
-    expect(await temperStone(db, "ann", "hardy2+swift", "hardy")).toMatch(/does not carry/);
+    expect(await temperStone(db, "ann", "hardy2+swift", "savage")).toMatch(/does not say/);
+    expect(await temperStone(db, "ann", "hardy2+swift", "hardy")).toMatch(/does not say/);
     expect(await temperStone(db, "ann", "hardy+swift", "hardy")).toMatch(/no longer have/);
     give("ann", ["swift2"]);
     expect(await temperStone(db, "ann", "swift2", "swift2")).toMatch(/as much of it/);
@@ -655,5 +666,74 @@ describe("ranks and boons", () => {
     expect(options.mods).toEqual(["hardy2", "gilded"]);
     expect(modsOf(options)).toMatchObject({ hp: 1.65, gold: 0.33 });
     expect((await chartFor(db, CREW)).nodes.find((n) => n.id === node)!.stone).toEqual(["hardy2", "gilded"]);
+  });
+});
+
+describe("a sea passage on the way", () => {
+  it("bars a place past it until it is beaten, and says so; a charter with a pilot's soundings slips past and leaves it unbeaten", async () => {
+    const { from, node, passage } = barred();
+    await went(from);
+    await clearNode(db, CREW, from);
+    expect((await states()).get(node)).toBe("beyond");
+    expect((await chartFor(db, CREW)).passages.find((p) => p.id === passage)).toMatchObject({ state: "open", kind: "salvage" });
+    // A plain charter will not do: the refusal names the water in the way.
+    give("ann");
+    const refused = await openNode(db, CREW, "ann", node, 2, "");
+    expect(refused).toMatchObject({ status: 409 });
+    expect("error" in refused && refused.error).toMatch(/Salvage waters lie on the way/);
+    expect(await scoutNode(db, CREW, node, "")).toEqual(refused);
+    // Soundings on the charter: the ship slips past, and the passage is as it was.
+    give("ann", ["piloted"]);
+    const slipped = await openNode(db, CREW, "ann", node, 2, "piloted");
+    expect(slipped).toMatchObject({ fresh: true });
+    expect((await chartFor(db, CREW)).passages.find((p) => p.id === passage)!.state).toBe("open");
+  });
+
+  it("is calm once beaten: the place past it is open to a plain charter", async () => {
+    const { from, node, passage } = barred();
+    await clearNode(db, CREW, from);
+    await clearNode(db, CREW, passage);
+    expect((await states()).get(node)).toBe("open");
+    expect((await chartFor(db, CREW)).passages.find((p) => p.id === passage)!.state).toBe("cleared");
+    expect(await went(node)).toMatchObject({ fresh: true });
+  });
+});
+
+describe("sailing a passage", () => {
+  it("makes a voyage for it (a deck at sea, no charter spent), the same one for whoever follows, and beating it clears it on the chart", async () => {
+    const { from, node, passage } = barred();
+    await clearNode(db, CREW, from);
+    const a = await openNode(db, CREW, "ann", passage, 2);
+    if ("error" in a) throw new Error(a.error);
+    expect(a.fresh).toBe(true);
+    const zone = (await getZoneRow(db, a.code))!;
+    expect(zone).toMatchObject({ kind: "atlas", crew_id: CREW, node: passage, status: "open" });
+    const options = JSON.parse(zone.options_json) as ZoneOptions;
+    expect(options).toMatchObject({ party: 2, name: "Salvage waters", voyage: { deck: { cols: 3, rows: 8 } } });
+    expect(options.tier).toBeUndefined();
+    expect(await openNode(db, CREW, "bo", passage, 1)).toEqual({ code: a.code, fresh: false });
+    expect(await scoutNode(db, CREW, passage)).toEqual({ live: a.code });
+    // The chart shows it under way; the place past it is still beyond it.
+    expect((await chartFor(db, CREW)).passages.find((p) => p.id === passage)).toMatchObject({ state: "open", zone: a.code });
+    expect((await states()).get(node)).toBe("beyond");
+    await clearNode(db, CREW, passage);
+    expect((await states()).get(node)).toBe("open");
+    expect(await openNode(db, CREW, "ann", passage, 2)).toMatchObject({ status: 409 });
+  });
+
+  it("refuses calm water, water no route reaches yet, and a ship that went down is not still sailing", async () => {
+    const { from, passage } = barred();
+    expect(await openNode(db, CREW, "ann", passage, 2)).toMatchObject({ status: 409, error: expect.stringMatching(/No route runs to that water/) });
+    const calm = atlasPassage(atlasSeed(CREW), ATLAS_HOME, from)!;
+    expect(calm.kind).toBe("calm");
+    expect(await openNode(db, CREW, "ann", calm.id, 2)).toMatchObject({ status: 409, error: expect.stringMatching(/calm/) });
+    await clearNode(db, CREW, from);
+    const a = await openNode(db, CREW, "ann", passage, 2);
+    if ("error" in a) throw new Error(a.error);
+    // She was sunk: the next to set out gets a fresh voyage.
+    sql.prepare("UPDATE zones SET status = 'lost' WHERE code = ?").run(a.code);
+    const b = await openNode(db, CREW, "ann", passage, 2);
+    expect(b).toMatchObject({ fresh: true });
+    expect("code" in b && b.code).not.toBe(a.code);
   });
 });

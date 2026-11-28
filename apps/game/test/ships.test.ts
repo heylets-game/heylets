@@ -6,7 +6,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
-import { HULL_PER_WOOD, SHIPS, atlasNodeById, crewShip, projectById, stoneItem, type AtlasNode, type ZoneOptions } from "@gantt-quest/world";
+import { ATLAS_HOME, HULL_PER_WOOD, SHIPS, atlasNodeById, atlasPassages, passageId, crewShip, projectById, stoneItem, type AtlasNode, type ZoneOptions } from "@gantt-quest/world";
 import { atlasSeed, clearNode, openNode, scoutNode } from "../src/server/atlas";
 import { harborBoard } from "../src/server/db";
 import { mendShip, shipOf } from "../src/server/db/ships";
@@ -35,9 +35,14 @@ function wayTo(ring: number, crew = CREW): { place: AtlasNode; through: AtlasNod
   }
   return { place, through };
 }
-/** The crew has cleared its way out to a place in this ring, which is now open to it. */
+/**
+ * The crew has cleared its way out to a place in this ring, which is now open to it: every landfall on the way, and
+ * the sea passage on every leg of it (beaten, so no passage bars the way: atlas.ts `atlasWay`).
+ */
 async function reached(ring: number, crew = CREW): Promise<AtlasNode> {
   const { place, through } = wayTo(ring, crew);
+  const legs = [ATLAS_HOME, ...through.map((n) => n.id), place.id];
+  for (let i = 1; i < legs.length; i++) await clearNode(db, crew, passageId(legs[i - 1], legs[i]));
   for (const n of through) await clearNode(db, crew, n.id);
   return place;
 }
@@ -131,6 +136,31 @@ describe("how many she carries", () => {
     }
   });
 
+  it("sails a sea passage on the crew's own ship: her deck, her hold, and her hull as the yard keeps it", async () => {
+    // The first water there is to beat, going out a ring at a time: most of the routes by the Harbor are calm.
+    const cleared = () => new Set((sql.prepare("SELECT node FROM atlas_nodes WHERE crew_id = ? AND status = 'cleared'").all(CREW) as { node: string }[]).map((r) => r.node));
+    let water = atlasPassages(atlasSeed(CREW), cleared()).find((p) => p.state === "open" && p.ring <= sloop.reach!);
+    for (let ring = 2; !water && ring <= sloop.reach!; ring++) {
+      await reached(ring);
+      water = atlasPassages(atlasSeed(CREW), cleared()).find((p) => p.state === "open" && p.ring <= sloop.reach!);
+    }
+    if (!water) throw new Error("no water to beat within the Sloop's reach");
+    const sail = async () => {
+      const went = await openNode(db, CREW, "ann", water.id, 6);
+      if ("error" in went) throw new Error(went.error);
+      const options = JSON.parse((await getZoneRow(db, went.code))!.options_json) as ZoneOptions;
+      // (Let that voyage go, and the way out to it stays cleared, so the next sets out afresh.)
+      sql.prepare("DELETE FROM atlas_nodes WHERE crew_id = ? AND node = ?").run(CREW, water!.id);
+      sql.prepare("DELETE FROM zones WHERE code = ?").run(went.code);
+      return options;
+    };
+    expect(await scoutNode(db, CREW, water.id)).toMatchObject({ most: sloop.heroes });
+    expect(await sail()).toMatchObject({ party: sloop.heroes, voyage: { deck: sloop.deck, hull: sloop.hull, sound: sloop.hull, hold: sloop.hold } });
+    launch("brig");
+    wear("brig", 40);
+    expect(await sail()).toMatchObject({ party: brig.heroes, voyage: { deck: brig.deck, hull: brig.hull, sound: 40, hold: brig.hold } });
+  });
+
   it("still makes a small map for a small party", async () => {
     const went = await openNode(db, CREW, "ann", node("1,0").id, 2);
     if ("error" in went) throw new Error(went.error);
@@ -197,6 +227,8 @@ describe("migration 0069", () => {
     cleared("PAID", "9,0", "open");
     run("INSERT INTO crew_projects (crew_id, project_id, built_at) VALUES ('PAID', 'brig', NULL), ('PAID', 'smithy', 77)");
     run("INSERT INTO crew_project_paid (crew_id, project_id, kind, qty, cap) VALUES ('PAID', 'brig', 'wood', 30, 120)");
+    // A sea passage beaten far out is no landfall: its id names its two ends, and it gives no ship of its own.
+    cleared("NEAR", "8,0|9,0");
 
     old.exec(readFileSync(new URL(files.find((f) => f.startsWith("0069"))!, dir), "utf8"));
 
@@ -213,7 +245,7 @@ describe("migration 0069", () => {
       return (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2;
     };
     for (const crew of ["NEAR", "MID", "FAR", "PAID"]) {
-      const far = Math.max(...(old.prepare("SELECT node FROM atlas_nodes WHERE crew_id = ? AND status = 'cleared'").all(crew) as { node: string }[]).map((n) => ring(n.node)));
+      const far = Math.max(...(old.prepare("SELECT node FROM atlas_nodes WHERE crew_id = ? AND status = 'cleared' AND node NOT LIKE '%|%'").all(crew) as { node: string }[]).map((n) => ring(n.node)));
       const ship = crewShip(built(crew));
       expect(ship.reach === null || far <= ship.reach, crew).toBe(true);
     }

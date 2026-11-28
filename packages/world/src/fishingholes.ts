@@ -150,7 +150,7 @@ const LANDMARKS: { at: HexPos; name: string }[] = [
   { at: HARBOR_GATHER.quarry, name: "the quarry" },
   { at: HARBOR_CAVE, name: "the caverns" },
   { at: HARBOR_RING, name: "the sparring ring" },
-  { at: HARBOR_LAPIDARY, name: "the Lapidary" },
+  { at: HARBOR_LAPIDARY, name: "the chart shop" },
   { at: HARBOR_PLOTS[HARBOR_PLOTS.length - 1], name: "the huts" },
 ];
 function whereOf(p: HexPos, near: boolean): string {

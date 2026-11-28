@@ -29,7 +29,7 @@ export const TAB_KINDS: TabKind[] = ["general", "materials", "lodestones"];
 export const STARTING_TABS: { name: string; kind: TabKind }[] = [
   { name: "Chest", kind: "general" },
   { name: "Materials", kind: "materials" },
-  { name: "Lodestones", kind: "lodestones" },
+  { name: "Charters", kind: "lodestones" },
 ];
 
 /** How many rows of squares a general tab has, and so how many squares. */

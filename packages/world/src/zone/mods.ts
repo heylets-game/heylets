@@ -13,7 +13,9 @@
 //           whoever stands on it (how much they take, how hard and how
 //           surely they hit, how far they move, how many there are).
 //   boons   make nothing harder. Each is more of one thing in the bounty:
-//           gold, experience, gear, lodestones. They are multiplied by
+//           gold, experience, gear, charters. (One is not of the bounty
+//           at all: a pilot's soundings, which see the ship past a sea
+//           passage on the way.) They are multiplied by
 //           what the perils add, so a boon is worth most on a hard map.
 //
 // A modifier has ranks: the same thing, more so. And each has a weight, how
@@ -29,7 +31,7 @@ import type { SurfaceKind, ZoneOptions, ZoneSize } from "./types";
 export type ZoneModId =
   | "tangled" | "craggy" | "sprawling" | "smouldering" | "fouled" | "slick" | "frozen"
   | "hardy" | "savage" | "swift" | "numerous"
-  | "gilded" | "storied" | "laden" | "lodebearing";
+  | "gilded" | "storied" | "laden" | "lodebearing" | "piloted";
 /** A modifier as a map or a stone carries it: its id, and its rank on the end if that is above the first. */
 export type ZoneMod = ZoneModId | `${ZoneModId}${2 | 3}`;
 
@@ -59,6 +61,12 @@ interface ModEffect {
   xp?: number;
   gear?: number;
   stones?: number;
+  /**
+   * A pilot's soundings, inked on the charter: the ship may slip past an unbeaten sea passage on the way to
+   * the place, without a fight and without its salvage. The number is how dangerous a passage it can slip
+   * (atlas.ts: `PASSAGES[kind].soundings`).
+   */
+  soundings?: number;
 }
 
 export interface ZoneModDef extends ModEffect {
@@ -106,7 +114,11 @@ export const ZONE_MODS: Record<ZoneModId, ZoneModDef> = {
   gilded: { id: "gilded", name: "Gilded", kind: "boon", weight: 5, blurb: "A third more gold in its bounty.", pay: 0, gold: 0.33, more: [{ blurb: "Two thirds more gold in its bounty.", pay: 0, gold: 0.66 }, { blurb: "Twice the gold in its bounty.", pay: 0, gold: 1 }] },
   storied: { id: "storied", name: "Storied", kind: "boon", weight: 5, blurb: "A quarter more experience in its bounty.", pay: 0, xp: 0.25, more: [{ blurb: "Half as much experience again in its bounty.", pay: 0, xp: 0.5 }, { blurb: "Four fifths more experience in its bounty.", pay: 0, xp: 0.8 }] },
   laden: { id: "laden", name: "Laden", kind: "boon", weight: 3, blurb: "A better chance of gear in its bounty, and of a better piece.", pay: 0, gear: 0.2, more: [{ blurb: "A much better chance of gear in its bounty, and of a better piece.", pay: 0, gear: 0.35 }, { blurb: "Gear in its bounty, as near as makes no odds, and good.", pay: 0, gear: 0.5 }] },
-  lodebearing: { id: "lodebearing", name: "Lodebearing", kind: "boon", weight: 2, blurb: "A better chance of a lodestone in its bounty, and of one that carries more.", pay: 0, stones: 0.2, more: [{ blurb: "A much better chance of a lodestone in its bounty, and of one that carries more.", pay: 0, stones: 0.35 }, { blurb: "A lodestone in its bounty, as near as makes no odds, and a fine one.", pay: 0, stones: 0.5 }] },
+  lodebearing: { id: "lodebearing", name: "Well-charted", kind: "boon", weight: 2, blurb: "A better chance of a charter in its bounty, and of one that says more.", pay: 0, stones: 0.2, more: [{ blurb: "A much better chance of a charter in its bounty, and of one that says more.", pay: 0, stones: 0.35 }, { blurb: "A charter in its bounty, as near as makes no odds, and a fine one.", pay: 0, stones: 0.5 }] },
+  piloted: {
+    id: "piloted", name: "Pilot's soundings", kind: "boon", weight: 2, blurb: "The ship slips past salvage waters on the way: no fight at sea, and no salvage.", pay: 0, soundings: 1,
+    more: [{ blurb: "The ship slips past salvage waters and a kraken's on the way: no fight at sea, and no salvage.", pay: 0, soundings: 2 }, { blurb: "The ship slips past any waters on the way, raiders' too: no fight at sea, and no salvage.", pay: 0, soundings: 3 }],
+  },
 };
 
 export const ZONE_MOD_IDS = Object.keys(ZONE_MODS) as ZoneModId[];
@@ -195,10 +207,12 @@ export interface ModSum {
   xp: number;
   gear: number;
   stones: number;
+  /** The best pilot's soundings among them: how dangerous a sea passage the ship may slip past. None is 0. */
+  soundings: number;
 }
 
 export function modsOf(options: Pick<ZoneOptions, "mods"> | undefined): ModSum {
-  const sum: ModSum = { obstacles: 0, elevation: 0, groups: 0, patches: 1, hp: 1, edge: 0, move: 0, extras: 0, pay: 0, gold: 0, xp: 0, gear: 0, stones: 0 };
+  const sum: ModSum = { obstacles: 0, elevation: 0, groups: 0, patches: 1, hp: 1, edge: 0, move: 0, extras: 0, pay: 0, gold: 0, xp: 0, gear: 0, stones: 0, soundings: 0 };
   for (const one of options?.mods ?? []) {
     if (!modOf(one)) continue;
     const def = modEffect(one);
@@ -217,6 +231,7 @@ export function modsOf(options: Pick<ZoneOptions, "mods"> | undefined): ModSum {
     sum.xp += def.xp ?? 0;
     sum.gear += def.gear ?? 0;
     sum.stones += def.stones ?? 0;
+    sum.soundings = Math.max(sum.soundings, def.soundings ?? 0);
   }
   return sum;
 }

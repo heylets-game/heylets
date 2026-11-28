@@ -256,7 +256,7 @@ export const STALL_BUYS: Partial<Record<ResourceKind, number>> = { herbs: 3, mus
 /** Why `qty` of `kind` cannot be sold to the stall by someone holding `have`, or null if it can. */
 export function sellMaterialProblem(kind: unknown, qty: unknown, have: Resources): string | null {
   const k = RESOURCE_KINDS.find((r) => r === kind);
-  if (k === "gem") return "The stall does not buy gems. Take them to the Lapidary.";
+  if (k === "gem") return "The stall does not buy gems. Take them to Charter & Trade.";
   if (!k || STALL_BUYS[k] === undefined) return "The stall does not buy that.";
   if (typeof qty !== "number" || !Number.isSafeInteger(qty) || qty < 1) return "Sell at least one.";
   if ((have[k] ?? 0) < qty) return `You only have ${have[k] ?? 0} ${RESOURCE_LABEL[k].toLowerCase()}.`;
