@@ -14,7 +14,7 @@ import { devTools } from "../devTools";
 import { fancy, fancyGrass } from "./fancy";
 import { WIND_DIR, addFieldSway, gustAt, setFieldCalm, windPower } from "./wind";
 import { addCutaway } from "./cutaway";
-import { nightAt, rainOf, stormAt, timeOfDay, weatherAt, type FloorLook, type Tile } from "@gantt-quest/world";
+import { nightAt, rainOf, stormAt, timeOfDay, weatherAt, type FloorLook, type Tile, endNotches, sideNotches } from "@gantt-quest/world";
 import type { LightKind } from "./props";
 import type { LampLight } from "./tableLamps";
 
@@ -107,79 +107,6 @@ const FILLET_STEPS = 5;
  * So where two hexes meet the light rolls off one and onto the next instead of snapping at a hard corner.
  * Calls `vertex` three times a triangle with a point and its normal.
  */
-/** A notch in a floor's side: the hex `q,r` beside floor tile `from` in its row (`side`: -1 to its west, 1 to its east), which the floor comes round above or below. */
-export interface SideNotch {
-  q: number;
-  r: number;
-  side: -1 | 1;
-  from: Tile;
-}
-
-/**
- * The notches down the sides of a floor: for each tile of it, the hex beside it in its own row that is not floor
- * (and that `open` allows: by default nothing there, or water), where the floor's rows above or below reach half a
- * hex further. Filling the near half of each squares the floor's side off.
- */
-export function sideNotches(tiles: readonly Tile[], floor: (t: Tile) => boolean, open: (there: Tile | undefined) => boolean = (there) => !there || there.biome === "water"): SideNotch[] {
-  const at = (q: number, r: number) => `${q},${r}`;
-  const all = new Map(tiles.map((t) => [at(t.q, t.r), t]));
-  const laid = (q: number, r: number) => {
-    const t = all.get(at(q, r));
-    return !!t && floor(t);
-  };
-  const out: SideNotch[] = [];
-  for (const t of tiles) {
-    if (!floor(t)) continue;
-    for (const side of [-1, 1] as const) {
-      const [hq, hr] = [t.q + side, t.r];
-      if (laid(hq, hr) || !open(all.get(at(hq, hr)))) continue;
-      const comesRound = side < 0 ? laid(hq + 1, hr - 1) || laid(hq, hr + 1) : laid(hq, hr - 1) || laid(hq - 1, hr + 1);
-      if (comesRound) out.push({ q: hq, r: hr, side, from: t });
-    }
-  }
-  return out;
-}
-
-/** A notch in a floor's end: the hex `q,r` past its last row (`room`: 1 if the floor lies below it on the page, toward +z; -1 if above), both of whose sides that way are floor. `from` is one of those two tiles. */
-export interface EndNotch {
-  q: number;
-  r: number;
-  room: -1 | 1;
-  from: Tile;
-}
-
-/**
- * The notches along the ends of a floor: each hex that is not floor (and that `open` allows) with floor on both
- * of its sides toward the room. Its point reaches in between those two; giving the floor that point squares the
- * floor's end off, as `sideNotches` does its sides.
- */
-export function endNotches(tiles: readonly Tile[], floor: (t: Tile) => boolean, open: (there: Tile | undefined) => boolean = (there) => !there || there.biome === "water"): EndNotch[] {
-  const at = (q: number, r: number) => `${q},${r}`;
-  const all = new Map(tiles.map((t) => [at(t.q, t.r), t]));
-  const laid = (q: number, r: number) => {
-    const t = all.get(at(q, r));
-    return t && floor(t) ? t : undefined;
-  };
-  // Every hex beside a floor tile, above or below it, is asked about once.
-  const asked = new Set<string>();
-  const out: EndNotch[] = [];
-  for (const t of tiles) {
-    if (!floor(t)) continue;
-    for (const [dq, dr] of [[0, -1], [1, -1], [0, 1], [-1, 1]]) {
-      const [q, r] = [t.q + dq, t.r + dr];
-      if (asked.has(at(q, r))) continue;
-      asked.add(at(q, r));
-      if (laid(q, r) || !open(all.get(at(q, r)))) continue;
-      const below = laid(q, r + 1) && laid(q - 1, r + 1);
-      const above = laid(q, r - 1) && laid(q + 1, r - 1);
-      // Floor both ways is a strip of something across a room: left alone.
-      if (below && !above) out.push({ q, r, room: 1, from: below });
-      else if (above && !below) out.push({ q, r, room: -1, from: above });
-    }
-  }
-  return out;
-}
-
 export function hexTop(vertex: (x: number, y: number, z: number, nx: number, ny: number, nz: number) => void) {
   const inner = TILE_RADIUS - TILE_FILLET;
   const corner = (i: number) => [Math.sin((i * Math.PI) / 3), Math.cos((i * Math.PI) / 3)];
@@ -1325,10 +1252,14 @@ export class Ambience {
         for (const { q, r, room, from } of endNotches(tiles, (x) => (x.biome as string) === biome, (there) => !there || there.biome === "water" || (there.biome as string) === "wall")) {
           const walled = (walls.get(`${q},${r}`)?.biome as string) === "wall";
           const p = place(from);
-          // That hex's middle is a row from `from`, half a hex along; its point is the triangle between its two near corners and its tip.
+          // That hex's middle is a row from `from`, half a hex along; the floor takes the half of it on the room's side,
+          // cut straight across its middle.
           const cx = p.x + (from.q + from.r / 2 < q + r / 2 ? HALF : -HALF);
           const [cz, y] = [p.z - room * 1.5, p.y + 0.006];
-          const tri: [number, number][] = room > 0 ? [[-HALF, TILE_RADIUS / 2], [0, TILE_RADIUS], [HALF, TILE_RADIUS / 2]] : [[-HALF, -TILE_RADIUS / 2], [HALF, -TILE_RADIUS / 2], [0, -TILE_RADIUS]];
+          const R = TILE_RADIUS;
+          // (Three triangles of a five-sided half: across the middle, down both sides, and in to the point.)
+          const half: [number, number][] = room > 0 ? [[-HALF, 0], [-HALF, R / 2], [0, R], [HALF, R / 2], [HALF, 0]] : [[HALF, 0], [HALF, -R / 2], [0, -R], [-HALF, -R / 2], [-HALF, 0]];
+          const tri = [half[0], half[1], half[2], half[0], half[2], half[3], half[0], half[3], half[4]];
           for (const [x, z] of tri) {
             positions.push(cx + x, y, cz + z);
             normals.push(0, 1, 0);
@@ -1336,7 +1267,7 @@ export class Ambience {
           }
           if (walled) continue;
           // Its outer face, straight down, along the floor's new edge.
-          const [x0, x1, z, low] = [cx - HALF, cx + HALF, cz + (room * TILE_RADIUS) / 2, y - 3];
+          const [x0, x1, z, low] = [cx - HALF, cx + HALF, cz, y - 3];
           const quad: [number, number, number][] = [[x0, y, z], [x1, y, z], [x1, low, z], [x0, y, z], [x1, low, z], [x0, low, z]];
           for (const v of quad) edge.push(...v);
         }

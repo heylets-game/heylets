@@ -11,12 +11,12 @@ import { buildCaveDressing } from "./caveDressing";
 import { reportEnv } from "../ui/env";
 import { makeRenderer } from "./graphics";
 import { apothecaryWallTexture, galleyWallTexture, lapidaryWallTexture, panelTexture, smithyWallTexture, wallpaperTexture } from "./groundArt";
-import { Ambience, type RoomLight, TILE_FILLET, TILE_RADIUS, TORCH_LIFT, dryPatch, endNotches, hexTop, meadowAt, sideNotches, tallGrass, type BuildingGlow } from "./ambience";
+import { Ambience, type RoomLight, TILE_FILLET, TILE_RADIUS, TORCH_LIFT, dryPatch, hexTop, meadowAt, tallGrass, type BuildingGlow } from "./ambience";
 import "./camera.css";
 import { CAMERA_ICON, PINCH_PAN_SLACK, followIconSvg, pixelGlyphSvg, readFollow, writeFollow } from "./cameraFollow";
 import type { HexPos } from "@gantt-quest/core";
 import { hexDistance } from "@gantt-quest/core";
-import { lookStep, lookYaw, BASE_HEIGHT, HARBOR_HEART_AT, BIG_REACH, ENEMIES, HEX_DIRS, SEATS, spanAt, tileCost, WALL_FACE_HALF, WALL_ITEM_BOTTOM, WALL_ITEM_TOP, hexAt, reachable, tileAt, wallFace, wallFaces, type Biome, type Clime, type Emote, type Outfit, type Poi, type Tile, type WorldMap, type FloorLook, type WallLook } from "@gantt-quest/world";
+import { lookStep, lookYaw, BASE_HEIGHT, HARBOR_HEART_AT, BIG_REACH, ENEMIES, HEX_DIRS, SEATS, spanAt, squaredWalls, tileCost, WALL_FACE_HALF, WALL_ITEM_BOTTOM, WALL_ITEM_TOP, hexAt, reachable, tileAt, wallFace, wallFaces, type Biome, type Clime, type Emote, type Outfit, type Poi, type Tile, type WorldMap, type FloorLook, type WallCut, type WallLook } from "@gantt-quest/world";
 import { fancy, fancyGrass, inkLine } from "./fancy";
 import { NightLife } from "./nightlife";
 import { Storm } from "./storm";
@@ -3280,7 +3280,7 @@ export class WorldRenderer {
    * it gave up, so a room's walls run straight. The rules know nothing of it: a thing hung on such a wall is
    * still on one of its hex's sides, and is only shown on the straight face (`wallSide`).
    */
-  private squared = new Map<string, { cut: "side" | "end"; room: 1 | -1 }>();
+  private squared = new Map<string, WallCut>();
   private halfWalls = new THREE.Group();
   private halfWallMeshes = new Map<string, THREE.Mesh>();
   private static readonly HALF_WALL = new THREE.MeshLambertMaterial({ color: "#3a2b20", side: THREE.DoubleSide });
@@ -3289,9 +3289,9 @@ export class WorldRenderer {
   private static cutColumn(cut: "side" | "end", room: 1 | -1): THREE.BufferGeometry {
     const a = (Math.sqrt(3) / 2) * TILE_RADIUS;
     const R = TILE_RADIUS;
-    // The top's outline: half the hex (cut down its middle), or the hex without its point toward the room.
+    // The top's outline: the half of the hex away from the room, cut down its middle (a side wall) or across it (an end wall).
     const top: [number, number][] =
-      cut === "side" ? [[0, -R], [-room * a, -R / 2], [-room * a, R / 2], [0, R]] : [[-a, (room * R) / 2], [-a, (-room * R) / 2], [0, -room * R], [a, (-room * R) / 2], [a, (room * R) / 2]];
+      cut === "side" ? [[0, -R], [-room * a, -R / 2], [-room * a, R / 2], [0, R]] : [[-a, 0], [-a, (-room * R) / 2], [0, -room * R], [a, (-room * R) / 2], [a, 0]];
     const v: number[] = [];
     const tri = (...pts: [number, number, number][]) => pts.forEach((p) => v.push(...p));
     for (let i = 1; i + 1 < top.length; i++) tri([top[0][0], 0, top[0][1]], [top[i][0], 0, top[i][1]], [top[i + 1][0], 0, top[i + 1][1]]);
@@ -3316,18 +3316,8 @@ export class WorldRenderer {
     this.halfWallMeshes.clear();
     this.squared.clear();
     if (!state.indoors || !this.ambience.squareEdges) return;
-    const floor = (t: Tile) => (t.biome as string) === "floor";
-    const wall = (there: Tile | undefined) => (there?.biome as string) === "wall";
-    const twice = new Set<string>();
-    for (const n of sideNotches(this.tiles, floor, wall)) {
-      const k = key(n);
-      // A wall with floor on both sides of it is left whole: there is no half to give up.
-      if (this.squared.has(k) && this.squared.get(k)!.room !== -n.side) twice.add(k);
-      this.squared.set(k, { cut: "side", room: -n.side as 1 | -1 });
-    }
-    for (const k of twice) this.squared.delete(k);
-    // The back and front walls: a wall in a side's notch already has its cut, and keeps it.
-    for (const n of endNotches(this.tiles, floor, wall)) if (!this.squared.has(key(n)) && !twice.has(key(n))) this.squared.set(key(n), { cut: "end", room: n.room });
+    // Which walls are cut, and how, is the rules' to say (roomedges.ts): furniture is let onto the same halves.
+    for (const [k, cut] of squaredWalls({ tiles: this.tiles })) this.squared.set(k, cut);
     for (const [k, { cut, room }] of this.squared) {
       const [q, r] = k.split(",").map(Number);
       const mesh = new THREE.Mesh(WorldRenderer.cutColumn(cut, room), WorldRenderer.HALF_WALL.clone());
@@ -3362,11 +3352,32 @@ export class WorldRenderer {
       const third = 2 / 3;
       return { x: mid.x, z: mid.z + dir.r * third, nx: room, nz: 0, tx: 0, tz: -room * third };
     }
-    // An end wall: the two sides either side of the point it lost.
+    // An end wall: the two sides either side of the point it lost, on the face across its middle.
     if (dir.r !== room) return wallFace(pos, side);
     const half = Math.sqrt(3) / 2;
     const east = dir.q + dir.r / 2 > 0 ? 1 : -1;
-    return { x: mid.x + (east * half) / 2, z: mid.z + room * 0.5, nx: 0, nz: room, tx: room * half, tz: 0 };
+    return { x: mid.x + (east * half) / 2, z: mid.z, nx: 0, nz: room, tx: room * half, tz: 0 };
+  }
+
+  /**
+   * Where the pointer is on the floor a cut wall gave up (the half hex on the room's side of it), and the floor
+   * hex beside it that a piece set down there is anchored on; or null if the pointer is not over such floor.
+   */
+  private cutFloorUnder(): { pos: HexPos; x: number; z: number } | null {
+    if (this.squared.size === 0) return null;
+    const ray = this.raycaster.ray;
+    if (Math.abs(ray.direction.y) < 1e-6) return null;
+    const far = (FLOOR_TOP - ray.origin.y) / ray.direction.y;
+    if (far <= 0) return null;
+    const [x, z] = [ray.origin.x + ray.direction.x * far, ray.origin.z + ray.direction.z * far];
+    const hex = hexAt(x, z);
+    const cut = this.squared.get(key(hex));
+    if (!cut || this.lowered.has(key(hex))) return null;
+    const mid = hexToWorld(hex);
+    if ((cut.cut === "side" ? x - mid.x : z - mid.z) * cut.room <= 0) return null;
+    // Beside a side wall, the floor hex straight across; beside an end wall, whichever of its two the pointer is nearer.
+    const pos = cut.cut === "side" ? { q: hex.q + cut.room, r: hex.r } : cut.room > 0 ? (x >= mid.x ? { q: hex.q, r: hex.r + 1 } : { q: hex.q - 1, r: hex.r + 1 }) : x >= mid.x ? { q: hex.q + 1, r: hex.r - 1 } : { q: hex.q, r: hex.r - 1 };
+    return (this.tiles.find((t) => t.q === pos.q && t.r === pos.r)?.biome as string) === "floor" ? { pos, x, z } : null;
   }
 
   private markWalls() {
@@ -4567,13 +4578,14 @@ export class WorldRenderer {
         return { pos: prop?.pos ?? { q: 0, r: 0 }, x: round(x), z: round(z), on: id };
       }
     }
-    const hit = this.raycaster.intersectObject(this.terrain)[0];
-    if (!hit || hit.instanceId === undefined) return null;
-    const t = this.tiles[hit.instanceId];
-    let pos = { q: t.q, r: t.r };
-    let [px, pz] = [hit.point.x, hit.point.z];
+    // Over the half hex of floor a cut wall gave up: the piece is anchored on the floor hex beside it, pushed that way.
+    const strip = this.cutFloorUnder();
+    const hit = strip ? undefined : this.raycaster.intersectObject(this.terrain)[0];
+    if (!strip && (!hit || hit.instanceId === undefined)) return null;
+    let pos = strip ? strip.pos : { q: this.tiles[hit!.instanceId!].q, r: this.tiles[hit!.instanceId!].r };
+    let [px, pz] = strip ? [strip.x, strip.z] : [hit!.point.x, hit!.point.z];
     const fp = holding.footprint;
-    if (!holding.small && fp && Math.hypot(fp.x ?? 0, fp.z ?? 0) > 0.3) {
+    if (!strip && !holding.small && fp && Math.hypot(fp.x ?? 0, fp.z ?? 0) > 0.3) {
       // A long piece is held by its middle: the hex it is anchored on is back along it from the pointer.
       const turn = -yawOf(holding.facing, holding.angle);
       const [c, s] = [Math.cos(turn), Math.sin(turn)];
