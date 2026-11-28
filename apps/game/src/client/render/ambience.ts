@@ -107,6 +107,16 @@ const FILLET_STEPS = 5;
  * So where two hexes meet the light rolls off one and onto the next instead of snapping at a hard corner.
  * Calls `vertex` three times a triangle with a point and its normal.
  */
+/** The top of one hex as a plain flat hexagon out to `TILE_RADIUS`, no fillet: six triangles, a point toward +z. Calls `vertex` with each corner, wound face up. */
+export function flatHex(vertex: (x: number, z: number) => void) {
+  const corner = (i: number): [number, number] => [Math.sin((i * Math.PI) / 3) * TILE_RADIUS, Math.cos((i * Math.PI) / 3) * TILE_RADIUS];
+  for (let i = 0; i < 6; i++) {
+    vertex(0, 0);
+    vertex(...corner(i));
+    vertex(...corner(i + 1));
+  }
+}
+
 export function hexTop(vertex: (x: number, y: number, z: number, nx: number, ny: number, nz: number) => void) {
   const inner = TILE_RADIUS - TILE_FILLET;
   const corner = (i: number) => [Math.sin((i * Math.PI) / 3), Math.cos((i * Math.PI) / 3)];
@@ -1217,7 +1227,14 @@ export class Ambience {
       for (const t of under) {
         const p = place(t);
         // Draped over the hex, fillet and all, a hair off its surface. The pattern is still laid straight down from above.
-        hexTop((x, y, z, nx, ny, nz) => {
+        // Squared off (a room, a deck), it is laid flat right out to the hex's edge instead, so one hex runs into the
+        // next with no rounded seam between them: the floor reads as one floor, not as hexes.
+        if (this.squareEdges) flatHex((x, z) => {
+          positions.push(p.x + x, p.y + 0.006, p.z + z);
+          normals.push(0, 1, 0);
+          uvs.push((p.x + x) / GROUND_SPAN, (p.z + z) / GROUND_SPAN);
+        });
+        else hexTop((x, y, z, nx, ny, nz) => {
           positions.push(p.x + x + nx * 0.006, p.y + y + ny * 0.006, p.z + z + nz * 0.006);
           normals.push(nx, ny, nz);
           uvs.push((p.x + x) / GROUND_SPAN, (p.z + z) / GROUND_SPAN);

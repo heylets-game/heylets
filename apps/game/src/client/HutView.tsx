@@ -56,8 +56,11 @@ function homeStock(hut: { resources: Record<string, number | undefined>; stash: 
   return all;
 }
 const defOf = (f: Furnishing) => FURNISHINGS[f.defId];
-/** A snapped turn: furniture to the hex's six facings, a small thing in twenty-fourths (15°). */
-const snapStep = (defId: string) => (isSmall(defId) ? Math.PI / 12 : Math.PI / 3);
+/**
+ * A snapped turn: furniture in quarter turns, square to the room's straight walls; a small thing in twenty-fourths
+ * (15°). (A piece set down at one of the hex's old sixth turns goes to the nearest quarter the next time it is turned.)
+ */
+const snapStep = (defId: string) => (isSmall(defId) ? Math.PI / 12 : Math.PI / 2);
 /** A free turn's step from a key or a toolbar button: 5°. */
 const FINE = Math.PI / 36;
 /** The next snapped turn from `angle` in direction `dir`: an angle between notches goes to the nearest one that way. */
@@ -139,7 +142,7 @@ export function HutView({ ownerId, me, refresh, onLeave }: { ownerId: string; me
     });
   /** How the carried piece is turned, in radians. */
   const [turn, setTurn] = useState(0);
-  /** Whether turning snaps to notches (the hex's facings, or 15° for small things). Alt flips it while held. */
+  /** Whether turning snaps to notches (quarter turns, or 15° for small things). Alt flips it while held. */
   const [snap, setSnap] = useState(readSnap);
   const toggleSnap = () =>
     setSnap((on) => {
@@ -324,8 +327,8 @@ export function HutView({ ownerId, me, refresh, onLeave }: { ownerId: string; me
   useEffect(() => setTurning(null), [furnishings, hut.refused]);
 
   /**
-   * Turn what is carried. Snapped, it goes to the next notch: the hex's six
-   * facings for furniture, 15° for a small thing. Free, it turns `by` radians
+   * Turn what is carried. Snapped, it goes to the next notch: a quarter turn
+   * for furniture, 15° for a small thing. Free, it turns `by` radians
    * (5° unless said).
    */
   const turnBy = useRef<(dir: 1 | -1, free: boolean, by?: number) => void>(() => {});
