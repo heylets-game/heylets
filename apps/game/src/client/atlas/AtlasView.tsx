@@ -45,6 +45,7 @@ import { worldToHex } from "../render/footsteps";
 import { WorldRenderer, type RenderState } from "../render/WorldRenderer";
 import { uiZoom } from "../uiScale";
 import { AtlasCloud, CLOUD_TOP } from "./AtlasCloud";
+import { AtlasInk } from "./AtlasInk";
 import { AtlasLayer, type AtlasMark, type AtlasRoute, type Rise } from "./AtlasLayer";
 import { dragSource, useDropTarget } from "../dragDrop";
 import { joinOk } from "../joinWarning";
@@ -107,6 +108,7 @@ export function AtlasView({ me, refresh, onLeave }: { me: Me; refresh(): Promise
   const [centre, setCentre] = useState<HexPos | null>(null);
   const layer = useRef<AtlasLayer | null>(null);
   const cloud = useRef<AtlasCloud | null>(null);
+  const ink = useRef<AtlasInk | null>(null);
   /** Opened from the Harbor (not come back to from a map): it opens grandly, the title holding the screen while the cloud parts. */
   const [opening, setOpening] = useState(() => picked === null);
   /** The world is on the screen (it is made behind a veil first): the opening starts from here. */
@@ -239,10 +241,13 @@ export function AtlasView({ me, refresh, onLeave }: { me: Me; refresh(): Promise
     renderer.current = view;
     cloud.current = new AtlasCloud(view, ATLAS_VIEW);
     layer.current = new AtlasLayer(view);
+    ink.current = new AtlasInk(view);
     // Dev server only: the cloud and the places, to poke at from the console.
     if (import.meta.env.DEV) (globalThis as { __gqAtlas?: unknown }).__gqAtlas = { cloud: cloud.current, layer: layer.current };
     return () => {
       layer.current?.dispose();
+      ink.current?.dispose();
+      ink.current = null;
       cloud.current?.dispose();
       layer.current = cloud.current = null;
       renderer.current = null;
@@ -266,6 +271,7 @@ export function AtlasView({ me, refresh, onLeave }: { me: Me; refresh(): Promise
     };
     view.setState(scene);
     over.set(world.clear, centre);
+    ink.current?.set(chart.seed, centre, ATLAS_VIEW);
     // On the ground where the cloud has lifted (or is thin enough to see through), on top of the cloud elsewhere.
     const rise: Rise = (x, z) => {
       const ground = view.groundAt(x, z);
