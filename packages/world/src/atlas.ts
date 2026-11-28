@@ -55,7 +55,7 @@ import type { Clime } from "./map";
 import { makeRng, seedFromString, type Rng } from "./rng";
 import { zoneOptions } from "./zone/gen";
 import { placeName, siteFor, type SiteGround, type SiteId } from "./zone/sites";
-import { PERIL_IDS, ZONE_MODS, cleanMods, modOf, rollMod, type ZoneMod, type ZoneModId } from "./zone/mods";
+import { PERIL_IDS, ZONE_MODS, cleanMods, modOf, modsOf, rollMod, type ZoneMod, type ZoneModId } from "./zone/mods";
 import type { ZoneBiome, ZoneOptions } from "./zone/types";
 
 /** A cell of the chart, in axial hex coordinates. The Harbor is at 0,0. */
@@ -92,9 +92,13 @@ export interface AtlasNode {
   links: string[];
 }
 
-/** A node as a crew is shown it. A fogged one is only somewhere a route leads: no name, no ground, nothing about what is there. */
+/**
+ * A node as a crew is shown it. One `beyond` is known, and lies past a sea passage they have not beaten: they
+ * may not set out for it until they have, save with a pilot's soundings on their charter. A fogged one is only
+ * somewhere a route leads: no name, no ground, nothing about what is there.
+ */
 export type AtlasNodeView =
-  | (AtlasNode & { state: "harbor" | "cleared" | "open" })
+  | (AtlasNode & { state: "harbor" | "cleared" | "open" | "beyond" })
   | { id: string; hex: HexPos; ring: number; links: string[]; state: "fogged" };
 
 export const ATLAS_HOME = "0,0";
@@ -546,14 +550,140 @@ export function atlasNodeById(seed: string, id: unknown): AtlasNode | null {
   return cell ? atlasNode(seed, cell) : null;
 }
 
+// ---------- passages: the sea between two places ----------
+
+/**
+ * What lies on the water of a route. Most are calm: the ship sails straight over. The rest are an encounter
+ * at sea, which a crew must beat once (after that the passage is calm for them) before they can sail on to
+ * what lies past it.
+ */
+export type PassageKind = "calm" | "salvage";
+export interface PassageDef {
+  name: string;
+  /** What it is, in a line, for the atlas. */
+  blurb: string;
+  /** The share of routes that are this, a ring out from the Harbor (`near`) and far out (`far`, from `PASSAGE_FAR` rings). */
+  near: number;
+  far: number;
+  /** The pilot's soundings a charter needs to slip past it unfought (zone/mods.ts: `soundings`). */
+  soundings: number;
+}
+/**
+ * The encounters there are. A new one is a line here (and its share comes out of the calm water), and
+ * whatever makes its map (voyage/).
+ */
+export const PASSAGES: Record<Exclude<PassageKind, "calm">, PassageDef> = {
+  salvage: { name: "Salvage waters", blurb: "Wreckage adrift, and things in the water that want it too.", near: 0.3, far: 0.5, soundings: 1 },
+};
+/** How many rings out a passage's share stops rising. */
+const PASSAGE_FAR = 8;
+
+export interface AtlasPassage {
+  /** The two places it lies between, lesser id first, with a bar between: its name in the database, beside the nodes'. */
+  id: string;
+  ends: [string, string];
+  /** The hex of the world halfway along its route: where the atlas marks it. */
+  hex: HexPos;
+  /** The further out of its two ends: how dangerous it is. */
+  ring: number;
+  level: number;
+  kind: PassageKind;
+}
+
+/** The id of the passage between two places, whichever way round they are given. */
+export const passageId = (a: string, b: string): string => [a, b].sort().join("|");
+
+/** The passage between two places a route joins, or null if none does. The same seed and pair always give the same passage. */
+export function atlasPassage(seed: string, a: unknown, b: unknown): AtlasPassage | null {
+  const [from, to] = [atlasCell(a), atlasCell(b)];
+  if (!from || !to || ringOf({ q: from.q - to.q, r: from.r - to.r }) !== 1 || !joined(seed, from, to)) return null;
+  const ends = [idOf(from), idOf(to)].sort() as [string, string];
+  const id = ends.join("|");
+  const [ha, hb] = [atlasHex(seed, from), atlasHex(seed, to)];
+  const ring = Math.max(ringOf(from), ringOf(to));
+  const hex = hexRound((ha.q + hb.q) / 2, (ha.r + hb.r) / 2);
+  // The water off the Harbor is home water: nothing lies in wait there.
+  let kind: PassageKind = "calm";
+  if (Math.min(ringOf(from), ringOf(to)) > 0) {
+    const out = Math.min(1, (ring - 2) / (PASSAGE_FAR - 2));
+    let at = roll(seed, "passage", id);
+    for (const [name, def] of Object.entries(PASSAGES) as [Exclude<PassageKind, "calm">, PassageDef][]) {
+      if ((at -= def.near + (def.far - def.near) * out) < 0) {
+        kind = name;
+        break;
+      }
+    }
+  }
+  return { id, ends, hex, ring, level: atlasLevel(ring), kind };
+}
+
+/** The passage an id names on a chart, or null if the id is not one's. */
+export function atlasPassageById(seed: string, id: unknown): AtlasPassage | null {
+  if (typeof id !== "string") return null;
+  const ends = id.split("|");
+  if (ends.length !== 2) return null;
+  const passage = atlasPassage(seed, ends[0], ends[1]);
+  return passage?.id === id ? passage : null;
+}
+
+/** Whether the ship may sail a passage freely: it is calm water, or the crew has beaten what was there. */
+const sailed = (passage: AtlasPassage, cleared: ReadonlySet<string>) => passage.kind === "calm" || cleared.has(passage.id);
+/** Whether a charter's soundings will see the ship past a passage unfought. */
+const slips = (passage: AtlasPassage, charter: readonly ZoneMod[]) => passage.kind !== "calm" && modsOf({ mods: [...charter] }).soundings >= PASSAGES[passage.kind].soundings;
+
+/**
+ * Whether a crew may set out to fight a passage: there is something there, they have not beaten it, and one
+ * end of it is the Harbor or a place they have cleared.
+ */
+export function passageOpen(seed: string, cleared: ReadonlySet<string>, id: unknown): boolean {
+  const passage = atlasPassageById(seed, id);
+  if (!passage || sailed(passage, cleared)) return false;
+  return passage.ends.some((end) => end === ATLAS_HOME || cleared.has(end));
+}
+
+/**
+ * How a crew that has cleared `cleared` (places and passages both) stands to a node:
+ *
+ *   open    a route runs to it from the Harbor or a place they have cleared, over water they may sail
+ *   beyond  such routes run to it, but every one crosses a passage they have not beaten
+ *   null    it is the Harbor, or cleared already, or no route reaches it yet
+ *
+ * With `charter`, what they mean to set out with: soundings on it that will slip a passage make the way open.
+ * `by` is the passage in the way (the least dangerous, where there are several), or slipped past.
+ */
+export function atlasWay(seed: string, cleared: ReadonlySet<string>, id: unknown, charter: readonly ZoneMod[] = []): { way: "open" | "beyond"; by?: AtlasPassage; silent?: true } | null {
+  const node = atlasNodeById(seed, id);
+  if (!node || node.kind === "harbor" || cleared.has(node.id)) return null;
+  const ways = node.links.filter((l) => l === ATLAS_HOME || cleared.has(l)).map((l) => atlasPassage(seed, node.id, l)!);
+  if (ways.length === 0) return null;
+  if (ways.some((p) => sailed(p, cleared))) return { way: "open" };
+  const barred = [...ways].sort((a, b) => PASSAGES[a.kind as Exclude<PassageKind, "calm">].soundings - PASSAGES[b.kind as Exclude<PassageKind, "calm">].soundings || a.id.localeCompare(b.id));
+  return slips(barred[0], charter) ? { way: "open", by: barred[0], silent: true } : { way: "beyond", by: barred[0] };
+}
+
 /**
  * Whether a crew that has cleared `cleared` may open this node: it is not the Harbor, not cleared
- * already, and a route runs to it from the Harbor or from a node they have cleared.
+ * already, and a route runs to it from the Harbor or from a node they have cleared, over water the ship may
+ * sail (or slip past, with the soundings on `charter`).
  */
-export function atlasOpen(seed: string, cleared: ReadonlySet<string>, id: unknown): boolean {
-  const node = atlasNodeById(seed, id);
-  if (!node || node.kind === "harbor" || cleared.has(node.id)) return false;
-  return node.links.some((l) => l === ATLAS_HOME || cleared.has(l));
+export function atlasOpen(seed: string, cleared: ReadonlySet<string>, id: unknown, charter: readonly ZoneMod[] = []): boolean {
+  return atlasWay(seed, cleared, id, charter)?.way === "open";
+}
+
+/** A passage as a crew is shown it: `open` to be fought, `cleared` by them, or `calm` water from the first. */
+export type AtlasPassageView = AtlasPassage & { state: "calm" | "open" | "cleared" };
+
+/** The passages a crew knows: those on the routes out of the Harbor and out of every place they have cleared. */
+export function atlasPassages(seed: string, cleared: ReadonlySet<string>): AtlasPassageView[] {
+  const out = new Map<string, AtlasPassageView>();
+  for (const id of [ATLAS_HOME, ...cleared]) {
+    const node = atlasNodeById(seed, id);
+    for (const link of node?.links ?? []) {
+      const passage = atlasPassage(seed, node!.id, link);
+      if (passage && !out.has(passage.id)) out.set(passage.id, { ...passage, state: passage.kind === "calm" ? "calm" : cleared.has(passage.id) ? "cleared" : "open" });
+    }
+  }
+  return [...out.values()].sort((a, b) => a.id.localeCompare(b.id));
 }
 
 /**
@@ -587,7 +717,7 @@ export function atlasView(seed: string, cleared: ReadonlySet<string>): AtlasNode
   const seen = (node: AtlasNode) => node.links.filter(shown);
   return [
     ...[...known.values()].map((n): AtlasNodeView => ({ ...n, links: seen(n), state: n.kind === "harbor" ? "harbor" : "cleared" })),
-    ...[...open.values()].map((n): AtlasNodeView => ({ ...n, links: seen(n), state: "open" })),
+    ...[...open.values()].map((n): AtlasNodeView => ({ ...n, links: seen(n), state: atlasWay(seed, cleared, n.id)?.way ?? "open" })),
     ...[...fog.values()].map((n): AtlasNodeView => ({ id: n.id, hex: n.hex, ring: n.ring, links: n.links.filter((l) => open.has(l)), state: "fogged" })),
   ];
 }

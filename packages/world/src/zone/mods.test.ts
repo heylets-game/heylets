@@ -49,7 +49,7 @@ describe("a map's modifiers", () => {
   });
 
   it("add up to nothing when there are none, and each names what it changes", () => {
-    expect(modsOf({})).toEqual({ obstacles: 0, elevation: 0, groups: 0, patches: 1, hp: 1, edge: 0, move: 0, extras: 0, pay: 0, gold: 0, xp: 0, gear: 0, stones: 0 });
+    expect(modsOf({})).toEqual({ obstacles: 0, elevation: 0, groups: 0, patches: 1, hp: 1, edge: 0, move: 0, extras: 0, pay: 0, gold: 0, xp: 0, gear: 0, stones: 0, soundings: 0 });
     expect(modsOf({ mods: ["hardy", "savage", "swift", "numerous"] })).toMatchObject({ hp: 1.3, edge: 1, move: 1, extras: 1 });
     expect(modsOf({ mods: ["sprawling", "frozen"] })).toMatchObject({ size: "large", groups: 1, hazard: "ice" });
     for (const id of ZONE_MOD_IDS) {
@@ -62,8 +62,9 @@ describe("a map's modifiers", () => {
     for (const id of BOON_IDS) {
       const sum = modsOf({ mods: [id] });
       expect(sum.pay, id).toBe(0);
-      expect({ ...sum, gold: 0, xp: 0, gear: 0, stones: 0 }, id).toEqual(modsOf({}));
-      expect(sum.gold + sum.xp + sum.gear + sum.stones, id).toBeGreaterThan(0);
+      expect({ ...sum, gold: 0, xp: 0, gear: 0, stones: 0, soundings: 0 }, id).toEqual(modsOf({}));
+      // (Or, for a pilot's soundings, a way past a sea passage: the one boon that is not of the bounty.)
+      expect(sum.gold + sum.xp + sum.gear + sum.stones + sum.soundings, id).toBeGreaterThan(0);
     }
   });
 

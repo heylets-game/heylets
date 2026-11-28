@@ -67,6 +67,21 @@ export function zoneOptions(raw: unknown): ZoneOptions {
     ...(typeof o.site === "string" && o.site in SITES ? { site: o.site } : {}),
     ...(typeof o.stone === "number" && Number.isFinite(o.stone) ? { stone: Math.max(0, Math.min(3, Math.round(o.stone))) } : {}),
     ...(CLIMES.includes(o.clime as Clime) && o.clime !== "greenwood" ? { clime: o.clime as Clime } : {}),
+    ...(cleanVoyage(o.voyage) ? { voyage: cleanVoyage(o.voyage)! } : {}),
+  };
+}
+
+/** A voyage's ship as it came off the wire, made safe; or null if it is none. */
+function cleanVoyage(raw: unknown): ZoneOptions["voyage"] | null {
+  const v = (raw && typeof raw === "object" ? raw : null) as { deck?: { cols?: unknown; rows?: unknown }; hull?: unknown; sound?: unknown; hold?: unknown; ms?: unknown } | null;
+  if (!v || !v.deck) return null;
+  const hull = whole(v.hull, 10, 1000, 60);
+  return {
+    deck: { cols: whole(v.deck.cols, 3, 5, 3), rows: whole(v.deck.rows, 6, 14, 8) },
+    hull,
+    ...(typeof v.sound === "number" ? { sound: whole(v.sound, 1, hull, hull) } : {}),
+    hold: whole(v.hold, 1, 60, 8),
+    ...(typeof v.ms === "number" ? { ms: whole(v.ms, 20_000, 600_000, 150_000) } : {}),
   };
 }
 

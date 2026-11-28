@@ -181,7 +181,8 @@ export function atlasWorld(seed: string, nodes: readonly AtlasNodeView[], centre
   };
   const clear: AtlasWorld["clear"] = [];
   for (const n of known) {
-    const far = n.state === "open" ? ATLAS_GLIMPSE : n.kind === "lookout" ? ATLAS_FARSIGHT : ATLAS_SIGHT;
+    // (Somewhere only open to them, or beyond a passage, is seen a little way round and no more.)
+    const far = n.state === "open" || n.state === "beyond" ? ATLAS_GLIMPSE : n.kind === "lookout" ? ATLAS_FARSIGHT : ATLAS_SIGHT;
     round(n.hex, far, lit);
     round(n.hex, far + ATLAS_RIM, shown);
     clear.push({ hex: n.hex, reach: far });
@@ -198,7 +199,7 @@ export function atlasWorld(seed: string, nodes: readonly AtlasNodeView[], centre
   };
   for (const n of known) {
     if (n.kind === "harbor") stand(`node:${n.id}`, "lighthouse", n.hex, true);
-    else if (n.kind === "seacave") stand(`node:${n.id}`, "cave", { q: n.hex.q + HARBOR_SIDES[5].q, r: n.hex.r + HARBOR_SIDES[5].r }, n.state !== "open");
+    else if (n.kind === "seacave") stand(`node:${n.id}`, "cave", { q: n.hex.q + HARBOR_SIDES[5].q, r: n.hex.r + HARBOR_SIDES[5].r }, n.state === "cleared");
   }
 
   // The grid is only how far across the window reaches: its tiles are not counted from a corner of it.
