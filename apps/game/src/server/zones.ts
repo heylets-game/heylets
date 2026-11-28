@@ -9,7 +9,8 @@ export interface ZoneRow {
   seed: string;
   options_json: string;
   state_json: string | null;
-  status: "open" | "fight" | "cleared";
+  /** `lost`: a voyage whose ship was sunk. It is over, and was not won. */
+  status: "open" | "fight" | "cleared" | "lost";
   kind: ZoneKind;
   crew_id: string | null;
   /** On a zone the atlas made: the node of the crew's chart it was made for. */
@@ -157,9 +158,10 @@ export function teleportTo(places: CrewPlace[], me: string, to: unknown): { zone
   return { zone: friend.zone?.code ?? null, name: friend.name };
 }
 
-/** 'fight' while one is on, 'cleared' once no enemy is left on the map (and, in a cave, nothing is left to open), else 'open'. */
-export function zoneStatus(state: ZoneState): "open" | "fight" | "cleared" {
+/** 'fight' while one is on, 'lost' for a voyage whose ship went down, 'cleared' once no enemy is left on the map (and, in a cave, nothing is left to open), else 'open'. */
+export function zoneStatus(state: ZoneState): "open" | "fight" | "cleared" | "lost" {
   if (state.encounter) return "fight";
+  if (state.voyage?.outcome === "sunk") return "lost";
   return zoneCleared(state) ? "cleared" : "open";
 }
 

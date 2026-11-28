@@ -8,7 +8,7 @@
 // the seed a node's map and its dice are made from is rolled afresh and never
 // leaves the server.
 
-import { MAX_PARTY, PASSAGES, atlasNodeById, atlasOpen, atlasPassageById, atlasPassages, passageOpen, atlasView, atlasWay, cleanStone, needsStone, nodeOptions, nodePlace, stoneKey, stoneName, stoneOn, type AtlasNode, type AtlasNodeView, type AtlasPassageView, type Lodestone, type ZoneMod } from "@gantt-quest/world";
+import { MAX_PARTY, PASSAGES, atlasNodeById, atlasOpen, atlasPassageById, atlasPassages, passageOpen, atlasView, atlasWay, cleanStone, needsStone, nodeOptions, nodePlace, stoneKey, stoneName, stoneOn, zoneOptions, type AtlasNode, type AtlasNodeView, type AtlasPassage, type AtlasPassageView, type Lodestone, type ZoneMod } from "@gantt-quest/world";
 import { spendStone } from "./lodestones";
 import { CAVE_IDLE_MS, createZoneRow, crewPlaces, type ZoneRow } from "./zones";
 
@@ -35,7 +35,7 @@ export interface Chart {
   seed: string;
   nodes: ChartNode[];
   /** The sea passages on the routes out of the Harbor and out of everywhere the crew has cleared. */
-  passages: AtlasPassageView[];
+  passages: (AtlasPassageView & { zone?: string; here?: string[] })[];
 }
 
 const rowsOf = async (db: D1Database, crewId: string) =>
@@ -44,7 +44,7 @@ const rowsOf = async (db: D1Database, crewId: string) =>
 /** The map still being fought through for a node: made for it, not cleared, and visited lately. Null if there is none. */
 async function liveZone(db: D1Database, code: string | null): Promise<string | null> {
   if (!code) return null;
-  const row = await db.prepare("SELECT code FROM zones WHERE code = ? AND status != 'cleared' AND updated_at > ?").bind(code, Date.now() - CAVE_IDLE_MS).first<{ code: string }>();
+  const row = await db.prepare("SELECT code FROM zones WHERE code = ? AND status NOT IN ('cleared', 'lost') AND updated_at > ?").bind(code, Date.now() - CAVE_IDLE_MS).first<{ code: string }>();
   return row?.code ?? null;
 }
 
@@ -59,7 +59,7 @@ async function liveZones(db: D1Database, codes: string[]): Promise<Set<string>> 
   const found = await Promise.all(
     parts.map((part) =>
       db
-        .prepare(`SELECT code FROM zones WHERE code IN (${part.map(() => "?").join(", ")}) AND status != 'cleared' AND updated_at > ?`)
+        .prepare(`SELECT code FROM zones WHERE code IN (${part.map(() => "?").join(", ")}) AND status NOT IN ('cleared', 'lost') AND updated_at > ?`)
         .bind(...part, since)
         .all<{ code: string }>(),
     ),
@@ -84,7 +84,52 @@ export async function chartFor(db: D1Database, crewId: string): Promise<Chart> {
     const stone = zone ? cleanStone(row?.stone) : null;
     nodes.push(zone ? { ...node, zone, here: places.filter((m) => m.zone?.code === zone).map((m) => m.name), ...(stone ? { stone } : {}) } : node);
   }
-  return { seed: atlasSeed(crewId), nodes, passages: atlasPassages(atlasSeed(crewId), cleared) };
+  // A passage being fought now has its map, and who is on it, as an open node has.
+  const sailing = await liveZones(db, rows.filter((r) => r.status === "open" && r.zone_code && r.node.includes("|")).map((r) => r.zone_code!));
+  const passages = atlasPassages(atlasSeed(crewId), cleared).map((p) => {
+    const code = p.state === "open" ? open.get(p.id)?.zone_code : null;
+    return code && sailing.has(code) ? { ...p, zone: code, here: places.filter((m) => m.zone?.code === code).map((m) => m.name) } : p;
+  });
+  return { seed: atlasSeed(crewId), nodes, passages };
+}
+
+/** What a passage is called on a map made for it. */
+const passageName = (passage: AtlasPassage): string => (passage.kind === "calm" ? "Calm water" : PASSAGES[passage.kind].name);
+
+/**
+ * The ship a passage is sailed on. TEMPORARY: every crew's Sloop, as voyage/ships.ts will have her. Once the
+ * shipyard is in (the crew's own ship, and her hull as the yard keeps it), this reads those instead.
+ */
+const PASSAGE_SHIP = { deck: { cols: 3, rows: 8 }, hull: 60, hold: 8 };
+
+/** Whether a crew may set out for a passage, and the map already being fought through there if there is one. */
+async function passageWay(db: D1Database, crewId: string, passage: AtlasPassage): Promise<{ live: string | null; attempts: number } | { error: string; status: 400 | 409 }> {
+  const rows = await rowsOf(db, crewId);
+  const mine = rows.find((r) => r.node === passage.id);
+  if (passage.kind === "calm") return { error: "That water is calm: there is nothing there to beat.", status: 409 };
+  if (mine?.status === "cleared") return { error: "That water is beaten already: the ship sails straight through.", status: 409 };
+  if (!passageOpen(atlasSeed(crewId), new Set(rows.filter((r) => r.status === "cleared").map((r) => r.node)), passage.id)) return { error: "No route runs to that water yet. Clear a landfall beside it first.", status: 409 };
+  return { live: await liveZone(db, mine?.zone_code ?? null), attempts: mine?.attempts ?? 0 };
+}
+
+/**
+ * Set out for a sea passage: the voyage the crew is already on there, or a fresh one for a party of this many.
+ * It needs no charter and spends none. Beaten (its map cleared), it is cleared on the chart as a node is.
+ */
+async function openPassage(db: D1Database, crewId: string, playerId: string, passage: AtlasPassage, party: number): Promise<{ code: string; fresh: boolean } | { error: string; status: 400 | 409 }> {
+  const found = await passageWay(db, crewId, passage);
+  if ("error" in found) return found;
+  if (found.live) return { code: found.live, fresh: false };
+  const options = zoneOptions({ party: Math.min(MAX_PARTY, Math.max(1, Math.round(party))), level: passage.level, name: passageName(passage), voyage: PASSAGE_SHIP });
+  const code = await createZoneRow(db, playerId, options, crypto.randomUUID().slice(0, 12), "atlas", crewId, passage.id);
+  await db
+    .prepare(
+      `INSERT INTO atlas_nodes (crew_id, node, status, zone_code, attempts, opened_by, opened_at, stone) VALUES (?1, ?2, 'open', ?3, ?4, ?5, ?6, NULL)
+       ON CONFLICT(crew_id, node) DO UPDATE SET zone_code = ?3, attempts = ?4, opened_by = ?5, opened_at = ?6, stone = NULL WHERE atlas_nodes.status != 'cleared'`,
+    )
+    .bind(crewId, passage.id, code, found.attempts + 1, playerId, Date.now())
+    .run();
+  return { code, fresh: true };
 }
 
 /**
@@ -108,6 +153,8 @@ function wayProblem(seed: string, rows: readonly { node: string; status: string 
  */
 export async function openNode(db: D1Database, crewId: string, playerId: string, nodeId: unknown, party: number, stone?: unknown): Promise<{ code: string; fresh: boolean } | { error: string; status: 400 | 409 }> {
   const seed = atlasSeed(crewId);
+  const passage = atlasPassageById(seed, nodeId);
+  if (passage) return openPassage(db, crewId, playerId, passage, party);
   const node = atlasNodeById(seed, nodeId);
   if (!node || node.kind === "harbor") return { error: "There is no such landfall.", status: 400 };
   const rows = await rowsOf(db, crewId);
@@ -146,6 +193,12 @@ export async function openNode(db: D1Database, crewId: string, playerId: string,
  */
 export async function scoutNode(db: D1Database, crewId: string, nodeId: unknown, stone?: unknown): Promise<{ live: string } | { node: string; place: string; site: string; level: number } | { error: string; status: 400 | 409 }> {
   const seed = atlasSeed(crewId);
+  const passage = atlasPassageById(seed, nodeId);
+  if (passage) {
+    const found = await passageWay(db, crewId, passage);
+    if ("error" in found) return found;
+    return found.live ? { live: found.live } : { node: passage.id, place: passageName(passage), site: "Open sea", level: passage.level };
+  }
   const node = atlasNodeById(seed, nodeId);
   if (!node || node.kind === "harbor") return { error: "There is no such landfall.", status: 400 };
   const rows = await rowsOf(db, crewId);

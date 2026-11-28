@@ -697,3 +697,42 @@ describe("a sea passage on the way", () => {
     expect(await went(node)).toMatchObject({ fresh: true });
   });
 });
+
+describe("sailing a passage", () => {
+  it("makes a voyage for it (a deck at sea, no charter spent), the same one for whoever follows, and beating it clears it on the chart", async () => {
+    const { from, node, passage } = barred();
+    await clearNode(db, CREW, from);
+    const a = await openNode(db, CREW, "ann", passage, 2);
+    if ("error" in a) throw new Error(a.error);
+    expect(a.fresh).toBe(true);
+    const zone = (await getZoneRow(db, a.code))!;
+    expect(zone).toMatchObject({ kind: "atlas", crew_id: CREW, node: passage, status: "open" });
+    const options = JSON.parse(zone.options_json) as ZoneOptions;
+    expect(options).toMatchObject({ party: 2, name: "Salvage waters", voyage: { deck: { cols: 3, rows: 8 } } });
+    expect(options.tier).toBeUndefined();
+    expect(await openNode(db, CREW, "bo", passage, 1)).toEqual({ code: a.code, fresh: false });
+    expect(await scoutNode(db, CREW, passage)).toEqual({ live: a.code });
+    // The chart shows it under way; the place past it is still beyond it.
+    expect((await chartFor(db, CREW)).passages.find((p) => p.id === passage)).toMatchObject({ state: "open", zone: a.code });
+    expect((await states()).get(node)).toBe("beyond");
+    await clearNode(db, CREW, passage);
+    expect((await states()).get(node)).toBe("open");
+    expect(await openNode(db, CREW, "ann", passage, 2)).toMatchObject({ status: 409 });
+  });
+
+  it("refuses calm water, water no route reaches yet, and a ship that went down is not still sailing", async () => {
+    const { from, passage } = barred();
+    expect(await openNode(db, CREW, "ann", passage, 2)).toMatchObject({ status: 409, error: expect.stringMatching(/No route runs to that water/) });
+    const calm = atlasPassage(atlasSeed(CREW), ATLAS_HOME, from)!;
+    expect(calm.kind).toBe("calm");
+    expect(await openNode(db, CREW, "ann", calm.id, 2)).toMatchObject({ status: 409, error: expect.stringMatching(/calm/) });
+    await clearNode(db, CREW, from);
+    const a = await openNode(db, CREW, "ann", passage, 2);
+    if ("error" in a) throw new Error(a.error);
+    // She was sunk: the next to set out gets a fresh voyage.
+    sql.prepare("UPDATE zones SET status = 'lost' WHERE code = ?").run(a.code);
+    const b = await openNode(db, CREW, "ann", passage, 2);
+    expect(b).toMatchObject({ fresh: true });
+    expect("code" in b && b.code).not.toBe(a.code);
+  });
+});
