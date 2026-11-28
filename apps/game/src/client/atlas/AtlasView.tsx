@@ -241,7 +241,7 @@ export function AtlasView({ me, refresh, onLeave }: { me: Me; refresh(): Promise
     renderer.current = view;
     cloud.current = new AtlasCloud(view, ATLAS_VIEW);
     layer.current = new AtlasLayer(view);
-    ink.current = new AtlasInk(view);
+    ink.current = new AtlasInk(view, ATLAS_VIEW);
     // Dev server only: the cloud and the places, to poke at from the console.
     if (import.meta.env.DEV) (globalThis as { __gqAtlas?: unknown }).__gqAtlas = { cloud: cloud.current, layer: layer.current };
     return () => {
@@ -271,7 +271,7 @@ export function AtlasView({ me, refresh, onLeave }: { me: Me; refresh(): Promise
     };
     view.setState(scene);
     over.set(world.clear, centre);
-    ink.current?.set(chart.seed, centre, ATLAS_VIEW);
+    ink.current?.set(chart.seed, centre, ATLAS_VIEW, world.map.tiles);
     // On the ground where the cloud has lifted (or is thin enough to see through), on top of the cloud elsewhere.
     const rise: Rise = (x, z) => {
       const ground = view.groundAt(x, z);
