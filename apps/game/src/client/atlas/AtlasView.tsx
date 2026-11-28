@@ -29,7 +29,7 @@
 // spent as the map is made, with what it carries added to the place's own.
 // Anywhere but beside the Harbor there must be one. What a stone carries is
 // told by pointing at it. They are drawn up and worked down in the Harbor,
-// at the Chartmaker's, before coming up here.
+// at Charter & Trade, before coming up here.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { hexDistance, type HexPos } from "@gantt-quest/core";
@@ -45,6 +45,7 @@ import { worldToHex } from "../render/footsteps";
 import { WorldRenderer, type RenderState } from "../render/WorldRenderer";
 import { uiZoom } from "../uiScale";
 import { AtlasCloud, CLOUD_TOP } from "./AtlasCloud";
+import { AtlasInk } from "./AtlasInk";
 import { AtlasLayer, type AtlasMark, type AtlasRoute, type Rise } from "./AtlasLayer";
 import { dragSource, useDropTarget } from "../dragDrop";
 import { joinOk } from "../joinWarning";
@@ -107,6 +108,7 @@ export function AtlasView({ me, refresh, onLeave }: { me: Me; refresh(): Promise
   const [centre, setCentre] = useState<HexPos | null>(null);
   const layer = useRef<AtlasLayer | null>(null);
   const cloud = useRef<AtlasCloud | null>(null);
+  const ink = useRef<AtlasInk | null>(null);
   /** Opened from the Harbor (not come back to from a map): it opens grandly, the title holding the screen while the cloud parts. */
   const [opening, setOpening] = useState(() => picked === null);
   /** The world is on the screen (it is made behind a veil first): the opening starts from here. */
@@ -239,10 +241,13 @@ export function AtlasView({ me, refresh, onLeave }: { me: Me; refresh(): Promise
     renderer.current = view;
     cloud.current = new AtlasCloud(view, ATLAS_VIEW);
     layer.current = new AtlasLayer(view);
+    ink.current = new AtlasInk(view, ATLAS_VIEW);
     // Dev server only: the cloud and the places, to poke at from the console.
     if (import.meta.env.DEV) (globalThis as { __gqAtlas?: unknown }).__gqAtlas = { cloud: cloud.current, layer: layer.current };
     return () => {
       layer.current?.dispose();
+      ink.current?.dispose();
+      ink.current = null;
       cloud.current?.dispose();
       layer.current = cloud.current = null;
       renderer.current = null;
@@ -266,6 +271,7 @@ export function AtlasView({ me, refresh, onLeave }: { me: Me; refresh(): Promise
     };
     view.setState(scene);
     over.set(world.clear, centre);
+    ink.current?.set(chart.seed, centre, ATLAS_VIEW, world.map.tiles);
     // On the ground where the cloud has lifted (or is thin enough to see through), on top of the cloud elsewhere.
     const rise: Rise = (x, z) => {
       const ground = view.groundAt(x, z);
@@ -583,7 +589,7 @@ export function AtlasView({ me, refresh, onLeave }: { me: Me; refresh(): Promise
                         </div>
                       )}
                     </div>
-                    {!begun && !inSlot && <p className="atlas-line muted">{!needs ? "No charter needed beside the Harbor." : held.length > 0 ? "Lay a charter in the slot to set out." : "It needs a charter, and you carry none. One can be drawn up at the Chartmaker's in the Harbor."}</p>}
+                    {!begun && !inSlot && <p className="atlas-line muted">{!needs ? "No charter needed beside the Harbor." : held.length > 0 ? "Lay a charter in the slot to set out." : "It needs a charter, and you carry none. One can be drawn up at Charter & Trade in the Harbor."}</p>}
                     {pay && (
                       <p className="atlas-line atlas-bounty" title={`${pay.gear >= 1 ? "With a piece of gear" : `And a ${Math.round(pay.gear * 100)}% chance of a piece of gear`}. Its spoils always hold a charter as good as the one that opened it (one in four times, a little better), and ${1 + (inSlot?.length ?? 0)} more ${inSlot?.length ? "chances" : "chance"} of another (about ${Math.round(Math.min(0.95, SPOIL_STONES.chance + SPOIL_STONES.perThing * (inSlot?.length ?? 0) + sum.stones) * 100)}% each). The more a charter says, the more charters its place gives back.`}>
                         Spoils <strong>{pay.xp} XP</strong> · <strong>{pay.gold[0]}–{pay.gold[1]} gold</strong> · <strong>1 to {2 + (inSlot?.length ?? 0)} charters</strong>

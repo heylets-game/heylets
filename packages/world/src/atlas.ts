@@ -336,20 +336,22 @@ function groundLie(seed: string, hex: HexPos, memo?: Map<string, number>): Atlas
  * (`sea`, whatever kind of place it is) is a skerry, hardly more than the rock it is on.
  */
 const ISLE_REACH: Record<AtlasNodeKind | "sea", { base: number; more: number }> = {
-  harbor: { base: 3.8, more: 0 },
-  landfall: { base: 2.4, more: 1.2 },
-  seacave: { base: 2.2, more: 0.7 },
-  lookout: { base: 2.8, more: 0.8 },
-  lair: { base: 3.2, more: 1 },
-  sea: { base: 1.4, more: 0.5 },
+  harbor: { base: 2.8, more: 0 },
+  landfall: { base: 1.8, more: 0.9 },
+  seacave: { base: 1.8, more: 0.4 },
+  lookout: { base: 1.9, more: 0.6 },
+  lair: { base: 2.3, more: 0.8 },
+  sea: { base: 1.2, more: 0.4 },
 };
 /** How far a coast wanders in and out of its island's round, in hexes, and how fine the wandering is (in cells). */
-const COAST_WANDER = 0.9;
+const COAST_WANDER = 0.7;
 const COAST_SCALE = 0.17;
 /** How wide the strand at an island's edge is, in hexes. */
-const COAST_STRAND = 0.55;
-/** In the ashlands low ground this fine or finer is still molten, even on an island: pools of fire, as the mire has pools of water. */
-const FIRE_POOLS = 0.3;
+const COAST_STRAND = 0.4;
+/** On an island of the mire, ground this fine or finer is a pool; of the ashlands, molten: a hex or two of it, here and there. */
+const POOLS: Partial<Record<Clime, number>> = { mire: 0.2, ash: 0.2 };
+/** How far in from its coast (as a share of its reach) an island of the hills begins to climb. */
+const HILL_FOOT = 0.4;
 
 /** The island a place stands on: where the place is, the lie of the land under it, and how far its land reaches. */
 interface Isle {
@@ -381,8 +383,8 @@ const plain = ({ pool: _pool, ...lie }: AtlasLie & { pool?: true }): AtlasLie =>
 /**
  * The lie of the land at a hex of the world: what the atlas draws there (atlasMap.ts), and so what a place
  * standing on it is. Open sea, unless an island reaches this far: then the ground the slow noise says
- * (`groundLie`), with a strand round the island's edge, and its low ground dry land like the rest of it (the
- * mire's pools and the ashlands' fire excepted). The hex a place stands on is the place's own lie exactly.
+ * (`groundLie`) is under the place on it, and so all over it, with a strand round its edge, a little of
+ * something else here and there, and a pool or two in the mire and the ashlands. The hex a place stands on is the place's own lie exactly.
  * `memo` saves working the same noise out twice.
  */
 export function atlasLie(seed: string, hex: HexPos, memo?: Map<string, number>): AtlasLie {
@@ -403,13 +405,31 @@ export function atlasLie(seed: string, hex: HexPos, memo?: Map<string, number>):
   if (!on) return open;
   within += (atlasNoise(seed, "coast", hex, COAST_SCALE, memo) - 0.5) * 2 * COAST_WANDER;
   if (within < 0) return open;
-  const strand: AtlasLie = { land: "strand", clime: ground.tract, tract: ground.tract, fine: ground.fine, up: 0, lea: false };
-  if (within < COAST_STRAND) return strand;
-  if (ground.land !== "sea") return plain(ground);
-  if (ground.pool || (ground.tract === "ash" && ground.fine < FIRE_POOLS)) return plain(ground);
-  // Low ground on an island is the island's own land: what the place on it stands on (sand, by the sea).
-  const land = on.lie.land === "sea" || on.lie.land === "strand" ? "strand" : on.lie.land;
-  return land === "strand" ? strand : { land, clime: land === "sand" ? "dunes" : ground.tract, tract: ground.tract, fine: ground.fine, up: land === "hills" ? 0.02 : 0, lea: false };
+  // An island is one country: the climate of the place on it, and the land the place stands on, with a strand
+  // round its edge and a little of something else here and there (by the fine noise), so it reads at a glance
+  // as what its map will be: a wooded island is woods with a glade or two, a desert one sand with a green patch.
+  const own = on.lie;
+  const tract = own.tract;
+  const fine = ground.fine;
+  const of = (land: AtlasLand, more: Partial<AtlasLie> = {}): AtlasLie => ({ land, clime: land === "sand" ? "dunes" : tract, tract, fine, up: 0, lea: false, ...more });
+  if (within < COAST_STRAND) return of("strand");
+  if (fine < (POOLS[tract] ?? 0)) return of("sea");
+  switch (own.land) {
+    case "sea":
+    case "strand":
+      return of("strand");
+    case "sand":
+      return of(fine > 0.82 ? "grass" : "sand");
+    case "forest":
+      return of(fine < 0.72 ? "forest" : "grass");
+    case "grass":
+      return of(fine > 0.74 ? "forest" : "grass", { lea: fine < 0.3 });
+    case "hills": {
+      // High in the middle, with green slopes down to the shore.
+      const up = within / on.reach - HILL_FOOT;
+      return up > 0 ? of("hills", { up: up * 0.4 }) : of(fine < 0.5 ? "forest" : "grass");
+    }
+  }
 }
 
 /** The ground a place's map is laid on (zone/sites.ts), by the land it stands on: the shore for the sea and its strand, high ground for the hills. */
