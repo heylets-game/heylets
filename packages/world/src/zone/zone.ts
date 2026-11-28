@@ -30,16 +30,16 @@ import { enemyTurn } from "./ai";
 import { pickBellGoer, placeBell } from "./bell";
 import { abilityArea, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, doCommon, drinkItem, enemyAct, fieldsCatch, isBlink, moveLeft, resolveAbility, throwItem, walk } from "./combat";
 import { checkStrike } from "./strikes";
-import { UNTIMED_KEEPS, countDown, has, leaveFight, heal, regrow, removeCondition, tick, tickStacks, unseen, usesLeft, type Ctx } from "./engine";
+import { UNTIMED_KEEPS, countDown, damage, has, leaveFight, heal, regrow, removeCondition, tick, tickStacks, unseen, usesLeft, type Ctx } from "./engine";
 import { ALERT_RANGE, freeHexNear, generateZone, groupKinds } from "./gen";
-import { deckPlan, holdShare, looseHarpoon, newVoyage, onDeck, passSea, putOver, stationProblem, stationsOn, stretchRun } from "../voyage/voyage";
+import { cannonDice, cannonProblem, deckPlan, holdShare, looseHarpoon, newVoyage, onDeck, passSea, putOver, stationProblem, stationsOn, stretchRun, type SeaEvent } from "../voyage/voyage";
 import { generateDelve } from "./delve";
 import { checkLoot, checkOpen, leaveBody, look, lootFor, lootGroup, openChest, payBounty, take } from "./loot";
 import { PARTY_SIZES, siteOpen, spaced } from "./sites";
 import { FREE_WALK, big, blast, blockerAt, caught, covers, gap, inFight, isDead, meet, noWayThere, pathIn, perkOf, roomAt, sameHex, sees, solid, span, unitAt, unitById, zoneReach } from "./geometry";
-import { AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, ENEMY_MOVE_AP, FLEE_RANGE, ITEM_AP, STROLL_GRACE_MS, STROLL_STEP_MS, SUMMONS, STARTING_ITEMS, THROWABLES, THROWABLE_KINDS, cleanItems, unitStrike, commonCostFor, enemyMove, tacticOf } from "./kit";
+import { ACTION_AP, AP_MAX, AP_TURN, SUMMON_AP_TURN, AURAS, ENEMY_MOVE_AP, FLEE_RANGE, ITEM_AP, STROLL_GRACE_MS, STROLL_STEP_MS, SUMMONS, STARTING_ITEMS, THROWABLES, THROWABLE_KINDS, cleanItems, unitStrike, commonCostFor, enemyMove, tacticOf } from "./kit";
 import { ENEMY_ABILITIES } from "./enemyabilities";
-import { d20, heroMove, mod, rollDice, statOf } from "./rules";
+import { d20, heroMove, mod, rollDice, rollShown, statOf } from "./rules";
 import { hiddenEnemies, sentToClient } from "./light";
 import { quakeAtTurn, tickWeather, weatherAtTurn } from "./weather";
 import { checkPickup, checkStow, clearSurfaces, lightTorch, pickUpTorch, placeSurface, stowTorch, standInSurface, tickLights, tickSurfaces } from "./surfaces";
@@ -421,8 +421,6 @@ function flee(ctx: Ctx, unit: Unit): void {
 
 /** The most time at sea counted at once: a map left alone has not sailed on without its crew. */
 const SEA_CATCHUP_MS = 12_000;
-/** Who comes over the rail at each boarding, in turn: the leader of the band (the rest are whoever stands with them, by the party's size). */
-const BOARDERS = ["bandit", "skeleton"];
 /** What sailing a stretch through is worth to each hero, besides the hold: so much, and so much more a level of the water. */
 const VOYAGE_XP = [14, 5];
 
@@ -444,7 +442,7 @@ function sail(ctx: Ctx, now: number): void {
     ctx.events.push({ t: "voyage_over", outcome: "sunk" });
     return;
   }
-  if (passed.boarding) board(ctx);
+  for (const event of passed.events) board(ctx, event);
   if (state.encounter || state.units.some((u) => u.side === "enemy" && !u.down) || !stretchRun(voyage)) return;
   // Through: the hold is shared out among the heroes aboard, and each is the better for the passage.
   voyage.outcome = "through";
@@ -458,26 +456,43 @@ function sail(ctx: Ctx, now: number): void {
   ctx.events.push({ t: "voyage_over", outcome: "through" });
 }
 
-/** Boarders come over the rail: a band on the deck as far from the heroes as the deck allows, and a fight with whoever is aboard. */
-function board(ctx: Ctx): void {
+/**
+ * The sea's trouble comes (voyage/voyage.ts SEA_EVENTS): a band over the rail onto the deck, as far from the heroes
+ * as it allows; or creatures surfacing in the water beside the hull, as near the deck as there is room. Either way,
+ * a fight with whoever is aboard.
+ */
+function board(ctx: Ctx, event: SeaEvent): void {
   const { state } = ctx;
   const [v, voyage] = [state.options.voyage!, state.voyage!];
   const heroes = state.units.filter((u) => u.side === "hero" && !u.down);
   if (heroes.length === 0) return;
-  const kinds = groupKinds(BOARDERS[(voyage.boarded - 1) % BOARDERS.length], Math.max(1, Math.min(6, state.sizedFor ?? state.options.party)));
-  const free = state.map.tiles.filter((t) => onDeck(v, t) && !unitAt(state, t)).map((t) => ({ q: t.q, r: t.r }));
+  const kinds = groupKinds(event.lead, Math.max(1, Math.min(6, state.sizedFor ?? state.options.party)));
+  const deck = state.map.tiles.filter((t) => onDeck(v, t)).map((t) => ({ q: t.q, r: t.r }));
+  const nearDeck = (p: HexPos) => Math.min(...deck.map((d) => hexDistance(d, p)));
   const far = (p: HexPos) => Math.min(...heroes.map((h) => hexDistance(h.pos, p)));
-  free.sort((a, b) => far(b) - far(a) || a.r - b.r || a.q - b.q);
-  const id = `board${voyage.boarded}`;
+  const free =
+    event.what === "board"
+      ? deck.filter((t) => !unitAt(state, t)).sort((a, b) => far(b) - far(a) || a.r - b.r || a.q - b.q)
+      : // Right beside the hull (and, failing room, a hex further out): the nearest a hero first.
+        state.map.tiles
+          .filter((t) => t.biome === "water" && !unitAt(state, t) && nearDeck(t) <= 2)
+          .map((t) => ({ q: t.q, r: t.r }))
+          .sort((a, b) => nearDeck(a) - nearDeck(b) || far(a) - far(b) || a.r - b.r || a.q - b.q);
+  const id = `${event.what}${voyage.boarded}`;
   state.groups[id] = { alerted: false };
   const came: string[] = [];
-  kinds.slice(0, free.length).forEach((kind, i) => {
-    const unit = enemyUnit(state, kind, free[i], id);
+  const taken: HexPos[] = [];
+  for (const kind of kinds) {
+    // Not side by side when they surface: one to a stretch of the rail, where there is room.
+    const at = free.find((p) => !taken.some((t) => sameHex(t, p)) && (event.what === "board" || taken.every((t) => hexDistance(t, p) >= 3))) ?? free.find((p) => !taken.some((t) => sameHex(t, p)));
+    if (!at) break;
+    taken.push(at);
+    const unit = enemyUnit(state, kind, at, id);
     state.units.push(unit);
     came.push(unit.id);
-  });
+  }
   if (came.length === 0) return;
-  ctx.events.push({ t: "boarded", group: id, units: came });
+  ctx.events.push({ t: "boarded", group: id, units: came, what: event.what });
   engage(ctx, [id], { kind: "seen", by: heroes[0].id });
 }
 
@@ -1376,6 +1391,27 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
     // A body: the others beside it are gone through with it (lootGroup), all in the one window.
     for (const s of lootGroup(state, spot!)) if (!checkLoot(state, unit, s)) look(ctx, unit, s);
     ctx.events.push({ t: "looked", id: unit.id, spot: spot!.id });
+    return null;
+  }
+  if (action.type === "cannon") {
+    const [v, voyage] = [state.options.voyage, state.voyage];
+    if (!v || !voyage) return "There is no ship here.";
+    const station = stationsOn(v).find((s) => s.id === action.station && s.kind === "cannon");
+    const wrong = stationProblem(v, voyage, station, unit.pos);
+    if (wrong) return wrong;
+    const target = unitById(state, action.target);
+    if (!target || target.side !== "enemy" || target.down) return "There is nothing there to fire at.";
+    const round = state.encounter ? state.encounter.round : null;
+    const off = cannonProblem(v, voyage, station!, target.pos, tileAt(state.map, target.pos)?.biome, round);
+    if (off) return off;
+    const cost = spend(budget, ACTION_AP);
+    if (cost) return cost;
+    if (round !== null) voyage.fired = { ...(voyage.fired ?? {}), [station!.id]: round };
+    ctx.events.push({ t: "cannon", id: unit.id, station: station!.id, target: target.id });
+    const rolled = rollShown(ctx.rng, cannonDice(state.options.level));
+    damage(ctx, target, rolled.total, { actor: unit.id, what: "Cannon", dice: rolled });
+    // A shot out of a fight starts one with whatever it was fired at.
+    if (!state.encounter && target.group && !target.down) engage(ctx, [target.group], { kind: "struck", by: unit.id });
     return null;
   }
   if (action.type === "harpoon" || action.type === "steer") {

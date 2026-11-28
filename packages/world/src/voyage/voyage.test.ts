@@ -5,7 +5,7 @@ import { nextTick } from "../zone/clock";
 import type { ZoneAction, ZoneEffect, ZoneEvent, ZoneState } from "../zone/types";
 import { must, fails, unit } from "../test/zoneBoard";
 import { driftField } from "./drift";
-import { BOARDINGS, DECK_MARGIN, STATIONS, VOYAGE_TAIL_MS, deckGrid, holdShare, lanesOver, onDeck, seaOf, shipFrame, stationsOn, type VoyageOptions } from "./voyage";
+import { DECK_MARGIN, SEA_EVENTS, cannonDice, STATIONS, VOYAGE_TAIL_MS, deckGrid, holdShare, lanesOver, onDeck, seaOf, shipFrame, stationsOn, type VoyageOptions } from "./voyage";
 
 const SLOOP: VoyageOptions = { deck: { cols: 3, rows: 8 }, hull: 60, hold: 8, ms: 60_000 };
 const T0 = 1_000_000;
@@ -42,7 +42,7 @@ describe("a ship's deck", () => {
 
   it("has a harpoon gun each side by the bow and the helm at the stern, all on the deck, and frames them by the ship", () => {
     const stations = stationsOn(SLOOP);
-    expect(stations.map((s) => s.kind).sort()).toEqual(["harpoon", "harpoon", "helm"]);
+    expect(stations.map((s) => s.kind).sort()).toEqual(["cannon", "cannon", "harpoon", "harpoon", "helm"]);
     for (const s of stations) expect(onDeck(SLOOP, s.pos), s.id).toBe(true);
     const [port, star, helm] = ["harpoon-port", "harpoon-starboard", "helm"].map((id) => shipFrame(SLOOP, stations.find((s) => s.id === id)!.pos));
     expect(port.x).toBeLessThan(0);
@@ -76,9 +76,10 @@ describe("the helm", () => {
     expect(events).toContainEqual({ t: "steered", id: "ann", dir: 1 });
     expect(lanesOver(state.voyage!)).toBe(1);
     expect(fails(state, { type: "steer", by: "ann", unit: "ann", dir: 1 })).toMatch(/coming round/);
-    state = sailTo(state, 6000);
+    // (All before the first trouble the sea sends, at SEA_EVENTS[0].)
+    state = sailTo(state, 4000);
     state = must(state, { type: "steer", by: "ann", unit: "ann", dir: 1 });
-    state = sailTo(state, 12_000);
+    state = sailTo(state, 7000);
     expect(fails(state, { type: "steer", by: "ann", unit: "ann", dir: 1 })).toMatch(/as far to starboard/);
     state = must(state, { type: "steer", by: "ann", unit: "ann", dir: -1 });
     expect(lanesOver(state.voyage!)).toBe(1);
@@ -133,20 +134,45 @@ describe("a harpoon gun", () => {
 });
 
 describe("the stretch", () => {
-  it("brings boarders over the rail at its set moments, and holds the ship fast while they are fought", () => {
+  it("sends its trouble in order: squid surfacing beside the hull first, in the water and never on deck, and holds the ship fast while it is fought", () => {
     const events: ZoneEvent[] = [];
     const state = sailTo(atSea(), 60_000, events);
     expect(state.encounter).not.toBeNull();
     const came = events.find((e) => e.t === "boarded")!;
-    expect(came.t === "boarded" && came.units.length).toBeGreaterThan(0);
-    const boarders = state.units.filter((u) => u.side === "enemy");
-    for (const b of boarders) expect(onDeck(SLOOP, b.pos), b.id).toBe(true);
-    expect(state.voyage!.t).toBeGreaterThanOrEqual(BOARDINGS[0] * SLOOP.ms!);
-    expect(state.voyage!.t).toBeLessThan(BOARDINGS[0] * SLOOP.ms! + 3001);
+    expect(came).toMatchObject({ what: SEA_EVENTS[0].what });
+    const first = state.units.filter((u) => u.side === "enemy");
+    expect(first.length).toBeGreaterThan(0);
+    for (const u of first) {
+      expect(u.kind).toBe(SEA_EVENTS[0].lead);
+      expect(onDeck(SLOOP, u.pos), u.id).toBe(false);
+      expect(state.map.tiles.find((t) => t.q === u.pos.q && t.r === u.pos.r)!.biome).toBe("water");
+      // Right beside the hull.
+      const deck = state.map.tiles.filter((t) => onDeck(SLOOP, t));
+      expect(Math.min(...deck.map((d) => hexDistance(d, u.pos))), u.id).toBeLessThanOrEqual(2);
+    }
+    expect(state.voyage!.t).toBeGreaterThanOrEqual(SEA_EVENTS[0].at * SLOOP.ms!);
+    expect(state.voyage!.t).toBeLessThan(SEA_EVENTS[0].at * SLOOP.ms! + 3001);
     // Time at sea stands still while the fight is on, and nothing can be worked.
     const held = must(state, { type: "time", now: state.voyage!.now! + 30_000 });
     expect(held.voyage!.t).toBe(state.voyage!.t);
     expect(fails(state, { type: "steer", by: "ann", unit: "ann", dir: 1 })).toMatch(/boarders/);
+  });
+
+  it("brings boarders over the rail onto the deck at their own moment", () => {
+    const events: ZoneEvent[] = [];
+    let state = atSea();
+    for (let guard = 0; guard < 200 && !events.some((e) => e.t === "boarded" && e.what === "board"); guard++) {
+      if (state.encounter) {
+        const step = stepZone(state, { type: "dev", by: "ann", dev: { op: "clear_enemies" } } as ZoneAction);
+        if (!step.ok) throw new Error(step.error);
+        state = step.state;
+        continue;
+      }
+      state = must(state, { type: "time", now: state.voyage!.now! + 3000 }, events);
+    }
+    const boarders = state.units.filter((u) => u.side === "enemy");
+    expect(boarders.length).toBeGreaterThan(0);
+    for (const b of boarders) expect(onDeck(SLOOP, b.pos), b.id).toBe(true);
   });
 
   /** The same voyage, with every boarder struck from the deck as soon as they come: sailed to its end. */
@@ -197,5 +223,43 @@ describe("the stretch", () => {
     expect(zoneCleared(state)).toBe(false);
     expect(paid).toEqual([]);
     expect(fails(state, { type: "steer", by: "ann", unit: "ann", dir: 1 })).toMatch(/over|helm/);
+  });
+});
+
+describe("a cannon", () => {
+  /** Ann at sea with the first squid up, and the cannon on that squid's side; Ann standing at it, and whose turn it is made hers. */
+  function squidUp() {
+    let state = sailTo(atSea(), 60_000);
+    const squid = state.units.find((u) => u.side === "enemy")!;
+    const side = shipFrame(SLOOP, squid.pos).x > 0 ? 1 : -1;
+    const cannon = stationsOn(SLOOP).find((s) => s.kind === "cannon" && s.side === side)!;
+    const other = stationsOn(SLOOP).find((s) => s.kind === "cannon" && s.side === -side)!;
+    // Put Ann at the gun and give her the turn (the combat sandbox lets a test do that), then leave the sandbox, which tops AP up.
+    for (const op of [{ op: "sandbox", on: true }, { op: "place", unit: "ann", at: cannon.pos }, { op: "set_turn", unit: "ann" }, { op: "sandbox", on: false }]) {
+      const step = stepZone(state, { type: "dev", by: "ann", dev: op } as ZoneAction);
+      if (!step.ok) throw new Error(step.error);
+      state = step.state;
+    }
+    return { state, squid, cannon, other };
+  }
+
+  it("fires at something in the water on its side, for an action, and hits it hard", () => {
+    const { state, squid, cannon } = squidUp();
+    const ap = state.encounter!.budgets.ann.ap;
+    const events: ZoneEvent[] = [];
+    const after = must(state, { type: "cannon", by: "ann", unit: "ann", station: cannon.id, target: squid.id }, events);
+    expect(events).toContainEqual({ t: "cannon", id: "ann", station: cannon.id, target: squid.id });
+    const hit = events.find((e) => e.t === "hit" && e.target === squid.id)!;
+    expect(hit.t === "hit" && hit.amount).toBeGreaterThanOrEqual(cannonDice(2).n + cannonDice(2).plus - 2);
+    expect(after.encounter?.budgets.ann?.ap ?? 0).toBeLessThanOrEqual(ap - 2);
+  });
+
+  it("fires once a round, only from beside it, only on its own side, and never at the deck", () => {
+    const { state, squid, cannon, other } = squidUp();
+    expect(fails(state, { type: "cannon", by: "ann", unit: "ann", station: other.id, target: squid.id })).toMatch(/Stand at the cannon/);
+    const fired = must(state, { type: "cannon", by: "ann", unit: "ann", station: cannon.id, target: squid.id });
+    const again = fired.units.find((u) => u.id === squid.id);
+    if (again && !again.down) expect(fails(fired, { type: "cannon", by: "ann", unit: "ann", station: cannon.id, target: squid.id })).toMatch(/fired this round/);
+    expect(fails(state, { type: "cannon", by: "ann", unit: "ann", station: cannon.id, target: "ann" })).toMatch(/nothing there/);
   });
 });

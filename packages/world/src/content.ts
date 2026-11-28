@@ -443,6 +443,12 @@ export const ENEMIES: Record<string, EnemyDef> = {
     abilities: ["beatdown", "battering_ram", "great_cleave"],
   },
   // An archer keeps its distance and shoots; every few turns it looses a rain of arrows over a hex and the ring round it.
+  // Out at sea: it surfaces beside a ship's hull and stays there, never coming aboard (it has no legs for a deck),
+  // spitting ink at whoever is nearest the rail. Ink in the eyes makes the next blows go wide.
+  squid: {
+    kind: "squid", name: "Spitting Squid", hp: 16, defence: 11, move: 0, save: 1, init: 2, xp: 12,
+    abilities: ["ink_spit", "lash"],
+  },
   archer: {
     kind: "archer", name: "Archer", hp: 13, defence: 12, move: 2, save: 0, init: 1, xp: 13,
     abilities: ["volley", "rain_of_arrows"],

@@ -193,6 +193,10 @@ export const ENEMY_ABILITIES: Record<string, EnemyAbilityDef> = {
   beatdown: { id: "beatdown", name: "Beatdown", damage: 11, potency: 3, saveOr: { effect: "prone", turns: 1 }, weight: 1 },
   great_cleave: { id: "great_cleave", name: "Great Cleave", damage: 9, potency: 3, spread: { shape: "sweep", rows: 2 }, cooldown: 4, weight: 2 },
   battering_ram: { id: "battering_ram", name: "Battering Ram", damage: 6, potency: 4, push: 3, cooldown: 2, weight: 2 },
+  // A squid's (content.ts): from the water, at whoever is on deck within reach. It leaves them Fumbling.
+  ink_spit: { id: "ink_spit", name: "Ink Spit", damage: 5, potency: 3, range: 5, saveOr: { effect: "fumbling" }, weight: 2 },
+  // And at anyone beside it at the rail: a tentacle across the deck.
+  lash: { id: "lash", name: "Lash", damage: 6, potency: 3, weight: 1 },
   volley: { id: "volley", name: "Volley", damage: 6, potency: 4, range: 6, weight: 1 },
   // An archer's favourite: a sheaf of arrows loosed high, to come down on a hex and every hex round it. Nobody is
   // aimed at, so there is no roll to hit: everyone under it makes an Agility save for half. It takes all a turn's

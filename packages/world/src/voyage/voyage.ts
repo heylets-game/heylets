@@ -46,12 +46,29 @@ export const VOYAGE_MS = 150_000;
 export const VOYAGE_TAIL_MS = 14_000;
 /** How many hexes of water lie round the deck on the map: room for what comes alongside. */
 export const DECK_MARGIN = 7;
-/** When boarders come over the rail, as shares of the stretch. */
-export const BOARDINGS = [0.3, 0.68];
+/**
+ * What the sea sends against the ship, and when (as a share of the stretch): boarders over the rail, led by
+ * `lead` (zone/gen.ts `groupKinds` makes up the rest of the band for the party), or creatures that surface in the
+ * water beside her hull and stay there. A new kind of trouble is a line here: what comes is ordinary enemies
+ * (content.ts ENEMIES), so its fight is the engine's own.
+ */
+export interface SeaEvent {
+  at: number;
+  what: "board" | "surface";
+  lead: string;
+}
+export const SEA_EVENTS: readonly SeaEvent[] = [
+  { at: 0.16, what: "surface", lead: "squid" },
+  { at: 0.34, what: "board", lead: "bandit" },
+  { at: 0.52, what: "surface", lead: "squid" },
+  { at: 0.72, what: "board", lead: "skeleton" },
+];
+/** The boardings among them (kept for whoever only wants to know when boarders come). */
+export const BOARDINGS = SEA_EVENTS.filter((e) => e.what === "board").map((e) => e.at);
 /** The most lanes the helm may carry her off her course, either way. */
 export const LANES = 2;
 
-export type StationKind = "harpoon" | "helm";
+export type StationKind = "harpoon" | "helm" | "cannon";
 export interface StationDef {
   name: string;
   /** What working it does, in a line. */
@@ -65,6 +82,9 @@ export interface StationDef {
 export const STATIONS: Record<StationKind, StationDef> = {
   harpoon: { name: "Harpoon gun", blurb: "Loose a line at something adrift and haul it aboard.", reload: 2400, reach: 7.5, slack: 0.3 },
   helm: { name: "Helm", blurb: "Put her over to port or starboard: clear of a rock, or nearer the salvage.", reload: LANE_MS },
+  // A cannon fires at what is in the water on its side, in a fight: once a round however many work it, and for a
+  // turn's action from whoever does. No roll to hit: a ball fired at something that close finds it.
+  cannon: { name: "Cannon", blurb: "Fire at whatever is in the water on her side: once a round, for an action.", reload: 0, reach: 7 },
 };
 
 export interface Station {
@@ -98,8 +118,10 @@ export interface VoyageState {
   holdMax: number;
   /** When each station may be worked again, by its id, in time at sea. */
   ready: Record<string, number>;
-  /** How many of the boardings have come. */
+  /** How many of the sea's events (SEA_EVENTS) have come, in order. */
   boarded: number;
+  /** The fight round each cannon was last fired in, by station: a cannon fires once a round. */
+  fired?: Record<string, number>;
   /** How it ended: she is through the stretch, or sunk. Missing while she sails. */
   outcome?: "through" | "sunk";
 }
@@ -121,12 +143,15 @@ export function deckPlan(v: VoyageOptions): { map: WorldMap; start: HexPos } {
   return { map: { grid, tiles, pois: [] }, start: hexAt(DECK_MARGIN + Math.floor(v.deck.cols / 2), DECK_MARGIN + v.deck.rows - 2) };
 }
 
-/** Her stations: a harpoon gun each side near the bow, and the helm at the stern. */
+/** Her stations: a harpoon gun each side by the bow, a cannon each side amidships, and the helm at the stern. */
 export function stationsOn(v: VoyageOptions): Station[] {
   const bow = DECK_MARGIN + 1;
+  const mid = DECK_MARGIN + Math.floor(v.deck.rows / 2);
   return [
     { id: "harpoon-port", kind: "harpoon", pos: hexAt(DECK_MARGIN, bow), side: -1 },
     { id: "harpoon-starboard", kind: "harpoon", pos: hexAt(DECK_MARGIN + v.deck.cols - 1, bow), side: 1 },
+    { id: "cannon-port", kind: "cannon", pos: hexAt(DECK_MARGIN, mid), side: -1 },
+    { id: "cannon-starboard", kind: "cannon", pos: hexAt(DECK_MARGIN + v.deck.cols - 1, mid), side: 1 },
     { id: "helm", kind: "helm", pos: hexAt(DECK_MARGIN + Math.floor(v.deck.cols / 2), DECK_MARGIN + v.deck.rows - 1), side: 0 },
   ];
 }
@@ -165,6 +190,23 @@ export const seaOf = (voyage: Pick<VoyageState, "sea" | "ms">): Sea => ({ seed: 
 
 /** How far the helm has put her over, in lanes: starboard is +. */
 export const lanesOver = (voyage: Pick<VoyageState, "steers">): number => voyage.steers.reduce((n, s) => n + s.dir, 0);
+
+/**
+ * Why a cannon cannot fire at a unit at `at` (on ground `ground`), or null if it can: it must be in the water, on the
+ * cannon's side of the ship, within its reach, and the cannon not fired yet this round (`round`: the fight's).
+ */
+export function cannonProblem(v: VoyageOptions, voyage: VoyageState, station: Station, at: HexPos, ground: string | undefined, round: number | null): string | null {
+  if (ground !== "water") return "A cannon fires out over the water, not across the deck.";
+  const there = shipFrame(v, at);
+  const from = shipFrame(v, station.pos);
+  if (there.x * station.side <= 0) return "That gun does not bear on the other side.";
+  if (Math.hypot(there.x - from.x, there.y - from.y) > STATIONS.cannon.reach! + 0.5) return "That is out of the cannon's reach.";
+  if (round !== null && voyage.fired?.[station.id] === round) return "That cannon has fired this round: it is being loaded.";
+  return null;
+}
+
+/** The damage a cannonball does, by how dangerous the water is: a strong hit that grows with the level. */
+export const cannonDice = (level: number) => ({ n: 2, d: 8, plus: 2 + Math.floor(level / 2) });
 
 /** Why a hero standing at `at` cannot work a station now, or null if they can. */
 export function stationProblem(v: VoyageOptions, voyage: VoyageState, station: Station | undefined, at: HexPos): string | null {
@@ -217,10 +259,10 @@ export function putOver(voyage: VoyageState, station: Station, dir: -1 | 1): str
   return null;
 }
 
-/** What a spell of time at sea brought: what struck the hull, whether boarders come now, and whether it is over. */
+/** What a spell of time at sea brought: what struck the hull, and what trouble falls due now (SEA_EVENTS). */
 export interface SeaPassed {
   struck: { thing: Drifting; hull: number }[];
-  boarding: boolean;
+  events: SeaEvent[];
 }
 
 /**
@@ -229,7 +271,7 @@ export interface SeaPassed {
  * the deck being clear, which is the reducer's to know (`through`).
  */
 export function passSea(v: VoyageOptions, voyage: VoyageState, seed: string, ms: number): SeaPassed {
-  const out: SeaPassed = { struck: [], boarding: false };
+  const out: SeaPassed = { struck: [], events: [] };
   if (voyage.outcome || ms <= 0) return out;
   const [from, to] = [voyage.t, voyage.t + ms];
   voyage.t = to;
@@ -247,15 +289,17 @@ export function passSea(v: VoyageOptions, voyage: VoyageState, seed: string, ms:
     voyage.hold = [];
     return out;
   }
-  if (voyage.boarded < BOARDINGS.length && to >= BOARDINGS[voyage.boarded] * voyage.ms) {
+  // One at a time: whatever comes starts a fight, and the sea stands still until it is won.
+  const next = SEA_EVENTS[voyage.boarded];
+  if (next && to >= next.at * voyage.ms) {
     voyage.boarded++;
-    out.boarding = true;
+    out.events.push(next);
   }
   return out;
 }
 
 /** Whether the stretch is run: the sea has no more to bring, and the last of it has drifted clear. */
-export const stretchRun = (voyage: VoyageState): boolean => voyage.t >= voyage.ms + VOYAGE_TAIL_MS && voyage.boarded >= BOARDINGS.length;
+export const stretchRun = (voyage: VoyageState): boolean => voyage.t >= voyage.ms + VOYAGE_TAIL_MS && voyage.boarded >= SEA_EVENTS.length;
 
 /**
  * The hold shared out among so many: each gets a share of every stack, rounded up, so nobody is handed nothing of

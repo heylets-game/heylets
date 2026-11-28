@@ -10547,6 +10547,51 @@ function dummy(top: THREE.Group): Rig {
   return { parts: [body], animate };
 }
 
+/**
+ * A spitting squid, up out of the water beside a ship: a tall mantle with fins at its tip, two great eyes at the
+ * waterline, and arms curled out round its foot. It rides the swell, and rears back to spit.
+ */
+function squid(top: THREE.Group): Rig {
+  const skin = "#b8485a";
+  const dark = "#7d2a3c";
+  const pale = "#e7a2a8";
+  const body = new Part(top, 0, 0, 0);
+  // The mantle, standing up out of the water and narrowing to a point.
+  body.loft(skin, [[0, 3.1, 3.1], [3, 3.6, 3.5], [7.5, 3.2, 3.1], [11.5, 2.2, 2.1], [14.5, 1.1, 1.05], [16, 0.25, 0.25]], 10);
+  // Fins at the tip, and dark spots down its back.
+  for (const s of [-1, 1]) body.shape(dark, [[0, 11, 0], [s * 3.4, 13.6, 0], [s * 2.6, 15.2, 0], [0, 15.6, 0]], 0, 0, -0.2);
+  for (let i = 0; i < 4; i++) spot(body, dark, 0.7 - i * 0.08, 0.2, 0.4, (i % 2 ? 1 : -1) * 0.9, 4.5 + i * 2.4, -2.9);
+  // Two great eyes, low on the mantle where it meets the water, and a pale mouth between them.
+  for (const s of [-1, 1]) {
+    body.ball("#f3ead8", 0.95, s * 1.8, 3, 2.75, 1, [1, 1, 0.6]);
+    body.ball(OUTLINE, 0.55, s * 1.85, 3, 3.25, 1, [1, 1, 0.5]);
+  }
+  body.ball(pale, 0.7, 0, 1.4, 3.1, 1, [1.2, 0.6, 0.6]);
+  // Arms curled out round its foot, at the waterline, and two longer tentacles reaching up.
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2 + 0.3;
+    const [x, z] = [Math.cos(a), Math.sin(a)];
+    strut(body, skin, [x * 2.6, 0.6, z * 2.6], [x * 5.6, 0.2, z * 5.6], 0.55);
+    strut(body, skin, [x * 5.6, 0.2, z * 5.6], [x * 6.8, 1.4, z * 6.8], 0.4);
+  }
+  for (const s of [-1, 1]) {
+    strut(body, skin, [s * 3, 1.2, 1.4], [s * 6, 7, 2.4], 0.45);
+    strut(body, skin, [s * 6, 7, 2.4], [s * 5.2, 9.6, 3.2], 0.35);
+    body.ball(pale, 0.7, s * 5.2, 9.6, 3.2, 1, [1, 1.3, 1]);
+  }
+  const animate = (a: Anim) => {
+    if (a.lying) {
+      top.rotation.set(0, 0, HALF_PI * 0.9);
+      top.position.set(0, -2, 0);
+      return;
+    }
+    // Riding the swell, and rearing back as it spits.
+    top.rotation.set(-a.strike * 0.35 + Math.sin(a.t * 1.3) * 0.04, 0, Math.sin(a.t * 0.9) * 0.06);
+    top.position.set(0, Math.sin(a.t * 1.6) * 0.5 - 1, 0);
+  };
+  return { parts: [body], animate, clean: true };
+}
+
 function rigFor(kind: string, top: THREE.Group, look: Look, outfit: Outfit | undefined, asleep: boolean): Rig {
   if (outfit) return person(top, look, outfit, asleep);
   switch (kind) {
@@ -10560,6 +10605,8 @@ function rigFor(kind: string, top: THREE.Group, look: Look, outfit: Outfit | und
       return bear(top, "#4a3426", "#2a1d15", "#8a7a6a", "#ff4d4d", "#3b291d");
     case "dummy":
       return dummy(top);
+    case "squid":
+      return squid(top);
     case "shade":
       return ghost(top);
     case "haunt":

@@ -525,6 +525,8 @@ export type ZoneAction =
   | { type: "unlock"; by: string; unit: string; poi: string }
   /** On a voyage: loose a harpoon from a gun the hero stands at, along `aim` (in the ship's frame: starboard, ahead; any length). */
   | { type: "harpoon"; by: string; unit: string; station: string; aim: { x: number; y: number } }
+  /** On a voyage: fire a cannon the hero stands at, at something in the water on its side. In a fight it costs an action. */
+  | { type: "cannon"; by: string; unit: string; station: string; target: string }
   /** On a voyage: put the helm over a lane, to port (-1) or starboard (1), from beside it. */
   | { type: "steer"; by: string; unit: string; dir: -1 | 1 }
   /** The server's own, never a client's: the time now, so time out of a fight can pass (zone/clock.ts). */
@@ -538,7 +540,7 @@ export type ZoneAction =
   | { type: "dev"; by: string; dev: DevOp };
 
 /** Action types a player's client may send. `dev` is let through only on a development deployment. */
-export const ZONE_CLIENT_ACTIONS: ReadonlySet<ZoneAction["type"]> = new Set(["move", "use", "common", "throw", "drink", "light", "pickup", "stow", "open", "loot", "take", "unlock", "forage", "harpoon", "steer", "end_turn", "dev"]);
+export const ZONE_CLIENT_ACTIONS: ReadonlySet<ZoneAction["type"]> = new Set(["move", "use", "common", "throw", "drink", "light", "pickup", "stow", "open", "loot", "take", "unlock", "forage", "harpoon", "steer", "cannon", "end_turn", "dev"]);
 
 /** One d20 roll, as shown on the roll card. */
 export interface Roll {
@@ -729,8 +731,10 @@ export type ZoneEvent =
   | { t: "steered"; id: string; dir: -1 | 1 }
   /** Something adrift struck the hull, and took so much off it. */
   | { t: "hull_struck"; n: number; kind: string; hull: number }
-  /** Boarders are over the rail. */
-  | { t: "boarded"; group: string; units: string[] }
+  /** Boarders are over the rail (`what`: "board"), or something has surfaced beside the hull ("surface"). */
+  | { t: "boarded"; group: string; units: string[]; what?: "board" | "surface" }
+  /** A cannon was fired from a station by a hero, at a unit in the water. */
+  | { t: "cannon"; id: string; station: string; target: string }
   /** The voyage is over: through the stretch (each hero's share of the hold is paid), or sunk. */
   | { t: "voyage_over"; outcome: "through" | "sunk" };
 

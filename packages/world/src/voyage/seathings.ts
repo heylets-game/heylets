@@ -45,7 +45,7 @@ export const SEA_THINGS: Record<SeaThingId, SeaThingDef> = {
     id: "wreckage", name: "Wreckage", size: 0.9, pace: 0.8, weight: 3, harpoons: 2,
     haul: (rng, level) => [{ t: "res", kind: "wood", n: rng.int(5, 9) }, { t: "res", kind: "iron", n: rng.int(2, 4) }, gold(rng, 6, 14, level)],
   },
-  rock: { id: "rock", name: "Rock", size: 0.8, pace: 0.7, weight: 4, hull: 8 },
+  rock: { id: "rock", name: "Rock", size: 0.8, pace: 0.7, weight: 3, hull: 6 },
 };
 
 export const SEA_THING_IDS = Object.keys(SEA_THINGS) as SeaThingId[];
