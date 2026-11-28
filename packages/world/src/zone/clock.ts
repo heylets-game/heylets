@@ -90,6 +90,8 @@ function roundDue(state: ZoneState): boolean {
  */
 export function nextTick(state: ZoneState): number | null {
   if (state.encounter || !state.clock) return null;
+  // At sea there is always something running: the drift, the hull, the boarders to come.
+  if (state.voyage && !state.voyage.outcome) return state.clock.at + EXPLORE_ROUND_MS;
   if (roundDue(state)) return state.clock.at + EXPLORE_ROUND_MS;
   const lit = state.units.some((u) => !!u.torch) || Object.keys(state.lights ?? {}).length > 0;
   return lit ? state.clock.torchAt + TORCH_ROUND_MS : null;

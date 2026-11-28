@@ -8,7 +8,7 @@
 // time, and the turns the helm has made, and from nothing else. So the
 // client draws the field every frame and the server never simulates it:
 // when a harpoon is loosed, the server works out where everything was at
-// the moment it saw the shot, and judges the aim (`harpoon`).
+// the moment it saw the shot, and judges the aim (`harpoonHit`).
 //
 // The arithmetic is plain on purpose (+, -, *, /, comparisons, and sqrt,
 // which every engine rounds the same): no sin, cos, exp or pow, so a
@@ -108,7 +108,7 @@ export function driftField(sea: Sea, t: number, steers: readonly Steer[], taken:
  * hexes: the first thing it meets, or null if it meets none. A thing is met if the shot passes within the
  * thing's own size of its middle (plus `slack`, for the moment between the player's eye and the server's clock).
  */
-export function harpoon(sea: Sea, t: number, steers: readonly Steer[], taken: ReadonlySet<number>, gun: { x: number; y: number }, aim: { x: number; y: number }, reach: number, slack = 0): Drifting | null {
+export function harpoonHit(sea: Sea, t: number, steers: readonly Steer[], taken: ReadonlySet<number>, gun: { x: number; y: number }, aim: { x: number; y: number }, reach: number, slack = 0): Drifting | null {
   const len = Math.sqrt(aim.x * aim.x + aim.y * aim.y);
   if (!(len > 0)) return null;
   const [ux, uy] = [aim.x / len, aim.y / len];
@@ -129,7 +129,7 @@ export function harpoon(sea: Sea, t: number, steers: readonly Steer[], taken: Re
  * (`half` hexes either way across, `fore` ahead of her middle and `aft` behind it) at some moment of it. Looked
  * for a tenth of a second at a time. Each strikes once: `struck` are the numbers of those that already have.
  */
-export function strikes(sea: Sea, from: number, to: number, steers: readonly Steer[], hull: { half: number; fore: number; aft: number }, struck: ReadonlySet<number> = new Set()): Drifting[] {
+export function hullStrikes(sea: Sea, from: number, to: number, steers: readonly Steer[], hull: { half: number; fore: number; aft: number }, struck: ReadonlySet<number> = new Set()): Drifting[] {
   const out = new Map<number, Drifting>();
   for (let t = from; t <= to; t += 100) {
     for (const thing of driftField(sea, t, steers, struck)) {

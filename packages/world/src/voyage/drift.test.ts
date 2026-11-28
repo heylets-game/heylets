@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { makeRng } from "../rng";
-import { DRIFT_AHEAD, DRIFT_ASTERN, DRIFT_FAR, LANE, LANE_MS, driftAt, driftField, harpoon, leeway, strikes, type Sea, type Steer } from "./drift";
+import { DRIFT_AHEAD, DRIFT_ASTERN, DRIFT_FAR, LANE, LANE_MS, driftAt, driftField, harpoonHit, leeway, hullStrikes, type Sea, type Steer } from "./drift";
 import { SEA_THINGS, SEA_THING_IDS, haulOf } from "./seathings";
 
 const sea: Sea = { seed: "CREWAA|1,1|2,1|try1", ms: 180_000 };
@@ -75,15 +75,15 @@ describe("a harpoon", () => {
   it("takes the thing it is aimed at, and nothing when it is aimed wide, short or at nothing", () => {
     const { t, thing } = target();
     const aim = { x: thing.x - gun.x, y: thing.y - gun.y };
-    expect(harpoon(sea, t, NONE, new Set(), gun, aim, 8)?.n).toBe(thing.n);
+    expect(harpoonHit(sea, t, NONE, new Set(), gun, aim, 8)?.n).toBe(thing.n);
     // Any length of aim: only the direction counts.
-    expect(harpoon(sea, t, NONE, new Set(), gun, { x: aim.x * 40, y: aim.y * 40 }, 8)?.n).toBe(thing.n);
+    expect(harpoonHit(sea, t, NONE, new Set(), gun, { x: aim.x * 40, y: aim.y * 40 }, 8)?.n).toBe(thing.n);
     // Too short a line, the other way, and no aim at all.
-    expect(harpoon(sea, t, NONE, new Set(), gun, aim, Math.hypot(aim.x, aim.y) - 0.1)).toBeNull();
-    expect(harpoon(sea, t, NONE, new Set(), gun, { x: -aim.x, y: -aim.y }, 8)?.n).not.toBe(thing.n);
-    expect(harpoon(sea, t, NONE, new Set(), gun, { x: 0, y: 0 }, 8)).toBeNull();
+    expect(harpoonHit(sea, t, NONE, new Set(), gun, aim, Math.hypot(aim.x, aim.y) - 0.1)).toBeNull();
+    expect(harpoonHit(sea, t, NONE, new Set(), gun, { x: -aim.x, y: -aim.y }, 8)?.n).not.toBe(thing.n);
+    expect(harpoonHit(sea, t, NONE, new Set(), gun, { x: 0, y: 0 }, 8)).toBeNull();
     // Already aboard: it is not there to hit.
-    expect(harpoon(sea, t, NONE, new Set([thing.n]), gun, aim, 8)?.n).not.toBe(thing.n);
+    expect(harpoonHit(sea, t, NONE, new Set([thing.n]), gun, aim, 8)?.n).not.toBe(thing.n);
   });
 
   it("misses by more than the thing's size, unless the slack allows for it", () => {
@@ -93,8 +93,8 @@ describe("a harpoon", () => {
     const wide = SEA_THINGS[thing.kind].size + 0.3;
     // Aimed at a point `wide` to one side of it.
     const aim = { x: dx + (-dy / far) * wide, y: dy + (dx / far) * wide };
-    expect(harpoon(sea, t, NONE, new Set(), gun, aim, 9)?.n).not.toBe(thing.n);
-    expect(harpoon(sea, t, NONE, new Set(), gun, aim, 9, 0.5)?.n).toBe(thing.n);
+    expect(harpoonHit(sea, t, NONE, new Set(), gun, aim, 9)?.n).not.toBe(thing.n);
+    expect(harpoonHit(sea, t, NONE, new Set(), gun, aim, 9, 0.5)?.n).toBe(thing.n);
   });
 });
 
@@ -102,14 +102,14 @@ describe("the hull", () => {
   const hull = { half: 1.3, fore: 4, aft: 4 };
 
   it("is struck by what drifts into it, once each, and steering clear of a rock saves it", () => {
-    const all = strikes(sea, 0, sea.ms + 40_000, NONE, hull);
+    const all = hullStrikes(sea, 0, sea.ms + 40_000, NONE, hull);
     const rocks = all.filter((d) => d.kind === "rock");
     expect(rocks.length).toBeGreaterThan(0);
     // Counted once however the stretch is cut up.
     const struck = new Set<number>();
     let count = 0;
     for (let t = 0; t < sea.ms + 40_000; t += 6000) {
-      const hit = strikes(sea, t, t + 6000, NONE, hull, struck);
+      const hit = hullStrikes(sea, t, t + 6000, NONE, hull, struck);
       for (const d of hit) struck.add(d.n);
       count += hit.length;
     }
@@ -118,7 +118,7 @@ describe("the hull", () => {
     const rock = rocks[0];
     const when = moments.find((t) => driftAt(sea, rock.n, t, NONE))!;
     const away: Steer[] = [{ at: when, dir: rock.x >= 0 ? -1 : 1 }, { at: when + 100, dir: rock.x >= 0 ? -1 : 1 }];
-    expect(strikes(sea, 0, sea.ms + 40_000, away, hull).some((d) => d.n === rock.n)).toBe(false);
+    expect(hullStrikes(sea, 0, sea.ms + 40_000, away, hull).some((d) => d.n === rock.n)).toBe(false);
   });
 });
 

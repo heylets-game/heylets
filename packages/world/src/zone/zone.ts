@@ -31,7 +31,8 @@ import { pickBellGoer, placeBell } from "./bell";
 import { abilityArea, checkAbility, checkCommon, checkDrink, checkLight, checkThrow, courseFor, doCommon, drinkItem, enemyAct, fieldsCatch, isBlink, moveLeft, resolveAbility, throwItem, walk } from "./combat";
 import { checkStrike } from "./strikes";
 import { UNTIMED_KEEPS, countDown, has, leaveFight, heal, regrow, removeCondition, tick, tickStacks, unseen, usesLeft, type Ctx } from "./engine";
-import { ALERT_RANGE, freeHexNear, generateZone } from "./gen";
+import { ALERT_RANGE, freeHexNear, generateZone, groupKinds } from "./gen";
+import { deckPlan, holdShare, looseHarpoon, newVoyage, onDeck, passSea, putOver, stationProblem, stationsOn, stretchRun } from "../voyage/voyage";
 import { generateDelve } from "./delve";
 import { checkLoot, checkOpen, leaveBody, look, lootFor, lootGroup, openChest, payBounty, take } from "./loot";
 import { PARTY_SIZES, siteOpen, spaced } from "./sites";
@@ -178,7 +179,7 @@ function renameConditions(state: ZoneState): ZoneState {
 export const loadZone = (state: ZoneState): ZoneState => makeRoom(ensureEnemyAbilities(ensureMouth(renameConditions(state))));
 
 export function createZone(code: string, seed: string, options: ZoneOptions): ZoneState {
-  const plan = options.delve ? generateDelve(seed, options) : generateZone(seed, options);
+  const plan = options.voyage ? { ...deckPlan(options.voyage), groups: [] } : options.delve ? generateDelve(seed, options) : generateZone(seed, options);
   const state: ZoneState = { v: 1, code, seed, rng: seedFromString(`zone-run|${seed}`), options, map: plan.map, start: plan.start, units: [], groups: {}, surfaces: { ...(plan.surfaces ?? {}) }, encounter: null, seq: 0 };
   if (plan.keys && plan.keys.length > 0) state.keyHolders = [...plan.keys];
   if (plan.scene) state.scene = { ...plan.scene };
@@ -186,6 +187,11 @@ export function createZone(code: string, seed: string, options: ZoneOptions): Zo
     const id = group.id ?? `g${++state.seq}`;
     state.groups[id] = { alerted: false, ...(group.bands ? { bands: group.bands.map((b) => [...b]) } : {}) };
     group.kinds.forEach((kind, i) => state.units.push(enemyUnit(state, kind, group.posts[i], id)));
+  }
+  // A ship's deck has no mouth to it, no room to be made and no bell: it is the sea's map, and keeps its own state.
+  if (options.voyage) {
+    state.voyage = newVoyage(options.voyage);
+    return state;
   }
   ensureMouth(state);
   makeRoom(state);
@@ -411,6 +417,68 @@ function flee(ctx: Ctx, unit: Unit): void {
   leaveFight(unit);
   endTurn(ctx, unit);
   ctx.events.push({ t: "fled", id: unit.id });
+}
+
+/** The most time at sea counted at once: a map left alone has not sailed on without its crew. */
+const SEA_CATCHUP_MS = 12_000;
+/** Who comes over the rail at each boarding, in turn: the leader of the band (the rest are whoever stands with them, by the party's size). */
+const BOARDERS = ["bandit", "skeleton"];
+/** What sailing a stretch through is worth to each hero, besides the hold: so much, and so much more a level of the water. */
+const VOYAGE_XP = [14, 5];
+
+/**
+ * On a voyage, the room has told the time: time at sea runs on (unless a fight holds the ship fast), with what
+ * that brings (voyage/voyage.ts `passSea`): rocks against the hull, boarders over the rail, and in the end the
+ * ship through her stretch or on the bottom.
+ */
+function sail(ctx: Ctx, now: number): void {
+  const { state } = ctx;
+  const [v, voyage] = [state.options.voyage, state.voyage];
+  if (!v || !voyage) return;
+  const was = voyage.now;
+  voyage.now = now;
+  if (was === null || voyage.outcome || state.encounter) return;
+  const passed = passSea(v, voyage, state.seed, Math.min(SEA_CATCHUP_MS, Math.max(0, now - was)));
+  for (const { thing, hull } of passed.struck) ctx.events.push({ t: "hull_struck", n: thing.n, kind: thing.kind, hull });
+  if (voyage.outcome === "sunk") {
+    ctx.events.push({ t: "voyage_over", outcome: "sunk" });
+    return;
+  }
+  if (passed.boarding) board(ctx);
+  if (state.encounter || state.units.some((u) => u.side === "enemy" && !u.down) || !stretchRun(voyage)) return;
+  // Through: the hold is shared out among the heroes aboard, and each is the better for the passage.
+  voyage.outcome = "through";
+  const heroes = state.units.filter((u) => u.side === "hero" && !u.controller && !u.summon);
+  const share = holdShare(voyage, heroes.length);
+  const xp = VOYAGE_XP[0] + VOYAGE_XP[1] * state.options.level;
+  for (const hero of heroes) {
+    ctx.effects.push({ type: "grant", heroId: hero.id, xp, resources: share.resources, ...(share.gold > 0 ? { gold: share.gold } : {}) });
+    ctx.events.push({ t: "spoils", id: hero.id, xp, resources: share.resources, ...(share.gold > 0 ? { gold: share.gold } : {}) });
+  }
+  ctx.events.push({ t: "voyage_over", outcome: "through" });
+}
+
+/** Boarders come over the rail: a band on the deck as far from the heroes as the deck allows, and a fight with whoever is aboard. */
+function board(ctx: Ctx): void {
+  const { state } = ctx;
+  const [v, voyage] = [state.options.voyage!, state.voyage!];
+  const heroes = state.units.filter((u) => u.side === "hero" && !u.down);
+  if (heroes.length === 0) return;
+  const kinds = groupKinds(BOARDERS[(voyage.boarded - 1) % BOARDERS.length], Math.max(1, Math.min(6, state.sizedFor ?? state.options.party)));
+  const free = state.map.tiles.filter((t) => onDeck(v, t) && !unitAt(state, t)).map((t) => ({ q: t.q, r: t.r }));
+  const far = (p: HexPos) => Math.min(...heroes.map((h) => hexDistance(h.pos, p)));
+  free.sort((a, b) => far(b) - far(a) || a.r - b.r || a.q - b.q);
+  const id = `board${voyage.boarded}`;
+  state.groups[id] = { alerted: false };
+  const came: string[] = [];
+  kinds.slice(0, free.length).forEach((kind, i) => {
+    const unit = enemyUnit(state, kind, free[i], id);
+    state.units.push(unit);
+    came.push(unit.id);
+  });
+  if (came.length === 0) return;
+  ctx.events.push({ t: "boarded", group: id, units: came });
+  engage(ctx, [id], { kind: "seen", by: heroes[0].id });
 }
 
 /**
@@ -1180,6 +1248,7 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
   }
   if (action.type === "time") {
     passTime(ctx, action.now);
+    sail(ctx, action.now);
     return null;
   }
   if (action.type === "stock") {
@@ -1307,6 +1376,28 @@ function act(ctx: Ctx, action: ZoneAction): string | null {
     // A body: the others beside it are gone through with it (lootGroup), all in the one window.
     for (const s of lootGroup(state, spot!)) if (!checkLoot(state, unit, s)) look(ctx, unit, s);
     ctx.events.push({ t: "looked", id: unit.id, spot: spot!.id });
+    return null;
+  }
+  if (action.type === "harpoon" || action.type === "steer") {
+    const [v, voyage] = [state.options.voyage, state.voyage];
+    if (!v || !voyage) return "There is no ship here.";
+    if (state.encounter) return "Not with boarders on the deck.";
+    const stations = stationsOn(v);
+    const station = action.type === "harpoon" ? stations.find((s) => s.id === action.station && s.kind === "harpoon") : stations.find((s) => s.kind === "helm");
+    const wrong = stationProblem(v, voyage, station, unit.pos);
+    if (wrong) return wrong;
+    if (action.type === "steer") {
+      const refused = putOver(voyage, station!, action.dir);
+      if (refused) return refused;
+      ctx.events.push({ t: "steered", id: unit.id, dir: action.dir });
+      return null;
+    }
+    const shot = looseHarpoon(v, voyage, state.seed, state.options.level, station!, action.aim);
+    if ("error" in shot) return shot.error;
+    const told = { t: "harpooned" as const, id: unit.id, station: station!.id, aim: action.aim };
+    if ("hauled" in shot) ctx.events.push({ ...told, n: shot.hauled.n, kind: shot.hauled.kind, haul: shot.haul });
+    else if ("held" in shot) ctx.events.push({ ...told, n: shot.held.n, kind: shot.held.kind, needs: shot.needs });
+    else ctx.events.push(told);
     return null;
   }
   if (action.type === "forage") {

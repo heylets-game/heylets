@@ -261,7 +261,9 @@ export const unopened = (state: Pick<ZoneState, "map">): number => state.map.poi
  * fights, so it is cleared only once the last of those is open too; anywhere else a chest left shut is the
  * party's own loss.
  */
-export const zoneCleared = (state: Pick<ZoneState, "map" | "units" | "options">): boolean => !state.units.some((u) => u.side === "enemy") && (!state.options.delve || unopened(state) === 0);
+export const zoneCleared = (state: Pick<ZoneState, "map" | "units" | "options" | "voyage">): boolean =>
+  // A voyage is cleared when the ship is through its stretch of sea, and not before, however quiet the deck is.
+  state.options.voyage ? state.voyage?.outcome === "through" : !state.units.some((u) => u.side === "enemy") && (!state.options.delve || unopened(state) === 0);
 
 /**
  * What is left to take on the map for `hero`: the bodies and chests that still hold anything, and the spoils while
