@@ -3324,6 +3324,7 @@ export class WorldRenderer {
       const { x, z } = hexToWorld({ q, r });
       mesh.position.set(x, tileTop(this.tiles.find((t) => t.q === q && t.r === r)), z);
       mesh.castShadow = mesh.receiveShadow = true;
+      mesh.userData.wallKey = k;
       this.halfWallMeshes.set(k, mesh);
       this.halfWalls.add(mesh);
     }
@@ -4571,9 +4572,13 @@ export class WorldRenderer {
    * beside it), as far along and as high as it points, kept on that side.
    */
   private aimAtWall(mount: { w: number; h: number }): PlaceTarget | null {
-    const hit = this.raycaster.intersectObject(this.terrain!)[0];
-    if (!hit || hit.instanceId === undefined) return null;
-    const t = this.tiles[hit.instanceId];
+    const ground = this.raycaster.intersectObject(this.terrain!)[0];
+    // A squared wall is its half column, not a hex of the ground: the pointer is on it if that is what it meets first.
+    const half = this.raycaster.intersectObjects(this.halfWalls.children)[0];
+    const hit = half && (!ground || half.distance <= ground.distance) ? half : ground;
+    if (!hit) return null;
+    const t = hit === half ? this.tiles.find((tile) => key(tile) === (half.object.userData.wallKey as string)) : hit.instanceId === undefined ? undefined : this.tiles[hit.instanceId];
+    if (!t) return null;
     const point = hit.point;
     let pos: HexPos;
     let side: number;
@@ -4589,7 +4594,12 @@ export class WorldRenderer {
         const f = this.wallSide(pos, s);
         return f.nx * (point.x - mid.x) + f.nz * (point.z - mid.z);
       };
-      side = sides.reduce((a, b) => (score(b) > score(a) ? b : a));
+      // (On a squared wall the sides that face the room lie along one straight face: the one whose stretch of it the pointer is nearest.)
+      const near = (s: number) => {
+        const f = this.wallSide(pos, s);
+        return Math.hypot(point.x - f.x, point.z - f.z);
+      };
+      side = this.squared.has(key(t)) ? sides.reduce((a, b) => (near(b) < near(a) ? b : a)) : sides.reduce((a, b) => (score(b) > score(a) ? b : a));
       // On the face of the wall (not its top), the height is where the pointer is.
       if (hit.face && Math.abs(hit.face.normal.y) < 0.5) y = point.y - FLOOR_TOP;
     } else if (t.biome === "floor") {
